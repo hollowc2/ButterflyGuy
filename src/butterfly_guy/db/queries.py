@@ -1,0 +1,225 @@
+"""Database query helpers for all tables."""
+
+from __future__ import annotations
+
+import datetime as dt
+from typing import Any
+
+from butterfly_guy.db.connection import DatabasePool
+
+
+class ChainQueries:
+    """Queries for option_chain_snapshots table."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def bulk_insert_snapshot(self, rows: list[dict[str, Any]]) -> int:
+        """Bulk insert option chain snapshot rows using COPY."""
+        if not rows:
+            return 0
+
+        columns = [
+            "snapshot_time", "underlying", "expiration", "strike", "option_type",
+            "bid", "ask", "mark", "last", "volume", "open_interest",
+            "iv", "delta", "gamma", "theta", "vega", "symbol", "spot_price",
+        ]
+
+        records = [
+            tuple(row.get(col) for col in columns) for row in rows
+        ]
+
+        async with self.db.pool.acquire() as conn:
+            await conn.copy_records_to_table(
+                "option_chain_snapshots",
+                records=records,
+                columns=columns,
+            )
+        return len(records)
+
+    async def get_latest_chain(
+        self, underlying: str, expiration: dt.date
+    ) -> list[dict]:
+        rows = await self.db.fetch(
+            """
+            SELECT * FROM option_chain_snapshots
+            WHERE underlying = $1 AND expiration = $2
+              AND snapshot_time = (
+                SELECT MAX(snapshot_time) FROM option_chain_snapshots
+                WHERE underlying = $1 AND expiration = $2
+              )
+            ORDER BY strike, option_type
+            """,
+            underlying, expiration,
+        )
+        return [dict(r) for r in rows]
+
+    async def get_chain_at_time(
+        self, underlying: str, expiration: dt.date, at: dt.datetime
+    ) -> list[dict]:
+        rows = await self.db.fetch(
+            """
+            SELECT * FROM option_chain_snapshots
+            WHERE underlying = $1 AND expiration = $2
+              AND snapshot_time <= $3
+            ORDER BY snapshot_time DESC, strike, option_type
+            LIMIT 2000
+            """,
+            underlying, expiration, at,
+        )
+        return [dict(r) for r in rows]
+
+
+class SpotQueries:
+    """Queries for spot_prices table."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def insert(self, underlying: str, price: float, ts: dt.datetime | None = None) -> None:
+        ts = ts or dt.datetime.now(dt.timezone.utc)
+        await self.db.execute(
+            "INSERT INTO spot_prices (ts, underlying, price) VALUES ($1, $2, $3)",
+            ts, underlying, price,
+        )
+
+    async def get_latest(self, underlying: str) -> float | None:
+        return await self.db.fetchval(
+            "SELECT price FROM spot_prices WHERE underlying = $1 ORDER BY ts DESC LIMIT 1",
+            underlying,
+        )
+
+
+class TradeQueries:
+    """Queries for trades table."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def insert_trade(self, trade: dict[str, Any]) -> int:
+        return await self.db.fetchval(
+            """
+            INSERT INTO trades (
+                trade_date, direction, wing_width, center_strike,
+                lower_strike, upper_strike, entry_price, entry_time,
+                lower_symbol, center_symbol, upper_symbol, quantity, status, metadata
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            RETURNING id
+            """,
+            trade["trade_date"], trade["direction"], trade["wing_width"],
+            trade["center_strike"], trade["lower_strike"], trade["upper_strike"],
+            trade["entry_price"], trade["entry_time"],
+            trade.get("lower_symbol"), trade.get("center_symbol"),
+            trade.get("upper_symbol"), trade.get("quantity", 1),
+            "OPEN", trade.get("metadata", {}),
+        )
+
+    async def close_trade(
+        self, trade_id: int, exit_price: float, exit_time: dt.datetime,
+        exit_reason: str, pnl: float, peak_value: float
+    ) -> None:
+        await self.db.execute(
+            """
+            UPDATE trades SET
+                exit_price = $2, exit_time = $3, exit_reason = $4,
+                pnl = $5, peak_value = $6, status = 'CLOSED'
+            WHERE id = $1
+            """,
+            trade_id, exit_price, exit_time, exit_reason, pnl, peak_value,
+        )
+
+    async def get_open_trades(self) -> list[dict]:
+        rows = await self.db.fetch(
+            "SELECT * FROM trades WHERE status = 'OPEN' ORDER BY entry_time"
+        )
+        return [dict(r) for r in rows]
+
+    async def get_trades_for_date(self, trade_date: dt.date) -> list[dict]:
+        rows = await self.db.fetch(
+            "SELECT * FROM trades WHERE trade_date = $1 ORDER BY entry_time", trade_date
+        )
+        return [dict(r) for r in rows]
+
+
+class RiskQueries:
+    """Queries for daily_risk_state table."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def get_or_create(self, trade_date: dt.date) -> dict:
+        row = await self.db.fetchrow(
+            "SELECT * FROM daily_risk_state WHERE trade_date = $1", trade_date
+        )
+        if row:
+            return dict(row)
+        await self.db.execute(
+            "INSERT INTO daily_risk_state (trade_date) VALUES ($1) ON CONFLICT DO NOTHING",
+            trade_date,
+        )
+        row = await self.db.fetchrow(
+            "SELECT * FROM daily_risk_state WHERE trade_date = $1", trade_date
+        )
+        return dict(row)
+
+    async def increment_trade_count(self, trade_date: dt.date) -> None:
+        await self.db.execute(
+            """
+            UPDATE daily_risk_state
+            SET trade_count = trade_count + 1
+            WHERE trade_date = $1
+            """,
+            trade_date,
+        )
+
+    async def update_pnl(self, trade_date: dt.date, pnl_delta: float) -> None:
+        await self.db.execute(
+            """
+            UPDATE daily_risk_state
+            SET realized_pnl = realized_pnl + $2
+            WHERE trade_date = $1
+            """,
+            trade_date, pnl_delta,
+        )
+
+    async def set_halted(self, trade_date: dt.date) -> None:
+        await self.db.execute(
+            "UPDATE daily_risk_state SET halted = TRUE, max_loss_hit = TRUE WHERE trade_date = $1",
+            trade_date,
+        )
+
+
+class DecisionQueries:
+    """Queries for decision_log table."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def log_event(self, event_type: str, data: dict[str, Any]) -> None:
+        await self.db.execute(
+            "INSERT INTO decision_log (event_type, data) VALUES ($1, $2::jsonb)",
+            event_type, __import__("json").dumps(data),
+        )
+
+
+class CandidateQueries:
+    """Queries for butterfly_candidates table."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def bulk_insert(self, candidates: list[dict[str, Any]]) -> int:
+        if not candidates:
+            return 0
+        columns = [
+            "scan_time", "direction", "wing_width", "center_strike",
+            "lower_strike", "upper_strike", "cost", "max_profit",
+            "reward_risk", "lower_be", "upper_be", "distance_from_spot",
+            "spot_price", "selected",
+        ]
+        records = [tuple(c.get(col) for col in columns) for c in candidates]
+        async with self.db.pool.acquire() as conn:
+            await conn.copy_records_to_table(
+                "butterfly_candidates", records=records, columns=columns,
+            )
+        return len(records)

@@ -1,0 +1,49 @@
+# Environment & secrets
+.env
+*.env
+secrets/
+tokens.json
+token.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+.uv/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data / outputs
+backtest_results.csv
+*.csv
+data/
+
+# Logs
+*.log
+logs/
+
+# Docker volumes (don't commit)
+infra/grafana/provisioning/alerting/

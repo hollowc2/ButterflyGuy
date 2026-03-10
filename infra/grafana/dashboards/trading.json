@@ -1,0 +1,114 @@
+{
+  "title": "Butterfly Guy Trading",
+  "uid": "butterfly-trading",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Daily P&L",
+      "type": "bargauge",
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "butterfly_daily_pnl_dollars",
+          "legendFormat": "Daily P&L ($)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Position Value",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 0.5},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {"expr": "butterfly_position_value", "legendFormat": "Current Value"}
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Peak vs Current Value",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 6},
+      "targets": [
+        {"expr": "butterfly_position_peak_value", "legendFormat": "Peak"},
+        {"expr": "butterfly_position_value", "legendFormat": "Current"}
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Daily Trade Count",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+      "targets": [
+        {"expr": "butterfly_daily_trade_count", "legendFormat": "Trades Today"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Active Trades",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
+      "targets": [
+        {"expr": "butterfly_trades_active", "legendFormat": "Active"}
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Chain Snapshots (1h rate)",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 14},
+      "targets": [
+        {
+          "expr": "rate(butterfly_chain_snapshots_total[1h])",
+          "legendFormat": "Snapshots/hr"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Butterfly Candidates Found",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 14},
+      "targets": [
+        {"expr": "butterfly_candidates_found", "legendFormat": "Candidates"}
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Order Fill Duration (p95)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 6},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket)",
+          "legendFormat": "p95 fill time (s)"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Schwab API Errors",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 20},
+      "targets": [
+        {
+          "expr": "rate(butterfly_schwab_api_errors_total[5m])",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+schwab:
+  token_path: "tokens.json"
+  max_token_age: 518400  # 6 days in seconds
+
+strategy:
+  underlying: "SPX"
+  wing_widths: [5, 10, 15, 20, 25]
+  spot_range: 40
+  rr_min: 8.0
+  max_cost_per_width:
+    5: 0.50
+    10: 1.00
+    15: 1.50
+    20: 2.00
+    25: 2.50
+
+entry:
+  start_time: "07:00"  # PST
+  end_time: "07:30"    # PST
+  timezone: "America/Los_Angeles"
+
+execution:
+  price_ladder_step: 0.05
+  price_ladder_steps: 4
+  retry_interval_seconds: 20
+  order_timeout_seconds: 300
+
+profit_management:
+  regimes:
+    morning:
+      start_minutes_after_open: 0
+      end_minutes_after_open: 120
+      drawdown_threshold: 0.50
+    late_morning:
+      start_minutes_after_open: 120
+      end_minutes_after_open: 240
+      drawdown_threshold: 0.40
+    afternoon:
+      start_minutes_after_open: 240
+      end_minutes_after_open: 390
+      drawdown_threshold: 0.30
+  exit_before_close_minutes: 5
+
+risk:
+  max_daily_loss: 500.0
+  max_trades_per_day: 2
+  max_position_size: 1
+
+collector:
+  snapshot_interval_seconds: 60
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "butterfly_guy"
+  user: "butterfly"
+  password: "butterfly_dev"
+
+monitoring:
+  metrics_port: 8000
+  log_level: "INFO"
