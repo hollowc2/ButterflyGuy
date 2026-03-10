@@ -46,6 +46,49 @@ services:
       - prometheus
       - timescaledb
 
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: butterfly_app
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - ../tokens.json:/app/tokens.json
+    environment:
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__NAME: butterfly_guy
+      DATABASE__USER: butterfly
+      DATABASE__PASSWORD: butterfly_dev
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    ports:
+      - "8000:8000"  # Prometheus metrics
+
+  collector:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: butterfly_collector
+    restart: unless-stopped
+    command: ["uv", "run", "python", "src/butterfly_guy/scripts/run_collector.py"]
+    env_file:
+      - ../.env
+    volumes:
+      - ../tokens.json:/app/tokens.json
+    environment:
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__NAME: butterfly_guy
+      DATABASE__USER: butterfly
+      DATABASE__PASSWORD: butterfly_dev
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
 volumes:
   timescale_data:
   prometheus_data:
