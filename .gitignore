@@ -39,7 +39,6 @@ htmlcov/
 # Data / outputs
 backtest_results.csv
 *.csv
-data/
 
 # Logs
 *.log
