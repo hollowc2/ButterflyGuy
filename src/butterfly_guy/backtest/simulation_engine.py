@@ -204,7 +204,43 @@ class SimulationEngine:
                     result.pnl = result.exit_price - result.entry_price
                     return result
 
-        # Expired worthless
+        # Data ended before 15:55 ET EOD trigger — exit at last available bar
+        # (handles CSV sources that stop at 15:15 ET; no-op for full-day data
+        # since the loop would have already returned via minutes_to_close <= 5)
+        if day.bars:
+            last_bar = day.bars[-1]
+            last_bar_et = last_bar.ts.astimezone(EASTERN)
+            if last_bar_et.time() >= dt.time(10, 30):
+                quotes = self.synth.generate_chain(
+                    spot=last_bar.close,
+                    vix=day.vix,
+                    expiration=expiration,
+                    snapshot_time=last_bar.ts,
+                    strike_min=entry_candidate.lower_strike - 5,
+                    strike_max=entry_candidate.upper_strike + 5,
+                )
+                quote_map = {
+                    q.strike: q
+                    for q in quotes
+                    if q.option_type == entry_candidate.direction
+                }
+                lower_q = quote_map.get(entry_candidate.lower_strike)
+                center_q = quote_map.get(entry_candidate.center_strike)
+                upper_q = quote_map.get(entry_candidate.upper_strike)
+                if lower_q and center_q and upper_q:
+                    current_value = max(
+                        0.0, lower_q.mark - 2 * center_q.mark + upper_q.mark
+                    )
+                else:
+                    current_value = 0.0
+                result.exit_time = last_bar.ts
+                result.exit_price = max(0.05, current_value - params.slippage)
+                result.exit_reason = "end_of_day"
+                result.peak_value = peak_value
+                result.pnl = result.exit_price - result.entry_price
+                return result
+
+        # Expired worthless (no usable bars after entry)
         result.exit_reason = "expired"
         result.exit_price = 0.0
         result.peak_value = peak_value
