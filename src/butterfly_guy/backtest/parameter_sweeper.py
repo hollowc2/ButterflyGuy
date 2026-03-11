@@ -51,6 +51,28 @@ def _max_drawdown(pnls: list[float]) -> float:
     return max_dd
 
 
+def _profit_factor(pnls: list[float]) -> float:
+    """Gross profit / gross loss. Returns 0 if no losses."""
+    gross_profit = sum(p for p in pnls if p > 0)
+    gross_loss = abs(sum(p for p in pnls if p < 0))
+    if gross_loss == 0:
+        return 0.0
+    return round(gross_profit / gross_loss, 4)
+
+
+def _max_consecutive_losses(pnls: list[float]) -> int:
+    """Longest streak of negative PnL trades."""
+    max_streak = 0
+    streak = 0
+    for p in pnls:
+        if p < 0:
+            streak += 1
+            max_streak = max(max_streak, streak)
+        else:
+            streak = 0
+    return max_streak
+
+
 class ParameterSweeper:
     """Runs grid search over simulation parameters across a date range."""
 
@@ -127,10 +149,27 @@ class ParameterSweeper:
                 "avg_pnl": 0.0,
                 "max_drawdown": 0.0,
                 "sharpe": 0.0,
+                "profit_factor": 0.0,
+                "max_consec_losses": 0,
+                "exit_morning_dd": 0,
+                "exit_late_morning_dd": 0,
+                "exit_afternoon_dd": 0,
+                "exit_eod": 0,
+                "exit_expired": 0,
             }
 
         pnls = [r.pnl for r in traded]
         wins = sum(1 for p in pnls if p > 0)
+
+        # Per-regime exit counts
+        exit_reasons = [r.exit_reason for r in traded]
+        regime_counts = {
+            "exit_morning_dd": exit_reasons.count("drawdown_morning"),
+            "exit_late_morning_dd": exit_reasons.count("drawdown_late_morning"),
+            "exit_afternoon_dd": exit_reasons.count("drawdown_afternoon"),
+            "exit_eod": exit_reasons.count("end_of_day"),
+            "exit_expired": exit_reasons.count("expired"),
+        }
 
         return {
             "wing_width": params.wing_width,
@@ -144,6 +183,9 @@ class ParameterSweeper:
             "avg_pnl": round(sum(pnls) / len(traded), 4),
             "max_drawdown": round(_max_drawdown(pnls), 4),
             "sharpe": round(_sharpe(pnls), 4),
+            "profit_factor": _profit_factor(pnls),
+            "max_consec_losses": _max_consecutive_losses(pnls),
+            **regime_counts,
         }
 
     @staticmethod

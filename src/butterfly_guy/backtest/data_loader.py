@@ -82,18 +82,21 @@ class BacktestDataLoader:
         return 18.0  # default fallback
 
     async def get_prev_close(self, date: dt.date) -> float:
-        """Fetch previous trading day's SPX close."""
-        # Use Polygon's previous close endpoint
+        """Fetch the actual previous trading day's SPX close for a given date."""
+        # Look back up to 7 calendar days to find the last trading day
+        look_back_start = date - dt.timedelta(days=7)
+        look_back_end = date - dt.timedelta(days=1)
         url = (
-            f"{POLYGON_BASE}/v2/aggs/ticker/I:SPX/prev"
-            f"?adjusted=true&apiKey={self.api_key}"
+            f"{POLYGON_BASE}/v2/aggs/ticker/I:SPX/range/1/day"
+            f"/{look_back_start}/{look_back_end}"
+            f"?adjusted=true&sort=asc&limit=10&apiKey={self.api_key}"
         )
         resp = await self._client.get(url)
         resp.raise_for_status()
         data = resp.json()
         results = data.get("results", [])
         if results:
-            return float(results[0]["c"])
+            return float(results[-1]["c"])  # most recent day before `date`
         return 5500.0  # fallback
 
     async def load_day(self, date: dt.date) -> DayData | None:

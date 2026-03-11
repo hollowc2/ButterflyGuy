@@ -9,8 +9,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
+# Set USE_YFINANCE=True for free data (hourly SPX bars, no API key needed).
+# Set USE_YFINANCE=False to use Polygon (requires POLYGON_ACCESS_KEY_ID in .env,
+# paid plan needed for I:SPX index data).
+USE_YFINANCE = True
+
 from butterfly_guy.backtest.data_loader import BacktestDataLoader
 from butterfly_guy.backtest.parameter_sweeper import ParameterSweeper, SweepConfig
+from butterfly_guy.backtest.yfinance_loader import YFinanceDataLoader
 from butterfly_guy.core.logging import get_logger, setup_logging
 
 setup_logging(log_level="INFO", json_output=False)
@@ -18,24 +24,27 @@ log = get_logger("run_backtest")
 
 
 async def main() -> None:
-    from dotenv import dotenv_values
-    env = dotenv_values(".env")
-    polygon_key = env.get("POLYGON_ACCESS_KEY_ID", "")
-
-    if not polygon_key:
-        print("POLYGON_ACCESS_KEY_ID not set in .env")
-        sys.exit(1)
-
-    loader = BacktestDataLoader(polygon_key)
+    if USE_YFINANCE:
+        loader = YFinanceDataLoader()
+        log.info("data_source", source="yfinance", note="hourly SPX bars, free")
+    else:
+        from dotenv import dotenv_values
+        env = dotenv_values(".env")
+        polygon_key = env.get("POLYGON_ACCESS_KEY_ID", "")
+        if not polygon_key:
+            print("POLYGON_ACCESS_KEY_ID not set in .env")
+            sys.exit(1)
+        loader = BacktestDataLoader(polygon_key)
+        log.info("data_source", source="polygon")
 
     config = SweepConfig(
-        start_date=dt.date(2025, 1, 2),
-        end_date=dt.date(2025, 12, 31),
-        wing_widths=[5, 10, 15, 20],
-        rr_mins=[6.0, 8.0, 10.0],
-        morning_drawdowns=[0.40, 0.50, 0.60],
-        late_morning_drawdowns=[0.30, 0.40, 0.50],
-        afternoon_drawdowns=[0.20, 0.30, 0.40],
+        start_date=dt.date(2025, 1, 6),
+        end_date=dt.date(2025, 1, 17),  # 2-week smoke test
+        wing_widths=[10, 20],
+        rr_mins=[6.0, 8.0],
+        morning_drawdowns=[0.50],
+        late_morning_drawdowns=[0.40],
+        afternoon_drawdowns=[0.30],
     )
 
     sweeper = ParameterSweeper(loader)

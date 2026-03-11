@@ -14,8 +14,8 @@ from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
 
-EASTERN = ZoneInfo("US/Eastern")
-PACIFIC = ZoneInfo("US/Pacific")
+EASTERN = ZoneInfo("America/New_York")
+PACIFIC = ZoneInfo("America/Los_Angeles")
 
 ENTRY_START = dt.time(10, 0)   # PST 7:00 = EST 10:00
 ENTRY_END = dt.time(10, 30)    # PST 7:30 = EST 10:30
