@@ -28,7 +28,6 @@ from butterfly_guy.backtest.simulation_engine import (
     ENTRY_START,
     SimulationParams,
 )
-from butterfly_guy.backtest.yfinance_loader import YFinanceDataLoader
 from butterfly_guy.core.config import StrategySettings
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
@@ -40,10 +39,8 @@ def fmt(ts: dt.datetime) -> str:
     return ts.astimezone(EASTERN).strftime("%H:%M ET")
 
 
-async def debug_day(date: dt.date, params: SimulationParams) -> None:
-    loader = YFinanceDataLoader()
+async def debug_day(date: dt.date, params: SimulationParams, loader) -> None:
     day = await loader.load_day(date)
-    await loader.close()
 
     if not day:
         print(f"No data for {date}")
@@ -275,7 +272,7 @@ async def main() -> None:
         slippage=0.05,
     )
 
-    await debug_day(date, params)
+    await debug_day(date, params, loader)
     await loader.close()
 
 
