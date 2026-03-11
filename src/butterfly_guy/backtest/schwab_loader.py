@@ -1,15 +1,17 @@
 """Backtest data loader using Schwab price history API.
 
-Provides real 1-minute SPX bars — same auth as the live trading system.
+Uses SPY 1-minute bars (ETF, fully supported by Schwab) scaled to SPX price
+levels using the SPX daily open as a calibration anchor. This gives true
+minute-level resolution with accurate SPX absolute pricing.
+
+Calibration:
+  ratio = SPX_daily_open / SPY_first_bar_open
+  scaled_price = spy_price * ratio
 
 Limitations:
 - Schwab returns up to ~48 days of 1-minute history.
 - For dates older than ~48 days use YFinanceDataLoader (hourly) or
   BacktestDataLoader (Polygon, paid plan).
-
-Tickers:
-  $SPX.X  — S&P 500 index (1-min bars)
-  $VIX.X  — CBOE VIX (daily only; minute bars not available)
 """
 
 from __future__ import annotations
@@ -24,12 +26,13 @@ from butterfly_guy.core.logging import get_logger
 log = get_logger(__name__)
 
 EASTERN = ZoneInfo("America/New_York")
-SPX_SYMBOL = "$SPX.X"
-VIX_SYMBOL = "$VIX.X"
+SPY_SYMBOL = "SPY"       # ETF — full 1-min support from Schwab
+SPX_SYMBOL = "$SPX.X"   # Index — daily bars only (used for price calibration)
+VIX_SYMBOL = "$VIX.X"   # VIX index — daily bars
 
 
 class SchwabDataLoader:
-    """Loads 1-minute SPX bars from Schwab price history API.
+    """Loads SPY 1-minute bars from Schwab, scaled to SPX price levels.
 
     Reuses the project's existing token file — no extra credentials needed.
     Supports up to ~48 days of 1-minute history.
@@ -58,16 +61,35 @@ class SchwabDataLoader:
             await self._client.close_async_session()
             self._client = None
 
+    async def _fetch_spx_daily_open(self, date: dt.date) -> float | None:
+        """Fetch the SPX daily open for calibrating SPY → SPX scaling."""
+        client = self._get_client()
+        start = dt.datetime(date.year, date.month, date.day, 0, 0, tzinfo=EASTERN)
+        end = dt.datetime(date.year, date.month, date.day, 23, 59, tzinfo=EASTERN)
+        resp = await client.get_price_history_every_day(
+            SPX_SYMBOL,
+            start_datetime=start,
+            end_datetime=end,
+            need_extended_hours_data=False,
+            need_previous_close=False,
+        )
+        if resp.status_code != 200:
+            log.warning("schwab_spx_daily_failed", date=str(date), status=resp.status_code)
+            return None
+        candles = resp.json().get("candles", [])
+        if candles:
+            return float(candles[0]["open"])
+        return None
+
     async def get_spx_minute_bars(self, date: dt.date) -> list[MinuteBar]:
-        """Fetch 1-minute SPX bars for a single trading day."""
+        """Fetch SPY 1-minute bars, scaled to SPX price levels."""
         client = self._get_client()
 
-        # Request the full day: 09:30–16:00 ET
         start = dt.datetime(date.year, date.month, date.day, 9, 30, tzinfo=EASTERN)
         end = dt.datetime(date.year, date.month, date.day, 16, 1, tzinfo=EASTERN)
 
         resp = await client.get_price_history_every_minute(
-            SPX_SYMBOL,
+            SPY_SYMBOL,
             start_datetime=start,
             end_datetime=end,
             need_extended_hours_data=False,
@@ -75,35 +97,47 @@ class SchwabDataLoader:
         )
 
         if resp.status_code != 200:
-            log.warning("schwab_price_history_failed", symbol=SPX_SYMBOL,
-                        date=str(date), status=resp.status_code)
+            log.warning("schwab_spy_failed", date=str(date), status=resp.status_code)
             return []
 
-        data = resp.json()
-        candles = data.get("candles", [])
+        candles = resp.json().get("candles", [])
+        if not candles:
+            return []
+
+        # Calibrate: scale SPY prices to SPX levels
+        spy_open = float(candles[0]["open"])
+        spx_open = await self._fetch_spx_daily_open(date)
+
+        if spx_open and spy_open > 0:
+            ratio = spx_open / spy_open
+            log.info("spy_spx_calibration", date=str(date),
+                     spy_open=spy_open, spx_open=spx_open, ratio=round(ratio, 4))
+        else:
+            # Fallback: use approximate 10:1 ratio
+            ratio = 10.0
+            log.warning("spy_spx_calibration_fallback", date=str(date), ratio=ratio)
 
         bars: list[MinuteBar] = []
         for c in candles:
             ts = dt.datetime.fromtimestamp(c["datetime"] / 1000, tz=dt.timezone.utc)
             bars.append(MinuteBar(
                 ts=ts,
-                open=float(c["open"]),
-                high=float(c["high"]),
-                low=float(c["low"]),
-                close=float(c["close"]),
+                open=float(c["open"]) * ratio,
+                high=float(c["high"]) * ratio,
+                low=float(c["low"]) * ratio,
+                close=float(c["close"]) * ratio,
                 volume=int(c.get("volume", 0)),
             ))
 
-        log.info("schwab_bars_loaded", date=str(date), count=len(bars))
+        log.info("schwab_bars_loaded", date=str(date), count=len(bars),
+                 source="SPY*ratio", ratio=round(ratio, 4))
         return bars
 
     async def get_vix_daily(self, date: dt.date) -> float:
-        """Fetch VIX close for a given date (daily bar)."""
+        """Fetch VIX close for a given date."""
         client = self._get_client()
-
         start = dt.datetime(date.year, date.month, date.day, 0, 0, tzinfo=EASTERN)
         end = dt.datetime(date.year, date.month, date.day, 23, 59, tzinfo=EASTERN)
-
         resp = await client.get_price_history_every_day(
             VIX_SYMBOL,
             start_datetime=start,
@@ -111,25 +145,19 @@ class SchwabDataLoader:
             need_extended_hours_data=False,
             need_previous_close=False,
         )
-
         if resp.status_code != 200:
             log.warning("schwab_vix_failed", date=str(date), status=resp.status_code)
             return 18.0
-
-        data = resp.json()
-        candles = data.get("candles", [])
+        candles = resp.json().get("candles", [])
         if candles:
             return float(candles[-1]["close"])
         return 18.0
 
     async def get_prev_close(self, date: dt.date) -> float:
-        """Fetch the previous trading day's SPX close."""
+        """Fetch previous trading day's SPX close."""
         client = self._get_client()
-
-        # Fetch 7 calendar days ending the day before `date`
         end = dt.datetime(date.year, date.month, date.day, 0, 0, tzinfo=EASTERN)
         start = end - dt.timedelta(days=7)
-
         resp = await client.get_price_history_every_day(
             SPX_SYMBOL,
             start_datetime=start,
@@ -137,13 +165,10 @@ class SchwabDataLoader:
             need_extended_hours_data=False,
             need_previous_close=False,
         )
-
         if resp.status_code != 200:
             log.warning("schwab_prev_close_failed", date=str(date), status=resp.status_code)
             return 5500.0
-
-        data = resp.json()
-        candles = data.get("candles", [])
+        candles = resp.json().get("candles", [])
         if candles:
             return float(candles[-1]["close"])
         return 5500.0
