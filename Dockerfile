@@ -7,11 +7,14 @@ WORKDIR /app
 
 # Install dependencies first (cached layer)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy source
 COPY src/ ./src/
 COPY config.yaml ./
+
+# Install the project itself
+RUN uv sync --frozen --no-dev
 
 # Default: run live trader. Override CMD for collector or backtest.
 CMD ["uv", "run", "python", "src/butterfly_guy/scripts/run_live.py"]
