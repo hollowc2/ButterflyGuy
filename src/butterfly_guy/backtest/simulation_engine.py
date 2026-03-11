@@ -10,6 +10,7 @@ from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.core.config import StrategySettings
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
+from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
@@ -33,6 +34,7 @@ class SimulationParams:
     afternoon_drawdown: float = 0.30
     slippage: float = 0.05  # per spread
     direction_override: str | None = None  # "CALL" or "PUT" to force direction
+    use_bias_filter: bool = False
 
 
 @dataclass
@@ -59,6 +61,7 @@ class SimulationEngine:
         self.builder = ButterflyBuilder(settings or StrategySettings())
         self.selector = ButterflySelector()
         self.direction_filter = DirectionFilter()
+        self.bias_filter = BiasScoreFilter()
 
     def simulate_day(self, day: DayData, params: SimulationParams) -> DayResult:
         """Simulate one trading day."""
@@ -88,11 +91,18 @@ class SimulationEngine:
                     strike_max=bar.close + 80,
                 )
 
-                direction = (
-                    params.direction_override
-                    if params.direction_override
-                    else self.direction_filter.get_direction(bar.close, day.prev_close)
-                )
+                if params.direction_override:
+                    direction = params.direction_override
+                elif params.use_bias_filter:
+                    bars_so_far = [b for b in day.bars if b.ts <= bar.ts]
+                    direction = self.bias_filter.get_direction(
+                        bars=bars_so_far, prev_close=day.prev_close, entry_close=bar.close
+                    )
+                else:
+                    direction = self.direction_filter.get_direction(bar.close, day.prev_close)
+
+                if direction is None:
+                    continue  # bias filter said no trade; try next bar in entry window
 
                 # Override settings to use single wing_width from params
                 settings_override = StrategySettings(

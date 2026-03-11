@@ -5,7 +5,7 @@ in memory. Outputs a table sorted by profit factor.
 
 Sweeps:
   - direction_override: auto (gap signal), CALL-only, PUT-only
-  - entry_start: 10:00, 10:05, 10:10, 10:15 ET
+  - use_bias_filter: False (gap signal), True (multi-signal bias score)
   - wing_width: 5, 10, 15, 20
   - rr_min: 6.0, 8.0, 10.0
   - morning_drawdown: 0.40, 0.50, 0.60
@@ -37,14 +37,6 @@ from butterfly_guy.core.logging import get_logger, setup_logging
 
 setup_logging(log_level="WARNING", json_output=False)
 log = get_logger("run_schwab_sweep")
-
-EASTERN_OFFSET = dt.timezone(dt.timedelta(hours=-5))  # ET (approximate, for time parsing)
-
-
-def parse_time(s: str) -> dt.time:
-    h, m = s.split(":")
-    return dt.time(int(h), int(m))
-
 
 def date_range(start: dt.date, end: dt.date) -> list[dt.date]:
     dates, d = [], start
@@ -87,11 +79,11 @@ def summarize(params: SimulationParams, results: list) -> dict:
     eod_exits = reasons.get("end_of_day", 0)
 
     direction_str = params.direction_override or "auto"
-    entry_str = params.entry_start.strftime("%H:%M")
+    filter_str = "bias" if params.use_bias_filter else "gap"
 
     return {
         "direction": direction_str,
-        "entry_start": entry_str,
+        "filter": filter_str,
         "wing": params.wing_width,
         "rr_min": params.rr_min,
         "morn_dd": params.morning_drawdown,
@@ -152,20 +144,14 @@ async def main() -> None:
 
     # Parameter grid
     directions = [None, "CALL", "PUT"]
-    entry_starts = [
-        parse_time("10:00"),
-        parse_time("10:05"),
-        parse_time("10:10"),
-        parse_time("10:15"),
-    ]
-    entry_end = parse_time("10:30")
+    use_bias_filters = [False, True]
     wing_widths = [5, 10, 15, 20]
     rr_mins = [6.0, 8.0, 10.0]
     morning_dds = [0.40, 0.50, 0.60]
     lm_dds = [0.30, 0.40]
     aft_dds = [0.20, 0.30]
 
-    grid = list(itertools.product(directions, entry_starts, wing_widths,
+    grid = list(itertools.product(directions, use_bias_filters, wing_widths,
                                   rr_mins, morning_dds, lm_dds, aft_dds))
     total_combos = len(grid)
     print(f"Testing {total_combos} parameter combinations...\n")
@@ -173,17 +159,16 @@ async def main() -> None:
     engine = SimulationEngine()
     rows = []
 
-    for i, (direction, entry_start_t, wing, rr, morn_dd, lm_dd, aft_dd) in enumerate(grid):
+    for i, (direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd) in enumerate(grid):
         params = SimulationParams(
             wing_width=wing,
             rr_min=rr,
-            entry_start=entry_start_t,
-            entry_end=entry_end,
             morning_drawdown=morn_dd,
             late_morning_drawdown=lm_dd,
             afternoon_drawdown=aft_dd,
             slippage=0.05,
             direction_override=direction,
+            use_bias_filter=use_bias,
         )
         results = [engine.simulate_day(day, params) for day in day_data]
         row = summarize(params, results)
@@ -202,19 +187,19 @@ async def main() -> None:
 
     # Print top 30
     top_n = min(30, len(rows))
-    print(f"\n{'=' * 110}")
+    print(f"\n{'=' * 115}")
     print(f"  TOP {top_n} PARAMETER COMBINATIONS (sorted by profit factor)")
-    print(f"{'=' * 110}")
-    hdr = (f"{'Dir':>5}  {'Start':>5}  {'Wing':>4}  {'RR':>4}  "
+    print(f"{'=' * 115}")
+    hdr = (f"{'Dir':>5}  {'Filt':>5}  {'Wing':>4}  {'RR':>4}  "
            f"{'MDD':>4}  {'LDD':>4}  {'ADD':>4}  "
            f"{'N':>3}  {'W%':>5}  {'PnL':>8}  "
            f"{'AvgW':>7}  {'AvgL':>7}  {'PF':>5}  {'Sharpe':>6}  {'Streak':>6}")
     print(hdr)
-    print("-" * 110)
+    print("-" * 115)
 
     for r in rows[:top_n]:
         print(
-            f"{r['direction']:>5}  {r['entry_start']:>5}  {r['wing']:>4}  "
+            f"{r['direction']:>5}  {r['filter']:>5}  {r['wing']:>4}  "
             f"{r['rr_min']:>4.1f}  "
             f"{r['morn_dd']:>4.2f}  {r['lm_dd']:>4.2f}  {r['aft_dd']:>4.2f}  "
             f"{r['trades']:>3}  {r['win_pct']:>4.1f}%  {r['total_pnl']:>+8.4f}  "
@@ -226,7 +211,7 @@ async def main() -> None:
     print(f"\n--- WORST 5 ---")
     for r in rows[-5:]:
         print(
-            f"{r['direction']:>5}  {r['entry_start']:>5}  {r['wing']:>4}  "
+            f"{r['direction']:>5}  {r['filter']:>5}  {r['wing']:>4}  "
             f"{r['rr_min']:>4.1f}  "
             f"{r['morn_dd']:>4.2f}  {r['lm_dd']:>4.2f}  {r['aft_dd']:>4.2f}  "
             f"{r['trades']:>3}  {r['win_pct']:>4.1f}%  {r['total_pnl']:>+8.4f}  "
