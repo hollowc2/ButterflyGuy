@@ -32,6 +32,7 @@ class SimulationParams:
     late_morning_drawdown: float = 0.40
     afternoon_drawdown: float = 0.30
     slippage: float = 0.05  # per spread
+    direction_override: str | None = None  # "CALL" or "PUT" to force direction
 
 
 @dataclass
@@ -87,8 +88,10 @@ class SimulationEngine:
                     strike_max=bar.close + 80,
                 )
 
-                direction = self.direction_filter.get_direction(
-                    bar.close, day.prev_close
+                direction = (
+                    params.direction_override
+                    if params.direction_override
+                    else self.direction_filter.get_direction(bar.close, day.prev_close)
                 )
 
                 # Override settings to use single wing_width from params

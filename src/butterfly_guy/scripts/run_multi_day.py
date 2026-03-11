@@ -4,11 +4,15 @@ Runs the simulation across a date range using Schwab 1-min data
 (up to ~48 days history) and prints a per-day table + aggregate stats.
 
 Usage:
-    # Last 48 days (default)
+    # Last 45 days, auto direction (default)
     uv run python src/butterfly_guy/scripts/run_multi_day.py
 
     # Custom date range
     uv run python src/butterfly_guy/scripts/run_multi_day.py 2026-01-20 2026-03-07
+
+    # Force direction (CALL-only or PUT-only)
+    uv run python src/butterfly_guy/scripts/run_multi_day.py --direction CALL
+    uv run python src/butterfly_guy/scripts/run_multi_day.py 2026-01-20 2026-03-07 --direction PUT
 """
 
 from __future__ import annotations
@@ -43,6 +47,13 @@ def date_range(start: dt.date, end: dt.date) -> list[dt.date]:
 async def main() -> None:
     args = sys.argv[1:]
 
+    # Parse --direction flag
+    direction_override = None
+    if "--direction" in args:
+        idx = args.index("--direction")
+        direction_override = args[idx + 1].upper()
+        args = [a for i, a in enumerate(args) if i != idx and i != idx + 1]
+
     today = dt.date.today()
     if len(args) >= 2:
         start = dt.date.fromisoformat(args[0])
@@ -69,16 +80,18 @@ async def main() -> None:
         late_morning_drawdown=0.40,
         afternoon_drawdown=0.30,
         slippage=0.05,
+        direction_override=direction_override,
     )
 
     engine = SimulationEngine()
     dates = date_range(start, end)
 
+    direction_label = f"  direction_override={direction_override}" if direction_override else ""
     print(f"\nRunning {len(dates)} trading days: {start} → {end}")
     print(f"Params: wing={params.wing_width}  rr_min={params.rr_min}  "
           f"morning_dd={params.morning_drawdown}  "
           f"late_morning_dd={params.late_morning_drawdown}  "
-          f"afternoon_dd={params.afternoon_drawdown}\n")
+          f"afternoon_dd={params.afternoon_drawdown}{direction_label}\n")
 
     header = (f"{'Date':>12}  {'Dir':>4}  {'Center':>7}  {'Entry':>6}  "
               f"{'Exit':>6}  {'Peak':>6}  {'PnL':>7}  {'Reason':<20}")
