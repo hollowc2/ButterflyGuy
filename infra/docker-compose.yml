@@ -74,7 +74,7 @@ services:
       dockerfile: Dockerfile
     container_name: butterfly_collector
     restart: unless-stopped
-    command: ["uv", "run", "python", "src/butterfly_guy/scripts/run_collector.py"]
+    command: ["uv", "run", "python", "-m", "butterfly_guy.scripts.run_collector"]
     env_file:
       - ../.env
     volumes:
