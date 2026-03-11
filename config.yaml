@@ -49,12 +49,6 @@ risk:
 collector:
   snapshot_interval_seconds: 60
 
-database:
-  host: "localhost"
-  port: 5432
-  name: "butterfly_guy"
-  user: "butterfly"
-  password: "butterfly_dev"
 
 monitoring:
   metrics_port: 8000
