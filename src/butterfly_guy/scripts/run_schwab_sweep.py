@@ -1,7 +1,7 @@
 """Parameter sweep using Schwab 1-minute SPY data.
 
-Loads all days from Schwab once, then runs every parameter combination
-in memory. Outputs a table sorted by profit factor.
+Loads days from local JSON cache (data/schwab/) when available; falls back
+to live Schwab API for missing days and saves them to cache.
 
 Sweeps:
   - direction_override: auto (gap signal), CALL-only, PUT-only
@@ -15,6 +15,7 @@ Sweeps:
 Usage:
     uv run python src/butterfly_guy/scripts/run_schwab_sweep.py
     uv run python src/butterfly_guy/scripts/run_schwab_sweep.py 2026-01-26 2026-03-10
+    uv run python src/butterfly_guy/scripts/run_schwab_sweep.py --no-cache
 """
 
 from __future__ import annotations
@@ -30,10 +31,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from dotenv import dotenv_values
 
+from butterfly_guy.backtest._cache_utils import day_cache_path, load_day, save_day
 from butterfly_guy.backtest.data_loader import DayData
 from butterfly_guy.backtest.schwab_loader import SchwabDataLoader
 from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
 from butterfly_guy.core.logging import get_logger, setup_logging
+
+CACHE_DIR = Path("data/schwab")
 
 setup_logging(log_level="WARNING", json_output=False)
 log = get_logger("run_schwab_sweep")
@@ -104,42 +108,64 @@ def summarize(params: SimulationParams, results: list) -> dict:
 
 
 async def main() -> None:
-    args = [a for a in sys.argv[1:] if a.startswith("20")]
+    no_cache = "--no-cache" in sys.argv
+    date_args = [a for a in sys.argv[1:] if a.startswith("20")]
     today = dt.date.today()
 
-    if len(args) >= 2:
-        start = dt.date.fromisoformat(args[0])
-        end = dt.date.fromisoformat(args[1])
-    elif len(args) == 1:
-        start = dt.date.fromisoformat(args[0])
+    if len(date_args) >= 2:
+        start = dt.date.fromisoformat(date_args[0])
+        end = dt.date.fromisoformat(date_args[1])
+    elif len(date_args) == 1:
+        start = dt.date.fromisoformat(date_args[0])
         end = today - dt.timedelta(days=1)
     else:
         start = today - dt.timedelta(days=45)
         end = today - dt.timedelta(days=1)
 
-    env = dotenv_values(".env")
-    loader = SchwabDataLoader(
-        token_path=env.get("SCHWAB_TOKEN_PATH", "tokens.json"),
-        api_key=env.get("SCHWAB_API_KEY", ""),
-        secret_key=env.get("SCHWAB_SECRET_KEY", ""),
-    )
-
     dates = date_range(start, end)
-    print(f"\nLoading {len(dates)} days from Schwab ({start} → {end})...")
+    cache_hits = sum(1 for d in dates if day_cache_path(d, CACHE_DIR).exists() and not no_cache)
+    cache_misses = len(dates) - cache_hits
+
+    print(f"\nLoading {len(dates)} days ({start} → {end})...")
+    if no_cache:
+        print("  --no-cache: fetching all days from Schwab API")
+    else:
+        print(f"  cache hits: {cache_hits}  API fetches needed: {cache_misses}")
+
+    loader: SchwabDataLoader | None = None
+    if cache_misses > 0 or no_cache:
+        env = dotenv_values(".env")
+        loader = SchwabDataLoader(
+            token_path=env.get("SCHWAB_TOKEN_PATH", "tokens.json"),
+            api_key=env.get("SCHWAB_API_KEY", ""),
+            secret_key=env.get("SCHWAB_SECRET_KEY", ""),
+        )
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     day_data: list[DayData] = []
     for date in dates:
-        try:
-            day = await loader.load_day(date)
-            if day:
+        p = day_cache_path(date, CACHE_DIR)
+        if p.exists() and not no_cache:
+            try:
+                day = load_day(p)
                 day_data.append(day)
-                print(f"  loaded {date} ({len(day.bars)} bars)")
-            else:
-                print(f"  skipped {date} — no data")
-        except Exception as e:
-            print(f"  skipped {date} — {e}")
+                print(f"  cache {date} ({len(day.bars)} bars)")
+            except Exception as e:
+                print(f"  skipped {date} — cache read error: {e}")
+        else:
+            try:
+                day = await loader.load_day(date)
+                if day:
+                    save_day(day, p)
+                    day_data.append(day)
+                    print(f"  fetch {date} ({len(day.bars)} bars) → saved")
+                else:
+                    print(f"  skipped {date} — no data")
+            except Exception as e:
+                print(f"  skipped {date} — {e}")
 
-    await loader.close()
+    if loader is not None:
+        await loader.close()
     print(f"\n{len(day_data)} days loaded. Running parameter sweep...\n")
 
     # Parameter grid

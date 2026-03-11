@@ -40,6 +40,9 @@ htmlcov/
 backtest_results.csv
 *.csv
 
+# Schwab day cache
+data/schwab/*.json
+
 # Logs
 *.log
 logs/
