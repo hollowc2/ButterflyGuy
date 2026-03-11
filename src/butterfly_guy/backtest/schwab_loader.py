@@ -1,24 +1,24 @@
-"""Backtest data loader using Schwab price history API.
+"""Backtest data loader using Schwab (1-min SPY bars) + yfinance (daily data).
 
-Uses SPY 1-minute bars (ETF, fully supported by Schwab) scaled to SPX price
-levels using the SPX daily open as a calibration anchor. This gives true
-minute-level resolution with accurate SPX absolute pricing.
+Schwab provides real 1-minute SPY bars (up to ~48 days history).
+yfinance provides SPX daily open (for calibration), VIX, and prev close.
 
 Calibration:
-  ratio = SPX_daily_open / SPY_first_bar_open
+  ratio = SPX_daily_open / SPY_first_bar_open   (from yfinance + Schwab)
   scaled_price = spy_price * ratio
 
-Limitations:
-- Schwab returns up to ~48 days of 1-minute history.
-- For dates older than ~48 days use YFinanceDataLoader (hourly) or
-  BacktestDataLoader (Polygon, paid plan).
+This hybrid approach gives true minute-level resolution with accurate
+SPX absolute pricing, correct VIX, and correct direction signal.
 """
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+import yfinance as yf
 
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.core.logging import get_logger
@@ -26,9 +26,9 @@ from butterfly_guy.core.logging import get_logger
 log = get_logger(__name__)
 
 EASTERN = ZoneInfo("America/New_York")
-SPY_SYMBOL = "SPY"       # ETF — full 1-min support from Schwab
-SPX_SYMBOL = "$SPX.X"   # Index — daily bars only (used for price calibration)
-VIX_SYMBOL = "$VIX.X"   # VIX index — daily bars
+SPY_SYMBOL = "SPY"    # ETF — full 1-min support from Schwab
+SPX_YF = "^GSPC"     # SPX on yfinance — for daily open calibration + prev close
+VIX_YF = "^VIX"      # VIX on yfinance — daily close
 
 
 class SchwabDataLoader:
@@ -61,25 +61,29 @@ class SchwabDataLoader:
             await self._client.close_async_session()
             self._client = None
 
-    async def _fetch_spx_daily_open(self, date: dt.date) -> float | None:
-        """Fetch the SPX daily open for calibrating SPY → SPX scaling."""
-        client = self._get_client()
-        start = dt.datetime(date.year, date.month, date.day, 0, 0, tzinfo=EASTERN)
-        end = dt.datetime(date.year, date.month, date.day, 23, 59, tzinfo=EASTERN)
-        resp = await client.get_price_history_every_day(
-            SPX_SYMBOL,
-            start_datetime=start,
-            end_datetime=end,
-            need_extended_hours_data=False,
-            need_previous_close=False,
-        )
-        if resp.status_code != 200:
-            log.warning("schwab_spx_daily_failed", date=str(date), status=resp.status_code)
-            return None
-        candles = resp.json().get("candles", [])
-        if candles:
-            return float(candles[0]["open"])
+    def _yf_spx_daily_open(self, date: dt.date) -> float | None:
+        """Fetch SPX daily open from yfinance for SPY→SPX calibration."""
+        end = date + dt.timedelta(days=1)
+        hist = yf.Ticker(SPX_YF).history(start=date, end=end, interval="1d")
+        if not hist.empty:
+            return float(hist["Open"].iloc[0])
         return None
+
+    def _yf_vix(self, date: dt.date) -> float:
+        """Fetch VIX daily close from yfinance."""
+        end = date + dt.timedelta(days=1)
+        hist = yf.Ticker(VIX_YF).history(start=date, end=end, interval="1d")
+        if not hist.empty:
+            return float(hist["Close"].iloc[0])
+        return 18.0
+
+    def _yf_prev_close(self, date: dt.date) -> float:
+        """Fetch previous trading day's SPX close from yfinance."""
+        start = date - dt.timedelta(days=7)
+        hist = yf.Ticker(SPX_YF).history(start=start, end=date, interval="1d")
+        if not hist.empty:
+            return float(hist["Close"].iloc[-1])
+        return 5500.0
 
     async def get_spx_minute_bars(self, date: dt.date) -> list[MinuteBar]:
         """Fetch SPY 1-minute bars, scaled to SPX price levels."""
@@ -106,14 +110,14 @@ class SchwabDataLoader:
 
         # Calibrate: scale SPY prices to SPX levels
         spy_open = float(candles[0]["open"])
-        spx_open = await self._fetch_spx_daily_open(date)
+        spx_open = await asyncio.to_thread(self._yf_spx_daily_open, date)
 
         if spx_open and spy_open > 0:
             ratio = spx_open / spy_open
             log.info("spy_spx_calibration", date=str(date),
-                     spy_open=spy_open, spx_open=spx_open, ratio=round(ratio, 4))
+                     spy_open=round(spy_open, 2), spx_open=round(spx_open, 2),
+                     ratio=round(ratio, 4))
         else:
-            # Fallback: use approximate 10:1 ratio
             ratio = 10.0
             log.warning("spy_spx_calibration_fallback", date=str(date), ratio=ratio)
 
@@ -134,44 +138,12 @@ class SchwabDataLoader:
         return bars
 
     async def get_vix_daily(self, date: dt.date) -> float:
-        """Fetch VIX close for a given date."""
-        client = self._get_client()
-        start = dt.datetime(date.year, date.month, date.day, 0, 0, tzinfo=EASTERN)
-        end = dt.datetime(date.year, date.month, date.day, 23, 59, tzinfo=EASTERN)
-        resp = await client.get_price_history_every_day(
-            VIX_SYMBOL,
-            start_datetime=start,
-            end_datetime=end,
-            need_extended_hours_data=False,
-            need_previous_close=False,
-        )
-        if resp.status_code != 200:
-            log.warning("schwab_vix_failed", date=str(date), status=resp.status_code)
-            return 18.0
-        candles = resp.json().get("candles", [])
-        if candles:
-            return float(candles[-1]["close"])
-        return 18.0
+        """Fetch VIX daily close from yfinance."""
+        return await asyncio.to_thread(self._yf_vix, date)
 
     async def get_prev_close(self, date: dt.date) -> float:
-        """Fetch previous trading day's SPX close."""
-        client = self._get_client()
-        end = dt.datetime(date.year, date.month, date.day, 0, 0, tzinfo=EASTERN)
-        start = end - dt.timedelta(days=7)
-        resp = await client.get_price_history_every_day(
-            SPX_SYMBOL,
-            start_datetime=start,
-            end_datetime=end,
-            need_extended_hours_data=False,
-            need_previous_close=False,
-        )
-        if resp.status_code != 200:
-            log.warning("schwab_prev_close_failed", date=str(date), status=resp.status_code)
-            return 5500.0
-        candles = resp.json().get("candles", [])
-        if candles:
-            return float(candles[-1]["close"])
-        return 5500.0
+        """Fetch previous trading day's SPX close from yfinance."""
+        return await asyncio.to_thread(self._yf_prev_close, date)
 
     async def load_day(self, date: dt.date) -> DayData | None:
         """Load all data needed for a single backtest day."""
