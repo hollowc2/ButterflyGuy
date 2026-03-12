@@ -280,7 +280,11 @@ async def main() -> None:
     )
 
     await debug_day(date, params, loader)
-    await loader.close()
+    if hasattr(loader, "close"):
+        if asyncio.iscoroutinefunction(loader.close):
+            await loader.close()
+        else:
+            loader.close()
 
 
 if __name__ == "__main__":
