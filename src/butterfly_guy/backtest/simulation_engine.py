@@ -87,8 +87,8 @@ class SimulationEngine:
                     vix=day.vix,
                     expiration=expiration,
                     snapshot_time=bar.ts,
-                    strike_min=bar.close - 80,
-                    strike_max=bar.close + 80,
+                    strike_min=bar.close - 110,
+                    strike_max=bar.close + 110,
                 )
 
                 if params.direction_override:
@@ -108,7 +108,7 @@ class SimulationEngine:
                 settings_override = StrategySettings(
                     wing_widths=[params.wing_width],
                     rr_min=params.rr_min,
-                    spot_range=60,
+                    spot_range=100,
                 )
                 builder = ButterflyBuilder(settings_override)
                 candidates = builder.build_candidates(quotes, bar.close, direction)

@@ -79,7 +79,7 @@ def main() -> None:
     direction_filter = DirectionFilter()
     bias_filter = BiasScoreFilter()
 
-    settings = StrategySettings(wing_widths=[wing_width], rr_min=rr_min, spot_range=60)
+    settings = StrategySettings(wing_widths=[wing_width], rr_min=rr_min, spot_range=100)
     builder = ButterflyBuilder(settings)
     selector = ButterflySelector()
 
@@ -123,8 +123,8 @@ def main() -> None:
         vix=day.vix,
         expiration=date,
         snapshot_time=entry_bar.ts,
-        strike_min=entry_bar.close - 80,
-        strike_max=entry_bar.close + 80,
+        strike_min=entry_bar.close - 110,
+        strike_max=entry_bar.close + 110,
     )
 
     # Show ATM chain slice (±30 pts)

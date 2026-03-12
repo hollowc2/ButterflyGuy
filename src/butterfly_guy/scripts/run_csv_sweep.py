@@ -151,8 +151,7 @@ def main() -> None:
     # Parameter grid
     directions = [None, "CALL", "PUT"]
     use_bias_filters = [False, True]
-    #wing_widths = [5, 10, 15, 20]
-    wing_widths = [10]
+    wing_widths = [10, 20, 30]
     rr_mins = [8.0, 10.0]
     morning_dds = [0.40, 0.50, 0.60]
     lm_dds = [0.30, 0.40]
