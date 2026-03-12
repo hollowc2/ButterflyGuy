@@ -20,11 +20,11 @@ class SchwabSettings(BaseModel):
 
 class StrategySettings(BaseModel):
     underlying: str = "SPX"
-    wing_widths: list[int] = Field(default_factory=lambda: [5, 10, 15, 20, 25])
-    spot_range: int = 40
+    wing_widths: list[int] = Field(default_factory=lambda: [10, 20, 30])
+    spot_range: int = 100
     rr_min: float = 8.0
     max_cost_per_width: dict[int, float] = Field(
-        default_factory=lambda: {5: 0.50, 10: 1.00, 15: 1.50, 20: 2.00, 25: 2.50}
+        default_factory=lambda: {10: 1.00, 20: 2.00, 30: 3.00}
     )
 
 

@@ -15,19 +15,15 @@ class ButterflySelector:
         self, candidates: list[ButterflyCandidate]
     ) -> ButterflyCandidate | None:
         """
-        Select the best candidate: closest to spot, tiebreak by highest RR.
-        Candidates should already be sorted by distance_from_spot.
+        Select the best candidate: prioritize the highest Reward/Risk (R/R) ratio.
+        This favors OTM geometries rather than forcing At-The-Money setups.
         """
         if not candidates:
             log.warning("no_candidates_to_select")
             return None
 
-        # Group by minimum distance
-        min_distance = candidates[0].distance_from_spot
-        closest = [c for c in candidates if c.distance_from_spot == min_distance]
-
-        # Tiebreak: highest reward/risk
-        best = max(closest, key=lambda c: c.reward_risk)
+        # Sort/select by highest reward/risk ratio
+        best = max(candidates, key=lambda c: c.reward_risk)
 
         log.info(
             "candidate_selected",
