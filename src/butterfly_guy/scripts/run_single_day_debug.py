@@ -87,14 +87,14 @@ async def debug_day(date: dt.date, params: SimulationParams, loader) -> None:
             vix=day.vix,
             expiration=day.date,
             snapshot_time=bar.ts,
-            strike_min=bar.close - 80,
-            strike_max=bar.close + 80,
+            strike_min=bar.close - 110,
+            strike_max=bar.close + 110,
         )
 
         settings = StrategySettings(
             wing_widths=[params.wing_width],
             rr_min=params.rr_min,
-            spot_range=60,
+            spot_range=100,
         )
         builder = ButterflyBuilder(settings)
         candidates = builder.build_candidates(quotes, bar.close, direction)
