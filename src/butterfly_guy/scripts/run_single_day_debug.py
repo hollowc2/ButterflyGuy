@@ -40,7 +40,11 @@ def fmt(ts: dt.datetime) -> str:
 
 
 async def debug_day(date: dt.date, params: SimulationParams, loader) -> None:
-    day = await loader.load_day(date)
+    if hasattr(loader, "load_day_async"):
+        day = await loader.load_day_async(date)
+    else:
+        # CsvDataLoader and others might be synchronous
+        day = loader.load_day(date)
 
     if not day:
         print(f"No data for {date}")
