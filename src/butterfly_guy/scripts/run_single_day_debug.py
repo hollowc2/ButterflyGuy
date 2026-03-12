@@ -267,8 +267,8 @@ async def main() -> None:
     print(f"Source: {source}  |  Date: {date}")
 
     params = SimulationParams(
-        wing_width=10,
-        rr_min=6.0,
+        wing_width=30,
+        rr_min=8.0,
         morning_drawdown=0.50,
         late_morning_drawdown=0.40,
         afternoon_drawdown=0.30,
