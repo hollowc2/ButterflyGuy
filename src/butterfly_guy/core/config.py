@@ -109,16 +109,17 @@ def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env")
             yaml_data = yaml.safe_load(f) or {}
 
     # Load env vars for Schwab credentials
-    from dotenv import dotenv_values
-
-    env_vars = dotenv_values(env_file)
+    import os
+    from dotenv import load_dotenv
+    load_dotenv(env_file)
 
     schwab_data = yaml_data.get("schwab", {})
-    schwab_data.setdefault("api_key", env_vars.get("SCHWAB_API_KEY", ""))
-    schwab_data.setdefault("secret_key", env_vars.get("SCHWAB_SECRET_KEY", ""))
-    schwab_data.setdefault("account_id", env_vars.get("SCHWAB_ACCOUNT_ID", ""))
-    if "token_path" in env_vars:
-        schwab_data.setdefault("token_path", env_vars["SCHWAB_TOKEN_PATH"])
+    schwab_data.setdefault("api_key", os.getenv("SCHWAB_API_KEY", ""))
+    schwab_data.setdefault("secret_key", os.getenv("SCHWAB_SECRET_KEY", ""))
+    schwab_data.setdefault("account_id", os.getenv("SCHWAB_ACCOUNT_ID", ""))
+    
+    if os.getenv("SCHWAB_TOKEN_PATH"):
+        schwab_data.setdefault("token_path", os.getenv("SCHWAB_TOKEN_PATH"))
     yaml_data["schwab"] = schwab_data
 
     return AppConfig(**yaml_data)
