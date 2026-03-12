@@ -151,18 +151,21 @@ def main() -> None:
     # Parameter grid
     directions = [None, "CALL", "PUT"]
     use_bias_filters = [False, True]
-    wing_widths = [5, 10, 15, 20]
-    rr_mins = [6.0, 8.0, 10.0]
+    #wing_widths = [5, 10, 15, 20]
+    wing_widths = [10]
+    rr_mins = [8.0, 10.0]
     morning_dds = [0.40, 0.50, 0.60]
     lm_dds = [0.30, 0.40]
     aft_dds = [0.20, 0.30]
 
-    grid = list(
-        itertools.product(
+    grid = [
+        (direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd)
+        for direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd in itertools.product(
             directions, use_bias_filters, wing_widths, rr_mins,
             morning_dds, lm_dds, aft_dds,
         )
-    )
+        if direction is None or not use_bias  # bias filter only meaningful for auto direction
+    ]
     print(f"Testing {len(grid)} parameter combinations...\n")
 
     engine = SimulationEngine()
