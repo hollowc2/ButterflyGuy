@@ -8,8 +8,8 @@ Usage:
     uv run python src/butterfly_guy/scripts/run_single_day_debug.py 2026-03-05
     uv run python src/butterfly_guy/scripts/run_single_day_debug.py 2026-03-05 --source schwab
 
-    # yfinance (hourly, any date in last ~2 years)
-    uv run python src/butterfly_guy/scripts/run_single_day_debug.py 2025-01-06 --source yfinance
+    # CSV (local 1-min data (data/spx_1min.csv), exhaustive)
+    uv run python src/butterfly_guy/scripts/run_single_day_debug.py 2025-06-03 --source csv
 """
 
 from __future__ import annotations
@@ -218,7 +218,7 @@ async def main() -> None:
     for arg in args:
         if arg == "--source" or arg.startswith("--source="):
             pass  # handled below
-        elif arg in ("schwab", "yfinance", "polygon"):
+        elif arg in ("schwab", "yfinance", "polygon", "csv"):
             source = arg
         elif arg.startswith("20"):
             date_str = arg
@@ -255,6 +255,9 @@ async def main() -> None:
     elif source == "yfinance":
         from butterfly_guy.backtest.yfinance_loader import YFinanceDataLoader
         loader = YFinanceDataLoader()
+    elif source == "csv":
+        from butterfly_guy.backtest.csv_loader import CsvDataLoader
+        loader = CsvDataLoader(Path("data/spx_1min.csv"), Path("data/vix_1min.csv"))
     else:
         from dotenv import dotenv_values
         from butterfly_guy.backtest.data_loader import BacktestDataLoader
