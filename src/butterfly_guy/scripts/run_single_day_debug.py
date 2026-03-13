@@ -102,7 +102,7 @@ async def debug_day(date: dt.date, params: SimulationParams, loader) -> None:
         )
         builder = ButterflyBuilder(settings)
         candidates = builder.build_candidates(quotes, bar.close, direction)
-        selector = ButterflySelector()
+        selector = ButterflySelector(settings)
         best = selector.select_best(candidates)
 
         print(f"  Candidates found: {len(candidates)}")

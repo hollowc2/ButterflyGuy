@@ -104,7 +104,6 @@ class SimulationEngine:
                 if direction is None:
                     continue  # bias filter said no trade; try next bar in entry window
 
-                # Override settings to use single wing_width from params
                 settings_override = StrategySettings(
                     wing_widths=[params.wing_width],
                     rr_min=params.rr_min,
@@ -112,7 +111,9 @@ class SimulationEngine:
                 )
                 builder = ButterflyBuilder(settings_override)
                 candidates = builder.build_candidates(quotes, bar.close, direction)
-                best = self.selector.select_best(candidates)
+                
+                selector = ButterflySelector(settings_override)
+                best = selector.select_best(candidates)
 
                 if best:
                     entry_candidate = best

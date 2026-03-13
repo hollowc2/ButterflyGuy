@@ -115,7 +115,7 @@ async def main() -> None:
         risk_engine=risk_engine,
         order_manager=order_manager,
         builder=ButterflyBuilder(config.strategy),
-        selector=ButterflySelector(),
+        selector=ButterflySelector(config.strategy),
         direction_filter=DirectionFilter(),
         chain_queries=chain_q,
         trade_queries=trade_q,

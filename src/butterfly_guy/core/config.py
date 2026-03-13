@@ -23,6 +23,8 @@ class StrategySettings(BaseModel):
     wing_widths: list[int] = Field(default_factory=lambda: [10, 20, 30])
     spot_range: int = 100
     rr_min: float = 8.0
+    rr_max: float = 12.0
+    rr_target: float = 10.0
     max_cost_per_width: dict[int, float] = Field(
         default_factory=lambda: {10: 1.00, 20: 2.00, 30: 3.00}
     )

@@ -81,7 +81,7 @@ def main() -> None:
 
     settings = StrategySettings(wing_widths=[wing_width], rr_min=rr_min, spot_range=100)
     builder = ButterflyBuilder(settings)
-    selector = ButterflySelector()
+    selector = ButterflySelector(settings)
 
     entry_bar = None
     direction = None
