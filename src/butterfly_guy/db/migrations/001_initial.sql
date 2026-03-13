@@ -14,11 +14,11 @@ CREATE TABLE IF NOT EXISTS option_chain_snapshots (
     last            NUMERIC(10,4),
     volume          INTEGER DEFAULT 0,
     open_interest   INTEGER DEFAULT 0,
-    iv              NUMERIC(8,6),
-    delta           NUMERIC(8,6),
-    gamma           NUMERIC(8,6),
-    theta           NUMERIC(8,6),
-    vega            NUMERIC(8,6),
+    iv              NUMERIC(12,6),
+    delta           NUMERIC(12,6),
+    gamma           NUMERIC(12,6),
+    theta           NUMERIC(12,6),
+    vega            NUMERIC(12,6),
     symbol          TEXT,
     spot_price      NUMERIC(10,2)
 );
