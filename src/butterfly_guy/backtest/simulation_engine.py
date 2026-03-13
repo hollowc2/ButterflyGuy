@@ -14,6 +14,8 @@ from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
+from butterfly_guy.strategy.regime_classifier import Regime, RegimeClassifier
+from butterfly_guy.strategy.regime_filter import RegimeFilter
 
 EASTERN = ZoneInfo("America/New_York")
 PACIFIC = ZoneInfo("America/Los_Angeles")
@@ -35,6 +37,32 @@ class SimulationParams:
     slippage: float = 0.05  # per spread
     direction_override: str | None = None  # "CALL" or "PUT" to force direction
     use_bias_filter: bool = False
+    vix_max: float | None = None
+    hold_to_expiry: bool = False  # skip all drawdown exits; let butterfly expire
+
+
+@dataclass
+class RegimeDispatch:
+    """Maps Regime → SimulationParams for use with simulate_day_adaptive().
+
+    Per-regime params should be set to known-optimal values from regime sweep.
+    default_params is the fallback for UNKNOWN (insufficient history).
+    """
+
+    classifier: RegimeClassifier
+    bull_params: SimulationParams
+    bear_params: SimulationParams
+    chop_params: SimulationParams
+    default_params: SimulationParams
+
+    def params_for(self, regime: Regime) -> SimulationParams:
+        if regime == Regime.BULL:
+            return self.bull_params
+        if regime == Regime.BEAR:
+            return self.bear_params
+        if regime == Regime.CHOP:
+            return self.chop_params
+        return self.default_params  # UNKNOWN
 
 
 @dataclass
@@ -62,6 +90,7 @@ class SimulationEngine:
         self.selector = ButterflySelector()
         self.direction_filter = DirectionFilter()
         self.bias_filter = BiasScoreFilter()
+        self._regime_filter_cache: dict[float, RegimeFilter] = {}
 
     def simulate_day(self, day: DayData, params: SimulationParams) -> DayResult:
         """Simulate one trading day."""
@@ -103,6 +132,13 @@ class SimulationEngine:
 
                 if direction is None:
                     continue  # bias filter said no trade; try next bar in entry window
+
+                if params.vix_max is not None and day.vix_bars:
+                    rf = self._regime_filter_cache.setdefault(
+                        params.vix_max, RegimeFilter(params.vix_max)
+                    )
+                    if not rf.should_trade(day.vix_bars, bar.ts):
+                        continue  # VIX too high at this bar; try next bar in window
 
                 settings_override = StrategySettings(
                     wing_widths=[params.wing_width],
@@ -195,7 +231,7 @@ class SimulationEngine:
                 return result
 
             # Drawdown exit (only if we've been in profit tent)
-            if peak_value > result.entry_price and peak_value > 0:
+            if not params.hold_to_expiry and peak_value > result.entry_price and peak_value > 0:
                 drawdown = (peak_value - current_value) / peak_value
                 if drawdown >= drawdown_threshold:
                     result.exit_time = bar.ts
@@ -247,3 +283,15 @@ class SimulationEngine:
         result.peak_value = peak_value
         result.pnl = -result.entry_price
         return result
+
+    def simulate_day_adaptive(
+        self, day: DayData, dispatch: RegimeDispatch
+    ) -> tuple[DayResult, Regime]:
+        """Classify regime then delegate to simulate_day() with matching params.
+
+        Returns (DayResult, Regime) so callers can accumulate per-regime stats.
+        """
+        regime = dispatch.classifier.classify(day.recent_closes, day.vix)
+        params = dispatch.params_for(regime)
+        result = self.simulate_day(day, params)
+        return result, regime
