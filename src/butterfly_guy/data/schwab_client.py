@@ -101,7 +101,7 @@ class SchwabClientWrapper:
         """Fetch SPX option chain for a specific expiration."""
         resp = await self._retry(
             self.client.get_option_chain,
-            "SPX",
+            "$SPX",
             from_date=expiration,
             to_date=expiration,
             endpoint="get_option_chain",
