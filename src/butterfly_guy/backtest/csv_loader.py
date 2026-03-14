@@ -47,7 +47,9 @@ class CsvDataLoader:
         # Build date-keyed lookups
         self._bars_by_date: dict[dt.date, list[MinuteBar]] = self._build_bars(spx_df)
         self._vix_by_date: dict[dt.date, float] = self._build_vix(vix_df)
+        self._vix_bars_by_date: dict[dt.date, list[MinuteBar]] = self._build_vix_bars(vix_df)
         self._prev_close: dict[dt.date, float] = self._build_prev_close(spx_df)
+        self._recent_closes: dict[dt.date, list[float]] = self._build_recent_closes(spx_df)
 
         dates = sorted(self._bars_by_date)
         log.info(
@@ -70,7 +72,16 @@ class CsvDataLoader:
             return None
         vix = self._vix_by_date.get(date, 18.0)
         prev_close = self._prev_close.get(date, 5500.0)
-        return DayData(date=date, bars=bars, vix=vix, prev_close=prev_close)
+        vix_bars = self._vix_bars_by_date.get(date, [])
+        recent_closes = self._recent_closes.get(date, [])
+        return DayData(
+            date=date,
+            bars=bars,
+            vix=vix,
+            prev_close=prev_close,
+            vix_bars=vix_bars,
+            recent_closes=recent_closes,
+        )
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -107,6 +118,40 @@ class CsvDataLoader:
             ]
             bars_by_date[date] = bars
         return bars_by_date
+
+    @staticmethod
+    def _build_recent_closes(df: pd.DataFrame, n: int = 30) -> dict[dt.date, list[float]]:
+        """Map each date → list of up to n prior daily closes (chrono order, newest last).
+
+        Uses last bar close per day as the daily close proxy, same as _build_prev_close.
+        """
+        last = df.sort_values("ts").groupby("et_date")["close"].last()
+        dates = list(last.index)
+        closes = [float(last.iloc[i]) for i in range(len(dates))]
+        result: dict[dt.date, list[float]] = {}
+        for i, date in enumerate(dates):
+            start_idx = max(0, i - n)
+            result[date] = closes[start_idx:i]
+        return result
+
+    @staticmethod
+    def _build_vix_bars(df: pd.DataFrame) -> dict[dt.date, list[MinuteBar]]:
+        result: dict[dt.date, list[MinuteBar]] = {}
+        for date, group in df.groupby("et_date"):
+            group = group.sort_values("ts")
+            bars = [
+                MinuteBar(
+                    ts=row.ts.to_pydatetime(),
+                    open=float(row.open),
+                    high=float(row.high),
+                    low=float(row.low),
+                    close=float(row.close),
+                    volume=0,
+                )
+                for row in group.itertuples()
+            ]
+            result[date] = bars
+        return result
 
     @staticmethod
     def _build_vix(df: pd.DataFrame) -> dict[dt.date, float]:

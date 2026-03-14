@@ -1,4 +1,10 @@
 """Main orchestrator: runs collector + trading + position monitor concurrently."""
+# TODO(regime-classifier): For regime-adaptive live trading, source recent_closes
+# from Schwab's get_price_history endpoint (frequencyType=daily, frequency=1,
+# periodType=month) covering at least lookback_days + 5 prior trading days.
+# Construct a RegimeDispatch with tuned thresholds from run_classifier_sweep.py
+# and call engine.simulate_day_adaptive() instead of simulate_day() in the entry loop.
+# Note: revisit BULL regime direction (CALL vs PUT) before deploying live.
 
 from __future__ import annotations
 
@@ -43,22 +49,32 @@ log = get_logger("run_live")
 async def entry_loop(trade_service: TradeService, position_service: PositionService) -> None:
     """Periodically attempt entries during the entry window."""
     active_trade = None
-    active_candidate = None
+    monitor_task: asyncio.Task | None = None
 
     while True:
         if not is_market_open():
             await asyncio.sleep(30)
             continue
 
+        # Check if monitor task has finished — reset active_trade so we can re-enter
+        if monitor_task is not None and monitor_task.done():
+            exc = monitor_task.exception()
+            if exc:
+                log.error("monitor_task_error", error=str(exc))
+            active_trade = None
+            monitor_task = None
+
         # If no active position, try entry
         if active_trade is None:
             try:
                 result = await trade_service.attempt_entry()
                 if result:
-                    active_trade = result
-                    log.info("entry_loop_got_trade", trade_id=result.trade_id)
-                    # Start monitor as background task
-                    # (We need the candidate — fetch it from DB or pass through)
+                    active_trade, candidate = result
+                    log.info("entry_loop_got_trade", trade_id=active_trade.trade_id)
+                    monitor_task = asyncio.create_task(
+                        position_service.monitor_loop(active_trade, candidate),
+                        name=f"monitor_{active_trade.trade_id}",
+                    )
             except Exception as e:
                 log.error("entry_loop_error", error=str(e))
 

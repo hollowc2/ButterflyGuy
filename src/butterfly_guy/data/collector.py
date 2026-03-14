@@ -18,6 +18,7 @@ from butterfly_guy.core.time_utils import (
     is_market_open,
     now_eastern,
 )
+from butterfly_guy.backtest.chain_cache import save_snapshot
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.db.queries import ChainQueries, SpotQueries
 
@@ -100,6 +101,7 @@ class OptionChainCollector:
                 count = await self.chain_queries.bulk_insert_snapshot(rows)
                 chain_snapshots_total.inc()
                 chain_snapshot_rows.set(count)
+                save_snapshot(expiration, snapshot_time, spot_price, rows)
                 log.info("snapshot_collected", rows=count, spot=spot_price)
                 return count
 

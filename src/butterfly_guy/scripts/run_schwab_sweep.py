@@ -83,7 +83,7 @@ def summarize(params: SimulationParams, results: list) -> dict:
     eod_exits = reasons.get("end_of_day", 0)
 
     direction_str = params.direction_override or "auto"
-    filter_str = "bias" if params.use_bias_filter else "gap"
+    filter_str = "bias" if params.use_bias_filter else "gap_dir"
 
     return {
         "direction": direction_str,

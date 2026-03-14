@@ -46,7 +46,15 @@ class OrderManager:
 
         for i in range(max_steps):
             limit_price = round(mid_price + i * step, 2)
-            log.info("entry_ladder_step", step=i, price=limit_price)
+            log.info("entry_ladder_step", step=i, price=limit_price, paper=self.settings.paper_trading)
+
+            if self.settings.paper_trading:
+                log.info("paper_trade_entry_fill", price=limit_price)
+                return {
+                    "order_id": "PAPER",
+                    "fill_price": limit_price,
+                    "fill_time": dt.datetime.now(dt.timezone.utc),
+                }
 
             order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
             orders_placed.labels(order_type="entry").inc()
@@ -90,7 +98,15 @@ class OrderManager:
 
         for i in range(max_steps):
             limit_price = round(max(0.05, mid_price - i * step), 2)
-            log.info("exit_ladder_step", step=i, price=limit_price)
+            log.info("exit_ladder_step", step=i, price=limit_price, paper=self.settings.paper_trading)
+
+            if self.settings.paper_trading:
+                log.info("paper_trade_exit_fill", price=limit_price)
+                return {
+                    "order_id": "PAPER",
+                    "fill_price": limit_price,
+                    "fill_time": dt.datetime.now(dt.timezone.utc),
+                }
 
             order_spec = self.builder.build_butterfly_close(candidate, limit_price, quantity)
             orders_placed.labels(order_type="exit").inc()

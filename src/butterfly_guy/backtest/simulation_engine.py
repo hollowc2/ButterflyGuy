@@ -6,6 +6,7 @@ import datetime as dt
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
+from butterfly_guy.backtest.chain_cache import load_chain_day, nearest_snapshot
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.core.config import StrategySettings
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
@@ -39,6 +40,7 @@ class SimulationParams:
     use_bias_filter: bool = False
     vix_max: float | None = None
     hold_to_expiry: bool = False  # skip all drawdown exits; let butterfly expire
+    skip_morning_exit: bool = False  # never exit on drawdown during morning regime (<2h after open)
 
 
 @dataclass
@@ -101,6 +103,9 @@ class SimulationEngine:
         if day.date.weekday() >= 5:
             return result
 
+        # Load real chain cache for this day (None if not available)
+        real_chains = load_chain_day(day.date)
+
         # Find entry bar
         entry_candidate: ButterflyCandidate | None = None
         entry_bar: MinuteBar | None = None
@@ -110,8 +115,9 @@ class SimulationEngine:
             bar_time = bar_et.time()
 
             if ENTRY_START <= bar_time <= ENTRY_END:
-                # Generate synthetic chain at this bar
-                quotes = self.synth.generate_chain(
+                # Use real chain if available, else synthetic
+                real_quotes = nearest_snapshot(real_chains, bar.ts) if real_chains else None
+                quotes = real_quotes if real_quotes else self.synth.generate_chain(
                     spot=bar.close,
                     vix=day.vix,
                     expiration=expiration,
@@ -194,7 +200,8 @@ class SimulationEngine:
                 drawdown_threshold = params.afternoon_drawdown
 
             # Calculate current butterfly value
-            quotes = self.synth.generate_chain(
+            real_quotes = nearest_snapshot(real_chains, bar.ts) if real_chains else None
+            quotes = real_quotes if real_quotes else self.synth.generate_chain(
                 spot=bar.close,
                 vix=day.vix,
                 expiration=expiration,
@@ -231,7 +238,8 @@ class SimulationEngine:
                 return result
 
             # Drawdown exit (only if we've been in profit tent)
-            if not params.hold_to_expiry and peak_value > result.entry_price and peak_value > 0:
+            skip_exit = params.hold_to_expiry or (params.skip_morning_exit and regime == "morning")
+            if not skip_exit and peak_value > result.entry_price and peak_value > 0:
                 drawdown = (peak_value - current_value) / peak_value
                 if drawdown >= drawdown_threshold:
                     result.exit_time = bar.ts
@@ -248,7 +256,8 @@ class SimulationEngine:
             last_bar = day.bars[-1]
             last_bar_et = last_bar.ts.astimezone(EASTERN)
             if last_bar_et.time() >= dt.time(10, 30):
-                quotes = self.synth.generate_chain(
+                real_quotes = nearest_snapshot(real_chains, last_bar.ts) if real_chains else None
+                quotes = real_quotes if real_quotes else self.synth.generate_chain(
                     spot=last_bar.close,
                     vix=day.vix,
                     expiration=expiration,

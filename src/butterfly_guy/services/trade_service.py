@@ -13,6 +13,8 @@ from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.db.queries import CandidateQueries, ChainQueries, DecisionQueries, TradeQueries
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.risk.risk_engine import RiskEngine
+from butterfly_guy.backtest.data_loader import MinuteBar
+from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
@@ -49,7 +51,7 @@ class TradeService:
         self.candidate_queries = candidate_queries
         self.decision_queries = decision_queries
 
-    async def attempt_entry(self) -> TradeRecord | None:
+    async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
         """Full entry flow: risk → time → chain → direction → scan → select → execute."""
         now = now_eastern()
 
@@ -90,9 +92,8 @@ class TradeService:
             log.warning("empty_chain")
             return None
 
-        # Determine direction (use spot vs yesterday for simplicity)
-        # In production, previous_close comes from DB or API
-        previous_close = spot_price  # fallback: neutral
+        # Fetch previous close from DB (fallback to spot_price = neutral)
+        previous_close = spot_price
         try:
             latest_spot = await self.chain_queries.db.fetchval(
                 """
@@ -107,7 +108,15 @@ class TradeService:
         except Exception:
             pass
 
-        direction = self.direction_filter.get_direction(spot_price, previous_close)
+        # Determine direction — bias filter if configured, else simple gap
+        if self.config.entry.use_bias_filter:
+            direction = await self._bias_direction(previous_close, spot_price)
+            if direction is None:
+                await self.decision_queries.log_event("bias_filter_no_signal", {"spot": spot_price})
+                log.info("bias_filter_no_signal", spot=spot_price)
+                return None
+        else:
+            direction = self.direction_filter.get_direction(spot_price, previous_close)
 
         # Build candidates
         candidates = self.builder.build_candidates(quotes, spot_price, direction)
@@ -203,7 +212,34 @@ class TradeService:
         })
 
         log.info("trade_entered", trade_id=trade_id, center=best.center_strike)
-        return record
+        return record, best
+
+    async def _bias_direction(
+        self, prev_close: float, entry_close: float
+    ) -> "Literal['CALL', 'PUT'] | None":
+        """Fetch today's 1-min bars from Schwab and run BiasScoreFilter."""
+        from typing import Literal
+
+        try:
+            candles = await self.schwab.get_intraday_bars("$SPX", days_back=1)
+            bars: list[MinuteBar] = []
+            for c in candles:
+                ts_ms = c.get("datetime", 0)
+                ts = dt.datetime.fromtimestamp(ts_ms / 1000, tz=dt.timezone.utc)
+                bars.append(
+                    MinuteBar(
+                        ts=ts,
+                        open=c.get("open", 0.0),
+                        high=c.get("high", 0.0),
+                        low=c.get("low", 0.0),
+                        close=c.get("close", 0.0),
+                        volume=int(c.get("volume", 0)),
+                    )
+                )
+            return BiasScoreFilter().get_direction(bars, prev_close, entry_close)
+        except Exception as e:
+            log.warning("bias_filter_fallback", error=str(e))
+            return self.direction_filter.get_direction(entry_close, prev_close)
 
     def _parse_chain_to_quotes(
         self, chain_data: dict, expiration: dt.date

@@ -43,6 +43,9 @@ backtest_results.csv
 # Schwab day cache
 data/schwab/*.json
 
+# Real option chain cache
+data/chains/*.json
+
 # Logs
 *.log
 logs/

@@ -105,6 +105,8 @@ def parse_args() -> argparse.Namespace:
                    help="Skip days where VIX exceeds this threshold at entry time")
     p.add_argument("--hold-to-expiry", action="store_true",
                    help="Disable all drawdown exits; let butterfly expire at EOD or worthless")
+    p.add_argument("--skip-morning-exit", action="store_true",
+                   help="Never exit on drawdown during morning regime (<2h after open); only late-morning/afternoon exits allowed")
 
     return p.parse_args()
 
@@ -142,6 +144,7 @@ def build_params(args: argparse.Namespace) -> SimulationParams:
         use_bias_filter=use_bias_filter,
         vix_max=args.vix_max,
         hold_to_expiry=args.hold_to_expiry,
+        skip_morning_exit=args.skip_morning_exit,
     )
 
 
@@ -152,6 +155,7 @@ def print_params(params: SimulationParams, source: str, dates: list[dt.date]) ->
     )
     vix_str = f"  vix_max={params.vix_max}" if params.vix_max is not None else ""
     hold_str = "  hold_to_expiry=True" if params.hold_to_expiry else ""
+    hold_str += "  skip_morning_exit=True" if params.skip_morning_exit else ""
     print(f"\nRunning {len(dates)} trading days: {dates[0]} → {dates[-1]}  [source={source}]")
     print(
         f"Params: wing={params.wing_width}  rr_min={params.rr_min}"

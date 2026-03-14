@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -26,6 +26,8 @@ class DayData:
     bars: list[MinuteBar]
     vix: float
     prev_close: float
+    vix_bars: list[MinuteBar] = field(default_factory=list)
+    recent_closes: list[float] = field(default_factory=list)
 
 
 class BacktestDataLoader:

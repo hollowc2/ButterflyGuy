@@ -34,6 +34,7 @@ class EntrySettings(BaseModel):
     start_time: str = "07:00"
     end_time: str = "07:30"
     timezone: str = "America/Los_Angeles"
+    use_bias_filter: bool = False  # if True, use BiasScoreFilter instead of simple gap
 
 
 class ExecutionSettings(BaseModel):
@@ -41,6 +42,7 @@ class ExecutionSettings(BaseModel):
     price_ladder_steps: int = 4
     retry_interval_seconds: int = 20
     order_timeout_seconds: int = 300
+    paper_trading: bool = True  # default safe — set False to go live
 
 
 class TimeRegime(BaseModel):

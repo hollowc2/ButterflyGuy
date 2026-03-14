@@ -73,13 +73,14 @@ def summarize(params: SimulationParams, results: list) -> dict | None:
 
     reasons = Counter(r.exit_reason for r in traded)
     direction_str = params.direction_override or "auto"
-    filter_str = "bias" if params.use_bias_filter else "gap"
+    filter_str = "bias" if params.use_bias_filter else "gap_dir"
 
     return {
         "direction": direction_str,
         "filter": filter_str,
         "wing": params.wing_width,
         "rr_min": params.rr_min,
+        "vix_max": params.vix_max if params.vix_max is not None else "-",
         "morn_dd": params.morning_drawdown,
         "lm_dd": params.late_morning_drawdown,
         "aft_dd": params.afternoon_drawdown,
@@ -100,12 +101,12 @@ def summarize(params: SimulationParams, results: list) -> dict | None:
 
 def print_table(rows: list[dict], top_n: int) -> None:
     rows = rows[:top_n]
-    width = 125
+    width = 135
     print(f"\n{'=' * width}")
     print(f"  TOP {len(rows)} PARAMETER COMBINATIONS (sorted by profit factor)")
     print(f"{'=' * width}")
     hdr = (
-        f"{'Dir':>5}  {'Filt':>5}  {'Wing':>4}  {'RR':>4}  "
+        f"{'Dir':>5}  {'Filt':>5}  {'Wing':>4}  {'RR':>4}  {'VIXmax':>6}  "
         f"{'MDD':>4}  {'LDD':>4}  {'ADD':>4}  "
         f"{'N':>4}  {'W%':>5}  {'PnL':>9}  "
         f"{'AvgW':>7}  {'AvgL':>7}  {'PF':>5}  {'Sharpe':>6}  {'Streak':>6}"
@@ -113,9 +114,10 @@ def print_table(rows: list[dict], top_n: int) -> None:
     print(hdr)
     print("-" * width)
     for r in rows:
+        vix_str = f"{r['vix_max']:>6}" if r['vix_max'] != "-" else f"{'  -':>6}"
         print(
             f"{r['direction']:>5}  {r['filter']:>5}  {r['wing']:>4}  "
-            f"{r['rr_min']:>4.1f}  "
+            f"{r['rr_min']:>4.1f}  {vix_str}  "
             f"{r['morn_dd']:>4.2f}  {r['lm_dd']:>4.2f}  {r['aft_dd']:>4.2f}  "
             f"{r['trades']:>4}  {r['win_pct']:>4.1f}%  {r['total_pnl']:>+9.4f}  "
             f"{r['avg_win']:>+7.4f}  {r['avg_loss']:>7.4f}  "
@@ -156,12 +158,13 @@ def main() -> None:
     morning_dds = [0.40, 0.50, 0.60]
     lm_dds = [0.30, 0.40]
     aft_dds = [0.20, 0.30]
+    vix_maxes = [None, 20.0, 22.0, 25.0]
 
     grid = [
-        (direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd)
-        for direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd in itertools.product(
+        (direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd, vix_max)
+        for direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd, vix_max in itertools.product(
             directions, use_bias_filters, wing_widths, rr_mins,
-            morning_dds, lm_dds, aft_dds,
+            morning_dds, lm_dds, aft_dds, vix_maxes,
         )
         if direction is None or not use_bias  # bias filter only meaningful for auto direction
     ]
@@ -170,7 +173,7 @@ def main() -> None:
     engine = SimulationEngine()
     rows = []
 
-    for i, (direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd) in enumerate(grid):
+    for i, (direction, use_bias, wing, rr, morn_dd, lm_dd, aft_dd, vix_max) in enumerate(grid):
         params = SimulationParams(
             wing_width=wing,
             rr_min=rr,
@@ -180,6 +183,7 @@ def main() -> None:
             slippage=0.05,
             direction_override=direction,
             use_bias_filter=use_bias,
+            vix_max=vix_max,
         )
         results = [engine.simulate_day(day, params) for day in day_data]
         row = summarize(params, results)
@@ -198,9 +202,10 @@ def main() -> None:
 
     print(f"\n--- WORST 5 ---")
     for r in rows[-5:]:
+        vix_str = f"{r['vix_max']:>6}" if r['vix_max'] != "-" else f"{'  -':>6}"
         print(
             f"{r['direction']:>5}  {r['filter']:>5}  {r['wing']:>4}  "
-            f"{r['rr_min']:>4.1f}  "
+            f"{r['rr_min']:>4.1f}  {vix_str}  "
             f"{r['morn_dd']:>4.2f}  {r['lm_dd']:>4.2f}  {r['aft_dd']:>4.2f}  "
             f"{r['trades']:>4}  {r['win_pct']:>4.1f}%  {r['total_pnl']:>+9.4f}  "
             f"{r['profit_factor']:>5.2f}  {r['sharpe']:>6.3f}"

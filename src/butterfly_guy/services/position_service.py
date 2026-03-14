@@ -112,8 +112,38 @@ class PositionService:
 
             await asyncio.sleep(poll_interval)
 
-        # Market closed — force exit
+        # Market closed — force exit at whatever the current value is
         log.warning("market_closed_force_exit", trade_id=trade.trade_id)
+        current_value = 0.0
+        peak = 0.0
+        try:
+            expiration = get_0dte_expiration()
+            chain_data = await self.schwab.get_spx_option_chain(expiration)
+            quotes = self._extract_quotes(chain_data, expiration, candidate)
+            pos_state = self.position_manager.update_position_value(candidate, quotes)
+            current_value = pos_state.current_value
+            peak = pos_state.peak_value
+        except Exception as e:
+            log.error("eod_valuation_failed", error=str(e))
+
+        fill = await self.order_manager.execute_exit(candidate, current_value, trade.quantity)
+        exit_price = fill["fill_price"] if fill else 0.0
+        exit_time = fill["fill_time"] if fill else now_eastern()
+        pnl = exit_price - trade.entry_price
+
+        await self.trade_queries.close_trade(
+            trade.trade_id,
+            exit_price,
+            exit_time,
+            "eod_force_exit",
+            pnl,
+            peak,
+        )
+        await self.risk_engine.record_pnl(pnl)
+        trades_active.dec()
+        trades_total.labels(direction=trade.direction, outcome="win" if pnl > 0 else "loss").inc()
+        daily_pnl.inc(pnl)
+        log.info("eod_force_exit_complete", trade_id=trade.trade_id, pnl=pnl)
 
     def _extract_quotes(
         self,

@@ -154,6 +154,28 @@ class SchwabClientWrapper:
         )
         log.info("order_cancelled", order_id=order_id)
 
+    async def get_intraday_bars(
+        self, symbol: str = "$SPX", days_back: int = 1
+    ) -> list[dict]:
+        """Fetch 1-minute bars for today (and optionally prior days) from Schwab."""
+        import datetime as dt
+
+        today = dt.date.today()
+        start = today - dt.timedelta(days=days_back)
+        resp = await self._retry(
+            self.client.get_price_history,
+            symbol,
+            period_type=self.client.PriceHistory.PeriodType.DAY,
+            period=days_back,
+            frequency_type=self.client.PriceHistory.FrequencyType.MINUTE,
+            frequency=self.client.PriceHistory.Frequency.EVERY_MINUTE,
+            start_datetime=dt.datetime.combine(start, dt.time.min),
+            end_datetime=dt.datetime.combine(today, dt.time.max),
+            endpoint="get_price_history",
+        )
+        data = resp.json()
+        return data.get("candles", [])
+
     async def close(self) -> None:
         """Close the client session."""
         if self._client is not None:
