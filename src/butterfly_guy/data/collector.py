@@ -93,6 +93,14 @@ class OptionChainCollector:
                 self.config.strategy.underlying, spot_price, snapshot_time
             )
 
+            # Get VIX spot price
+            try:
+                vix_price = await self.schwab.get_spot_price("$VIX")
+                await self.spot_queries.insert("$VIX", vix_price, snapshot_time)
+                log.info("vix_snapshot_collected", vix=vix_price)
+            except Exception as e:
+                log.warning("vix_fetch_failed", error=str(e))
+
             # Get chain
             chain_data = await self.schwab.get_spx_option_chain(expiration)
             rows = self._parse_chain_response(chain_data, snapshot_time, expiration, spot_price)
