@@ -11,18 +11,16 @@ strategy:
     10: 1.00
     20: 2.00
     30: 3.00
-
 entry:
   start_time: "07:00"  # PST
   end_time: "07:30"    # PST
   timezone: "America/Los_Angeles"
-
 execution:
   price_ladder_step: 0.05
   price_ladder_steps: 4
   retry_interval_seconds: 20
   order_timeout_seconds: 300
-
+  paper_trading: true
 profit_management:
   regimes:
     morning:
@@ -38,16 +36,12 @@ profit_management:
       end_minutes_after_open: 390
       drawdown_threshold: 0.30
   exit_before_close_minutes: 5
-
 risk:
   max_daily_loss: 500.0
   max_trades_per_day: 2
   max_position_size: 1
-
 collector:
   snapshot_interval_seconds: 60
-
-
 monitoring:
   metrics_port: 8000
   log_level: "INFO"
