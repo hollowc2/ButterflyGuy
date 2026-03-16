@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: butterfly
       POSTGRES_PASSWORD: butterfly_dev
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - timescale_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: prom/prometheus:latest
     container_name: butterfly_prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -33,7 +33,7 @@ services:
     image: grafana/grafana:latest
     container_name: butterfly_grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: butterfly
@@ -66,7 +66,7 @@ services:
       timescaledb:
         condition: service_healthy
     ports:
-      - "8000:8000"  # Prometheus metrics
+      - "127.0.0.1:8000:8000"  # Prometheus metrics
 
   collector:
     build:
