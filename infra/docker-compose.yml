@@ -69,6 +69,7 @@ services:
       - "127.0.0.1:8000:8000"  # Prometheus metrics
 
   collector:
+    profiles: [collect]  # Only starts when: docker compose --profile collect up
     build:
       context: ..
       dockerfile: Dockerfile
