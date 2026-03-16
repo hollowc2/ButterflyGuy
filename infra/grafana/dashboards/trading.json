@@ -109,6 +109,109 @@
           "legendFormat": "{{endpoint}}"
         }
       ]
+    },
+    {
+      "id": 10,
+      "title": "SPX Spot Price",
+      "type": "timeseries",
+      "datasource": {"type": "postgres", "uid": "timescaledb"},
+      "gridPos": {"h": 7, "w": 14, "x": 0, "y": 26},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "green"},
+          "unit": "currencyUSD",
+          "decimals": 2
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "timescaledb"},
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = 'SPX' AND $__timeFilter(ts) ORDER BY time",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "VIX",
+      "type": "timeseries",
+      "datasource": {"type": "postgres", "uid": "timescaledb"},
+      "gridPos": {"h": 7, "w": 10, "x": 14, "y": 26},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "orange"},
+          "decimals": 2
+        }
+      },
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "timescaledb"},
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = '$VIX' AND $__timeFilter(ts) ORDER BY time",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Rows in Last Snapshot",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 33},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 400},
+              {"color": "green", "value": 460}
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "butterfly_chain_snapshot_rows",
+          "legendFormat": "Rows"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "DB Snapshots Today",
+      "type": "stat",
+      "datasource": {"type": "postgres", "uid": "timescaledb"},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 33},
+      "targets": [
+        {
+          "datasource": {"type": "postgres", "uid": "timescaledb"},
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT snapshot_time)::float AS value FROM option_chain_snapshots WHERE snapshot_time::date = CURRENT_DATE",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Snapshot Collect Duration",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 33},
+      "fieldConfig": {"defaults": {"unit": "s"}},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(butterfly_chain_snapshot_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        }
+      ]
     }
   ]
 }
