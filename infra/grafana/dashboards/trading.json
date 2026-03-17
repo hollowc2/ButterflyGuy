@@ -2,14 +2,19 @@
   "title": "Butterfly Guy Trading",
   "uid": "butterfly-trading",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "panels": [
     {
       "id": 1,
       "title": "Daily P&L",
       "type": "bargauge",
-      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
       "targets": [
         {
           "expr": "butterfly_daily_pnl_dollars",
@@ -21,55 +26,104 @@
       "id": 2,
       "title": "Position Value",
       "type": "gauge",
-      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 0},
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "steps": [
-              {"color": "red", "value": 0},
-              {"color": "yellow", "value": 0.5},
-              {"color": "green", "value": 1}
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         }
       },
       "targets": [
-        {"expr": "butterfly_position_value", "legendFormat": "Current Value"}
+        {
+          "expr": "butterfly_position_value",
+          "legendFormat": "Current Value"
+        }
       ]
     },
     {
       "id": 3,
       "title": "Peak vs Current Value",
       "type": "timeseries",
-      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 6},
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 0,
+        "y": 6
+      },
       "targets": [
-        {"expr": "butterfly_position_peak_value", "legendFormat": "Peak"},
-        {"expr": "butterfly_position_value", "legendFormat": "Current"}
+        {
+          "expr": "butterfly_position_peak_value",
+          "legendFormat": "Peak"
+        },
+        {
+          "expr": "butterfly_position_value",
+          "legendFormat": "Current"
+        }
       ]
     },
     {
       "id": 4,
       "title": "Daily Trade Count",
       "type": "stat",
-      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
       "targets": [
-        {"expr": "butterfly_daily_trade_count", "legendFormat": "Trades Today"}
+        {
+          "expr": "butterfly_daily_trade_count",
+          "legendFormat": "Trades Today"
+        }
       ]
     },
     {
       "id": 5,
       "title": "Active Trades",
       "type": "stat",
-      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
       "targets": [
-        {"expr": "butterfly_trades_active", "legendFormat": "Active"}
+        {
+          "expr": "butterfly_trades_active",
+          "legendFormat": "Active"
+        }
       ]
     },
     {
       "id": 6,
       "title": "Chain Snapshots (1h rate)",
       "type": "timeseries",
-      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 14},
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
       "targets": [
         {
           "expr": "rate(butterfly_chain_snapshots_total[1h])",
@@ -81,16 +135,29 @@
       "id": 7,
       "title": "Butterfly Candidates Found",
       "type": "timeseries",
-      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 14},
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
       "targets": [
-        {"expr": "butterfly_candidates_found", "legendFormat": "Candidates"}
+        {
+          "expr": "butterfly_candidates_found",
+          "legendFormat": "Candidates"
+        }
       ]
     },
     {
       "id": 8,
       "title": "Order Fill Duration (p95)",
       "type": "stat",
-      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 6},
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 6
+      },
       "targets": [
         {
           "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket)",
@@ -102,7 +169,12 @@
       "id": 9,
       "title": "Schwab API Errors",
       "type": "timeseries",
-      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 20},
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
       "targets": [
         {
           "expr": "rate(butterfly_schwab_api_errors_total[5m])",
@@ -114,18 +186,32 @@
       "id": 10,
       "title": "SPX Spot Price",
       "type": "timeseries",
-      "datasource": {"type": "postgres", "uid": "timescaledb"},
-      "gridPos": {"h": 7, "w": 14, "x": 0, "y": 26},
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 14,
+        "x": 0,
+        "y": 26
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "fixed", "fixedColor": "green"},
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
           "unit": "currencyUSD",
           "decimals": 2
         }
       },
       "targets": [
         {
-          "datasource": {"type": "postgres", "uid": "timescaledb"},
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
           "rawQuery": true,
           "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = 'SPX' AND $__timeFilter(ts) ORDER BY time",
           "format": "time_series",
@@ -137,17 +223,31 @@
       "id": 11,
       "title": "VIX",
       "type": "timeseries",
-      "datasource": {"type": "postgres", "uid": "timescaledb"},
-      "gridPos": {"h": 7, "w": 10, "x": 14, "y": 26},
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 10,
+        "x": 14,
+        "y": 26
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "fixed", "fixedColor": "orange"},
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
           "decimals": 2
         }
       },
       "targets": [
         {
-          "datasource": {"type": "postgres", "uid": "timescaledb"},
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
           "rawQuery": true,
           "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = '$VIX' AND $__timeFilter(ts) ORDER BY time",
           "format": "time_series",
@@ -159,15 +259,32 @@
       "id": 12,
       "title": "Rows in Last Snapshot",
       "type": "stat",
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 33},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 33
+      },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "steps": [
-              {"color": "red", "value": 0},
-              {"color": "yellow", "value": 400},
-              {"color": "green", "value": 460}
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 400
+              },
+              {
+                "color": "green",
+                "value": 460
+              }
             ]
           }
         }
@@ -183,11 +300,22 @@
       "id": 13,
       "title": "DB Snapshots Today",
       "type": "stat",
-      "datasource": {"type": "postgres", "uid": "timescaledb"},
-      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 33},
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 33
+      },
       "targets": [
         {
-          "datasource": {"type": "postgres", "uid": "timescaledb"},
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
           "rawQuery": true,
           "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT snapshot_time)::float AS value FROM option_chain_snapshots WHERE snapshot_time::date = CURRENT_DATE",
           "format": "time_series",
@@ -199,9 +327,21 @@
       "id": 14,
       "title": "Snapshot Collect Duration",
       "type": "timeseries",
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 33},
-      "fieldConfig": {"defaults": {"unit": "s"}},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
       "targets": [
         {
           "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket[5m]))",
@@ -212,6 +352,615 @@
           "legendFormat": "p95"
         }
       ]
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Today's Trade",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Center Strike",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 3,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "butterfly_entry_center_strike",
+          "legendFormat": "center"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Wing Width",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 3,
+        "y": 38,
+        "w": 3,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "butterfly_entry_wing_width",
+          "legendFormat": "width"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Entry Cost",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 38,
+        "w": 3,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "unit": "currencyUSD",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "butterfly_entry_cost",
+          "legendFormat": "cost"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Max Profit / Spread",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 9,
+        "y": 38,
+        "w": 3,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "unit": "currencyUSD",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "butterfly_entry_max_profit",
+          "legendFormat": "max profit"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Lower Breakeven",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 38,
+        "w": 3,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "butterfly_entry_lower_be",
+          "legendFormat": "lower BE"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Upper Breakeven",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 38,
+        "w": 3,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "butterfly_entry_upper_be",
+          "legendFormat": "upper BE"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "VIX at Entry",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 38,
+        "w": 3,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "butterfly_entry_vix",
+          "legendFormat": "VIX"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Expected Move (1\u03c3)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 21,
+        "y": 38,
+        "w": 3,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "short",
+          "displayName": "\u00b1${__value} pts",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "butterfly_entry_expected_move_pts",
+          "legendFormat": "exp move"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "SPX vs Breakevens",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 16,
+        "h": 8
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_be"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_be"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    4,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawSql": "SELECT ts AS time, price AS \"SPX\" FROM spot_prices WHERE underlying='SPX' AND $__timeFilter(ts) ORDER BY ts",
+          "format": "time_series",
+          "legendFormat": "SPX"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawSql": "SELECT entry_time AS time, lower_strike + entry_price AS \"lower_be\", center_strike AS \"center\", upper_strike - entry_price AS \"upper_be\" FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "table",
+      "title": "Candidates Scanned Today",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 41,
+        "w": 8,
+        "h": 8
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "rr",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawSql": "SELECT\n  scan_time::time(0) AS time,\n  direction,\n  wing_width AS width,\n  center_strike AS center,\n  ROUND(cost::numeric, 2) AS cost,\n  ROUND(reward_risk::numeric, 1) AS rr,\n  ROUND(lower_be::numeric, 0) AS lower_be,\n  ROUND(upper_be::numeric, 0) AS upper_be,\n  selected\nFROM butterfly_candidates\nWHERE scan_time::date = CURRENT_DATE\nORDER BY scan_time DESC, rr DESC\nLIMIT 50",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selected"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "transparent",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

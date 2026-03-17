@@ -6,7 +6,12 @@ import datetime as dt
 
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
-from butterfly_guy.core.metrics import daily_pnl, daily_trade_count, trades_active, trades_total
+from butterfly_guy.core.metrics import (
+    daily_pnl, daily_trade_count, trades_active, trades_total,
+    entry_vix, entry_expected_move, entry_center_strike, entry_wing_width,
+    entry_cost, entry_max_profit, entry_lower_be, entry_upper_be,
+)
+from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_expected_move
 from butterfly_guy.core.time_utils import get_0dte_expiration, now_eastern, time_in_window
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
@@ -223,6 +228,17 @@ class TradeService:
 
         trades_active.inc()
         daily_trade_count.inc()
+
+        # Emit entry detail metrics for Grafana
+        entry_center_strike.set(best.center_strike)
+        entry_wing_width.set(best.wing_width)
+        entry_cost.set(best.cost)
+        entry_max_profit.set(best.max_profit)
+        entry_lower_be.set(best.lower_be)
+        entry_upper_be.set(best.upper_be)
+        if vix_price:
+            entry_vix.set(vix_price)
+            entry_expected_move.set(_vix_expected_move(vix_price, spot_price))
 
         record = TradeRecord(
             trade_id=trade_id,

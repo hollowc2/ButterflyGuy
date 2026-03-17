@@ -36,6 +36,16 @@ position_value = Gauge("butterfly_position_value", "Current position mark value"
 position_peak_value = Gauge("butterfly_position_peak_value", "Peak position value")
 position_pnl = Gauge("butterfly_position_pnl", "Current position unrealized PnL")
 
+# Entry details — set at trade entry, held until next trade
+entry_vix = Gauge("butterfly_entry_vix", "VIX at time of entry")
+entry_expected_move = Gauge("butterfly_entry_expected_move_pts", "VIX-implied 1σ daily move in SPX points")
+entry_center_strike = Gauge("butterfly_entry_center_strike", "Selected center strike")
+entry_wing_width = Gauge("butterfly_entry_wing_width", "Selected wing width")
+entry_cost = Gauge("butterfly_entry_cost", "Entry cost per spread")
+entry_max_profit = Gauge("butterfly_entry_max_profit", "Max profit per spread at expiry")
+entry_lower_be = Gauge("butterfly_entry_lower_be", "Lower breakeven strike")
+entry_upper_be = Gauge("butterfly_entry_upper_be", "Upper breakeven strike")
+
 # Orders
 orders_placed = Counter(
     "butterfly_orders_placed_total", "Total orders placed", ["order_type"]
