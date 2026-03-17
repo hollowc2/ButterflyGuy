@@ -35,6 +35,8 @@ class EntrySettings(BaseModel):
     end_time: str = "07:30"
     timezone: str = "America/Los_Angeles"
     use_bias_filter: bool = False  # if True, use BiasScoreFilter instead of simple gap
+    use_vix_center: bool = True   # anchor center strike to VIX-implied expected move
+    center_tolerance: float = 15.0  # pts; how far a candidate's center can stray from VIX target
 
 
 class ExecutionSettings(BaseModel):

@@ -15,6 +15,8 @@ entry:
   start_time: "07:00"  # PST
   end_time: "07:30"    # PST
   timezone: "America/Los_Angeles"
+  use_vix_center: true   # anchor center to VIX-implied expected move per width
+  center_tolerance: 15.0 # pts; candidate center must be within this of VIX target
 execution:
   price_ladder_step: 0.05
   price_ladder_steps: 4
