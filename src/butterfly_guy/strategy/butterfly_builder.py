@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import math
 from typing import Literal
 
 from butterfly_guy.core.config import StrategySettings
@@ -10,6 +11,72 @@ from butterfly_guy.core.logging import get_logger
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 
 log = get_logger(__name__)
+
+# Fraction of the expected daily move used to derive wing width.
+# 0.15 calibrated so that:
+#   VIX ~15  → ~10-wide   (low-vol, tight tent)
+#   VIX ~20  → ~10-wide
+#   VIX ~25  → ~15 → snaps to 20-wide
+#   VIX ~35  → ~20-wide
+#   VIX ~50  → ~30-wide
+_TRADING_DAYS_PER_YEAR = 252
+
+# Per-width sigma fractions for VIX-anchored center placement.
+# Wider wings need to be placed further OTM to remain cost-effective and
+# to capture the large moves required for the tent to be hit.
+#   10-wide: close to ATM — cheap, profits from small OTM drifts
+#   20-wide: moderate OTM — mid-range move required
+#   30-wide: further OTM — needs a bigger push, but pays ~3x a 10-wide when it hits
+VIX_SIGMA_BY_WIDTH: dict[int, float] = {
+    10: 0.25,
+    20: 0.50,
+    30: 0.75,
+}
+_VIX_SIGMA_DEFAULT = 0.50  # fallback for unlisted widths
+
+
+def vix_expected_move(vix: float, spot: float) -> float:
+    """Return the expected 1-sigma daily SPX move implied by VIX."""
+    return spot * (vix / 100) / math.sqrt(_TRADING_DAYS_PER_YEAR)
+
+
+def vix_target_center(
+    vix: float,
+    spot: float,
+    direction: str,
+    wing_width: int | None = None,
+    sigma_fraction: float | None = None,
+    strike_step: int = 5,
+) -> float:
+    """Derive the ideal center strike from VIX.
+
+    Places the center at `sigma_fraction` × expected_daily_move above spot
+    (CALL) or below spot (PUT), rounded to the nearest strike_step.
+
+    Sigma fraction is resolved in this order:
+      1. Explicit `sigma_fraction` argument
+      2. `VIX_SIGMA_BY_WIDTH[wing_width]` lookup
+      3. `_VIX_SIGMA_DEFAULT` fallback
+
+    Args:
+        vix: Current VIX level.
+        spot: Current SPX spot price.
+        direction: "CALL" or "PUT".
+        wing_width: Wing width to look up sigma in VIX_SIGMA_BY_WIDTH.
+        sigma_fraction: Override sigma directly (takes precedence over wing_width).
+        strike_step: Round center to this increment (default 5 for SPX).
+
+    Returns:
+        Target center strike as a float.
+    """
+    if sigma_fraction is None:
+        sigma_fraction = VIX_SIGMA_BY_WIDTH.get(wing_width, _VIX_SIGMA_DEFAULT) \
+            if wing_width is not None else _VIX_SIGMA_DEFAULT
+
+    move = vix_expected_move(vix, spot)
+    offset = move * sigma_fraction
+    raw = (spot + offset) if direction == "CALL" else (spot - offset)
+    return round(raw / strike_step) * strike_step
 
 
 class ButterflyBuilder:
@@ -40,6 +107,12 @@ class ButterflyBuilder:
 
         for center in strikes:
             if abs(center - spot_price) > self.settings.spot_range:
+                continue
+            # For CALL flies the center must be OTM (above spot);
+            # for PUT flies the center must be OTM (below spot).
+            if direction == "CALL" and center <= spot_price:
+                continue
+            if direction == "PUT" and center >= spot_price:
                 continue
 
             for width in self.settings.wing_widths:

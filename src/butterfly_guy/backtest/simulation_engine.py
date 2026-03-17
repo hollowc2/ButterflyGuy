@@ -12,7 +12,7 @@ from butterfly_guy.core.config import StrategySettings
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
-from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
+from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, vix_target_center
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
 from butterfly_guy.strategy.regime_classifier import Regime, RegimeClassifier
@@ -41,6 +41,8 @@ class SimulationParams:
     vix_max: float | None = None
     hold_to_expiry: bool = False  # skip all drawdown exits; let butterfly expire
     skip_morning_exit: bool = False  # never exit on drawdown during morning regime (<2h after open)
+    use_vix_center: bool = False  # anchor center to VIX-implied expected move; sigma from VIX_SIGMA_BY_WIDTH
+    vix_center_sigma: float = 0.0  # override per-width sigma (0.0 = use VIX_SIGMA_BY_WIDTH lookup)
 
 
 @dataclass
@@ -153,9 +155,19 @@ class SimulationEngine:
                 )
                 builder = ButterflyBuilder(settings_override)
                 candidates = builder.build_candidates(quotes, bar.close, direction)
-                
+
+                target_center = None
+                if params.use_vix_center and day.vix:
+                    target_center = vix_target_center(
+                        vix=day.vix,
+                        spot=bar.close,
+                        direction=direction,
+                        wing_width=params.wing_width,
+                        sigma_fraction=params.vix_center_sigma or None,
+                    )
+
                 selector = ButterflySelector(settings_override)
-                best = selector.select_best(candidates)
+                best = selector.select_best(candidates, target_center=target_center)
 
                 if best:
                     entry_candidate = best
