@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 from typing import Any
 
 from butterfly_guy.db.connection import DatabasePool
@@ -111,7 +112,7 @@ class TradeQueries:
             trade["entry_price"], trade["entry_time"],
             trade.get("lower_symbol"), trade.get("center_symbol"),
             trade.get("upper_symbol"), trade.get("quantity", 1),
-            "OPEN", trade.get("metadata", {}),
+            "OPEN", json.dumps(trade.get("metadata", {})),
         )
 
     async def close_trade(
