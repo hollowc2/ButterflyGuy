@@ -173,7 +173,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 53
+        "y": 56
       },
       "targets": [
         {
@@ -370,7 +370,7 @@
       "type": "stat",
       "title": "Center Strike",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 0, "y": 38, "w": 3, "h": 3 },
+      "gridPos": { "x": 0, "y": 38, "w": 6, "h": 3 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
@@ -380,7 +380,7 @@
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
-          "unit": "short",
+          "unit": "none",
           "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
         }
       },
@@ -397,7 +397,7 @@
       "type": "stat",
       "title": "Wing Width",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 3, "y": 38, "w": 3, "h": 3 },
+      "gridPos": { "x": 6, "y": 38, "w": 6, "h": 3 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
@@ -407,7 +407,7 @@
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
-          "unit": "short",
+          "unit": "none",
           "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }
         }
       },
@@ -424,7 +424,7 @@
       "type": "stat",
       "title": "Entry Cost",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 6, "y": 38, "w": 3, "h": 3 },
+      "gridPos": { "x": 12, "y": 38, "w": 6, "h": 3 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
@@ -451,7 +451,7 @@
       "type": "stat",
       "title": "Max Profit / Spread",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 9, "y": 38, "w": 3, "h": 3 },
+      "gridPos": { "x": 18, "y": 38, "w": 6, "h": 3 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
@@ -478,7 +478,7 @@
       "type": "stat",
       "title": "Lower Breakeven",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 12, "y": 38, "w": 3, "h": 3 },
+      "gridPos": { "x": 0, "y": 41, "w": 6, "h": 3 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
@@ -487,8 +487,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "decimals": 0,
-          "unit": "short",
+          "decimals": 1,
+          "unit": "none",
           "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
         }
       },
@@ -505,7 +505,7 @@
       "type": "stat",
       "title": "Upper Breakeven",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 15, "y": 38, "w": 3, "h": 3 },
+      "gridPos": { "x": 6, "y": 41, "w": 6, "h": 3 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
@@ -514,8 +514,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "decimals": 0,
-          "unit": "short",
+          "decimals": 1,
+          "unit": "none",
           "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
         }
       },
@@ -532,7 +532,7 @@
       "type": "stat",
       "title": "VIX at Entry",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 18, "y": 38, "w": 3, "h": 3 },
+      "gridPos": { "x": 12, "y": 41, "w": 6, "h": 3 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
@@ -542,7 +542,7 @@
       "fieldConfig": {
         "defaults": {
           "decimals": 1,
-          "unit": "short",
+          "unit": "none",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -566,7 +566,7 @@
       "type": "stat",
       "title": "Expected Move (1\u03c3)",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 21, "y": 38, "w": 3, "h": 3 },
+      "gridPos": { "x": 18, "y": 41, "w": 6, "h": 3 },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
@@ -576,7 +576,7 @@
       "fieldConfig": {
         "defaults": {
           "decimals": 0,
-          "unit": "short",
+          "unit": "none",
           "displayName": "\u00b1${__value} pts",
           "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
         }
@@ -599,7 +599,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 44,
         "w": 24,
         "h": 8
       },
@@ -724,7 +724,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 49,
+        "y": 52,
         "w": 24,
         "h": 8
       },
