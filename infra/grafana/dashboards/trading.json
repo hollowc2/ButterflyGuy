@@ -781,7 +781,7 @@
     }
   ],
   "time": {
-    "from": "now/d+8h+30m",
+    "from": "now/d+12h+30m",
     "to": "now"
   },
   "timepicker": {},
