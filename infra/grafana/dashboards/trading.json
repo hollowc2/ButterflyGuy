@@ -85,7 +85,7 @@
       "title": "Daily Trade Count",
       "type": "stat",
       "gridPos": {
-        "h": 4,
+        "h": 6,
         "w": 4,
         "x": 16,
         "y": 0
@@ -102,7 +102,7 @@
       "title": "Active Trades",
       "type": "stat",
       "gridPos": {
-        "h": 4,
+        "h": 6,
         "w": 4,
         "x": 20,
         "y": 0
