@@ -564,7 +564,7 @@
     {
       "id": 23,
       "type": "stat",
-      "title": "Expected Move (1\u03c3)",
+      "title": "Expected Move \u00b1pts (1\u03c3)",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
       "gridPos": { "x": 18, "y": 41, "w": 6, "h": 3 },
       "options": {
@@ -577,7 +577,6 @@
         "defaults": {
           "decimals": 0,
           "unit": "none",
-          "displayName": "\u00b1${__value} pts",
           "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
         }
       },
