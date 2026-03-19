@@ -238,7 +238,7 @@
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "none",
-        "graphMode": "area",
+        "graphMode": "none",
         "textMode": "auto"
       },
       "fieldConfig": {
@@ -257,7 +257,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, price::float AS value FROM spot_prices WHERE underlying='SPX' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT NOW() AS time, price::float AS value FROM spot_prices WHERE underlying='SPX' ORDER BY ts DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -272,7 +272,7 @@
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"] },
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "textMode": "auto"
       },
       "fieldConfig": {
@@ -293,7 +293,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, price::float AS value FROM spot_prices WHERE underlying='$VIX' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT NOW() AS time, price::float AS value FROM spot_prices WHERE underlying='$VIX' ORDER BY ts DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }

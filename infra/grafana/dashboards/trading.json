@@ -173,7 +173,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 20
+        "y": 53
       },
       "targets": [
         {
@@ -883,6 +883,7 @@
             "type": "postgres",
             "uid": "timescaledb"
           },
+          "rawQuery": true,
           "rawSql": "SELECT ts AS time, price AS \"SPX\" FROM spot_prices WHERE underlying='SPX' AND $__timeFilter(ts) ORDER BY ts",
           "format": "time_series",
           "legendFormat": "SPX"
@@ -892,6 +893,7 @@
             "type": "postgres",
             "uid": "timescaledb"
           },
+          "rawQuery": true,
           "rawSql": "SELECT entry_time AS time, lower_strike + entry_price AS \"lower_be\", center_strike AS \"center\", upper_strike - entry_price AS \"upper_be\" FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1",
           "format": "time_series"
         }
@@ -925,6 +927,7 @@
             "type": "postgres",
             "uid": "timescaledb"
           },
+          "rawQuery": true,
           "rawSql": "SELECT\n  scan_time AS time,\n  direction,\n  wing_width AS width,\n  center_strike AS center,\n  ROUND(cost::numeric, 2) AS cost,\n  ROUND(reward_risk::numeric, 1) AS rr,\n  ROUND(lower_be::numeric, 0) AS lower_be,\n  ROUND(upper_be::numeric, 0) AS upper_be,\n  selected\nFROM butterfly_candidates\nWHERE scan_time::date = CURRENT_DATE\nORDER BY scan_time DESC, rr DESC\nLIMIT 50",
           "format": "table"
         }
