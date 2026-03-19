@@ -22,4 +22,5 @@ datasources:
       sslmode: disable
       postgresVersion: 1600
       timescaledb: true
+      database: butterfly_guy
     editable: true
