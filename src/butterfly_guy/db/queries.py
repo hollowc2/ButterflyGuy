@@ -101,12 +101,13 @@ class TradeQueries:
         return await self.db.fetchval(
             """
             INSERT INTO trades (
-                trade_date, direction, wing_width, center_strike,
+                underlying, trade_date, direction, wing_width, center_strike,
                 lower_strike, upper_strike, entry_price, entry_time,
                 lower_symbol, center_symbol, upper_symbol, quantity, status, metadata
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
             RETURNING id
             """,
+            trade.get("underlying", "SPX"),
             trade["trade_date"], trade["direction"], trade["wing_width"],
             trade["center_strike"], trade["lower_strike"], trade["upper_strike"],
             trade["entry_price"], trade["entry_time"],
@@ -129,15 +130,17 @@ class TradeQueries:
             trade_id, exit_price, exit_time, exit_reason, pnl, peak_value,
         )
 
-    async def get_open_trades(self) -> list[dict]:
+    async def get_open_trades(self, underlying: str) -> list[dict]:
         rows = await self.db.fetch(
-            "SELECT * FROM trades WHERE status = 'OPEN' ORDER BY entry_time"
+            "SELECT * FROM trades WHERE status = 'OPEN' AND underlying = $1 ORDER BY entry_time",
+            underlying,
         )
         return [dict(r) for r in rows]
 
-    async def get_trades_for_date(self, trade_date: dt.date) -> list[dict]:
+    async def get_trades_for_date(self, trade_date: dt.date, underlying: str) -> list[dict]:
         rows = await self.db.fetch(
-            "SELECT * FROM trades WHERE trade_date = $1 ORDER BY entry_time", trade_date
+            "SELECT * FROM trades WHERE trade_date = $1 AND underlying = $2 ORDER BY entry_time",
+            trade_date, underlying,
         )
         return [dict(r) for r in rows]
 
@@ -148,45 +151,47 @@ class RiskQueries:
     def __init__(self, db: DatabasePool) -> None:
         self.db = db
 
-    async def get_or_create(self, trade_date: dt.date) -> dict:
+    async def get_or_create(self, trade_date: dt.date, underlying: str) -> dict:
         row = await self.db.fetchrow(
-            "SELECT * FROM daily_risk_state WHERE trade_date = $1", trade_date
+            "SELECT * FROM daily_risk_state WHERE trade_date = $1 AND underlying = $2",
+            trade_date, underlying,
         )
         if row:
             return dict(row)
         await self.db.execute(
-            "INSERT INTO daily_risk_state (trade_date) VALUES ($1) ON CONFLICT DO NOTHING",
-            trade_date,
+            "INSERT INTO daily_risk_state (trade_date, underlying) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            trade_date, underlying,
         )
         row = await self.db.fetchrow(
-            "SELECT * FROM daily_risk_state WHERE trade_date = $1", trade_date
+            "SELECT * FROM daily_risk_state WHERE trade_date = $1 AND underlying = $2",
+            trade_date, underlying,
         )
         return dict(row)
 
-    async def increment_trade_count(self, trade_date: dt.date) -> None:
+    async def increment_trade_count(self, trade_date: dt.date, underlying: str) -> None:
         await self.db.execute(
             """
             UPDATE daily_risk_state
             SET trade_count = trade_count + 1
-            WHERE trade_date = $1
+            WHERE trade_date = $1 AND underlying = $2
             """,
-            trade_date,
+            trade_date, underlying,
         )
 
-    async def update_pnl(self, trade_date: dt.date, pnl_delta: float) -> None:
+    async def update_pnl(self, trade_date: dt.date, pnl_delta: float, underlying: str) -> None:
         await self.db.execute(
             """
             UPDATE daily_risk_state
             SET realized_pnl = realized_pnl + $2
-            WHERE trade_date = $1
+            WHERE trade_date = $1 AND underlying = $3
             """,
-            trade_date, pnl_delta,
+            trade_date, pnl_delta, underlying,
         )
 
-    async def set_halted(self, trade_date: dt.date) -> None:
+    async def set_halted(self, trade_date: dt.date, underlying: str) -> None:
         await self.db.execute(
-            "UPDATE daily_risk_state SET halted = TRUE, max_loss_hit = TRUE WHERE trade_date = $1",
-            trade_date,
+            "UPDATE daily_risk_state SET halted = TRUE, max_loss_hit = TRUE WHERE trade_date = $1 AND underlying = $2",
+            trade_date, underlying,
         )
 
 
@@ -213,7 +218,7 @@ class CandidateQueries:
         if not candidates:
             return 0
         columns = [
-            "scan_time", "direction", "wing_width", "center_strike",
+            "scan_time", "underlying", "direction", "wing_width", "center_strike",
             "lower_strike", "upper_strike", "cost", "max_profit",
             "reward_risk", "lower_be", "upper_be", "distance_from_spot",
             "spot_price", "selected",

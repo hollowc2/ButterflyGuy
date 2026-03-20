@@ -1,0 +1,780 @@
+{
+  "title": "NDX Trading",
+  "uid": "butterfly-trading-ndx",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Daily P&L",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "butterfly_daily_pnl_dollars",
+          "legendFormat": "Daily P&L ($)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Position Value",
+      "type": "gauge",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "butterfly_position_value",
+          "legendFormat": "Current Value"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Peak vs Current Value",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "expr": "butterfly_position_peak_value",
+          "legendFormat": "Peak"
+        },
+        {
+          "expr": "butterfly_position_value",
+          "legendFormat": "Current"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Daily Trade Count",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "butterfly_daily_trade_count",
+          "legendFormat": "Trades Today"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Active Trades",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "butterfly_trades_active",
+          "legendFormat": "Active"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Chain Snapshots (1h rate)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "expr": "rate(butterfly_chain_snapshots_total[1h])",
+          "legendFormat": "Snapshots/hr"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Butterfly Candidates Found",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "expr": "butterfly_candidates_found",
+          "legendFormat": "Candidates"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Order Fill Duration (p95)",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 33
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket)",
+          "legendFormat": "p95 fill time (s)"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Schwab API Errors",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
+      "targets": [
+        {
+          "expr": "rate(butterfly_schwab_api_errors_total[5m])",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "NDX Spot Price",
+      "type": "timeseries",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 14,
+        "x": 0,
+        "y": 26
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "unit": "short",
+          "decimals": 2
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = 'NDX' AND $__timeFilter(ts) ORDER BY time",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "VIX",
+      "type": "timeseries",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 10,
+        "x": 14,
+        "y": 26
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "decimals": 2
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = '$VIX' AND $__timeFilter(ts) ORDER BY time",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Rows in Last Snapshot",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 400
+              },
+              {
+                "color": "green",
+                "value": 460
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "butterfly_chain_snapshot_rows",
+          "legendFormat": "Rows"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "DB Snapshots Today",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 33
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT snapshot_time)::float AS value FROM option_chain_snapshots WHERE snapshot_time::date = CURRENT_DATE AND underlying = 'NDX'",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Snapshot Collect Duration",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(butterfly_chain_snapshot_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Today's Trade",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Center Strike",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 0, "y": 38, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "rawQuery": true,
+        "rawSql": "SELECT NOW() AS time, center_strike::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Wing Width",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 6, "y": 38, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "rawQuery": true,
+        "rawSql": "SELECT NOW() AS time, wing_width::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Entry Cost",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 12, "y": 38, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "unit": "currencyUSD",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "rawQuery": true,
+        "rawSql": "SELECT NOW() AS time, entry_price::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Max Profit / Spread",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 18, "y": 38, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "unit": "currencyUSD",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "rawQuery": true,
+        "rawSql": "SELECT NOW() AS time, (wing_width - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Lower Breakeven",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 0, "y": 41, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "rawQuery": true,
+        "rawSql": "SELECT NOW() AS time, (lower_strike + entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Upper Breakeven",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 6, "y": 41, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "rawQuery": true,
+        "rawSql": "SELECT NOW() AS time, (upper_strike - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "VIX at Entry",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 12, "y": 41, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "red", "value": 30 }
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "rawQuery": true,
+        "rawSql": "SELECT NOW() AS time, sp.price::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'NDX' AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Expected Move \u00b1pts (1\u03c3)",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 18, "y": 41, "w": 6, "h": 3 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "unit": "none",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "targets": [{
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "rawQuery": true,
+        "rawSql": "SELECT NOW() AS time, ROUND((ndx.price * (vix.price / 100.0) / SQRT(252))::numeric, 0)::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) vix CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = 'NDX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) ndx WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'NDX' AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
+        "format": "time_series",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "NDX vs Breakevens",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 24,
+        "h": 8
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_be"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [8, 4],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_be"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [8, 4],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "center"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [4, 4],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, price AS \"NDX\" FROM spot_prices WHERE underlying='NDX' AND $__timeFilter(ts) ORDER BY ts",
+          "format": "time_series",
+          "legendFormat": "NDX"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT entry_time AS time, lower_strike + entry_price AS \"lower_be\", center_strike AS \"center\", upper_strike - entry_price AS \"upper_be\" FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1",
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "table",
+      "title": "Candidates Scanned Today",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 24,
+        "h": 8
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "rr",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT\n  scan_time AS time,\n  direction,\n  wing_width AS width,\n  center_strike AS center,\n  ROUND(cost::numeric, 2) AS cost,\n  ROUND(reward_risk::numeric, 1) AS rr,\n  ROUND(lower_be::numeric, 0) AS lower_be,\n  ROUND(upper_be::numeric, 0) AS upper_be,\n  selected\nFROM butterfly_candidates\nWHERE scan_time::date = CURRENT_DATE AND underlying = 'NDX'\nORDER BY scan_time DESC, rr DESC\nLIMIT 50",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selected"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "transparent",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "time": {
+    "from": "now/d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "America/New_York"
+}

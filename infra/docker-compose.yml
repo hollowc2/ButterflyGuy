@@ -46,11 +46,11 @@ services:
       - prometheus
       - timescaledb
 
-  app:
+  app_spx:
     build:
       context: ..
       dockerfile: Dockerfile
-    container_name: butterfly_app
+    container_name: butterfly_spx_app
     restart: unless-stopped
     env_file:
       - ../.env
@@ -68,18 +68,66 @@ services:
     ports:
       - "127.0.0.1:8000:8000"  # Prometheus metrics
 
-  collector:
-    profiles: [collect]  # Only starts when: docker compose --profile collect up
+  collector_spx:
+    profiles: [spx]
     build:
       context: ..
       dockerfile: Dockerfile
-    container_name: butterfly_collector
+    container_name: butterfly_spx_collector
     restart: unless-stopped
     command: ["python", "-m", "butterfly_guy.scripts.run_collector"]
     env_file:
       - ../.env
     volumes:
       - ../tokens.json:/app/tokens.json
+    environment:
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__NAME: butterfly_guy
+      DATABASE__USER: butterfly
+      DATABASE__PASSWORD: butterfly_dev
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+  app_ndx:
+    profiles: [ndx]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: butterfly_ndx_app
+    restart: unless-stopped
+    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "config_ndx.yaml"]
+    env_file:
+      - ../.env
+    volumes:
+      - ../tokens.json:/app/tokens.json
+      - ../config_ndx.yaml:/app/config_ndx.yaml
+    environment:
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__NAME: butterfly_guy
+      DATABASE__USER: butterfly
+      DATABASE__PASSWORD: butterfly_dev
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8001:8001"
+
+  collector_ndx:
+    profiles: [ndx]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: butterfly_ndx_collector
+    restart: unless-stopped
+    command: ["python", "-m", "butterfly_guy.scripts.run_collector", "--config", "config_ndx.yaml"]
+    env_file:
+      - ../.env
+    volumes:
+      - ../tokens.json:/app/tokens.json
+      - ../config_ndx.yaml:/app/config_ndx.yaml
     environment:
       DATABASE__HOST: timescaledb
       DATABASE__PORT: 5432

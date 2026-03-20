@@ -10,7 +10,7 @@ from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import daily_pnl, trades_active, trades_total
 from butterfly_guy.core.time_utils import get_0dte_expiration, is_market_open, now_eastern
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
-from butterfly_guy.data.schwab_client import SchwabClientWrapper
+from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
 from butterfly_guy.db.queries import DecisionQueries, TradeQueries
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.position.position_manager import PositionManager
@@ -55,7 +55,10 @@ class PositionService:
             try:
                 # Fetch latest chain for position valuation
                 expiration = get_0dte_expiration()
-                chain_data = await self.schwab.get_spx_option_chain(expiration)
+                chain_data = await self.schwab.get_option_chain(
+                        SCHWAB_CHAIN_SYMBOLS.get(self.config.strategy.underlying, self.config.strategy.underlying),
+                        expiration,
+                    )
                 quotes = self._extract_quotes(chain_data, expiration, candidate)
 
                 # Update position
@@ -118,7 +121,10 @@ class PositionService:
         peak = 0.0
         try:
             expiration = get_0dte_expiration()
-            chain_data = await self.schwab.get_spx_option_chain(expiration)
+            chain_data = await self.schwab.get_option_chain(
+                        SCHWAB_CHAIN_SYMBOLS.get(self.config.strategy.underlying, self.config.strategy.underlying),
+                        expiration,
+                    )
             quotes = self._extract_quotes(chain_data, expiration, candidate)
             pos_state = self.position_manager.update_position_value(candidate, quotes)
             current_value = pos_state.current_value

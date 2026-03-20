@@ -14,7 +14,7 @@ from butterfly_guy.core.metrics import (
 from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_expected_move
 from butterfly_guy.core.time_utils import get_0dte_expiration, now_eastern, time_in_window
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
-from butterfly_guy.data.schwab_client import SchwabClientWrapper
+from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS, SchwabClientWrapper
 from butterfly_guy.db.queries import CandidateQueries, ChainQueries, DecisionQueries, TradeQueries
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.risk.risk_engine import RiskEngine
@@ -76,17 +76,20 @@ class TradeService:
             return None
 
         expiration = get_0dte_expiration()
+        underlying = self.config.strategy.underlying
+        spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+        chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
 
         # Fetch chain
         try:
-            chain_data = await self.schwab.get_spx_option_chain(expiration)
+            chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
         except Exception as e:
             log.error("chain_fetch_failed", error=str(e))
             return None
 
         # Get spot price
         try:
-            spot_price = await self.schwab.get_spot_price()
+            spot_price = await self.schwab.get_spot_price(spot_symbol)
         except Exception as e:
             log.error("spot_fetch_failed", error=str(e))
             return None
@@ -131,6 +134,7 @@ class TradeService:
         candidate_rows = [
             {
                 "scan_time": scan_time,
+                "underlying": underlying,
                 "direction": c.direction,
                 "wing_width": c.wing_width,
                 "center_strike": c.center_strike,
@@ -211,6 +215,7 @@ class TradeService:
 
         # Record trade
         trade_data = {
+            "underlying": underlying,
             "trade_date": expiration,
             "direction": direction,
             "wing_width": best.wing_width,
@@ -273,7 +278,9 @@ class TradeService:
         from typing import Literal
 
         try:
-            candles = await self.schwab.get_intraday_bars("$SPX", days_back=1)
+            underlying = self.config.strategy.underlying
+            spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+            candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
             bars: list[MinuteBar] = []
             for c in candles:
                 ts_ms = c.get("datetime", 0)

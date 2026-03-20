@@ -81,7 +81,7 @@ async def entry_loop(trade_service: TradeService, position_service: PositionServ
         await asyncio.sleep(15)
 
 
-async def daily_reset_loop(risk_queries: RiskQueries) -> None:
+async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
     """Reset daily risk state at market open."""
     while True:
         now = now_eastern()
@@ -92,12 +92,16 @@ async def daily_reset_loop(risk_queries: RiskQueries) -> None:
         sleep_secs = (next_midnight - now).total_seconds()
         await asyncio.sleep(sleep_secs)
         today = dt.date.today()
-        await risk_queries.get_or_create(today)
+        await risk_queries.get_or_create(today, underlying)
         log.info("daily_risk_reset", date=str(today))
 
 
 async def main() -> None:
-    config = load_config()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
+    args = parser.parse_args()
+    config = load_config(args.config)
     setup_logging(config.monitoring.log_level, json_output=True)
 
     log.info("live_trading_starting")
@@ -121,7 +125,7 @@ async def main() -> None:
     candidate_q = CandidateQueries(db)
 
     # Build service objects
-    risk_engine = RiskEngine(config.risk, risk_q)
+    risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
     order_builder = ButterflyOrderBuilder()
     order_manager = OrderManager(config.execution, schwab, order_builder)
 
@@ -170,7 +174,7 @@ async def main() -> None:
             tg.create_task(
                 entry_loop(trade_service, position_service), name="entry_loop"
             )
-            tg.create_task(daily_reset_loop(risk_q), name="daily_reset")
+            tg.create_task(daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset")
     except* Exception as eg:
         for exc in eg.exceptions:
             log.error("task_group_error", error=str(exc))

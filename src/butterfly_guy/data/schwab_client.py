@@ -18,6 +18,11 @@ log = get_logger(__name__)
 MAX_RETRIES = 3
 RETRY_BACKOFF = [1, 2, 4]
 
+# Maps strategy underlying → Schwab API symbol for spot price quotes
+SCHWAB_SPOT_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX"}
+# Maps strategy underlying → Schwab API symbol for options chain requests
+SCHWAB_CHAIN_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX"}
+
 
 class SchwabClientWrapper:
     """Async wrapper around schwab-py with retry and metrics."""
@@ -97,11 +102,11 @@ class SchwabClientWrapper:
                     await asyncio.sleep(wait)
         raise RuntimeError(f"API call failed after {MAX_RETRIES} retries: {last_err}")
 
-    async def get_spx_option_chain(self, expiration: dt.date) -> dict[str, Any]:
-        """Fetch SPX option chain for a specific expiration."""
+    async def get_option_chain(self, symbol: str, expiration: dt.date) -> dict[str, Any]:
+        """Fetch option chain for a specific symbol and expiration."""
         resp = await self._retry(
             self.client.get_option_chain,
-            "$SPX",
+            symbol,
             from_date=expiration,
             to_date=expiration,
             endpoint="get_option_chain",

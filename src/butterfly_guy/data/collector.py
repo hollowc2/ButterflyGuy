@@ -19,7 +19,7 @@ from butterfly_guy.core.time_utils import (
     now_eastern,
 )
 from butterfly_guy.backtest.chain_cache import save_snapshot
-from butterfly_guy.data.schwab_client import SchwabClientWrapper
+from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS, SchwabClientWrapper
 from butterfly_guy.db.queries import ChainQueries, SpotQueries
 
 log = get_logger(__name__)
@@ -85,13 +85,14 @@ class OptionChainCollector:
         """Fetch current chain and store snapshot. Returns row count."""
         snapshot_time = now_eastern()
         expiration = get_0dte_expiration()
+        underlying = self.config.strategy.underlying
+        spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+        chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
 
         with chain_snapshot_duration.time():
             # Get spot price
-            spot_price = await self.schwab.get_spot_price()
-            await self.spot_queries.insert(
-                self.config.strategy.underlying, spot_price, snapshot_time
-            )
+            spot_price = await self.schwab.get_spot_price(spot_symbol)
+            await self.spot_queries.insert(underlying, spot_price, snapshot_time)
 
             # Get VIX spot price
             try:
@@ -102,7 +103,7 @@ class OptionChainCollector:
                 log.warning("vix_fetch_failed", error=str(e))
 
             # Get chain
-            chain_data = await self.schwab.get_spx_option_chain(expiration)
+            chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
             rows = self._parse_chain_response(chain_data, snapshot_time, expiration, spot_price)
 
             if rows:

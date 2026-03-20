@@ -1,6 +1,6 @@
 {
-  "title": "Butterfly Guy Trading",
-  "uid": "butterfly-trading",
+  "title": "SPX Trading",
+  "uid": "butterfly-trading-spx",
   "schemaVersion": 38,
   "version": 2,
   "refresh": "10s",

@@ -20,7 +20,11 @@ from butterfly_guy.db.queries import ChainQueries, SpotQueries
 
 
 async def main() -> None:
-    config = load_config()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
+    args = parser.parse_args()
+    config = load_config(args.config)
     setup_logging(config.monitoring.log_level, json_output=False)
 
     from butterfly_guy.core.logging import get_logger
