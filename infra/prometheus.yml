@@ -3,9 +3,14 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: "butterfly_guy"
+  - job_name: "butterfly_spx"
     static_configs:
-      - targets: ["app:8000"]
+      - targets: ["app_spx:8000"]
+    metrics_path: /metrics
+
+  - job_name: "butterfly_ndx"
+    static_configs:
+      - targets: ["app_ndx:8000"]
     metrics_path: /metrics
 
   - job_name: "prometheus"

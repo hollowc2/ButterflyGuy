@@ -45,5 +45,5 @@ risk:
 collector:
   snapshot_interval_seconds: 60
 monitoring:
-  metrics_port: 8001           # different port to avoid conflict with SPX app
+  metrics_port: 8000           # each container gets its own port 8000 internally
   log_level: "INFO"

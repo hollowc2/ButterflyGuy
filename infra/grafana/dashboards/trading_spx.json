@@ -17,7 +17,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_daily_pnl_dollars",
+          "expr": "butterfly_daily_pnl_dollars{underlying=\"SPX\"}",
           "legendFormat": "Daily P&L ($)"
         }
       ]
@@ -54,7 +54,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_position_value",
+          "expr": "butterfly_position_value{underlying=\"SPX\"}",
           "legendFormat": "Current Value"
         }
       ]
@@ -71,11 +71,11 @@
       },
       "targets": [
         {
-          "expr": "butterfly_position_peak_value",
+          "expr": "butterfly_position_peak_value{underlying=\"SPX\"}",
           "legendFormat": "Peak"
         },
         {
-          "expr": "butterfly_position_value",
+          "expr": "butterfly_position_value{underlying=\"SPX\"}",
           "legendFormat": "Current"
         }
       ]
@@ -92,7 +92,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_daily_trade_count",
+          "expr": "butterfly_daily_trade_count{underlying=\"SPX\"}",
           "legendFormat": "Trades Today"
         }
       ]
@@ -109,7 +109,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_trades_active",
+          "expr": "butterfly_trades_active{underlying=\"SPX\"}",
           "legendFormat": "Active"
         }
       ]
@@ -126,7 +126,7 @@
       },
       "targets": [
         {
-          "expr": "rate(butterfly_chain_snapshots_total[1h])",
+          "expr": "rate(butterfly_chain_snapshots_total{underlying=\"SPX\"}[1h])",
           "legendFormat": "Snapshots/hr"
         }
       ]
@@ -143,7 +143,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_candidates_found",
+          "expr": "butterfly_candidates_found{underlying=\"SPX\"}",
           "legendFormat": "Candidates"
         }
       ]
@@ -160,7 +160,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket)",
+          "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket{underlying=\"SPX\"})",
           "legendFormat": "p95 fill time (s)"
         }
       ]
@@ -291,7 +291,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_chain_snapshot_rows",
+          "expr": "butterfly_chain_snapshot_rows{underlying=\"SPX\"}",
           "legendFormat": "Rows"
         }
       ]
@@ -344,11 +344,11 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"SPX\"}[5m]))",
           "legendFormat": "p50"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(butterfly_chain_snapshot_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"SPX\"}[5m]))",
           "legendFormat": "p95"
         }
       ]

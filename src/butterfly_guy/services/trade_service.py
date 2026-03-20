@@ -231,19 +231,19 @@ class TradeService:
         trade_id = await self.trade_queries.insert_trade(trade_data)
         await self.risk_engine.record_trade()
 
-        trades_active.inc()
-        daily_trade_count.inc()
+        trades_active.labels(underlying=underlying).inc()
+        daily_trade_count.labels(underlying=underlying).inc()
 
         # Emit entry detail metrics for Grafana
-        entry_center_strike.set(best.center_strike)
-        entry_wing_width.set(best.wing_width)
-        entry_cost.set(best.cost)
-        entry_max_profit.set(best.max_profit)
-        entry_lower_be.set(best.lower_be)
-        entry_upper_be.set(best.upper_be)
+        entry_center_strike.labels(underlying=underlying).set(best.center_strike)
+        entry_wing_width.labels(underlying=underlying).set(best.wing_width)
+        entry_cost.labels(underlying=underlying).set(best.cost)
+        entry_max_profit.labels(underlying=underlying).set(best.max_profit)
+        entry_lower_be.labels(underlying=underlying).set(best.lower_be)
+        entry_upper_be.labels(underlying=underlying).set(best.upper_be)
         if vix_price:
-            entry_vix.set(vix_price)
-            entry_expected_move.set(_vix_expected_move(vix_price, spot_price))
+            entry_vix.labels(underlying=underlying).set(vix_price)
+            entry_expected_move.labels(underlying=underlying).set(_vix_expected_move(vix_price, spot_price))
 
         record = TradeRecord(
             trade_id=trade_id,

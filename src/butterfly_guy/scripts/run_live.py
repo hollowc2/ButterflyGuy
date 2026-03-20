@@ -127,7 +127,7 @@ async def main() -> None:
     # Build service objects
     risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
     order_builder = ButterflyOrderBuilder()
-    order_manager = OrderManager(config.execution, schwab, order_builder)
+    order_manager = OrderManager(config.execution, schwab, order_builder, config.strategy.underlying)
 
     trade_service = TradeService(
         config=config,

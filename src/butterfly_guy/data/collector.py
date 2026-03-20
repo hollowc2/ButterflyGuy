@@ -89,7 +89,7 @@ class OptionChainCollector:
         spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
         chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
 
-        with chain_snapshot_duration.time():
+        with chain_snapshot_duration.labels(underlying=underlying).time():
             # Get spot price
             spot_price = await self.schwab.get_spot_price(spot_symbol)
             await self.spot_queries.insert(underlying, spot_price, snapshot_time)
@@ -108,8 +108,8 @@ class OptionChainCollector:
 
             if rows:
                 count = await self.chain_queries.bulk_insert_snapshot(rows)
-                chain_snapshots_total.inc()
-                chain_snapshot_rows.set(count)
+                chain_snapshots_total.labels(underlying=underlying).inc()
+                chain_snapshot_rows.labels(underlying=underlying).set(count)
                 save_snapshot(expiration, snapshot_time, spot_price, rows)
                 log.info("snapshot_collected", rows=count, spot=spot_price)
                 return count

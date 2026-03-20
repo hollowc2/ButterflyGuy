@@ -27,10 +27,12 @@ class OrderManager:
         settings: ExecutionSettings,
         schwab: SchwabClientWrapper,
         builder: ButterflyOrderBuilder,
+        underlying: str = "SPX",
     ) -> None:
         self.settings = settings
         self.schwab = schwab
         self.builder = builder
+        self.underlying = underlying
 
     async def execute_entry(
         self, candidate: ButterflyCandidate, quantity: int = 1
@@ -57,7 +59,7 @@ class OrderManager:
                 }
 
             order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
-            orders_placed.labels(order_type="entry").inc()
+            orders_placed.labels(underlying=self.underlying, order_type="entry").inc()
             start_time = dt.datetime.now(dt.timezone.utc)
 
             try:
@@ -66,8 +68,8 @@ class OrderManager:
 
                 if fill:
                     elapsed = (dt.datetime.now(dt.timezone.utc) - start_time).total_seconds()
-                    order_fill_duration.observe(elapsed)
-                    orders_filled.labels(order_type="entry").inc()
+                    order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
+                    orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
                     log.info("entry_filled", order_id=order_id, price=limit_price, step=i)
                     return {
                         "order_id": order_id,
@@ -109,7 +111,7 @@ class OrderManager:
                 }
 
             order_spec = self.builder.build_butterfly_close(candidate, limit_price, quantity)
-            orders_placed.labels(order_type="exit").inc()
+            orders_placed.labels(underlying=self.underlying, order_type="exit").inc()
             start_time = dt.datetime.now(dt.timezone.utc)
 
             try:
@@ -118,8 +120,8 @@ class OrderManager:
 
                 if fill:
                     elapsed = (dt.datetime.now(dt.timezone.utc) - start_time).total_seconds()
-                    order_fill_duration.observe(elapsed)
-                    orders_filled.labels(order_type="exit").inc()
+                    order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
+                    orders_filled.labels(underlying=self.underlying, order_type="exit").inc()
                     log.info("exit_filled", order_id=order_id, price=limit_price, step=i)
                     return {
                         "order_id": order_id,
