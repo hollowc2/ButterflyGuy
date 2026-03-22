@@ -212,22 +212,16 @@ class OrderManager:
             # price_ceiling tracks the lowest live mark observed so far (ratchet).
             # None means no live price seen yet; fall back to current_value until first fetch.
             price_ceiling: float | None = None
+            last_spread = None
 
-            while True:
-                if dt.datetime.now(dt.timezone.utc) >= deadline:
-                    log.warning("paper_exit_timeout")
-                    return None
-
+            while dt.datetime.now(dt.timezone.utc) < deadline:
                 for i in range(max_steps):
-                    if dt.datetime.now(dt.timezone.utc) >= deadline:
-                        log.warning("paper_exit_timeout")
-                        return None
-
                     spread = await self._fetch_live_spread(candidate)
                     if spread is not None:
                         # Ratchet: first live price replaces current_value; subsequent
                         # prices only update if lower, preventing outer-loop backsliding.
-                        price_ceiling = spread.mark if price_ceiling is None else min(price_ceiling, spread.mark)
+                        price_ceiling = spread.bid if price_ceiling is None else min(price_ceiling, spread.bid)
+                        last_spread = spread
                     mid_price = price_ceiling if price_ceiling is not None else current_value
 
                     limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
@@ -250,10 +244,27 @@ class OrderManager:
 
                     await asyncio.sleep(retry_interval)
 
+                    if dt.datetime.now(dt.timezone.utc) >= deadline:
+                        break
+
                 log.warning("paper_exit_ladder_exhausted_repricing")
 
+            # Ladder timed out without fill — force-fill at last seen bid (safety fallback)
+            force_bid = (
+                last_spread.bid
+                if last_spread and last_spread.bid and last_spread.bid > 0
+                else 0.05
+            )
+            log.warning("exit_ladder_forced_at_bid", bid=force_bid)
+            return {
+                "order_id": "PAPER",
+                "fill_price": force_bid,
+                "fill_time": dt.datetime.now(dt.timezone.utc),
+                "forced": True,
+            }
+
         deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
-        mid_price = current_value
+        bid_floor: float | None = None
 
         while True:
             if dt.datetime.now(dt.timezone.utc) >= deadline:
@@ -265,9 +276,10 @@ class OrderManager:
                     log.warning("exit_timeout")
                     return None
 
-                live = await self._fetch_live_mark(candidate)
-                if live is not None:
-                    mid_price = live
+                spread = await self._fetch_live_spread(candidate)
+                if spread is not None:
+                    bid_floor = spread.bid if bid_floor is None else min(bid_floor, spread.bid)
+                mid_price = bid_floor if bid_floor is not None else current_value
 
                 limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
                 log.info("exit_ladder_step", step=i, price=limit_price, mid_price=mid_price)

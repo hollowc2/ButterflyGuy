@@ -480,27 +480,30 @@ async def test_paper_entry_does_not_mutate_candidate_cost():
 
 @pytest.mark.asyncio
 async def test_paper_exit_fills_when_at_bid():
-    # spread.bid = 3.50; mid_price seed = 3.00 (current_value); step 0 → limit = 3.00 + 3*0.05 = 3.15
-    # step 0: 3.15 <= 3.50? Yes → fills
+    # spread.bid = 3.50; bid_floor = 3.50
+    # step 0: 3.50+3*0.05=3.65 > 3.50, step 1: 3.60 > 3.50, step 2: 3.55 > 3.50
+    # step 3: 3.50+0*0.05=3.50 <= 3.50 → fills at 3.50 after 3 sleeps
     settings = make_settings(paper_trading=True, price_ladder_steps=4, price_ladder_step=0.05)
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     spread = LiveSpread(bid=3.50, mark=3.00, ask=3.60)
 
+    sleep_mock = AsyncMock()
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
-         patch("asyncio.sleep", new=AsyncMock()):
+         patch("asyncio.sleep", new=sleep_mock):
         result = await om.execute_exit(candidate, current_value=3.00, quantity=1)
 
     assert result is not None
     assert result["order_id"] == "PAPER"
-    # limit at step 0 = spread.mark + (4-1)*0.05 = 3.15
-    assert result["fill_price"] == pytest.approx(3.15)
+    assert result["fill_price"] == pytest.approx(3.50)
+    assert sleep_mock.call_count == 3
 
 
 @pytest.mark.asyncio
-async def test_paper_exit_no_fill_when_above_bid():
-    # spread.bid = 2.00; limit 3.45→3.40→3.35→3.30 across 4 steps — never fills
-    # Escape infinite outer loop via CancelledError after all 4 steps sleep
+async def test_paper_exit_fills_at_bid_when_bid_far_below_mark():
+    # spread.bid = 2.00, mark = 3.30; bid_floor = 2.00
+    # step 0: 2.00+3*0.05=2.15 > 2.00, step 1: 2.10 > 2.00, step 2: 2.05 > 2.00
+    # step 3: 2.00+0*0.05=2.00 <= 2.00 → fills at 2.00 after 3 sleeps
     settings = make_settings(
         paper_trading=True,
         price_ladder_steps=4,
@@ -511,23 +514,14 @@ async def test_paper_exit_no_fill_when_above_bid():
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     spread = LiveSpread(bid=2.00, mark=3.30, ask=3.60)
 
-    sleep_count = 0
-
-    async def mock_sleep(_):
-        nonlocal sleep_count
-        sleep_count += 1
-        if sleep_count >= 4:
-            raise asyncio.CancelledError()
-
+    sleep_mock = AsyncMock()
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
-         patch("asyncio.sleep", new=mock_sleep):
-        try:
-            result = await om.execute_exit(candidate, current_value=3.30, quantity=1)
-        except asyncio.CancelledError:
-            result = None
+         patch("asyncio.sleep", new=sleep_mock):
+        result = await om.execute_exit(candidate, current_value=3.30, quantity=1)
 
-    assert result is None
-    assert sleep_count == 4  # all 4 ladder steps slept without filling
+    assert result is not None
+    assert result["fill_price"] == pytest.approx(2.00)
+    assert sleep_mock.call_count == 3
 
 
 @pytest.mark.asyncio
@@ -541,8 +535,8 @@ async def test_paper_exit_sleeps_between_steps():
     )
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
-    # mark=3.00, step down: step0=3.15, step1=3.10, step2=3.05, step3=3.00
-    # bid=3.05 → fills at step 2 (3.05 <= 3.05)
+    # bid=3.05; bid_floor=3.05; step0=3.20, step1=3.15, step2=3.10, step3=3.05
+    # step 3: 3.05 <= 3.05 → fills after 3 sleeps
     spread = LiveSpread(bid=3.05, mark=3.00, ask=3.60)
 
     sleep_mock = AsyncMock()
@@ -551,13 +545,14 @@ async def test_paper_exit_sleeps_between_steps():
         result = await om.execute_exit(candidate, current_value=3.00, quantity=1)
 
     assert result is not None
-    # Steps 0 and 1 sleep (not filled), step 2 fills (no sleep)
-    assert sleep_mock.call_count == 2
+    # Steps 0, 1, 2 sleep (not filled), step 3 fills (no sleep)
+    assert sleep_mock.call_count == 3
     sleep_mock.assert_called_with(5)
 
 
 @pytest.mark.asyncio
 async def test_paper_exit_respects_timeout():
+    """When the exit ladder times out, it should force-fill at bid (not return None)."""
     settings = make_settings(paper_trading=True, order_timeout_seconds=0)
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
@@ -565,7 +560,10 @@ async def test_paper_exit_respects_timeout():
     with patch("asyncio.sleep", new=AsyncMock()):
         result = await om.execute_exit(candidate, current_value=3.75, quantity=1)
 
-    assert result is None
+    # Force-fill fallback returns a dict with forced=True, not None
+    assert result is not None
+    assert result.get("forced") is True
+    assert result["fill_price"] >= 0.05
 
 
 # ---------------------------------------------------------------------------
@@ -669,21 +667,22 @@ async def test_entry_does_not_mutate_candidate_cost():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_exit_uses_live_mark_not_current_value():
+async def test_exit_uses_live_bid_not_current_value():
     settings = make_settings(price_ladder_steps=4)
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
-    live_mark = 3.20
+    live_bid = 3.20
     current_value = 2.50
 
-    with patch.object(om, "_fetch_live_mark", new=AsyncMock(return_value=live_mark)), \
+    live_spread = LiveSpread(bid=live_bid, mark=3.40, ask=3.60)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=live_spread)), \
          patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
         result = await om.execute_exit(candidate, current_value=current_value, quantity=1)
 
     assert result is not None
     limit_price_used = om.builder.build_butterfly_close.call_args[0][1]
-    # Step 0: live_mark + (max_steps-1)*step = 3.20 + 3*0.05 = 3.35
-    assert limit_price_used == pytest.approx(live_mark + 3 * 0.05)
+    # Step 0: bid_floor + (max_steps-1)*step = 3.20 + 3*0.05 = 3.35
+    assert limit_price_used == pytest.approx(live_bid + 3 * 0.05)
 
 
 @pytest.mark.asyncio
@@ -693,7 +692,7 @@ async def test_exit_falls_back_to_current_value_when_fetch_fails():
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     current_value = 3.75
 
-    with patch.object(om, "_fetch_live_mark", new=AsyncMock(return_value=None)), \
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)), \
          patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
         result = await om.execute_exit(candidate, current_value=current_value, quantity=1)
 
@@ -704,23 +703,24 @@ async def test_exit_falls_back_to_current_value_when_fetch_fails():
 
 
 @pytest.mark.asyncio
-async def test_exit_steps_down_from_live_mark():
+async def test_exit_steps_down_from_live_bid():
     settings = make_settings(price_ladder_steps=4)
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
-    live_mark = 3.20
+    live_bid = 3.20
 
-    with patch.object(om, "_fetch_live_mark", new=AsyncMock(return_value=live_mark)), \
+    live_spread = LiveSpread(bid=live_bid, mark=3.40, ask=3.60)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=live_spread)), \
          patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=[False, True])):
         result = await om.execute_exit(candidate, current_value=2.50, quantity=1)
 
     assert result is not None
     calls = om.builder.build_butterfly_close.call_args_list
     assert len(calls) == 2
-    # Step 0: live_mark + (4-1)*0.05 = 3.35  (best price first)
-    # Step 1: live_mark + (4-2)*0.05 = 3.30  (step down)
-    assert calls[0][0][1] == pytest.approx(live_mark + 3 * 0.05)
-    assert calls[1][0][1] == pytest.approx(live_mark + 2 * 0.05)
+    # Step 0: bid_floor + (4-1)*0.05 = 3.35  (best price first)
+    # Step 1: bid_floor + (4-2)*0.05 = 3.30  (step down)
+    assert calls[0][0][1] == pytest.approx(live_bid + 3 * 0.05)
+    assert calls[1][0][1] == pytest.approx(live_bid + 2 * 0.05)
 
 
 @pytest.mark.asyncio
