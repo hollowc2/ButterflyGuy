@@ -53,11 +53,23 @@ def make_pos(
 
 
 def test_no_exit_when_not_in_profit_tent():
-    """State machine should NOT exit on drawdown if position was never in profit tent."""
+    """Drawdown-from-peak exit should NOT fire if position was never in profit tent."""
     sm = ProfitStateMachine(make_settings())
-    pos = make_pos(entry=1.0, current=0.5, peak=1.0, pnl=-0.5, drawdown=0.5)
+    # 25% loss — below absolute stop threshold (50%), so only drawdown gate applies
+    pos = make_pos(entry=1.0, current=0.75, peak=1.0, pnl=-0.25, drawdown=0.25)
     signal = sm.evaluate(pos)
     assert signal is None
+
+
+def test_absolute_loss_stop_fires_without_profit_tent():
+    """Absolute loss stop should fire even if position was never in profit tent."""
+    sm = ProfitStateMachine(make_settings())
+    # 55% loss — exceeds absolute stop threshold (50%)
+    pos = make_pos(entry=1.0, current=0.45, peak=1.0, pnl=-0.55, drawdown=0.55)
+    signal = sm.evaluate(pos)
+    assert signal is not None
+    assert signal.reason == "absolute_loss_stop"
+    assert signal.urgency == "high"
 
 
 def test_exit_on_end_of_day():

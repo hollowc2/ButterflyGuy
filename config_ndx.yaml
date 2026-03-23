@@ -38,6 +38,7 @@ profit_management:
       end_minutes_after_open: 390
       drawdown_threshold: 0.30
   exit_before_close_minutes: 5
+  max_loss_from_cost: 0.50
 risk:
   max_daily_loss: 500.0
   max_trades_per_day: 2

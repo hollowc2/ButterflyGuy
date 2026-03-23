@@ -43,6 +43,7 @@ class SimulationParams:
     skip_morning_exit: bool = False  # never exit on drawdown during morning regime (<2h after open)
     use_vix_center: bool = False  # anchor center to VIX-implied expected move; sigma from VIX_SIGMA_BY_WIDTH
     vix_center_sigma: float = 0.0  # override per-width sigma (0.0 = use VIX_SIGMA_BY_WIDTH lookup)
+    max_loss_from_cost: float = 0.50  # exit if position loses this fraction of cost (no profit required)
 
 
 @dataclass
@@ -248,6 +249,17 @@ class SimulationEngine:
                 result.peak_value = peak_value
                 result.pnl = result.exit_price - result.entry_price
                 return result
+
+            # Absolute loss stop — fires regardless of peak (no profit required)
+            if not params.hold_to_expiry and result.entry_price > 0:
+                loss_from_cost = (result.entry_price - current_value) / result.entry_price
+                if loss_from_cost >= params.max_loss_from_cost:
+                    result.exit_time = bar.ts
+                    result.exit_price = max(0.05, current_value - params.slippage)
+                    result.exit_reason = "absolute_loss_stop"
+                    result.peak_value = peak_value
+                    result.pnl = result.exit_price - result.entry_price
+                    return result
 
             # Drawdown exit (only if we've been in profit tent)
             skip_exit = params.hold_to_expiry or (params.skip_morning_exit and regime == "morning")

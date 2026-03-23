@@ -59,7 +59,7 @@ async def test_collect_snapshot_parses_chain():
     config = AppConfig()
     schwab = MagicMock()
     schwab.get_spot_price = AsyncMock(return_value=5500.0)
-    schwab.get_spx_option_chain = AsyncMock(return_value=SAMPLE_CHAIN_RESPONSE)
+    schwab.get_option_chain = AsyncMock(return_value=SAMPLE_CHAIN_RESPONSE)
 
     chain_queries = MagicMock()
     chain_queries.bulk_insert_snapshot = AsyncMock(return_value=2)
@@ -91,7 +91,7 @@ async def test_collect_snapshot_row_fields():
     config = AppConfig()
     schwab = MagicMock()
     schwab.get_spot_price = AsyncMock(return_value=5501.0)
-    schwab.get_spx_option_chain = AsyncMock(return_value=SAMPLE_CHAIN_RESPONSE)
+    schwab.get_option_chain = AsyncMock(return_value=SAMPLE_CHAIN_RESPONSE)
 
     inserted_rows = []
 

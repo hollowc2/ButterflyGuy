@@ -59,6 +59,23 @@ class ProfitStateMachine:
         # Update internal state
         self._update_state(pos)
 
+        # Absolute loss stop — fires regardless of whether position ever gained
+        if pos.entry_price > 0:
+            loss_from_cost = (pos.entry_price - pos.current_value) / pos.entry_price
+            if loss_from_cost >= self.settings.max_loss_from_cost:
+                log.info(
+                    "absolute_loss_stop_triggered",
+                    loss_pct=loss_from_cost,
+                    threshold=self.settings.max_loss_from_cost,
+                    entry=pos.entry_price,
+                    current=pos.current_value,
+                )
+                return ExitSignal(
+                    reason="absolute_loss_stop",
+                    target_credit=pos.current_value,
+                    urgency="high",
+                )
+
         # Get drawdown threshold for current regime
         regime_config = self.settings.regimes.get(pos.time_regime)
         if not regime_config:
