@@ -13,6 +13,7 @@ from butterfly_guy.core.metrics import (
     orders_filled,
     orders_placed,
 )
+from butterfly_guy.core.time_utils import get_0dte_expiration
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
@@ -45,7 +46,11 @@ class OrderManager:
         """Fetch current butterfly bid/mark/ask from the live option chain. Returns None on any failure."""
         try:
             chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(self.underlying, self.underlying)
-            expiration = candidate.lower_quote.expiration
+            expiration = (
+                candidate.lower_quote.expiration
+                if candidate.lower_quote is not None
+                else get_0dte_expiration()
+            )
             chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
 
             map_key = "callExpDateMap" if candidate.direction == "CALL" else "putExpDateMap"

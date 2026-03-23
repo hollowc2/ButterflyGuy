@@ -11,9 +11,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
-from butterfly_guy.core.metrics import start_metrics_server
+from butterfly_guy.core.metrics import daily_pnl, daily_trade_count, start_metrics_server, trades_active
 from butterfly_guy.core.time_utils import is_market_open, now_eastern
 from butterfly_guy.data.collector import OptionChainCollector
+from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.db.connection import DatabasePool
 from butterfly_guy.db.migrations.run_migrations import run_migrations
@@ -42,10 +43,22 @@ from butterfly_guy.strategy.regime_classifier import RegimeClassifier
 log = get_logger("run_live")
 
 
-async def entry_loop(trade_service: TradeService, position_service: PositionService) -> None:
+async def entry_loop(
+    trade_service: TradeService,
+    position_service: PositionService,
+    recovered_trade: TradeRecord | None = None,
+    recovered_candidate: ButterflyCandidate | None = None,
+) -> None:
     """Periodically attempt entries during the entry window."""
-    active_trade = None
+    active_trade: TradeRecord | None = recovered_trade
     monitor_task: asyncio.Task | None = None
+
+    if recovered_trade is not None and recovered_candidate is not None:
+        log.info("resuming_monitor_for_recovered_trade", trade_id=recovered_trade.trade_id)
+        monitor_task = asyncio.create_task(
+            position_service.monitor_loop(recovered_trade, recovered_candidate),
+            name=f"monitor_{recovered_trade.trade_id}",
+        )
 
     while True:
         if not is_market_open():
@@ -177,11 +190,63 @@ async def main() -> None:
     if notifier:
         await notifier._post("🚀 Butterfly Guy starting up!")
 
+    # Recover any open trade and initialize daily metrics from DB
+    underlying = config.strategy.underlying
+    recovered_trade: TradeRecord | None = None
+    recovered_candidate: ButterflyCandidate | None = None
+
+    open_rows = await trade_q.get_open_trades(underlying)
+    if open_rows:
+        row = open_rows[0]
+        recovered_trade = TradeRecord(
+            trade_id=row["id"],
+            trade_date=row["trade_date"],
+            direction=row["direction"],
+            wing_width=row["wing_width"],
+            center_strike=float(row["center_strike"]),
+            lower_strike=float(row["lower_strike"]),
+            upper_strike=float(row["upper_strike"]),
+            entry_price=float(row["entry_price"]),
+            entry_time=row["entry_time"],
+            lower_symbol=row.get("lower_symbol") or "",
+            center_symbol=row.get("center_symbol") or "",
+            upper_symbol=row.get("upper_symbol") or "",
+            quantity=row.get("quantity") or 1,
+            status=row.get("status") or "OPEN",
+        )
+        recovered_candidate = ButterflyCandidate(
+            direction=recovered_trade.direction,
+            wing_width=recovered_trade.wing_width,
+            center_strike=recovered_trade.center_strike,
+            lower_strike=recovered_trade.lower_strike,
+            upper_strike=recovered_trade.upper_strike,
+            cost=recovered_trade.entry_price,
+            max_profit=0.0,
+            reward_risk=0.0,
+            lower_be=0.0,
+            upper_be=0.0,
+            distance_from_spot=0.0,
+            spot_price=0.0,
+            lower_symbol=recovered_trade.lower_symbol,
+            center_symbol=recovered_trade.center_symbol,
+            upper_symbol=recovered_trade.upper_symbol,
+        )
+        trades_active.labels(underlying=underlying).set(len(open_rows))
+        log.info("recovered_open_trade", trade_id=recovered_trade.trade_id, underlying=underlying)
+
+    # Initialize daily counters from DB so metrics survive restarts
+    today = dt.date.today()
+    today_trades = await trade_q.get_trades_for_date(today, underlying)
+    daily_trade_count.labels(underlying=underlying).set(len(today_trades))
+    realized_pnl = sum(float(t["pnl"]) for t in today_trades if t.get("pnl") is not None)
+    daily_pnl.labels(underlying=underlying).set(realized_pnl)
+
     try:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(collector.run_loop(), name="collector")
             tg.create_task(
-                entry_loop(trade_service, position_service), name="entry_loop"
+                entry_loop(trade_service, position_service, recovered_trade, recovered_candidate),
+                name="entry_loop",
             )
             tg.create_task(daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset")
     except* Exception as eg:
