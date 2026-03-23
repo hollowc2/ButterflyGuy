@@ -38,7 +38,7 @@ class PositionService:
         self.risk_engine = risk_engine
         self.trade_queries = trade_queries
         self.decision_queries = decision_queries
-        self.position_manager = PositionManager()
+        self.position_manager = PositionManager(config.strategy.underlying)
         self.state_machine = ProfitStateMachine(config.profit_management)
 
     async def monitor_loop(

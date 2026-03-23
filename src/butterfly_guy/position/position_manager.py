@@ -30,7 +30,8 @@ class PositionState:
 class PositionManager:
     """Tracks position value from chain data and manages peak tracking."""
 
-    def __init__(self) -> None:
+    def __init__(self, underlying: str) -> None:
+        self._underlying = underlying
         self._peak_value: float = 0.0
         self._entry_price: float = 0.0
 
@@ -74,9 +75,9 @@ class PositionManager:
         regime = self._get_time_regime(mins_open)
 
         # Update metrics
-        position_value.set(current_value)
-        position_peak_value.set(self._peak_value)
-        position_pnl.set(pnl)
+        position_value.labels(underlying=self._underlying).set(current_value)
+        position_peak_value.labels(underlying=self._underlying).set(self._peak_value)
+        position_pnl.labels(underlying=self._underlying).set(pnl)
 
         return PositionState(
             entry_price=self._entry_price,

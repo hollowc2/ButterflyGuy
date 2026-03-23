@@ -10,6 +10,7 @@ from butterfly_guy.core.metrics import (
     daily_pnl, daily_trade_count, trades_active, trades_total,
     entry_vix, entry_expected_move, entry_center_strike, entry_wing_width,
     entry_cost, entry_max_profit, entry_lower_be, entry_upper_be,
+    butterfly_candidates_found, butterfly_scans_total,
 )
 from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_expected_move
 from butterfly_guy.core.time_utils import get_0dte_expiration, now_eastern, time_in_window
@@ -128,6 +129,8 @@ class TradeService:
 
         # Build candidates
         candidates = self.builder.build_candidates(quotes, spot_price, direction)
+        butterfly_scans_total.labels(underlying=underlying).inc()
+        butterfly_candidates_found.labels(underlying=underlying).set(len(candidates))
 
         # Log all candidates
         scan_time = now_eastern()
