@@ -1,10 +1,4 @@
 """Main orchestrator: runs collector + trading + position monitor concurrently."""
-# TODO(regime-classifier): For regime-adaptive live trading, source recent_closes
-# from Schwab's get_price_history endpoint (frequencyType=daily, frequency=1,
-# periodType=month) covering at least lookback_days + 5 prior trading days.
-# Construct a RegimeDispatch with tuned thresholds from run_classifier_sweep.py
-# and call engine.simulate_day_adaptive() instead of simulate_day() in the entry loop.
-# Note: revisit BULL regime direction (CALL vs PUT) before deploying live.
 
 from __future__ import annotations
 
@@ -26,6 +20,7 @@ from butterfly_guy.db.migrations.run_migrations import run_migrations
 from butterfly_guy.db.queries import (
     CandidateQueries,
     ChainQueries,
+    DailyBarQueries,
     DecisionQueries,
     RiskQueries,
     SpotQueries,
@@ -42,6 +37,7 @@ from butterfly_guy.services.trade_service import TradeService
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
+from butterfly_guy.strategy.regime_classifier import RegimeClassifier
 
 log = get_logger("run_live")
 
@@ -123,6 +119,7 @@ async def main() -> None:
     risk_q = RiskQueries(db)
     decision_q = DecisionQueries(db)
     candidate_q = CandidateQueries(db)
+    daily_bar_q = DailyBarQueries(db)
 
     # Build service objects
     risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
@@ -157,7 +154,19 @@ async def main() -> None:
         schwab=schwab,
         chain_queries=chain_q,
         spot_queries=spot_q,
+        daily_bar_queries=daily_bar_q,
     )
+
+    # Classify today's market regime from stored daily bars
+    regime_classifier = RegimeClassifier()
+    lookback = regime_classifier.lookback_days
+    recent_spx = await daily_bar_q.get_recent_closes(
+        config.strategy.underlying, days=lookback + 5
+    )
+    vix_closes = await daily_bar_q.get_recent_closes("$VIX", days=1)
+    vix_level = vix_closes[0] if vix_closes else 0.0
+    regime = regime_classifier.classify(recent_spx, vix_level)
+    log.info("regime_classified", regime=regime.value, spx_bars=len(recent_spx), vix=vix_level)
 
     # Discord notifier (optional)
     from dotenv import dotenv_values

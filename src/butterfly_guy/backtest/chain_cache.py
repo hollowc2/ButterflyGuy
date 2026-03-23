@@ -66,6 +66,8 @@ def save_snapshot(
             "delta": r.get("delta") or 0.0,
             "gamma": r.get("gamma") or 0.0,
             "symbol": r.get("symbol") or "",
+            "bid_size": r.get("bid_size") or 0,
+            "ask_size": r.get("ask_size") or 0,
         }
         for r in rows
     ]
@@ -105,6 +107,8 @@ def load_chain_day(
                 iv=float(q.get("iv") or 0.0),
                 delta=float(q.get("delta") or 0.0),
                 gamma=float(q.get("gamma") or 0.0),
+                bid_size=int(q.get("bid_size") or 0),
+                ask_size=int(q.get("ask_size") or 0),
             )
             for q in snap["quotes"]
             if q.get("mark") is not None

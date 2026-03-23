@@ -181,6 +181,30 @@ class SchwabClientWrapper:
         data = resp.json()
         return data.get("candles", [])
 
+    async def get_daily_bars(self, symbol: str, days_back: int = 10) -> list[dict]:
+        """Fetch daily OHLCV bars for the given symbol."""
+        resp = await self._retry(
+            self.client.get_price_history,
+            symbol,
+            period_type=self.client.PriceHistory.PeriodType.MONTH,
+            period=1,
+            frequency_type=self.client.PriceHistory.FrequencyType.DAILY,
+            frequency=self.client.PriceHistory.Frequency.EVERY_DAY,
+            endpoint="get_daily_bars",
+        )
+        data = resp.json()
+        return data.get("candles", [])
+
+    async def get_positions(self) -> dict:
+        """Fetch account positions and buying power."""
+        resp = await self._retry(
+            self.client.get_account,
+            self.account_hash,
+            fields=[self.client.Account.Fields.POSITIONS],
+            endpoint="get_account",
+        )
+        return resp.json()
+
     async def close(self) -> None:
         """Close the client session."""
         if self._client is not None:

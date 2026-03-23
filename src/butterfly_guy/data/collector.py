@@ -20,7 +20,7 @@ from butterfly_guy.core.time_utils import (
 )
 from butterfly_guy.backtest.chain_cache import save_snapshot
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS, SchwabClientWrapper
-from butterfly_guy.db.queries import ChainQueries, SpotQueries
+from butterfly_guy.db.queries import ChainQueries, DailyBarQueries, SpotQueries
 
 log = get_logger(__name__)
 
@@ -34,11 +34,14 @@ class OptionChainCollector:
         schwab: SchwabClientWrapper,
         chain_queries: ChainQueries,
         spot_queries: SpotQueries,
+        daily_bar_queries: DailyBarQueries | None = None,
     ) -> None:
         self.config = config
         self.schwab = schwab
         self.chain_queries = chain_queries
         self.spot_queries = spot_queries
+        self.daily_bar_queries = daily_bar_queries
+        self._daily_bars_date: dt.date | None = None
 
     def _parse_chain_response(
         self,
@@ -78,8 +81,51 @@ class OptionChainCollector:
                             "vega": opt.get("vega"),
                             "symbol": opt.get("symbol"),
                             "spot_price": spot_price,
+                            "bid_size": opt.get("bidSize"),
+                            "ask_size": opt.get("askSize"),
+                            "rho": opt.get("rho"),
+                            "intrinsic_value": opt.get("intrinsicValue"),
+                            "time_value": opt.get("timeValue"),
+                            "in_the_money": opt.get("inTheMoney"),
+                            "days_to_expiration": opt.get("daysToExpiration"),
+                            "multiplier": opt.get("multiplier"),
+                            "theoretical_value": opt.get("theoreticalOptionValue"),
                         })
         return rows
+
+    async def collect_daily_bars(self) -> None:
+        """Fetch and store daily OHLCV bars for SPX and VIX. Runs once per calendar day."""
+        if self.daily_bar_queries is None:
+            return
+        today = dt.date.today()
+        if self._daily_bars_date == today:
+            return
+
+        underlying = self.config.strategy.underlying
+        spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+
+        for symbol, label in [(spot_symbol, underlying), ("$VIX", "$VIX")]:
+            try:
+                candles = await self.schwab.get_daily_bars(symbol)
+                rows = [
+                    {
+                        "date": dt.datetime.fromtimestamp(c["datetime"] / 1000, tz=dt.timezone.utc).date(),
+                        "underlying": label,
+                        "open": c.get("open"),
+                        "high": c.get("high"),
+                        "low": c.get("low"),
+                        "close": c["close"],
+                        "volume": c.get("volume", 0),
+                    }
+                    for c in candles
+                    if c.get("close") is not None
+                ]
+                count = await self.daily_bar_queries.bulk_upsert(rows)
+                log.info("daily_bars_collected", symbol=label, rows=count)
+            except Exception as e:
+                log.warning("daily_bars_fetch_failed", symbol=label, error=str(e))
+
+        self._daily_bars_date = today
 
     async def collect_snapshot(self) -> int:
         """Fetch current chain and store snapshot. Returns row count."""
@@ -129,6 +175,7 @@ class OptionChainCollector:
                 continue
 
             try:
+                await self.collect_daily_bars()
                 await self.collect_snapshot()
             except Exception as e:
                 log.error("snapshot_failed", error=str(e))

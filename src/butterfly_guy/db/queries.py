@@ -24,6 +24,8 @@ class ChainQueries:
             "snapshot_time", "underlying", "expiration", "strike", "option_type",
             "bid", "ask", "mark", "last", "volume", "open_interest",
             "iv", "delta", "gamma", "theta", "vega", "symbol", "spot_price",
+            "bid_size", "ask_size", "rho", "intrinsic_value", "time_value",
+            "in_the_money", "days_to_expiration", "multiplier", "theoretical_value",
         ]
 
         records = [
@@ -206,6 +208,48 @@ class DecisionQueries:
             "INSERT INTO decision_log (event_type, data) VALUES ($1, $2::jsonb)",
             event_type, __import__("json").dumps(data),
         )
+
+
+class DailyBarQueries:
+    """Queries for daily_bars table."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def bulk_upsert(self, rows: list[dict[str, Any]]) -> int:
+        """Upsert daily OHLCV rows. Updates close/open/high/low/volume on conflict."""
+        if not rows:
+            return 0
+        for row in rows:
+            await self.db.execute(
+                """
+                INSERT INTO daily_bars (date, underlying, open, high, low, close, volume)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (date, underlying) DO UPDATE SET
+                    open   = EXCLUDED.open,
+                    high   = EXCLUDED.high,
+                    low    = EXCLUDED.low,
+                    close  = EXCLUDED.close,
+                    volume = EXCLUDED.volume
+                """,
+                row["date"], row["underlying"],
+                row.get("open"), row.get("high"), row.get("low"),
+                row["close"], row.get("volume", 0),
+            )
+        return len(rows)
+
+    async def get_recent_closes(self, underlying: str, days: int) -> list[float]:
+        """Return the last `days` daily closes in chronological order (oldest first)."""
+        rows = await self.db.fetch(
+            """
+            SELECT close FROM daily_bars
+            WHERE underlying = $1
+            ORDER BY date DESC
+            LIMIT $2
+            """,
+            underlying, days,
+        )
+        return [float(r["close"]) for r in reversed(rows)]
 
 
 class CandidateQueries:

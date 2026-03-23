@@ -27,6 +27,15 @@ class OptionQuote:
     gamma: float = 0.0
     theta: float = 0.0
     vega: float = 0.0
+    bid_size: int = 0
+    ask_size: int = 0
+    rho: float = 0.0
+    intrinsic_value: float = 0.0
+    time_value: float = 0.0
+    in_the_money: bool = False
+    days_to_expiration: int = 0
+    multiplier: float = 100.0
+    theoretical_value: float = 0.0
 
     @property
     def mid(self) -> float:
