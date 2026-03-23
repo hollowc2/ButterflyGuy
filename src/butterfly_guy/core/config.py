@@ -45,6 +45,10 @@ class ExecutionSettings(BaseModel):
     retry_interval_seconds: int = 20
     order_timeout_seconds: int = 300
     paper_trading: bool = True  # default safe — set False to go live
+    paper_fill_buffer: float = 0.05          # extra width beyond synthetic ask/bid required to fill
+    paper_slippage_per_spread: float = 0.05  # additional cost/credit lost on fill_price
+    paper_commission_per_contract: float = 0.65  # per option contract (4 per butterfly)
+    paper_min_oi_per_leg: int = 0            # 0 = disabled; minimum open interest per leg
 
 
 class TimeRegime(BaseModel):

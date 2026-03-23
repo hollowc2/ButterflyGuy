@@ -24,6 +24,10 @@ def make_settings(**overrides) -> ExecutionSettings:
         retry_interval_seconds=0,
         order_timeout_seconds=300,
         paper_trading=False,
+        paper_fill_buffer=0.0,
+        paper_slippage_per_spread=0.0,
+        paper_commission_per_contract=0.0,
+        paper_min_oi_per_leg=0,
     )
     defaults.update(overrides)
     return ExecutionSettings(**defaults)
@@ -732,3 +736,369 @@ async def test_exit_returns_none_on_timeout():
     result = await om.execute_exit(candidate, current_value=3.75, quantity=1)
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Paper realism: fill buffer
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_paper_entry_fill_buffer_prevents_early_fill():
+    # mark=2.30, ask=2.40, fill_buffer=0.10 → need limit >= 2.50
+    # Steps: 2.30, 2.35, 2.40, 2.45 — none reach 2.50 → no fill in 4 steps
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+        paper_fill_buffer=0.10,
+        order_timeout_seconds=300,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=2.20, mark=2.30, ask=2.40)
+
+    sleep_count = 0
+
+    async def mock_sleep(_):
+        nonlocal sleep_count
+        sleep_count += 1
+        if sleep_count >= 4:
+            raise asyncio.CancelledError()
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=mock_sleep):
+        try:
+            result = await om.execute_entry(candidate, quantity=1)
+        except asyncio.CancelledError:
+            result = None
+
+    assert result is None
+    assert sleep_count == 4
+
+
+@pytest.mark.asyncio
+async def test_paper_entry_fill_buffer_requires_extra_width():
+    # mark=2.30, ask=2.40, fill_buffer=0.10 → fill at step 4 (2.30+4*0.05=2.50 >= 2.40+0.10)
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=5,
+        price_ladder_step=0.05,
+        paper_fill_buffer=0.10,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=2.20, mark=2.30, ask=2.40)
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_entry(candidate, quantity=1)
+
+    assert result is not None
+    assert result["order_id"] == "PAPER"
+    # limit_price at step 4 = 2.30 + 4*0.05 = 2.50; fill_price = 2.50 (no slippage/commission)
+    assert result["fill_price"] == pytest.approx(2.50)
+
+
+@pytest.mark.asyncio
+async def test_paper_exit_fill_buffer_prevents_early_fill():
+    # bid=3.50, fill_buffer=0.10 → need limit <= 3.40
+    # Steps from 3.50+(3)*0.05=3.65 down: 3.65, 3.60, 3.55, 3.50 — none <= 3.40
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+        paper_fill_buffer=0.10,
+        order_timeout_seconds=300,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.50, mark=3.00, ask=3.60)
+
+    sleep_count = 0
+
+    async def mock_sleep(_):
+        nonlocal sleep_count
+        sleep_count += 1
+        if sleep_count >= 4:
+            raise asyncio.CancelledError()
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=mock_sleep):
+        try:
+            result = await om.execute_exit(candidate, current_value=3.00, quantity=1)
+        except asyncio.CancelledError:
+            result = None
+
+    assert result is None
+    assert sleep_count == 4
+
+
+# ---------------------------------------------------------------------------
+# Paper realism: slippage
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_paper_entry_slippage_added_to_fill_price():
+    # mark=2.30, ask=2.40 → fills at step 2 (limit=2.40); slippage=0.10 → fill_price=2.50
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+        paper_slippage_per_spread=0.10,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=2.20, mark=2.30, ask=2.40)
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_entry(candidate, quantity=1)
+
+    assert result is not None
+    assert result["fill_price"] == pytest.approx(2.50)  # 2.40 + 0.10 slippage
+
+
+@pytest.mark.asyncio
+async def test_paper_exit_slippage_subtracted_from_fill_price():
+    # bid=3.50; step 3: limit=3.50+0*0.05=3.50 <= 3.50; slippage=0.10 → fill_price=3.40
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+        paper_slippage_per_spread=0.10,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.50, mark=3.00, ask=3.60)
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_exit(candidate, current_value=3.00, quantity=1)
+
+    assert result is not None
+    assert result["fill_price"] == pytest.approx(3.40)  # 3.50 - 0.10 slippage
+
+
+# ---------------------------------------------------------------------------
+# Paper realism: commission
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_paper_entry_commission_added_to_fill_price():
+    # mark=2.30, ask=2.40 → limit=2.40 at step 2; commission=4*1*1.00/100=0.04 → fill_price=2.44
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+        paper_commission_per_contract=1.00,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=2.20, mark=2.30, ask=2.40)
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_entry(candidate, quantity=1)
+
+    assert result is not None
+    assert result["fill_price"] == pytest.approx(2.44)  # 2.40 + 0.04 commission
+
+
+@pytest.mark.asyncio
+async def test_paper_exit_commission_subtracted_from_fill_price():
+    # bid=3.50; step 3: limit=3.50; commission=4*1*1.00/100=0.04 → fill_price=3.46
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+        paper_commission_per_contract=1.00,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.50, mark=3.00, ask=3.60)
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_exit(candidate, current_value=3.00, quantity=1)
+
+    assert result is not None
+    assert result["fill_price"] == pytest.approx(3.46)  # 3.50 - 0.04 commission
+
+
+# ---------------------------------------------------------------------------
+# Paper realism: forced exit applies buffer + slippage
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_paper_forced_exit_applies_buffer_and_slippage():
+    # Forced fill triggers when all ladder steps exhaust and deadline expires.
+    # Mock dt.datetime.now to control the timeout: enters loop once, then expires.
+    # bid=3.50, ask=10.0 (never fills), fill_buffer=0.05, slippage=0.10 →
+    # force_price = 3.50 - 0.05 - 0.10 = 3.35
+    settings = make_settings(
+        paper_trading=True,
+        order_timeout_seconds=300,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+        paper_fill_buffer=0.05,
+        paper_slippage_per_spread=0.10,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.50, mark=3.00, ask=10.0)  # ask too high: fill never triggers
+
+    base = dt.datetime(2026, 3, 23, 12, 0, 0, tzinfo=dt.timezone.utc)
+    now_call = 0
+
+    def mock_now(tz=None):
+        nonlocal now_call
+        now_call += 1
+        # Call 1: deadline setup; call 2: while-check enters loop
+        # Call 3+: inner deadline check + while-check + fill_time → expired
+        return base if now_call <= 2 else base + dt.timedelta(seconds=400)
+
+    mock_dt = MagicMock()
+    mock_dt.datetime.now.side_effect = mock_now
+    mock_dt.timedelta = dt.timedelta
+    mock_dt.timezone = dt.timezone
+    mock_dt.date = dt.date
+
+    with patch("butterfly_guy.execution.order_manager.dt", mock_dt), \
+         patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_exit(candidate, current_value=3.00, quantity=1)
+
+    assert result is not None
+    assert result.get("forced") is True
+    assert result["fill_price"] == pytest.approx(3.35)
+
+
+# ---------------------------------------------------------------------------
+# Paper realism: open interest gate
+# ---------------------------------------------------------------------------
+
+def make_chain_data_with_oi(
+    expiration: dt.date,
+    lower: float,
+    center: float,
+    upper: float,
+    lower_oi: int,
+    center_oi: int,
+    upper_oi: int,
+    direction: str = "PUT",
+) -> dict:
+    map_key = "callExpDateMap" if direction == "CALL" else "putExpDateMap"
+    exp_key = f"{expiration}:0"
+    return {
+        map_key: {
+            exp_key: {
+                str(lower): [{"bid": 1.0, "mark": 1.1, "ask": 1.2, "openInterest": lower_oi}],
+                str(center): [{"bid": 1.4, "mark": 1.5, "ask": 1.6, "openInterest": center_oi}],
+                str(upper): [{"bid": 2.3, "mark": 2.4, "ask": 2.5, "openInterest": upper_oi}],
+            }
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_paper_spread_oi_gate_returns_none_when_oi_insufficient():
+    settings = make_settings(paper_trading=True, paper_min_oi_per_leg=50)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    exp = dt.date(2026, 3, 21)
+
+    # center has OI=10 < 50 → gate fires
+    schwab.get_option_chain = AsyncMock(
+        return_value=make_chain_data_with_oi(exp, 5900, 5950, 6000, 100, 10, 100)
+    )
+
+    result = await om._fetch_live_spread(candidate)
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_paper_spread_oi_gate_passes_when_all_oi_sufficient():
+    settings = make_settings(paper_trading=True, paper_min_oi_per_leg=50)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    exp = dt.date(2026, 3, 21)
+
+    schwab.get_option_chain = AsyncMock(
+        return_value=make_chain_data_with_oi(exp, 5900, 5950, 6000, 100, 200, 150)
+    )
+
+    result = await om._fetch_live_spread(candidate)
+
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_paper_spread_oi_gate_disabled_when_zero():
+    # paper_min_oi_per_leg=0 means disabled; even OI=0 should not block
+    settings = make_settings(paper_trading=True, paper_min_oi_per_leg=0)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    exp = dt.date(2026, 3, 21)
+
+    schwab.get_option_chain = AsyncMock(
+        return_value=make_chain_data_with_oi(exp, 5900, 5950, 6000, 0, 0, 0)
+    )
+
+    result = await om._fetch_live_spread(candidate)
+
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_paper_spread_oi_gate_skipped_in_live_mode():
+    # paper_trading=False → OI gate should not fire even if OI is low
+    settings = make_settings(paper_trading=False, paper_min_oi_per_leg=50)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    exp = dt.date(2026, 3, 21)
+
+    schwab.get_option_chain = AsyncMock(
+        return_value=make_chain_data_with_oi(exp, 5900, 5950, 6000, 1, 1, 1)
+    )
+
+    result = await om._fetch_live_spread(candidate)
+
+    assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# Paper realism: no ratchet — uses current mark each step
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_paper_entry_uses_current_mark_not_ratchet():
+    # First step sees mark=3.00 (high), second step sees mark=2.30 (lower).
+    # Without ratchet, second step should anchor to 2.30, not stay at 3.00.
+    # ask=2.40 at step 2 of second outer-loop pass → limit=2.30+2*0.05=2.40 fills.
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+        order_timeout_seconds=300,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+
+    high_spread = LiveSpread(bid=2.90, mark=3.00, ask=10.0)   # first pass: ask too high to fill
+    low_spread = LiveSpread(bid=2.20, mark=2.30, ask=2.40)    # second pass: fills at step 2
+
+    call_count = 0
+
+    async def fetch_side_effect(_):
+        nonlocal call_count
+        call_count += 1
+        return high_spread if call_count <= 4 else low_spread
+
+    with patch.object(om, "_fetch_live_spread", new=fetch_side_effect), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_entry(candidate, quantity=1)
+
+    assert result is not None
+    # fill_price should be based on mark=2.30, not ratcheted 3.00
+    assert result["fill_price"] == pytest.approx(2.40)  # limit=2.40 (step 2 of low_spread), no slippage

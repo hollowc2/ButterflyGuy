@@ -54,6 +54,7 @@ class OrderManager:
             bids: dict[float, float] = {}
             marks: dict[float, float] = {}
             asks: dict[float, float] = {}
+            ois: dict[float, int] = {}
             target_strikes = {candidate.lower_strike, candidate.center_strike, candidate.upper_strike}
 
             for exp_key, strikes in exp_map.items():
@@ -66,12 +67,17 @@ class OrderManager:
                         bids[strike] = opt.get("bid", 0)
                         marks[strike] = opt.get("mark", 0)
                         asks[strike] = opt.get("ask", 0)
+                        ois[strike] = opt.get("openInterest", 0)
 
             if len(marks) < 3:
                 log.warning("live_spread_incomplete", found=len(marks), expected=3)
                 return None
 
             lo, ce, up = candidate.lower_strike, candidate.center_strike, candidate.upper_strike
+            if self.settings.paper_trading and self.settings.paper_min_oi_per_leg > 0:
+                if any(ois.get(s, 0) < self.settings.paper_min_oi_per_leg for s in [lo, ce, up]):
+                    log.warning("paper_spread_insufficient_oi", ois=ois)
+                    return None
             spread_bid = bids[lo] + bids[up] - 2 * asks[ce]
             spread_mark = marks[lo] + marks[up] - 2 * marks[ce]
             spread_ask = asks[lo] + asks[up] - 2 * bids[ce]
@@ -105,9 +111,7 @@ class OrderManager:
 
         if self.settings.paper_trading:
             deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
-            # price_floor tracks the highest live mark observed so far (ratchet).
-            # None means no live price seen yet; fall back to candidate.cost until first fetch.
-            price_floor: float | None = None
+            commission = 4 * quantity * self.settings.paper_commission_per_contract / 100
 
             while True:
                 if dt.datetime.now(dt.timezone.utc) >= deadline:
@@ -120,11 +124,7 @@ class OrderManager:
                         return None
 
                     spread = await self._fetch_live_spread(candidate)
-                    if spread is not None:
-                        # Ratchet: first live price replaces candidate.cost; subsequent
-                        # prices only update if higher, preventing outer-loop backsliding.
-                        price_floor = spread.mark if price_floor is None else max(price_floor, spread.mark)
-                    mid_price = price_floor if price_floor is not None else candidate.cost
+                    mid_price = spread.mark if spread is not None else candidate.cost
 
                     limit_price = round(mid_price + i * step, 2)
                     log.info(
@@ -136,11 +136,14 @@ class OrderManager:
                         ask=spread.ask if spread is not None else None,
                     )
 
-                    if spread is not None and limit_price >= spread.ask:
-                        log.info("paper_entry_filled", price=limit_price, step=i)
+                    if spread is not None and limit_price >= spread.ask + self.settings.paper_fill_buffer:
+                        fill_price = round(
+                            limit_price + self.settings.paper_slippage_per_spread + commission, 2
+                        )
+                        log.info("paper_entry_filled", price=limit_price, fill_price=fill_price, step=i)
                         return {
                             "order_id": "PAPER",
-                            "fill_price": limit_price,
+                            "fill_price": fill_price,
                             "fill_time": dt.datetime.now(dt.timezone.utc),
                         }
 
@@ -209,20 +212,15 @@ class OrderManager:
 
         if self.settings.paper_trading:
             deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
-            # price_ceiling tracks the lowest live mark observed so far (ratchet).
-            # None means no live price seen yet; fall back to current_value until first fetch.
-            price_ceiling: float | None = None
+            commission = 4 * quantity * self.settings.paper_commission_per_contract / 100
             last_spread = None
 
             while dt.datetime.now(dt.timezone.utc) < deadline:
                 for i in range(max_steps):
                     spread = await self._fetch_live_spread(candidate)
                     if spread is not None:
-                        # Ratchet: first live price replaces current_value; subsequent
-                        # prices only update if lower, preventing outer-loop backsliding.
-                        price_ceiling = spread.bid if price_ceiling is None else min(price_ceiling, spread.bid)
                         last_spread = spread
-                    mid_price = price_ceiling if price_ceiling is not None else current_value
+                    mid_price = spread.bid if spread is not None else current_value
 
                     limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
                     log.info(
@@ -234,11 +232,14 @@ class OrderManager:
                         ask=spread.ask if spread is not None else None,
                     )
 
-                    if spread is not None and limit_price <= spread.bid:
-                        log.info("paper_exit_filled", price=limit_price, step=i)
+                    if spread is not None and limit_price <= spread.bid - self.settings.paper_fill_buffer:
+                        fill_price = round(
+                            max(0.05, limit_price - self.settings.paper_slippage_per_spread - commission), 2
+                        )
+                        log.info("paper_exit_filled", price=limit_price, fill_price=fill_price, step=i)
                         return {
                             "order_id": "PAPER",
-                            "fill_price": limit_price,
+                            "fill_price": fill_price,
                             "fill_time": dt.datetime.now(dt.timezone.utc),
                         }
 
@@ -249,16 +250,19 @@ class OrderManager:
 
                 log.warning("paper_exit_ladder_exhausted_repricing")
 
-            # Ladder timed out without fill — force-fill at last seen bid (safety fallback)
+            # Ladder timed out without fill — force market-order fill at last seen bid minus costs
             force_bid = (
                 last_spread.bid
                 if last_spread and last_spread.bid and last_spread.bid > 0
                 else 0.05
             )
-            log.warning("exit_ladder_forced_at_bid", bid=force_bid)
+            force_price = round(
+                max(0.05, force_bid - self.settings.paper_fill_buffer - self.settings.paper_slippage_per_spread - commission), 2
+            )
+            log.warning("exit_ladder_forced_at_bid", bid=force_bid, fill_price=force_price)
             return {
                 "order_id": "PAPER",
-                "fill_price": force_bid,
+                "fill_price": force_price,
                 "fill_time": dt.datetime.now(dt.timezone.utc),
                 "forced": True,
             }
