@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
-from butterfly_guy.core.metrics import daily_pnl, daily_trade_count, start_metrics_server, trades_active
+from butterfly_guy.core.metrics import butterfly_candidates_found, daily_pnl, daily_trade_count, start_metrics_server, trades_active
 from butterfly_guy.core.time_utils import is_market_open, now_eastern
 from butterfly_guy.data.collector import OptionChainCollector
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
@@ -240,6 +240,21 @@ async def main() -> None:
     daily_trade_count.labels(underlying=underlying).set(len(today_trades))
     realized_pnl = sum(float(t["pnl"]) for t in today_trades if t.get("pnl") is not None)
     daily_pnl.labels(underlying=underlying).set(realized_pnl)
+
+    # Seed candidates_found from the most recent scan today
+    last_scan_count = await db.pool.fetchval(
+        """
+        SELECT COUNT(*) FROM butterfly_candidates
+        WHERE underlying = $1
+          AND scan_time = (
+              SELECT MAX(scan_time) FROM butterfly_candidates
+              WHERE underlying = $1 AND scan_time::date = CURRENT_DATE
+          )
+        """,
+        underlying,
+    )
+    if last_scan_count:
+        butterfly_candidates_found.labels(underlying=underlying).set(last_scan_count)
 
     try:
         async with asyncio.TaskGroup() as tg:
