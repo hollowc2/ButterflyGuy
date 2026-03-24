@@ -128,6 +128,8 @@ class ButterflyBuilder:
 
                 # Butterfly cost: buy lower + buy upper - 2 * sell center (using mark)
                 cost = lower_q.mark - 2 * center_q.mark + upper_q.mark
+                # Fly ask: real market cost hitting the spread (buy wings at ask, sell center at bid)
+                fly_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
 
                 if cost < 0.05:  # minimum practical butterfly debit; filters fp-epsilon zeros
                     continue
@@ -154,6 +156,7 @@ class ButterflyBuilder:
                         lower_strike=lower,
                         upper_strike=upper,
                         cost=round(cost, 4),
+                        ask=round(fly_ask, 4),
                         max_profit=round(max_profit, 4),
                         reward_risk=round(rr, 4),
                         lower_be=round(lower_be, 2),

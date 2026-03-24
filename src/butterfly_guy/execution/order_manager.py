@@ -102,6 +102,68 @@ class OrderManager:
         spread = await self._fetch_live_spread(candidate)
         return spread.mark if spread is not None else None
 
+    async def execute_single_attempt(
+        self, candidate: ButterflyCandidate, limit_price: float, quantity: int = 1
+    ) -> dict | None:
+        """
+        Place one butterfly order at limit_price. Wait for fill; cancel if unfilled.
+        Returns fill dict on success, None otherwise.
+        The retry loop and re-scanning live in TradeService — this is a single shot.
+
+        Paper trading: checks live spread; fills if limit_price >= spread.ask + buffer.
+        Live trading: places order, waits retry_interval_seconds, cancels if unfilled.
+        """
+        log.info("entry_attempt", price=limit_price, center=candidate.center_strike,
+                 width=candidate.wing_width, paper=self.settings.paper_trading)
+
+        if self.settings.paper_trading:
+            commission = 4 * quantity * self.settings.paper_commission_per_contract / 100
+            spread = await self._fetch_live_spread(candidate)
+            if spread is None:
+                log.warning("paper_entry_no_spread", center=candidate.center_strike)
+                return None
+            log.info("paper_entry_spread", bid=spread.bid, mark=spread.mark,
+                     ask=spread.ask, limit=limit_price)
+            if limit_price >= spread.ask + self.settings.paper_fill_buffer:
+                fill_price = round(
+                    limit_price + self.settings.paper_slippage_per_spread + commission, 2
+                )
+                log.info("paper_entry_filled", limit=limit_price, fill_price=fill_price)
+                return {
+                    "order_id": "PAPER",
+                    "fill_price": fill_price,
+                    "fill_time": dt.datetime.now(dt.timezone.utc),
+                }
+            log.info("paper_entry_not_filled", limit=limit_price, ask=spread.ask)
+            return None
+
+        order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
+        orders_placed.labels(underlying=self.underlying, order_type="entry").inc()
+        start_time = dt.datetime.now(dt.timezone.utc)
+
+        try:
+            order_id = await self.schwab.place_order(order_spec)
+            fill = await self._wait_for_fill(order_id, self.settings.retry_interval_seconds)
+
+            if fill:
+                elapsed = (dt.datetime.now(dt.timezone.utc) - start_time).total_seconds()
+                order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
+                orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
+                log.info("entry_filled", order_id=order_id, price=limit_price)
+                return {
+                    "order_id": order_id,
+                    "fill_price": limit_price,
+                    "fill_time": dt.datetime.now(dt.timezone.utc),
+                }
+
+            await self.schwab.cancel_order(order_id)
+            log.info("entry_unfilled_cancelled", price=limit_price)
+
+        except Exception as e:
+            log.error("entry_attempt_failed", error=str(e))
+
+        return None
+
     async def execute_entry(
         self, candidate: ButterflyCandidate, quantity: int = 1
     ) -> dict | None:

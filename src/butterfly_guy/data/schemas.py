@@ -58,6 +58,7 @@ class ButterflyCandidate:
     upper_be: float
     distance_from_spot: float
     spot_price: float
+    ask: float = 0.0  # composite fly ask: lower.ask + upper.ask - 2*center.bid
     lower_symbol: str = ""
     center_symbol: str = ""
     upper_symbol: str = ""

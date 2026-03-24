@@ -58,9 +58,7 @@ class TradeService:
         self.decision_queries = decision_queries
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
-        """Full entry flow: risk → time → chain → direction → scan → select → execute."""
-        now = now_eastern()
-
+        """Full entry flow: risk → time → direction (once) → retry loop (re-scan + fill)."""
         # Risk check
         allowed, reason = await self.risk_engine.can_trade()
         if not allowed:
@@ -81,24 +79,11 @@ class TradeService:
         spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
         chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
 
-        # Fetch chain
-        try:
-            chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
-        except Exception as e:
-            log.error("chain_fetch_failed", error=str(e))
-            return None
-
-        # Get spot price
+        # Get initial spot price for direction determination
         try:
             spot_price = await self.schwab.get_spot_price(spot_symbol)
         except Exception as e:
             log.error("spot_fetch_failed", error=str(e))
-            return None
-
-        # Parse chain into OptionQuotes
-        quotes = self._parse_chain_to_quotes(chain_data, expiration)
-        if not quotes:
-            log.warning("empty_chain")
             return None
 
         # Fetch previous close from DB (fallback to spot_price = neutral)
@@ -117,7 +102,7 @@ class TradeService:
         except Exception:
             pass
 
-        # Determine direction — bias filter if configured, else simple gap
+        # Determine direction once — bias filter or simple gap
         if self.config.entry.use_bias_filter:
             direction = await self._bias_direction(previous_close, spot_price)
             if direction is None:
@@ -127,35 +112,7 @@ class TradeService:
         else:
             direction = self.direction_filter.get_direction(spot_price, previous_close)
 
-        # Build candidates
-        candidates = self.builder.build_candidates(quotes, spot_price, direction)
-        butterfly_scans_total.labels(underlying=underlying).inc()
-        butterfly_candidates_found.labels(underlying=underlying).set(len(candidates))
-
-        # Log all candidates
-        scan_time = now_eastern()
-        candidate_rows = [
-            {
-                "scan_time": scan_time,
-                "underlying": underlying,
-                "direction": c.direction,
-                "wing_width": c.wing_width,
-                "center_strike": c.center_strike,
-                "lower_strike": c.lower_strike,
-                "upper_strike": c.upper_strike,
-                "cost": c.cost,
-                "max_profit": c.max_profit,
-                "reward_risk": c.reward_risk,
-                "lower_be": c.lower_be,
-                "upper_be": c.upper_be,
-                "distance_from_spot": c.distance_from_spot,
-                "spot_price": c.spot_price,
-                "selected": False,
-            }
-            for c in candidates
-        ]
-
-        # Fetch VIX for center anchoring
+        # Fetch VIX once for center anchoring (stable throughout the entry window)
         vix_price: float | None = None
         if self.config.entry.use_vix_center:
             try:
@@ -168,111 +125,162 @@ class TradeService:
             except Exception as e:
                 log.warning("vix_fetch_failed", error=str(e))
 
-        # Select best — per-width VIX-anchored if enabled, else global R/R
-        best: ButterflyCandidate | None = None
-        if vix_price and self.config.entry.use_vix_center:
-            per_width_bests = []
-            for width in self.config.strategy.wing_widths:
-                target_center = vix_target_center(
-                    vix=vix_price, spot=spot_price,
-                    direction=direction, wing_width=width,
+        # Entry retry loop: re-scan chain each attempt so strikes flex with price movement.
+        # Start at fly's composite ask, add price_step each retry to sweeten the offer.
+        max_steps = self.config.execution.price_ladder_steps
+        price_step = self.config.execution.price_ladder_step
+        candidates_logged = False
+
+        for step in range(max_steps):
+            # Re-fetch chain + spot each attempt — market may have moved
+            try:
+                chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
+                spot_price = await self.schwab.get_spot_price(spot_symbol)
+            except Exception as e:
+                log.error("chain_fetch_failed", step=step, error=str(e))
+                break
+
+            quotes = self._parse_chain_to_quotes(chain_data, expiration)
+            if not quotes:
+                log.warning("empty_chain", step=step)
+                break
+
+            candidates = self.builder.build_candidates(quotes, spot_price, direction)
+
+            # Select best — VIX-anchored per width if enabled, else global R/R
+            best: ButterflyCandidate | None = None
+            if vix_price and self.config.entry.use_vix_center:
+                per_width_bests = []
+                for width in self.config.strategy.wing_widths:
+                    target_center = vix_target_center(
+                        vix=vix_price, spot=spot_price,
+                        direction=direction, wing_width=width,
+                    )
+                    width_candidates = [c for c in candidates if c.wing_width == width]
+                    w_best = self.selector.select_best(
+                        width_candidates,
+                        target_center=target_center,
+                        center_tolerance=self.config.entry.center_tolerance,
+                    )
+                    if w_best:
+                        per_width_bests.append(w_best)
+                if per_width_bests:
+                    best = min(per_width_bests,
+                               key=lambda c: abs(c.reward_risk - self.config.strategy.rr_target))
+                    log.info("vix_center_selected", vix=round(vix_price, 2),
+                             width=best.wing_width, center=best.center_strike,
+                             rr=round(best.reward_risk, 2))
+            if best is None:
+                best = self.selector.select_best(candidates)
+
+            # Log candidates to DB on first scan only (avoid noise from retries)
+            if not candidates_logged:
+                candidates_logged = True
+                butterfly_scans_total.labels(underlying=underlying).inc()
+                butterfly_candidates_found.labels(underlying=underlying).set(len(candidates))
+                scan_time = now_eastern()
+                candidate_rows = [
+                    {
+                        "scan_time": scan_time,
+                        "underlying": underlying,
+                        "direction": c.direction,
+                        "wing_width": c.wing_width,
+                        "center_strike": c.center_strike,
+                        "lower_strike": c.lower_strike,
+                        "upper_strike": c.upper_strike,
+                        "cost": c.cost,
+                        "max_profit": c.max_profit,
+                        "reward_risk": c.reward_risk,
+                        "lower_be": c.lower_be,
+                        "upper_be": c.upper_be,
+                        "distance_from_spot": c.distance_from_spot,
+                        "spot_price": c.spot_price,
+                        "selected": False,
+                    }
+                    for c in candidates
+                ]
+                if best:
+                    for row in candidate_rows:
+                        if row["center_strike"] == best.center_strike and row["wing_width"] == best.wing_width:
+                            row["selected"] = True
+                if candidate_rows:
+                    await self.candidate_queries.bulk_insert(candidate_rows)
+
+            if not best:
+                await self.decision_queries.log_event("no_candidates", {"direction": direction, "spot": spot_price, "step": step})
+                log.info("no_candidates", step=step, direction=direction)
+                break
+
+            # Price at fly's composite ask + per-step increment to sweeten the offer
+            limit_price = round(best.ask + step * price_step, 2)
+            log.info("entry_attempt", step=step, center=best.center_strike,
+                     width=best.wing_width, ask=best.ask, limit=limit_price)
+
+            fill = await self.order_manager.execute_single_attempt(best, limit_price)
+            if fill:
+                trade_data = {
+                    "underlying": underlying,
+                    "trade_date": expiration,
+                    "direction": direction,
+                    "wing_width": best.wing_width,
+                    "center_strike": best.center_strike,
+                    "lower_strike": best.lower_strike,
+                    "upper_strike": best.upper_strike,
+                    "entry_price": fill["fill_price"],
+                    "entry_time": fill["fill_time"],
+                    "lower_symbol": best.lower_symbol,
+                    "center_symbol": best.center_symbol,
+                    "upper_symbol": best.upper_symbol,
+                }
+                trade_id = await self.trade_queries.insert_trade(trade_data)
+                await self.risk_engine.record_trade()
+
+                trades_active.labels(underlying=underlying).inc()
+                daily_trade_count.labels(underlying=underlying).inc()
+
+                # Emit entry detail metrics for Grafana
+                entry_center_strike.labels(underlying=underlying).set(best.center_strike)
+                entry_wing_width.labels(underlying=underlying).set(best.wing_width)
+                entry_cost.labels(underlying=underlying).set(best.cost)
+                entry_max_profit.labels(underlying=underlying).set(best.max_profit)
+                entry_lower_be.labels(underlying=underlying).set(best.lower_be)
+                entry_upper_be.labels(underlying=underlying).set(best.upper_be)
+                if vix_price:
+                    entry_vix.labels(underlying=underlying).set(vix_price)
+                    entry_expected_move.labels(underlying=underlying).set(_vix_expected_move(vix_price, spot_price))
+
+                record = TradeRecord(
+                    trade_id=trade_id,
+                    trade_date=expiration,
+                    direction=direction,
+                    wing_width=best.wing_width,
+                    center_strike=best.center_strike,
+                    lower_strike=best.lower_strike,
+                    upper_strike=best.upper_strike,
+                    entry_price=fill["fill_price"],
+                    entry_time=fill["fill_time"],
+                    lower_symbol=best.lower_symbol,
+                    center_symbol=best.center_symbol,
+                    upper_symbol=best.upper_symbol,
                 )
-                width_candidates = [c for c in candidates if c.wing_width == width]
-                w_best = self.selector.select_best(
-                    width_candidates,
-                    target_center=target_center,
-                    center_tolerance=self.config.entry.center_tolerance,
-                )
-                if w_best:
-                    per_width_bests.append(w_best)
-            if per_width_bests:
-                best = min(per_width_bests,
-                           key=lambda c: abs(c.reward_risk - self.config.strategy.rr_target))
-                log.info("vix_center_selected", vix=round(vix_price, 2),
-                         width=best.wing_width, center=best.center_strike,
-                         rr=round(best.reward_risk, 2))
-        if best is None:
-            best = self.selector.select_best(candidates)
-        if not best:
-            await self.decision_queries.log_event("no_candidates", {"direction": direction, "spot": spot_price})
-            if candidate_rows:
-                await self.candidate_queries.bulk_insert(candidate_rows)
-            return None
 
-        # Mark selected
-        for row in candidate_rows:
-            if (
-                row["center_strike"] == best.center_strike
-                and row["wing_width"] == best.wing_width
-            ):
-                row["selected"] = True
+                await self.decision_queries.log_event("trade_entered", {
+                    "trade_id": trade_id,
+                    "center": best.center_strike,
+                    "width": best.wing_width,
+                    "cost": fill["fill_price"],
+                    "direction": direction,
+                    "entry_step": step,
+                })
 
-        if candidate_rows:
-            await self.candidate_queries.bulk_insert(candidate_rows)
+                log.info("trade_entered", trade_id=trade_id, center=best.center_strike, step=step)
+                return record, best
 
-        # Execute entry
-        fill = await self.order_manager.execute_entry(best)
-        if not fill:
-            await self.decision_queries.log_event("entry_failed", {"center": best.center_strike})
-            return None
+            log.info("entry_step_unfilled", step=step, limit=limit_price, center=best.center_strike)
 
-        # Record trade
-        trade_data = {
-            "underlying": underlying,
-            "trade_date": expiration,
-            "direction": direction,
-            "wing_width": best.wing_width,
-            "center_strike": best.center_strike,
-            "lower_strike": best.lower_strike,
-            "upper_strike": best.upper_strike,
-            "entry_price": fill["fill_price"],
-            "entry_time": fill["fill_time"],
-            "lower_symbol": best.lower_symbol,
-            "center_symbol": best.center_symbol,
-            "upper_symbol": best.upper_symbol,
-        }
-        trade_id = await self.trade_queries.insert_trade(trade_data)
-        await self.risk_engine.record_trade()
-
-        trades_active.labels(underlying=underlying).inc()
-        daily_trade_count.labels(underlying=underlying).inc()
-
-        # Emit entry detail metrics for Grafana
-        entry_center_strike.labels(underlying=underlying).set(best.center_strike)
-        entry_wing_width.labels(underlying=underlying).set(best.wing_width)
-        entry_cost.labels(underlying=underlying).set(best.cost)
-        entry_max_profit.labels(underlying=underlying).set(best.max_profit)
-        entry_lower_be.labels(underlying=underlying).set(best.lower_be)
-        entry_upper_be.labels(underlying=underlying).set(best.upper_be)
-        if vix_price:
-            entry_vix.labels(underlying=underlying).set(vix_price)
-            entry_expected_move.labels(underlying=underlying).set(_vix_expected_move(vix_price, spot_price))
-
-        record = TradeRecord(
-            trade_id=trade_id,
-            trade_date=expiration,
-            direction=direction,
-            wing_width=best.wing_width,
-            center_strike=best.center_strike,
-            lower_strike=best.lower_strike,
-            upper_strike=best.upper_strike,
-            entry_price=fill["fill_price"],
-            entry_time=fill["fill_time"],
-            lower_symbol=best.lower_symbol,
-            center_symbol=best.center_symbol,
-            upper_symbol=best.upper_symbol,
-        )
-
-        await self.decision_queries.log_event("trade_entered", {
-            "trade_id": trade_id,
-            "center": best.center_strike,
-            "width": best.wing_width,
-            "cost": fill["fill_price"],
-            "direction": direction,
-        })
-
-        log.info("trade_entered", trade_id=trade_id, center=best.center_strike)
-        return record, best
+        await self.decision_queries.log_event("entry_exhausted", {"direction": direction})
+        log.warning("entry_exhausted", direction=direction)
+        return None
 
     async def _bias_direction(
         self, prev_close: float, entry_close: float
