@@ -60,7 +60,7 @@ class ProfitStateMachine:
         self._update_state(pos)
 
         # Absolute loss stop — fires regardless of whether position ever gained
-        if pos.entry_price > 0:
+        if self.settings.use_absolute_loss_stop and pos.entry_price > 0:
             loss_from_cost = (pos.entry_price - pos.current_value) / pos.entry_price
             if loss_from_cost >= self.settings.max_loss_from_cost:
                 log.info(

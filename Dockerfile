@@ -15,7 +15,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy source and install project
 COPY src/ ./src/
-COPY config.yaml ./
+COPY config.yaml notify.py ./
 RUN uv sync --frozen --no-dev --no-editable
 
 # Default: run live trader. Override CMD for collector or backtest.

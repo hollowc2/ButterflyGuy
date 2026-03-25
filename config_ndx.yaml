@@ -13,12 +13,12 @@ strategy:
     75: 6.00
 entry:
   start_time: "07:00"  # PST
-  end_time: "07:30"    # PST
+  end_time: "07:45"    # PST
   timezone: "America/Los_Angeles"
   use_vix_center: true
   center_tolerance: 100.0  # NDX moves in larger point increments
 execution:
-  price_ladder_step: 0.05
+  price_ladder_step: 0.10
   price_ladder_steps: 4
   retry_interval_seconds: 20
   order_timeout_seconds: 300

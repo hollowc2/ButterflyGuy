@@ -8,6 +8,7 @@ from typing import Any
 
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
+from notify import send as notify
 from butterfly_guy.core.metrics import (
     chain_snapshot_duration,
     chain_snapshot_rows,
@@ -166,7 +167,11 @@ class OptionChainCollector:
     async def run_loop(self) -> None:
         """Main collector loop — runs while market is open."""
         interval = self.config.collector.snapshot_interval_seconds
+        underlying = self.config.strategy.underlying
         log.info("collector_starting", interval=interval)
+
+        consecutive_failures = 0
+        alert_sent = False
 
         while True:
             if not is_market_open():
@@ -177,7 +182,15 @@ class OptionChainCollector:
             try:
                 await self.collect_daily_bars()
                 await self.collect_snapshot()
+                if alert_sent:
+                    notify(f"✅ {underlying} data collection recovered.")
+                    alert_sent = False
+                consecutive_failures = 0
             except Exception as e:
                 log.error("snapshot_failed", error=str(e))
+                consecutive_failures += 1
+                if consecutive_failures >= 3 and not alert_sent:
+                    notify(f"⚠️ {underlying} data collection has failed {consecutive_failures} times in a row. Last error: {e}")
+                    alert_sent = True
 
             await asyncio.sleep(interval)

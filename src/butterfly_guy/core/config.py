@@ -61,6 +61,7 @@ class ProfitManagementSettings(BaseModel):
     regimes: dict[str, TimeRegime] = Field(default_factory=dict)
     exit_before_close_minutes: int = 5
     max_loss_from_cost: float = 0.50
+    use_absolute_loss_stop: bool = True
 
 
 class RiskSettings(BaseModel):
