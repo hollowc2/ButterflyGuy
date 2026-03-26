@@ -62,7 +62,7 @@ class TradeService:
         # Risk check
         allowed, reason = await self.risk_engine.can_trade()
         if not allowed:
-            await self.decision_queries.log_event("entry_blocked", {"reason": reason})
+            await self.decision_queries.log_event("entry_blocked", {"reason": reason}, underlying=self.config.strategy.underlying)
             log.info("entry_blocked", reason=reason)
             return None
 
@@ -106,7 +106,7 @@ class TradeService:
         if self.config.entry.use_bias_filter:
             direction = await self._bias_direction(previous_close, spot_price)
             if direction is None:
-                await self.decision_queries.log_event("bias_filter_no_signal", {"spot": spot_price})
+                await self.decision_queries.log_event("bias_filter_no_signal", {"spot": spot_price}, underlying=underlying)
                 log.info("bias_filter_no_signal", spot=spot_price)
                 return None
         else:
@@ -207,7 +207,7 @@ class TradeService:
                     await self.candidate_queries.bulk_insert(candidate_rows)
 
             if not best:
-                await self.decision_queries.log_event("no_candidates", {"direction": direction, "spot": spot_price, "step": step})
+                await self.decision_queries.log_event("no_candidates", {"direction": direction, "spot": spot_price, "step": step}, underlying=underlying)
                 log.info("no_candidates", step=step, direction=direction)
                 break
 
@@ -271,14 +271,18 @@ class TradeService:
                     "cost": fill["fill_price"],
                     "direction": direction,
                     "entry_step": step,
-                })
+                }, underlying=underlying)
 
                 log.info("trade_entered", trade_id=trade_id, center=best.center_strike, step=step)
                 return record, best
 
-            log.info("entry_step_unfilled", step=step, limit=limit_price, center=best.center_strike)
+            await self.decision_queries.log_event("entry_step_unfilled", {
+                "step": step, "limit": limit_price, "ask": best.ask,
+                "center": best.center_strike, "width": best.wing_width,
+            }, underlying=underlying)
+            log.info("entry_step_unfilled", step=step, limit=limit_price, ask=best.ask, center=best.center_strike)
 
-        await self.decision_queries.log_event("entry_exhausted", {"direction": direction})
+        await self.decision_queries.log_event("entry_exhausted", {"direction": direction}, underlying=underlying)
         log.warning("entry_exhausted", direction=direction)
         return None
 

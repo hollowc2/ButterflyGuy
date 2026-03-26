@@ -2,7 +2,7 @@
   "title": "SPX Trading",
   "uid": "butterfly-trading-spx",
   "schemaVersion": 38,
-  "version": 2,
+  "version": 3,
   "refresh": "10s",
   "panels": [
     {
@@ -369,10 +369,22 @@
       "id": 16,
       "type": "stat",
       "title": "Center Strike",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 0, "y": 38, "w": 6, "h": 3 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 6,
+        "h": 3
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -381,25 +393,50 @@
         "defaults": {
           "decimals": 0,
           "unit": "none",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "targets": [{
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "rawQuery": true,
-        "rawSql": "SELECT NOW() AS time, center_strike::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-        "format": "time_series",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, center_strike::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 17,
       "type": "stat",
       "title": "Wing Width",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 6, "y": 38, "w": 6, "h": 3 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 38,
+        "w": 6,
+        "h": 3
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -408,25 +445,50 @@
         "defaults": {
           "decimals": 0,
           "unit": "none",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "targets": [{
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "rawQuery": true,
-        "rawSql": "SELECT NOW() AS time, wing_width::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-        "format": "time_series",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, wing_width::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 18,
       "type": "stat",
       "title": "Entry Cost",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 12, "y": 38, "w": 6, "h": 3 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 38,
+        "w": 6,
+        "h": 3
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -435,25 +497,50 @@
         "defaults": {
           "decimals": 2,
           "unit": "currencyUSD",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "targets": [{
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "rawQuery": true,
-        "rawSql": "SELECT NOW() AS time, entry_price::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-        "format": "time_series",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, entry_price::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 19,
       "type": "stat",
       "title": "Max Profit / Spread",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 18, "y": 38, "w": 6, "h": 3 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 38,
+        "w": 6,
+        "h": 3
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -462,79 +549,50 @@
         "defaults": {
           "decimals": 2,
           "unit": "currencyUSD",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "targets": [{
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "rawQuery": true,
-        "rawSql": "SELECT NOW() AS time, (wing_width - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-        "format": "time_series",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, (wing_width - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 20,
       "type": "stat",
       "title": "Lower Breakeven",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 0, "y": 41, "w": 6, "h": 3 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 41,
+        "w": 6,
+        "h": 3
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 1,
-          "unit": "none",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
-        }
-      },
-      "targets": [{
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "rawQuery": true,
-        "rawSql": "SELECT NOW() AS time, (lower_strike + entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-        "format": "time_series",
-        "refId": "A"
-      }]
-    },
-    {
-      "id": 21,
-      "type": "stat",
-      "title": "Upper Breakeven",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 6, "y": 41, "w": 6, "h": 3 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 1,
-          "unit": "none",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
-        }
-      },
-      "targets": [{
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "rawQuery": true,
-        "rawSql": "SELECT NOW() AS time, (upper_strike - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-        "format": "time_series",
-        "refId": "A"
-      }]
-    },
-    {
-      "id": 22,
-      "type": "stat",
-      "title": "VIX at Entry",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 12, "y": 41, "w": 6, "h": 3 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -546,29 +604,159 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 20 },
-              { "color": "red", "value": 30 }
+              {
+                "color": "yellow",
+                "value": null
+              }
             ]
           }
         }
       },
-      "targets": [{
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "rawQuery": true,
-        "rawSql": "SELECT NOW() AS time, sp.price::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
-        "format": "time_series",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, (lower_strike + entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Upper Breakeven",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 41,
+        "w": 6,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, (upper_strike - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "VIX at Entry",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 41,
+        "w": 6,
+        "h": 3
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, sp.price::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 23,
       "type": "stat",
       "title": "Expected Move \u00b1pts (1\u03c3)",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
-      "gridPos": { "x": 18, "y": 41, "w": 6, "h": 3 },
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 41,
+        "w": 6,
+        "h": 3
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "colorMode": "value",
         "graphMode": "none",
         "textMode": "auto"
@@ -577,16 +765,29 @@
         "defaults": {
           "decimals": 0,
           "unit": "none",
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "targets": [{
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "rawQuery": true,
-        "rawSql": "SELECT NOW() AS time, ROUND((spx.price * (vix.price / 100.0) / SQRT(252))::numeric, 0)::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) vix CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = 'SPX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) spx WHERE t.trade_date = CURRENT_DATE AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
-        "format": "time_series",
-        "refId": "A"
-      }]
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, ROUND((spx.price * (vix.price / 100.0) / SQRT(252))::numeric, 0)::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) vix CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = 'SPX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) spx WHERE t.trade_date = CURRENT_DATE AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
     },
     {
       "id": 24,
@@ -773,6 +974,73 @@
                     }
                   ]
                 }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "type": "table",
+      "title": "Decision Log Today (SPX)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "timescaledb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 62,
+        "w": 24,
+        "h": 10
+      },
+      "options": {
+        "sortBy": [
+          {
+            "displayName": "Time",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT\n  ts AT TIME ZONE 'America/Los_Angeles' AS \"Time\",\n  event_type AS \"Event\",\n  data AS \"Details\"\nFROM decision_log\nWHERE ts::date = CURRENT_DATE\n  AND underlying = 'SPX'\nORDER BY ts DESC\nLIMIT 200",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "width": 0
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Event"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
               }
             ]
           }

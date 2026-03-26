@@ -23,6 +23,7 @@ execution:
   retry_interval_seconds: 20
   order_timeout_seconds: 300
   paper_trading: true
+  paper_fill_buffer: 0.00
 profit_management:
   regimes:
     morning:

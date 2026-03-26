@@ -107,7 +107,7 @@ class PositionService:
                         "exit_reason": signal.reason,
                         "pnl": pnl,
                         "peak_value": pos_state.peak_value,
-                    })
+                    }, underlying=underlying)
 
                     log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason=signal.reason)
                     return

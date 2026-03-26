@@ -203,10 +203,10 @@ class DecisionQueries:
     def __init__(self, db: DatabasePool) -> None:
         self.db = db
 
-    async def log_event(self, event_type: str, data: dict[str, Any]) -> None:
+    async def log_event(self, event_type: str, data: dict[str, Any], underlying: str | None = None) -> None:
         await self.db.execute(
-            "INSERT INTO decision_log (event_type, data) VALUES ($1, $2::jsonb)",
-            event_type, __import__("json").dumps(data),
+            "INSERT INTO decision_log (event_type, data, underlying) VALUES ($1, $2::jsonb, $3)",
+            event_type, __import__("json").dumps(data), underlying,
         )
 
 
