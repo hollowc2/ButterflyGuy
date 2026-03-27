@@ -40,6 +40,7 @@ class PositionService:
         self.decision_queries = decision_queries
         self.position_manager = PositionManager(config.strategy.underlying)
         self.state_machine = ProfitStateMachine(config.profit_management)
+        self._last_profit_state: str | None = None
 
     async def monitor_loop(
         self, trade: TradeRecord, candidate: ButterflyCandidate
@@ -47,6 +48,7 @@ class PositionService:
         """Monitor position every 10s, evaluate state machine, trigger exit if needed."""
         self.position_manager.reset(trade.entry_price)
         self.state_machine.reset()
+        self._last_profit_state = None
         poll_interval = 10
 
         log.info("position_monitor_started", trade_id=trade.trade_id)
@@ -67,6 +69,20 @@ class PositionService:
                 # Evaluate state machine
                 signal = self.state_machine.evaluate(pos_state)
 
+                # Log profit state transitions
+                current_profit_state = self.state_machine.state.name
+                if current_profit_state != self._last_profit_state:
+                    await self.decision_queries.log_event("profit_state_transition", {
+                        "trade_id": trade.trade_id,
+                        "from": self._last_profit_state,
+                        "to": current_profit_state,
+                        "mark_value": pos_state.current_value,
+                        "peak_value": pos_state.peak_value,
+                        "pnl": pos_state.pnl,
+                        "regime": pos_state.time_regime,
+                    }, underlying=self.config.strategy.underlying)
+                    self._last_profit_state = current_profit_state
+
                 if signal:
                     log.info(
                         "exit_signal",
@@ -74,6 +90,17 @@ class PositionService:
                         urgency=signal.urgency,
                         value=pos_state.current_value,
                     )
+
+                    await self.decision_queries.log_event("exit_signal_fired", {
+                        "trade_id": trade.trade_id,
+                        "reason": signal.reason,
+                        "urgency": signal.urgency,
+                        "mark_value": pos_state.current_value,
+                        "peak_value": pos_state.peak_value,
+                        "drawdown_pct": round(pos_state.drawdown_from_peak * 100, 1),
+                        "regime": pos_state.time_regime,
+                        "entry_price": pos_state.entry_price,
+                    }, underlying=self.config.strategy.underlying)
 
                     fill = await self.order_manager.execute_exit(
                         candidate, pos_state.current_value, trade.quantity
@@ -105,8 +132,15 @@ class PositionService:
                     await self.decision_queries.log_event("trade_exited", {
                         "trade_id": trade.trade_id,
                         "exit_reason": signal.reason,
+                        "entry_price": trade.entry_price,
+                        "mark_at_signal": pos_state.current_value,
+                        "spread_bid": fill.get("spread_bid") if fill else None,
+                        "spread_mark": fill.get("spread_mark") if fill else None,
+                        "spread_ask": fill.get("spread_ask") if fill else None,
+                        "fill_price": exit_price,
                         "pnl": pnl,
                         "peak_value": pos_state.peak_value,
+                        "forced": fill.get("forced", False) if fill else True,
                     }, underlying=underlying)
 
                     log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason=signal.reason)

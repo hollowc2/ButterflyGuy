@@ -124,17 +124,15 @@ class OrderManager:
                 return None
             log.info("paper_entry_spread", bid=spread.bid, mark=spread.mark,
                      ask=spread.ask, limit=limit_price)
-            if limit_price >= spread.ask + self.settings.paper_fill_buffer:
-                fill_price = round(
-                    limit_price + self.settings.paper_slippage_per_spread + commission, 2
-                )
+            if limit_price >= spread.mark:
+                fill_price = round(spread.mark + self.settings.paper_slippage_per_spread + commission, 2)
                 log.info("paper_entry_filled", limit=limit_price, fill_price=fill_price)
                 return {
                     "order_id": "PAPER",
                     "fill_price": fill_price,
                     "fill_time": dt.datetime.now(dt.timezone.utc),
                 }
-            log.info("paper_entry_not_filled", limit=limit_price, ask=spread.ask)
+            log.info("paper_entry_not_filled", limit=limit_price, mark=spread.mark)
             return None
 
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
@@ -203,10 +201,8 @@ class OrderManager:
                         ask=spread.ask if spread is not None else None,
                     )
 
-                    if spread is not None and limit_price >= spread.ask + self.settings.paper_fill_buffer:
-                        fill_price = round(
-                            limit_price + self.settings.paper_slippage_per_spread + commission, 2
-                        )
+                    if spread is not None and limit_price >= spread.mark:
+                        fill_price = round(spread.mark + self.settings.paper_slippage_per_spread + commission, 2)
                         log.info("paper_entry_filled", price=limit_price, fill_price=fill_price, step=i)
                         return {
                             "order_id": "PAPER",
@@ -278,58 +274,29 @@ class OrderManager:
         timeout = self.settings.order_timeout_seconds
 
         if self.settings.paper_trading:
-            deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
             commission = 4 * quantity * self.settings.paper_commission_per_contract / 100
-            last_spread = None
+            spread = await self._fetch_live_spread(candidate)
 
-            while dt.datetime.now(dt.timezone.utc) < deadline:
-                for i in range(max_steps):
-                    spread = await self._fetch_live_spread(candidate)
-                    if spread is not None:
-                        last_spread = spread
-                    mid_price = spread.bid if spread is not None else current_value
+            if spread is not None and spread.mark > 0:
+                fill_price = round(
+                    max(0.05, spread.mark - self.settings.paper_slippage_per_spread - commission), 2
+                )
+                log.info("paper_exit_filled_at_mark", bid=spread.bid, mark=spread.mark, fill_price=fill_price)
+                return {
+                    "order_id": "PAPER",
+                    "fill_price": fill_price,
+                    "fill_time": dt.datetime.now(dt.timezone.utc),
+                    "spread_bid": spread.bid,
+                    "spread_mark": spread.mark,
+                    "spread_ask": spread.ask,
+                }
 
-                    limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
-                    log.info(
-                        "paper_exit_step",
-                        step=i,
-                        price=limit_price,
-                        bid=spread.bid if spread is not None else None,
-                        mark=spread.mark if spread is not None else None,
-                        ask=spread.ask if spread is not None else None,
-                    )
-
-                    if spread is not None and limit_price <= spread.bid - self.settings.paper_fill_buffer:
-                        fill_price = round(
-                            max(0.05, limit_price - self.settings.paper_slippage_per_spread - commission), 2
-                        )
-                        log.info("paper_exit_filled", price=limit_price, fill_price=fill_price, step=i)
-                        return {
-                            "order_id": "PAPER",
-                            "fill_price": fill_price,
-                            "fill_time": dt.datetime.now(dt.timezone.utc),
-                        }
-
-                    await asyncio.sleep(retry_interval)
-
-                    if dt.datetime.now(dt.timezone.utc) >= deadline:
-                        break
-
-                log.warning("paper_exit_ladder_exhausted_repricing")
-
-            # Ladder timed out without fill — force market-order fill at last seen bid minus costs
-            force_bid = (
-                last_spread.bid
-                if last_spread and last_spread.bid and last_spread.bid > 0
-                else 0.05
-            )
-            force_price = round(
-                max(0.05, force_bid - self.settings.paper_fill_buffer - self.settings.paper_slippage_per_spread - commission), 2
-            )
-            log.warning("exit_ladder_forced_at_bid", bid=force_bid, fill_price=force_price)
+            # Fallback if chain unavailable
+            fill_price = round(max(0.05, current_value - self.settings.paper_slippage_per_spread - commission), 2)
+            log.warning("paper_exit_no_spread_fallback", current_value=current_value, fill_price=fill_price)
             return {
                 "order_id": "PAPER",
-                "fill_price": force_price,
+                "fill_price": fill_price,
                 "fill_time": dt.datetime.now(dt.timezone.utc),
                 "forced": True,
             }

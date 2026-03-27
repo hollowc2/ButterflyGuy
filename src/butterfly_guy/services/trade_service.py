@@ -277,7 +277,7 @@ class TradeService:
                 return record, best
 
             await self.decision_queries.log_event("entry_step_unfilled", {
-                "step": step, "limit": limit_price, "ask": best.ask,
+                "step": step, "limit": limit_price, "mark": best.cost, "ask": best.ask,
                 "center": best.center_strike, "width": best.wing_width,
             }, underlying=underlying)
             log.info("entry_step_unfilled", step=step, limit=limit_price, ask=best.ask, center=best.center_strike)
