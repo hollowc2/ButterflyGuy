@@ -909,7 +909,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT entry_time AS time, lower_strike + entry_price AS \"lower_be\", center_strike AS \"center\", upper_strike - entry_price AS \"upper_be\" FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1",
+          "rawSql": "SELECT sp.ts AS time, (t.lower_strike + t.entry_price)::float AS \"lower_be\", t.center_strike::float AS \"center\", (t.upper_strike - t.entry_price)::float AS \"upper_be\" FROM spot_prices sp CROSS JOIN (SELECT lower_strike, center_strike, upper_strike, entry_price FROM trades WHERE trade_date = CURRENT_DATE AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1) t WHERE sp.underlying = 'SPX' AND $__timeFilter(sp.ts) ORDER BY sp.ts",
           "format": "time_series"
         }
       ]
