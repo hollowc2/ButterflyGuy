@@ -49,7 +49,7 @@ class PositionService:
         self.position_manager.reset(trade.entry_price)
         self.state_machine.reset()
         self._last_profit_state = None
-        poll_interval = 10
+        poll_interval = 2
 
         log.info("position_monitor_started", trade_id=trade.trade_id)
 
