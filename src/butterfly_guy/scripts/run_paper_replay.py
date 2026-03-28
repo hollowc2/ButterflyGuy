@@ -64,9 +64,9 @@ SNAPSHOT_INTERVAL_SECONDS = 30   # approximate gap between DB snapshots (~31s me
 RETRY_INTERVAL_SECONDS = 20      # mirrors ExecutionSettings.retry_interval_seconds
 
 # Profit management drawdown thresholds (mirrors config.yaml)
-MORNING_DD = 0.50        # 0–120 min after open
-LATE_MORNING_DD = 0.40   # 120–240 min after open
-AFTERNOON_DD = 0.30      # 240+ min after open
+MORNING_DD = 0.60        # 0–120 min after open
+LATE_MORNING_DD = 0.60   # 120–240 min after open
+AFTERNOON_DD = 0.40      # 240+ min after open
 EXIT_BEFORE_CLOSE_MINUTES = 5
 MAX_LOSS_FROM_COST = 0.50   # exit if position loses 50% of cost (no prior profit required)
 
