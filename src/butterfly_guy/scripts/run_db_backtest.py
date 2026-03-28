@@ -25,12 +25,15 @@ import yfinance as yf
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
 from butterfly_guy.core.logging import get_logger, setup_logging
-from butterfly_guy.data.schemas import OptionQuote
+from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
     VIX_SIGMA_BY_WIDTH,
+    ButterflyBuilder,
     vix_expected_move,
     vix_target_center,
 )
+from butterfly_guy.strategy.butterfly_selector import ButterflySelector
+from butterfly_guy.core.config import StrategySettings
 
 setup_logging(log_level="INFO", json_output=False)
 log = get_logger("run_db_backtest")
@@ -42,10 +45,10 @@ DB_DSN = "postgresql://butterfly:butterfly_dev@localhost:5432/butterfly_guy"
 # --------------------------------------------------------------------------- #
 #  Config — edit these to change the backtest                                 #
 # --------------------------------------------------------------------------- #
-TARGET_DATE = dt.date(2026, 3, 16)
+TARGET_DATE = dt.date(2026, 3, 27)
 
 WING_WIDTHS = [10, 20, 30]
-DIRECTION = "CALL"   # forced bullish
+DIRECTION = "PUT"
 
 BASE_PARAMS = dict(
     direction_override=DIRECTION,
@@ -55,6 +58,7 @@ BASE_PARAMS = dict(
     afternoon_drawdown=0.30,
     slippage=0.05,
     use_vix_center=True,  # center anchored to VIX; sigma auto-selected per width
+    use_absolute_loss_stop=False,  # disabled to test hold-through behavior
 )
 # --------------------------------------------------------------------------- #
 
@@ -140,7 +144,15 @@ async def load_bars_from_db(
     return bars
 
 
-def get_prev_close(date: dt.date) -> float:
+async def get_prev_close(conn: asyncpg.Connection, date: dt.date) -> float:
+    """Previous SPX close from DB; falls back to yfinance."""
+    row = await conn.fetchval(
+        "SELECT price FROM spot_prices WHERE underlying = 'SPX' AND ts::date < $1 ORDER BY ts DESC LIMIT 1",
+        date,
+    )
+    if row:
+        return float(row)
+    log.warning("prev_close_not_in_db", date=date, fallback="yfinance")
     start = date - dt.timedelta(days=7)
     hist = yf.Ticker("^GSPC").history(start=start, end=date, interval="1d")
     if not hist.empty:
@@ -148,12 +160,67 @@ def get_prev_close(date: dt.date) -> float:
     return 5500.0
 
 
-def get_vix(date: dt.date) -> float:
+async def get_vix(conn: asyncpg.Connection, date: dt.date, at_time: dt.datetime | None = None) -> float:
+    """VIX at or before `at_time` on date from DB; falls back to yfinance.
+
+    If `at_time` is provided, returns the last VIX reading <= that timestamp
+    (matches what the live system reads at entry). Otherwise returns the first
+    reading of the day (market open).
+    """
+    if at_time is not None:
+        row = await conn.fetchval(
+            "SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= $1 ORDER BY ts DESC LIMIT 1",
+            at_time,
+        )
+    else:
+        row = await conn.fetchval(
+            "SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts::date = $1 ORDER BY ts LIMIT 1",
+            date,
+        )
+    if row:
+        return float(row)
+    log.warning("vix_not_in_db", date=date, fallback="yfinance")
     end = date + dt.timedelta(days=1)
     hist = yf.Ticker("^VIX").history(start=date, end=end, interval="1d")
     if not hist.empty:
         return float(hist["Close"].iloc[0])
     return 18.0
+
+
+def select_live_width(
+    quotes: list[OptionQuote],
+    spot: float,
+    direction: str,
+    vix: float,
+    wing_widths: list[int],
+    rr_min: float,
+    rr_target: float,
+    center_tolerance: float,
+) -> ButterflyCandidate | None:
+    """Replicate live trade_service cross-width selection.
+
+    For each width, find the best candidate near the VIX-anchored center.
+    Then pick the single winner whose R/R is closest to rr_target — exactly
+    what trade_service.attempt_entry() does.
+    """
+    settings = StrategySettings(wing_widths=wing_widths, rr_min=rr_min, spot_range=100)
+    builder = ButterflyBuilder(settings)
+    selector = ButterflySelector(settings)
+
+    all_candidates = builder.build_candidates(quotes, spot, direction)
+
+    per_width_bests: list[ButterflyCandidate] = []
+    for width in wing_widths:
+        target_center = vix_target_center(vix=vix, spot=spot, direction=direction, wing_width=width)
+        width_candidates = [c for c in all_candidates if c.wing_width == width]
+        best = selector.select_best(width_candidates, target_center=target_center, center_tolerance=center_tolerance)
+        if best:
+            per_width_bests.append(best)
+
+    if not per_width_bests:
+        return None
+
+    return min(per_width_bests, key=lambda c: abs(c.reward_risk - rr_target))
 
 
 def nearest_snapshot(
@@ -168,7 +235,7 @@ def nearest_snapshot(
 
 async def main() -> None:
     print(f"\n{'='*60}")
-    print(f"  DB BACKTEST — {TARGET_DATE}  |  30-wide CALL butterfly (bullish)")
+    print(f"  DB BACKTEST — {TARGET_DATE}  |  {DIRECTION} butterfly  [abs stop DISABLED]")
     print(f"{'='*60}\n")
 
     conn = await asyncpg.connect(DB_DSN)
@@ -176,6 +243,8 @@ async def main() -> None:
         print("Loading chain snapshots from DB...")
         chains = await load_chains_from_db(conn, TARGET_DATE)
         bars = await load_bars_from_db(conn, TARGET_DATE)
+        print("Fetching prev_close (DB first, yfinance fallback)...")
+        prev_close = await get_prev_close(conn, TARGET_DATE)
     finally:
         await conn.close()
 
@@ -193,15 +262,23 @@ async def main() -> None:
     spot_prices = [b.close for b in bars]
     print(f"  SPX range        : {min(spot_prices):.2f} – {max(spot_prices):.2f}")
 
-    # Fetch prev_close and VIX from yfinance
-    print("\nFetching VIX + prev_close from yfinance...")
-    prev_close = await asyncio.to_thread(get_prev_close, TARGET_DATE)
-    vix = await asyncio.to_thread(get_vix, TARGET_DATE)
-    import math
-    entry_spot = bars[0].close  # open bar; actual entry uses 10am bar
+    # Find entry bar (first bar at/after 10:00 ET) to determine entry spot + VIX at entry
+    entry_bar = next(
+        (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(10, 0)),
+        bars[0],
+    )
+    entry_spot = entry_bar.close
+
+    conn = await asyncpg.connect(DB_DSN)
+    try:
+        print("Fetching VIX at entry time (DB first, yfinance fallback)...")
+        vix = await get_vix(conn, TARGET_DATE, at_time=entry_bar.ts)
+    finally:
+        await conn.close()
+
     expected_move = vix_expected_move(vix, entry_spot)
     print(f"  Prev close       : {prev_close:.2f}")
-    print(f"  VIX              : {vix:.2f}")
+    print(f"  VIX (DB@entry)   : {vix:.2f}")
     print(f"  Open gap         : {entry_spot - prev_close:+.2f} "
           f"({(entry_spot/prev_close - 1)*100:+.2f}%)")
     print(f"\n  Expected daily 1σ move : ±{expected_move:.0f} pts  (SPX × VIX/100 / √252)")
@@ -210,6 +287,24 @@ async def main() -> None:
         sigma = VIX_SIGMA_BY_WIDTH.get(w, 0.5)
         tc = vix_target_center(vix, entry_spot, DIRECTION, wing_width=w)
         print(f"    {w}-wide → {sigma}σ → center at {tc:.0f}  ({tc - entry_spot:+.0f} pts OTM)")
+
+    # Replicate live cross-width selection at the entry bar
+    entry_quotes = nearest_snapshot(chains, entry_bar.ts) or []
+    chosen = select_live_width(
+        quotes=entry_quotes,
+        spot=entry_spot,
+        direction=DIRECTION,
+        vix=vix,
+        wing_widths=WING_WIDTHS,
+        rr_min=BASE_PARAMS["rr_min"],
+        rr_target=10.0,
+        center_tolerance=15.0,
+    )
+    if not chosen:
+        print("\nERROR: Cross-width selection found no valid candidate at entry bar.")
+        return
+    print(f"\n  Live selection   : {chosen.wing_width}W  center={chosen.center_strike:.0f}  "
+          f"R/R={chosen.reward_risk:.1f}  cost=${chosen.cost:.2f}")
     print()
 
     day = DayData(date=TARGET_DATE, bars=bars, vix=vix, prev_close=prev_close)
@@ -228,12 +323,9 @@ async def main() -> None:
     # ------------------------------------------------------------------------ #
 
     engine = SimulationEngine()
-    all_results = []
-
-    for width in WING_WIDTHS:
-        params = SimulationParams(wing_width=width, **BASE_PARAMS)
-        result = engine.simulate_day(day, params)
-        all_results.append((width, result))
+    params = SimulationParams(wing_width=chosen.wing_width, **BASE_PARAMS)
+    result = engine.simulate_day(day, params)
+    all_results = [(chosen.wing_width, result)]
 
     # Restore chain cache
     _cc.load_chain_day = _original_load  # type: ignore[assignment]
