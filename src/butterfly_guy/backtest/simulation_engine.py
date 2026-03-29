@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 from butterfly_guy.backtest.chain_cache import load_chain_day, nearest_snapshot
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.core.config import StrategySettings
-from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
+from butterfly_guy.core.time_utils import get_time_regime
+from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, fly_mark_value
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, vix_target_center
@@ -203,15 +204,12 @@ class SimulationEngine:
             mins_since_open = (bar_et - open_dt).total_seconds() / 60.0
 
             # Determine regime
-            if mins_since_open < 120:
-                regime = "morning"
-                drawdown_threshold = params.morning_drawdown
-            elif mins_since_open < 240:
-                regime = "late_morning"
-                drawdown_threshold = params.late_morning_drawdown
-            else:
-                regime = "afternoon"
-                drawdown_threshold = params.afternoon_drawdown
+            regime = get_time_regime(mins_since_open)
+            drawdown_threshold = {
+                "morning": params.morning_drawdown,
+                "late_morning": params.late_morning_drawdown,
+                "afternoon": params.afternoon_drawdown,
+            }[regime]
 
             # Calculate current butterfly value
             real_quotes = nearest_snapshot(real_chains, bar.ts) if real_chains else None
@@ -230,8 +228,7 @@ class SimulationEngine:
             upper_q = quote_map.get(entry_candidate.upper_strike)
 
             if lower_q and center_q and upper_q:
-                current_value = lower_q.mark - 2 * center_q.mark + upper_q.mark
-                current_value = max(0.0, current_value)
+                current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
             else:
                 current_value = peak_value
 
@@ -299,9 +296,7 @@ class SimulationEngine:
                 center_q = quote_map.get(entry_candidate.center_strike)
                 upper_q = quote_map.get(entry_candidate.upper_strike)
                 if lower_q and center_q and upper_q:
-                    current_value = max(
-                        0.0, lower_q.mark - 2 * center_q.mark + upper_q.mark
-                    )
+                    current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
                 else:
                     current_value = 0.0
                 result.exit_time = last_bar.ts

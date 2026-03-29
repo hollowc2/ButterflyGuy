@@ -37,9 +37,10 @@ class OptionQuote:
     multiplier: float = 100.0
     theoretical_value: float = 0.0
 
-    @property
-    def mid(self) -> float:
-        return (self.bid + self.ask) / 2.0
+
+def fly_mark_value(lower: OptionQuote, center: OptionQuote, upper: OptionQuote) -> float:
+    """Butterfly value at mark: lower.mark - 2*center.mark + upper.mark."""
+    return lower.mark - 2 * center.mark + upper.mark
 
 
 @dataclass

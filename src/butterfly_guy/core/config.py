@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -121,8 +123,6 @@ def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env")
             yaml_data = yaml.safe_load(f) or {}
 
     # Load env vars for Schwab credentials
-    import os
-    from dotenv import load_dotenv
     load_dotenv(env_file)
 
     schwab_data = yaml_data.get("schwab", {})

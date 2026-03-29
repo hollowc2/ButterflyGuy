@@ -78,6 +78,15 @@ def minutes_to_close(at: dt.datetime | None = None) -> float:
     return max(0.0, delta.total_seconds() / 60.0)
 
 
+def get_time_regime(minutes_since_open: float) -> str:
+    """Classify minutes since open into a named time regime."""
+    if minutes_since_open < 120:
+        return "morning"
+    if minutes_since_open < 240:
+        return "late_morning"
+    return "afternoon"
+
+
 def minutes_since_open(at: dt.datetime | None = None) -> float:
     """Minutes elapsed since market open."""
     now = (at or now_eastern()).astimezone(EASTERN)

@@ -8,7 +8,7 @@ from typing import Literal
 
 from butterfly_guy.core.config import StrategySettings
 from butterfly_guy.core.logging import get_logger
-from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
+from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, fly_mark_value
 
 log = get_logger(__name__)
 
@@ -130,7 +130,7 @@ class ButterflyBuilder:
                 upper_q = by_strike[upper]
 
                 # Butterfly cost: buy lower + buy upper - 2 * sell center (using mark)
-                cost = lower_q.mark - 2 * center_q.mark + upper_q.mark
+                cost = fly_mark_value(lower_q, center_q, upper_q)
                 # Fly ask: real market cost hitting the spread (buy wings at ask, sell center at bid)
                 fly_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
 

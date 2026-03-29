@@ -206,7 +206,7 @@ class DecisionQueries:
     async def log_event(self, event_type: str, data: dict[str, Any], underlying: str | None = None) -> None:
         await self.db.execute(
             "INSERT INTO decision_log (event_type, data, underlying) VALUES ($1, $2::jsonb, $3)",
-            event_type, __import__("json").dumps(data), underlying,
+            event_type, json.dumps(data), underlying,
         )
 
 
@@ -220,22 +220,24 @@ class DailyBarQueries:
         """Upsert daily OHLCV rows. Updates close/open/high/low/volume on conflict."""
         if not rows:
             return 0
-        for row in rows:
-            await self.db.execute(
-                """
-                INSERT INTO daily_bars (date, underlying, open, high, low, close, volume)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (date, underlying) DO UPDATE SET
-                    open   = EXCLUDED.open,
-                    high   = EXCLUDED.high,
-                    low    = EXCLUDED.low,
-                    close  = EXCLUDED.close,
-                    volume = EXCLUDED.volume
-                """,
-                row["date"], row["underlying"],
-                row.get("open"), row.get("high"), row.get("low"),
-                row["close"], row.get("volume", 0),
-            )
+        records = [
+            (row["date"], row["underlying"], row.get("open"), row.get("high"),
+             row.get("low"), row["close"], row.get("volume", 0))
+            for row in rows
+        ]
+        await self.db.pool.executemany(
+            """
+            INSERT INTO daily_bars (date, underlying, open, high, low, close, volume)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (date, underlying) DO UPDATE SET
+                open   = EXCLUDED.open,
+                high   = EXCLUDED.high,
+                low    = EXCLUDED.low,
+                close  = EXCLUDED.close,
+                volume = EXCLUDED.volume
+            """,
+            records,
+        )
         return len(rows)
 
     async def get_recent_closes(self, underlying: str, days: int) -> list[float]:

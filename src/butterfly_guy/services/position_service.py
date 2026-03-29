@@ -119,15 +119,7 @@ class PositionService:
                         pos_state.peak_value,
                     )
 
-                    underlying = self.config.strategy.underlying
-                    await self.risk_engine.record_pnl(pnl)
-                    trades_active.labels(underlying=underlying).dec()
-                    trades_total.labels(
-                        underlying=underlying,
-                        direction=trade.direction,
-                        outcome="win" if pnl > 0 else "loss",
-                    ).inc()
-                    daily_pnl.labels(underlying=underlying).inc(pnl)
+                    await self._record_exit_metrics(pnl, trade)
 
                     await self.decision_queries.log_event("trade_exited", {
                         "trade_id": trade.trade_id,
@@ -181,12 +173,19 @@ class PositionService:
             pnl,
             peak,
         )
+        await self._record_exit_metrics(pnl, trade)
+        log.info("eod_force_exit_complete", trade_id=trade.trade_id, pnl=pnl)
+
+    async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:
         underlying = self.config.strategy.underlying
         await self.risk_engine.record_pnl(pnl)
         trades_active.labels(underlying=underlying).dec()
-        trades_total.labels(underlying=underlying, direction=trade.direction, outcome="win" if pnl > 0 else "loss").inc()
+        trades_total.labels(
+            underlying=underlying,
+            direction=trade.direction,
+            outcome="win" if pnl > 0 else "loss",
+        ).inc()
         daily_pnl.labels(underlying=underlying).inc(pnl)
-        log.info("eod_force_exit_complete", trade_id=trade.trade_id, pnl=pnl)
 
     def _extract_quotes(
         self,

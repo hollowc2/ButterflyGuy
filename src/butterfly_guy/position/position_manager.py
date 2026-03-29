@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import position_peak_value, position_pnl, position_value
-from butterfly_guy.core.time_utils import minutes_since_open, minutes_to_close
-from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
+from butterfly_guy.core.time_utils import get_time_regime, minutes_since_open, minutes_to_close
+from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord, fly_mark_value
 
 log = get_logger(__name__)
 
@@ -58,8 +58,7 @@ class PositionManager:
             current_value = self._peak_value
             log.warning("missing_quotes_for_position")
         else:
-            current_value = lower_q.mark - 2 * center_q.mark + upper_q.mark
-            current_value = max(0.0, current_value)
+            current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
 
         # Update peak
         if current_value > self._peak_value:
@@ -72,7 +71,7 @@ class PositionManager:
 
         # Determine time regime
         mins_open = minutes_since_open()
-        regime = self._get_time_regime(mins_open)
+        regime = get_time_regime(mins_open)
 
         # Update metrics
         position_value.labels(underlying=self._underlying).set(current_value)
@@ -90,11 +89,3 @@ class PositionManager:
             minutes_since_open=mins_open,
         )
 
-    @staticmethod
-    def _get_time_regime(mins_since_open: float) -> str:
-        if mins_since_open < 120:
-            return "morning"
-        elif mins_since_open < 240:
-            return "late_morning"
-        else:
-            return "afternoon"
