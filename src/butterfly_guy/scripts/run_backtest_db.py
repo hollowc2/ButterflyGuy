@@ -145,6 +145,8 @@ def parse_args() -> argparse.Namespace:
                    help="(Sweep) top N rows to print, sorted by Sharpe.")
     p.add_argument("--csv", type=Path, default=None,
                    help="(Sweep) CSV output path. Default: auto-named in current dir.")
+    p.add_argument("--thinkback", action="store_true",
+                   help="Print ToS ThinkBack validation checklists after per-day results.")
 
     args = p.parse_args()
 
@@ -459,6 +461,54 @@ def _summarize_combo(
 
 
 # ---------------------------------------------------------------------------
+# ThinkBack validation output
+# ---------------------------------------------------------------------------
+
+def print_thinkback_checklist(day_rows: list[dict], asset: str) -> None:
+    """Print a per-trade ToS ThinkBack validation checklist."""
+    traded_rows = [r for r in day_rows if r["result"].traded]
+    if not traded_rows:
+        return
+
+    border = "\u2550" * 52
+    print(f"\n{border}")
+    print(f"  THINKBACK VALIDATION CHECKLISTS  \u2014  {asset}")
+    print(border)
+
+    for row in traded_rows:
+        r = row["result"]
+        d = row["data"]
+
+        lower = int(r.center_strike - r.wing_width)
+        center = int(r.center_strike)
+        upper = int(r.center_strike + r.wing_width)
+        opt = r.direction[0]  # 'C' or 'P'
+
+        entry_et = r.entry_time.astimezone(EASTERN).strftime("%I:%M %p ET") if r.entry_time else "?"
+        exit_et = r.exit_time.astimezone(EASTERN).strftime("%I:%M %p ET") if r.exit_time else "?"
+        pnl_ct = r.pnl * 100
+
+        print(f"\n  {d['date']}  {asset}  {r.direction}  ({r.wing_width}-wide)")
+        print(f"  {'─'*48}")
+        print(f"  Butterfly : {lower}{opt} / {center}{opt} / {upper}{opt}")
+        print(f"  Entry     : {entry_et:<14}  mark = ${r.entry_price:.2f}")
+        print(f"  Peak      : ${r.peak_value:.2f}")
+        print(f"  Exit      : {exit_et:<14}  mark = ${r.exit_price:.2f}   ({r.exit_reason})")
+        print(f"  PnL/ct    : ${pnl_ct:+.2f}")
+        print(f"")
+        print(f"  ThinkBack steps:")
+        print(f"    1. Set date to {d['date']}")
+        print(f"    2. Load {asset} 0-DTE {r.direction} butterfly:")
+        print(f"         Buy  1x  {lower}{opt}")
+        print(f"         Sell 2x  {center}{opt}")
+        print(f"         Buy  1x  {upper}{opt}")
+        print(f"    3. Mark at {entry_et} \u2192 expect ~${r.entry_price:.2f}")
+        print(f"    4. Mark at {exit_et} \u2192 expect ~${r.exit_price:.2f}")
+
+    print(f"\n{border}\n")
+
+
+# ---------------------------------------------------------------------------
 # Single-config mode
 # ---------------------------------------------------------------------------
 
@@ -598,6 +648,9 @@ async def run_single(args: argparse.Namespace) -> None:
     print(f"  Exit reasons: "
           + "  ".join(f"{k}={v}" for k, v in sorted(exit_counts.items())))
     print(f"{'='*90}\n")
+
+    if args.thinkback:
+        print_thinkback_checklist(day_rows, args.asset)
 
 
 # ---------------------------------------------------------------------------
