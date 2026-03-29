@@ -31,6 +31,9 @@ VIX_SIGMA_BY_WIDTH: dict[int, float] = {
     10: 0.25,
     20: 0.50,
     30: 0.75,
+    25: 0.25,  # NDX narrow
+    50: 0.50,  # NDX mid
+    75: 0.75,  # NDX wide
 }
 _VIX_SIGMA_DEFAULT = 0.50  # fallback for unlisted widths
 
