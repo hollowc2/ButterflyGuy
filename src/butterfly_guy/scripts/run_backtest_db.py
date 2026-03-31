@@ -112,8 +112,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--asset", choices=["SPX", "NDX"], default="SPX",
                    help="Underlying asset to backtest")
     p.add_argument("--direction", type=_strlist, default=None,
-                   metavar="PUT|CALL[,PUT|CALL]",
-                   help="Direction(s). Default: PUT. Comma-separate for sweep.")
+                   metavar="PUT|CALL|auto[,...]",
+                   help="Direction(s). Default: PUT. Use 'auto' to derive from spot vs prev close each day.")
 
     p.add_argument("--wing", type=_intlist, default=None,
                    metavar="W[,W]",
@@ -527,7 +527,7 @@ def print_thinkback_checklist(day_rows: list[dict], asset: str) -> None:
 
 async def run_single(args: argparse.Namespace) -> None:
     asset_cfg = ASSET_DEFAULTS[args.asset]
-    direction = args.direction[0]
+    direction_arg = args.direction[0]
     wing_widths = args.wing
     rr_min = args.rr_min[0]
     morning_dd = args.morning_dd[0]
@@ -537,7 +537,7 @@ async def run_single(args: argparse.Namespace) -> None:
     spot_range = asset_cfg["spot_range"]
 
     print(f"\n{'='*72}")
-    print(f"  DB BACKTEST  |  {args.asset}  {direction} butterfly")
+    print(f"  DB BACKTEST  |  {args.asset}  {direction_arg} butterfly")
     print(f"  Widths: {wing_widths}  rr_min: {rr_min}  DD: {morning_dd}/{late_morning_dd}/{afternoon_dd}")
     print(f"  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  "
           f"slippage: {args.slippage}  vix_max: {args.vix_max or 'none'}")
@@ -574,6 +574,11 @@ async def run_single(args: argparse.Namespace) -> None:
             print(f" SKIPPED (VIX {d['vix']:.1f} > {args.vix_max})")
             continue
 
+        if direction_arg == "auto":
+            direction = "CALL" if d["entry_spot"] >= d["prev_close"] else "PUT"
+        else:
+            direction = direction_arg
+
         entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
         chosen = select_live_width(
             quotes=entry_quotes,
@@ -590,7 +595,7 @@ async def run_single(args: argparse.Namespace) -> None:
             print(f" SKIPPED (no qualifying butterfly)")
             continue
 
-        print(f" {chosen.wing_width}W center={chosen.center_strike:.0f}  "
+        print(f" {chosen.wing_width}W {direction} center={chosen.center_strike:.0f}  "
               f"R/R={chosen.reward_risk:.1f}  cost=${chosen.cost:.2f}")
 
         params = SimulationParams(
