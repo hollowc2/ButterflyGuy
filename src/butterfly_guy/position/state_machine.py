@@ -38,7 +38,7 @@ class ProfitStateMachine:
     def __init__(self, settings: ProfitManagementSettings) -> None:
         self.settings = settings
         self._state = ProfitState.LOSS
-        self._ever_in_tent: bool = False
+        self._ever_in_profit: bool = False
 
     @property
     def state(self) -> ProfitState:
@@ -83,8 +83,8 @@ class ProfitStateMachine:
 
         threshold = regime_config.drawdown_threshold
 
-        # Only exit on drawdown if position ever reached profit tent
-        if self._ever_in_tent:
+        # Only exit on drawdown if position has ever been above entry
+        if self._ever_in_profit:
             if pos.drawdown_from_peak >= threshold:
                 log.info(
                     "drawdown_exit_triggered",
@@ -116,10 +116,10 @@ class ProfitStateMachine:
         if new_state != self._state:
             log.info("state_transition", old=self._state.name, new=new_state.name, pnl_ratio=pnl_ratio)
             self._state = new_state
-        if self._state == ProfitState.PROFIT_TENT:
-            self._ever_in_tent = True
+        if self._state != ProfitState.LOSS:
+            self._ever_in_profit = True
 
     def reset(self) -> None:
         """Reset state machine for a new position."""
         self._state = ProfitState.LOSS
-        self._ever_in_tent = False
+        self._ever_in_profit = False

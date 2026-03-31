@@ -276,16 +276,20 @@ async def get_prev_close(
     date: dt.date,
     underlying: str,
 ) -> float:
+    """Return the last spot price at or before 16:00 ET on the previous trading day."""
     row = await conn.fetchval(
-        "SELECT price FROM spot_prices WHERE underlying = $1 AND ts::date < $2 ORDER BY ts DESC LIMIT 1",
+        """
+        SELECT price FROM spot_prices
+        WHERE underlying = $1
+          AND (ts AT TIME ZONE 'America/New_York')::date < $2
+          AND (ts AT TIME ZONE 'America/New_York')::time <= '16:00:00'
+        ORDER BY ts DESC
+        LIMIT 1
+        """,
         underlying, date,
     )
     if row:
         return float(row)
-    ticker = YFINANCE_TICKER.get(underlying, "^GSPC")
-    hist = yf.Ticker(ticker).history(start=date - dt.timedelta(days=7), end=date, interval="1d")
-    if not hist.empty:
-        return float(hist["Close"].iloc[-1])
     return 5500.0
 
 
