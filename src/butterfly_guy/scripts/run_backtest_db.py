@@ -155,7 +155,7 @@ def parse_args() -> argparse.Namespace:
     if args.wing is None:
         args.wing = list(asset_cfg["wing_widths"])
     if args.direction is None:
-        args.direction = ["PUT"]
+        args.direction = ["auto"]
     if args.rr_min is None:
         args.rr_min = [8.0]
     if args.morning_dd is None:

@@ -55,8 +55,7 @@ WING_WIDTHS = [10, 20, 30]
 
 # Strategies to run (label, params)
 STRATEGIES = [
-    ("gap-auto",  dict(direction_override=None, use_bias_filter=False, use_vix_center=False, use_absolute_loss_stop=False)),
-    ("bias-filt", dict(direction_override=None, use_bias_filter=True,  use_vix_center=False, use_absolute_loss_stop=False)),
+    ("gap-auto", dict(direction_override=None, use_bias_filter=False, use_vix_center=False, use_absolute_loss_stop=False)),
 ]
 
 BASE_PARAMS = dict(
