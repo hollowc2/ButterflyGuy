@@ -368,20 +368,29 @@ def select_live_width(
 # ---------------------------------------------------------------------------
 
 def _patch_chain_cache(chains: dict, date: dt.date):
-    """Inject DB chains into the chain cache for `date`. Returns restore callable."""
+    """Inject DB chains into the chain cache for `date`. Returns restore callable.
+
+    Must patch both the chain_cache module AND simulation_engine's local binding,
+    because simulation_engine uses `from chain_cache import load_chain_day` which
+    creates a local reference that won't see module-level monkey-patches.
+    """
     import butterfly_guy.backtest.chain_cache as _cc
-    _cc._DB_CHAINS = chains  # type: ignore[attr-defined]
-    _original_load = _cc.load_chain_day
+    import butterfly_guy.backtest.simulation_engine as _se
+
+    _original_cc_load = _cc.load_chain_day
+    _original_se_load = _se.load_chain_day  # type: ignore[attr-defined]
 
     def _patched(d, cache_dir=None):
         if d == date:
-            return _cc._DB_CHAINS  # type: ignore[attr-defined]
-        return _original_load(d, cache_dir) if cache_dir else _original_load(d)
+            return chains
+        return _original_cc_load(d, cache_dir) if cache_dir else _original_cc_load(d)
 
     _cc.load_chain_day = _patched  # type: ignore[assignment]
+    _se.load_chain_day = _patched  # type: ignore[assignment]
 
     def restore():
-        _cc.load_chain_day = _original_load  # type: ignore[assignment]
+        _cc.load_chain_day = _original_cc_load  # type: ignore[assignment]
+        _se.load_chain_day = _original_se_load  # type: ignore[assignment]
 
     return restore
 

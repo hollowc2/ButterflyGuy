@@ -57,8 +57,8 @@ class SyntheticChainGenerator:
         atm_iv = self.iv_model.vix_to_0dte_iv(vix)
 
         # Strike range
-        smin = strike_min if strike_min is not None else round(spot - 100, 0)
-        smax = strike_max if strike_max is not None else round(spot + 100, 0)
+        smin = strike_min if strike_min is not None else round((spot - 100) / strike_step) * strike_step
+        smax = strike_max if strike_max is not None else round((spot + 100) / strike_step) * strike_step
 
         quotes: list[OptionQuote] = []
         strike = smin
