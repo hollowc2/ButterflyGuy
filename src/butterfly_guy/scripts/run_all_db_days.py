@@ -55,17 +55,15 @@ WING_WIDTHS = [10, 20, 30]
 
 # Strategies to run (label, params)
 STRATEGIES = [
-    ("gap-auto",      dict(direction_override=None, use_bias_filter=False, use_vix_center=False, use_absolute_loss_stop=True)),
-    ("gap-auto-nals", dict(direction_override=None, use_bias_filter=False, use_vix_center=False, use_absolute_loss_stop=False)),
-    ("bias-filt",     dict(direction_override=None, use_bias_filter=True,  use_vix_center=False, use_absolute_loss_stop=True)),
-    ("bias-nals",     dict(direction_override=None, use_bias_filter=True,  use_vix_center=False, use_absolute_loss_stop=False)),
+    ("gap-auto",  dict(direction_override=None, use_bias_filter=False, use_vix_center=False, use_absolute_loss_stop=False)),
+    ("bias-filt", dict(direction_override=None, use_bias_filter=True,  use_vix_center=False, use_absolute_loss_stop=False)),
 ]
 
 BASE_PARAMS = dict(
     rr_min=8.0,
-    morning_drawdown=0.50,
-    late_morning_drawdown=0.40,
-    afternoon_drawdown=0.30,
+    morning_drawdown=0.60,
+    late_morning_drawdown=0.60,
+    afternoon_drawdown=0.40,
     slippage=0.05,
 )
 
