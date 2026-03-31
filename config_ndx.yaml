@@ -43,7 +43,7 @@ profit_management:
   use_absolute_loss_stop: false
 risk:
   max_daily_loss: 500.0
-  max_trades_per_day: 2
+  max_trades_per_day: 1
   max_position_size: 1
 collector:
   snapshot_interval_seconds: 60

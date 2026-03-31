@@ -68,7 +68,7 @@ class ProfitManagementSettings(BaseModel):
 
 class RiskSettings(BaseModel):
     max_daily_loss: float = 500.0
-    max_trades_per_day: int = 2
+    max_trades_per_day: int = 1
     max_position_size: int = 1
 
 
