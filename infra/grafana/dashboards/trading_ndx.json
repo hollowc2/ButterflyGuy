@@ -64,7 +64,7 @@
       "title": "Peak vs Current Value",
       "type": "timeseries",
       "gridPos": {
-        "h": 8,
+        "h": 12,
         "w": 24,
         "x": 0,
         "y": 6
@@ -122,7 +122,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 30
       },
       "targets": [
         {
@@ -139,7 +139,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 30
       },
       "targets": [
         {
@@ -156,7 +156,7 @@
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 33
+        "y": 49
       },
       "targets": [
         {
@@ -173,7 +173,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 80
       },
       "targets": [
         {
@@ -194,7 +194,7 @@
         "h": 7,
         "w": 14,
         "x": 0,
-        "y": 26
+        "y": 42
       },
       "fieldConfig": {
         "defaults": {
@@ -231,7 +231,7 @@
         "h": 7,
         "w": 10,
         "x": 14,
-        "y": 26
+        "y": 42
       },
       "fieldConfig": {
         "defaults": {
@@ -267,7 +267,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 33
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {
@@ -308,7 +308,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 33
+        "y": 49
       },
       "targets": [
         {
@@ -335,7 +335,7 @@
         "h": 4,
         "w": 8,
         "x": 8,
-        "y": 33
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {
@@ -360,7 +360,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 53,
         "w": 24,
         "h": 1
       }
@@ -375,7 +375,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 54,
         "w": 6,
         "h": 3
       },
@@ -427,7 +427,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 38,
+        "y": 54,
         "w": 6,
         "h": 3
       },
@@ -479,7 +479,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 38,
+        "y": 54,
         "w": 6,
         "h": 3
       },
@@ -531,7 +531,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 38,
+        "y": 54,
         "w": 6,
         "h": 3
       },
@@ -583,7 +583,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 57,
         "w": 6,
         "h": 3
       },
@@ -635,7 +635,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 41,
+        "y": 57,
         "w": 6,
         "h": 3
       },
@@ -687,7 +687,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 41,
+        "y": 57,
         "w": 6,
         "h": 3
       },
@@ -747,7 +747,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 41,
+        "y": 57,
         "w": 6,
         "h": 3
       },
@@ -799,9 +799,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 44,
+        "y": 18,
         "w": 24,
-        "h": 8
+        "h": 12
       },
       "options": {
         "tooltip": {
@@ -971,7 +971,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT entry_time AS time, lower_strike + entry_price AS \"lower_be\", center_strike AS \"center\", upper_strike - entry_price AS \"upper_be\" FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1",
+          "rawSql": "SELECT sp.ts AS time, (t.lower_strike + t.entry_price)::float AS \"lower_be\", t.center_strike::float AS \"center\", (t.upper_strike - t.entry_price)::float AS \"upper_be\" FROM spot_prices sp CROSS JOIN (SELECT lower_strike, center_strike, upper_strike, entry_price FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1) t WHERE sp.underlying = 'NDX' AND $__timeFilter(sp.ts) ORDER BY sp.ts",
           "format": "time_series"
         },
         {
@@ -1004,7 +1004,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 52,
+        "y": 60,
         "w": 24,
         "h": 8
       },
@@ -1070,7 +1070,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 62,
+        "y": 70,
         "w": 24,
         "h": 10
       },
