@@ -122,7 +122,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 22
       },
       "targets": [
         {
@@ -139,7 +139,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 22
       },
       "targets": [
         {
@@ -156,7 +156,7 @@
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 33
+        "y": 41
       },
       "targets": [
         {
@@ -173,7 +173,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 64
       },
       "targets": [
         {
@@ -194,7 +194,7 @@
         "h": 7,
         "w": 14,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "fieldConfig": {
         "defaults": {
@@ -231,7 +231,7 @@
         "h": 7,
         "w": 10,
         "x": 14,
-        "y": 26
+        "y": 34
       },
       "fieldConfig": {
         "defaults": {
@@ -267,7 +267,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 33
+        "y": 41
       },
       "fieldConfig": {
         "defaults": {
@@ -308,7 +308,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 33
+        "y": 41
       },
       "targets": [
         {
@@ -335,7 +335,7 @@
         "h": 4,
         "w": 8,
         "x": 8,
-        "y": 33
+        "y": 41
       },
       "fieldConfig": {
         "defaults": {
@@ -360,7 +360,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 45,
         "w": 24,
         "h": 1
       }
@@ -375,7 +375,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 46,
         "w": 6,
         "h": 3
       },
@@ -427,7 +427,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 38,
+        "y": 46,
         "w": 6,
         "h": 3
       },
@@ -479,7 +479,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 38,
+        "y": 46,
         "w": 6,
         "h": 3
       },
@@ -531,7 +531,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 38,
+        "y": 46,
         "w": 6,
         "h": 3
       },
@@ -583,7 +583,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 41,
+        "y": 49,
         "w": 6,
         "h": 3
       },
@@ -635,7 +635,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 41,
+        "y": 49,
         "w": 6,
         "h": 3
       },
@@ -687,7 +687,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 41,
+        "y": 49,
         "w": 6,
         "h": 3
       },
@@ -747,7 +747,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 41,
+        "y": 49,
         "w": 6,
         "h": 3
       },
@@ -799,7 +799,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 44,
+        "y": 14,
         "w": 24,
         "h": 8
       },
@@ -889,6 +889,68 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Entry"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 10
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "always"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exit"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 10
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "always"
+              }
+            ]
           }
         ]
       },
@@ -911,6 +973,24 @@
           "rawQuery": true,
           "rawSql": "SELECT sp.ts AS time, (t.lower_strike + t.entry_price)::float AS \"lower_be\", t.center_strike::float AS \"center\", (t.upper_strike - t.entry_price)::float AS \"upper_be\" FROM spot_prices sp CROSS JOIN (SELECT lower_strike, center_strike, upper_strike, entry_price FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'SPX' AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1) t WHERE sp.underlying = 'SPX' AND $__timeFilter(sp.ts) ORDER BY sp.ts",
           "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT t.entry_time AS time, sp.price AS \"Entry\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='SPX' AND ts <= t.entry_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'SPX' AND t.status != 'CANCELLED' ORDER BY t.entry_time LIMIT 1",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT t.exit_time AS time, sp.price AS \"Exit\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='SPX' AND ts <= t.exit_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'SPX' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL ORDER BY t.entry_time LIMIT 1",
+          "format": "time_series"
         }
       ]
     },
@@ -924,7 +1004,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 52,
+        "y": 60,
         "w": 24,
         "h": 8
       },
@@ -990,7 +1070,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 62,
+        "y": 70,
         "w": 24,
         "h": 10
       },
@@ -1009,7 +1089,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT\n  ts AT TIME ZONE 'America/Los_Angeles' AS \"Time\",\n  event_type AS \"Event\",\n  CASE event_type\n    WHEN 'trade_entered' THEN\n      'fill=' || (data->>'cost') || '  width=' || (data->>'width') || '  center=' || (data->>'center') || '  dir=' || (data->>'direction') || '  step=' || (data->>'entry_step')\n    WHEN 'entry_step_unfilled' THEN\n      'step=' || (data->>'step') || '  center=' || (data->>'center') || '  width=' || (data->>'width') || '  mark=' || (data->>'mark') || '  ask=' || (data->>'ask') || '  limit=' || (data->>'limit')\n    WHEN 'entry_exhausted' THEN\n      'direction=' || (data->>'direction') || '  — no fill after all steps'\n    WHEN 'exit_signal_fired' THEN\n      'reason=' || (data->>'reason') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  drawdown=' || (data->>'drawdown_pct') || '%  regime=' || (data->>'regime')\n    WHEN 'trade_exited' THEN\n      'reason=' || (data->>'exit_reason') || '  entry=' || (data->>'entry_price') || '  mark_signal=' || (data->>'mark_at_signal') || '  bid=' || COALESCE(data->>'spread_bid','?') || '  mark=' || COALESCE(data->>'spread_mark','?') || '  fill=' || (data->>'fill_price') || '  pnl=' || (data->>'pnl') || CASE WHEN (data->>'forced')::boolean THEN '  [FORCED]' ELSE '' END\n    WHEN 'profit_state_transition' THEN\n      (data->>'from') || ' → ' || (data->>'to') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  regime=' || (data->>'regime')\n    WHEN 'entry_failed' THEN\n      'center=' || (data->>'center')\n    ELSE data::text\n  END AS \"Details\"\nFROM decision_log\nWHERE ts::date = CURRENT_DATE\n  AND underlying = 'SPX'\nORDER BY ts ASC\nLIMIT 200",
+          "rawSql": "SELECT\n  ts AT TIME ZONE 'America/Los_Angeles' AS \"Time\",\n  event_type AS \"Event\",\n  CASE event_type\n    WHEN 'trade_entered' THEN\n      'fill=' || (data->>'cost') || '  width=' || (data->>'width') || '  center=' || (data->>'center') || '  dir=' || (data->>'direction') || '  step=' || (data->>'entry_step')\n    WHEN 'entry_step_unfilled' THEN\n      'step=' || (data->>'step') || '  center=' || (data->>'center') || '  width=' || (data->>'width') || '  mark=' || (data->>'mark') || '  ask=' || (data->>'ask') || '  limit=' || (data->>'limit')\n    WHEN 'entry_exhausted' THEN\n      'direction=' || (data->>'direction') || '  \u2014 no fill after all steps'\n    WHEN 'exit_signal_fired' THEN\n      'reason=' || (data->>'reason') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  drawdown=' || (data->>'drawdown_pct') || '%  regime=' || (data->>'regime')\n    WHEN 'trade_exited' THEN\n      'reason=' || (data->>'exit_reason') || '  entry=' || (data->>'entry_price') || '  mark_signal=' || (data->>'mark_at_signal') || '  bid=' || COALESCE(data->>'spread_bid','?') || '  mark=' || COALESCE(data->>'spread_mark','?') || '  fill=' || (data->>'fill_price') || '  pnl=' || (data->>'pnl') || CASE WHEN (data->>'forced')::boolean THEN '  [FORCED]' ELSE '' END\n    WHEN 'profit_state_transition' THEN\n      (data->>'from') || ' \u2192 ' || (data->>'to') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  regime=' || (data->>'regime')\n    WHEN 'entry_failed' THEN\n      'center=' || (data->>'center')\n    ELSE data::text\n  END AS \"Details\"\nFROM decision_log\nWHERE ts::date = CURRENT_DATE\n  AND underlying = 'SPX'\nORDER BY ts ASC\nLIMIT 200",
           "format": "table"
         }
       ],

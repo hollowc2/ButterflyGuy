@@ -889,6 +889,68 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Entry"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 10
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "always"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exit"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 10
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "always"
+              }
+            ]
           }
         ]
       },
@@ -910,6 +972,24 @@
           },
           "rawQuery": true,
           "rawSql": "SELECT entry_time AS time, lower_strike + entry_price AS \"lower_be\", center_strike AS \"center\", upper_strike - entry_price AS \"upper_be\" FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT t.entry_time AS time, sp.price AS \"Entry\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='NDX' AND ts <= t.entry_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'NDX' AND t.status != 'CANCELLED' ORDER BY t.entry_time LIMIT 1",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT t.exit_time AS time, sp.price AS \"Exit\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='NDX' AND ts <= t.exit_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'NDX' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL ORDER BY t.entry_time LIMIT 1",
           "format": "time_series"
         }
       ]
