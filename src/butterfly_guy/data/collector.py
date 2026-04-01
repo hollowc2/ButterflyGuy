@@ -105,7 +105,11 @@ class OptionChainCollector:
         underlying = self.config.strategy.underlying
         spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
 
-        for symbol, label in [(spot_symbol, underlying), ("$VIX", "$VIX")]:
+        symbols_to_fetch = [(spot_symbol, underlying)]
+        if underlying == "SPX":
+            symbols_to_fetch.append(("$VIX", "$VIX"))
+
+        for symbol, label in symbols_to_fetch:
             try:
                 candles = await self.schwab.get_daily_bars(symbol)
                 rows = [
@@ -141,13 +145,14 @@ class OptionChainCollector:
             spot_price = await self.schwab.get_spot_price(spot_symbol)
             await self.spot_queries.insert(underlying, spot_price, snapshot_time)
 
-            # Get VIX spot price
-            try:
-                vix_price = await self.schwab.get_spot_price("$VIX")
-                await self.spot_queries.insert("$VIX", vix_price, snapshot_time)
-                log.info("vix_snapshot_collected", vix=vix_price)
-            except Exception as e:
-                log.warning("vix_fetch_failed", error=str(e))
+            # Get VIX spot price (only for SPX to prevent duplicate requests/writes)
+            if underlying == "SPX":
+                try:
+                    vix_price = await self.schwab.get_spot_price("$VIX")
+                    await self.spot_queries.insert("$VIX", vix_price, snapshot_time)
+                    log.info("vix_snapshot_collected", vix=vix_price)
+                except Exception as e:
+                    log.warning("vix_fetch_failed", error=str(e))
 
             # Get chain
             chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
