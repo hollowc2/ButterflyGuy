@@ -54,6 +54,7 @@ DB_DSN = "postgresql://butterfly:butterfly_dev@localhost:5432/butterfly_guy"
 # ─────────────────────────────────────────────────────────────────────────── #
 # DATES: leave empty [] to auto-detect complete days from DB
 DATES: list[dt.date] = []
+ASSET = "SPX"
 WING_WIDTH = 20
 DIRECTION: str | None = None   # None = gap-based bias filter; "CALL"/"PUT" to force
 RR_MIN = 8.0
@@ -190,8 +191,8 @@ def _butterfly_value(quotes: list[OptionQuote], candidate: ButterflyCandidate) -
 
 # ─── DB loaders ──────────────────────────────────────────────────────────── #
 
-async def detect_complete_days(conn: asyncpg.Connection) -> list[dt.date]:
-    """Return SPX 0-DTE days where first snapshot is at or before 09:35 ET."""
+async def detect_complete_days(conn: asyncpg.Connection, asset: str = ASSET) -> list[dt.date]:
+    """Return 0-DTE days where first snapshot is at or before 09:35 ET."""
     rows = await conn.fetch(
         """
         SELECT
@@ -200,11 +201,12 @@ async def detect_complete_days(conn: asyncpg.Connection) -> list[dt.date]:
             MAX(snapshot_time AT TIME ZONE 'America/New_York') AS last_snap,
             COUNT(DISTINCT snapshot_time) AS snap_count
         FROM option_chain_snapshots
-        WHERE underlying = 'SPX'
+        WHERE underlying = $1
           AND expiration = snapshot_time::date
         GROUP BY 1
         ORDER BY 1
-        """
+        """,
+        asset,
     )
     complete = []
     for r in rows:
@@ -215,19 +217,19 @@ async def detect_complete_days(conn: asyncpg.Connection) -> list[dt.date]:
 
 
 async def load_chains_from_db(
-    conn: asyncpg.Connection, date: dt.date
+    conn: asyncpg.Connection, date: dt.date, asset: str = ASSET
 ) -> dict[dt.datetime, list[OptionQuote]]:
     rows = await conn.fetch(
         """
         SELECT snapshot_time, strike, option_type, bid, ask, mark, last,
                volume, open_interest, iv, delta, gamma, theta, vega, symbol, spot_price
         FROM option_chain_snapshots
-        WHERE underlying = 'SPX'
+        WHERE underlying = $2
           AND expiration = $1
           AND snapshot_time::date = $1
         ORDER BY snapshot_time, strike, option_type
         """,
-        date,
+        date, asset,
     )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
     for r in rows:
@@ -237,7 +239,7 @@ async def load_chains_from_db(
         chains[ts].append(
             OptionQuote(
                 symbol=r["symbol"] or f"DB_{r['option_type'][0]}{int(r['strike'])}",
-                underlying="SPX",
+                underlying=asset,
                 expiration=date,
                 strike=float(r["strike"]),
                 option_type=r["option_type"],
@@ -258,7 +260,7 @@ async def load_chains_from_db(
 
 
 async def load_bars_from_db(
-    conn: asyncpg.Connection, date: dt.date
+    conn: asyncpg.Connection, date: dt.date, asset: str = ASSET
 ) -> list[MinuteBar]:
     rows = await conn.fetch(
         """
@@ -266,13 +268,13 @@ async def load_bars_from_db(
             snapshot_time,
             spot_price
         FROM option_chain_snapshots
-        WHERE underlying = 'SPX'
+        WHERE underlying = $2
           AND snapshot_time::date = $1
           AND spot_price IS NOT NULL
           AND spot_price > 0
         ORDER BY snapshot_time
         """,
-        date,
+        date, asset,
     )
     bars: list[MinuteBar] = []
     for r in rows:

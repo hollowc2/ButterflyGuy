@@ -19,9 +19,9 @@ MAX_RETRIES = 3
 RETRY_BACKOFF = [1, 2, 4]
 
 # Maps strategy underlying → Schwab API symbol for spot price quotes
-SCHWAB_SPOT_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX"}
+SCHWAB_SPOT_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX", "XSP": "$XSP"}
 # Maps strategy underlying → Schwab API symbol for options chain requests
-SCHWAB_CHAIN_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX"}
+SCHWAB_CHAIN_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX", "XSP": "XSP"}
 
 
 class SchwabClientWrapper:

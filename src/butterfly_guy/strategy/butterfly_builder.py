@@ -34,6 +34,9 @@ VIX_SIGMA_BY_WIDTH: dict[int, float] = {
     25: 0.25,  # NDX narrow
     50: 0.50,  # NDX mid
     75: 0.75,  # NDX wide
+    1: 0.25,   # XSP narrow
+    2: 0.50,   # XSP mid
+    3: 0.75,   # XSP wide
 }
 _VIX_SIGMA_DEFAULT = 0.50  # fallback for unlisted widths
 
@@ -49,7 +52,7 @@ def vix_target_center(
     direction: str,
     wing_width: int | None = None,
     sigma_fraction: float | None = None,
-    strike_step: int = 5,
+    strike_step: int | None = None,
 ) -> float:
     """Derive the ideal center strike from VIX.
 
@@ -67,7 +70,7 @@ def vix_target_center(
         direction: "CALL" or "PUT".
         wing_width: Wing width to look up sigma in VIX_SIGMA_BY_WIDTH.
         sigma_fraction: Override sigma directly (takes precedence over wing_width).
-        strike_step: Round center to this increment (default 5 for SPX).
+        strike_step: Round center to this increment (defaults to 1 for widths <=5, else 5).
 
     Returns:
         Target center strike as a float.
@@ -75,6 +78,9 @@ def vix_target_center(
     if sigma_fraction is None:
         sigma_fraction = VIX_SIGMA_BY_WIDTH.get(wing_width, _VIX_SIGMA_DEFAULT) \
             if wing_width is not None else _VIX_SIGMA_DEFAULT
+
+    if strike_step is None:
+        strike_step = 1 if wing_width is not None and wing_width <= 5 else 5
 
     move = vix_expected_move(vix, spot)
     offset = move * sigma_fraction

@@ -225,10 +225,11 @@ def print_consensus_table(
         )
 
 
-def parse_args() -> tuple[int, int, int]:
+def parse_args() -> tuple[int, int, int, str]:
     top_n = 15
     consensus_n = 20
     min_regimes = len(REGIMES)
+    asset = "SPX"
     args = sys.argv[1:]
     for i, a in enumerate(args):
         if a == "--top" and i + 1 < len(args):
@@ -246,18 +247,21 @@ def parse_args() -> tuple[int, int, int]:
                 min_regimes = int(args[i + 1])
             except ValueError:
                 pass
-    return top_n, consensus_n, min_regimes
+        if a == "--asset" and i + 1 < len(args):
+            asset = args[i + 1].upper()
+    return top_n, consensus_n, min_regimes, asset
 
 
 def main() -> None:
-    top_n, consensus_n, min_regimes = parse_args()
+    top_n, consensus_n, min_regimes, asset = parse_args()
+    spx_path = Path(f"data/{asset.lower()}_1min.csv")
 
-    if not SPX_PATH.exists() or not VIX_PATH.exists():
-        print(f"Missing CSV files: {SPX_PATH}, {VIX_PATH}")
+    if not spx_path.exists() or not VIX_PATH.exists():
+        print(f"Missing CSV files: {spx_path}, {VIX_PATH}")
         sys.exit(1)
 
-    print(f"\nLoading CSV data (this takes a few seconds)...")
-    loader = CsvDataLoader(SPX_PATH, VIX_PATH)
+    print(f"\nLoading CSV data for {asset} (this takes a few seconds)...")
+    loader = CsvDataLoader(spx_path, VIX_PATH)
     engine = SimulationEngine()
 
     all_regime_results: list[tuple[str, list[dict]]] = []

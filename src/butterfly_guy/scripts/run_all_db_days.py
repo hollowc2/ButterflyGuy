@@ -50,6 +50,9 @@ FULL_DATA_DATES = [
     dt.date(2026, 3, 24),
 ]
 
+# Asset to test
+ASSET = "SPX"
+
 # Wing widths to test
 WING_WIDTHS = [10, 20, 30]
 
@@ -72,19 +75,19 @@ BASE_PARAMS = dict(
 # ---------------------------------------------------------------------------
 
 async def load_chains_from_db(
-    conn: asyncpg.Connection, date: dt.date
+    conn: asyncpg.Connection, date: dt.date, asset: str = ASSET
 ) -> dict[dt.datetime, list[OptionQuote]]:
     rows = await conn.fetch(
         """
         SELECT snapshot_time, strike, option_type, bid, ask, mark, last,
                volume, open_interest, iv, delta, gamma, theta, vega, symbol, spot_price
         FROM option_chain_snapshots
-        WHERE underlying = 'SPX'
+        WHERE underlying = $2
           AND expiration = $1
           AND snapshot_time::date = $1
         ORDER BY snapshot_time, strike, option_type
         """,
-        date,
+        date, asset,
     )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
     for r in rows:
@@ -94,7 +97,7 @@ async def load_chains_from_db(
         chains[ts].append(
             OptionQuote(
                 symbol=r["symbol"] or f"DB_{r['option_type'][0]}{int(r['strike'])}",
-                underlying="SPX",
+                underlying=asset,
                 expiration=date,
                 strike=float(r["strike"]),
                 option_type=r["option_type"],
@@ -115,19 +118,19 @@ async def load_chains_from_db(
 
 
 async def load_bars_from_db(
-    conn: asyncpg.Connection, date: dt.date
+    conn: asyncpg.Connection, date: dt.date, asset: str = ASSET
 ) -> list[MinuteBar]:
     rows = await conn.fetch(
         """
         SELECT DISTINCT ON (snapshot_time)
             snapshot_time, spot_price
         FROM option_chain_snapshots
-        WHERE underlying = 'SPX'
+        WHERE underlying = $2
           AND snapshot_time::date = $1
           AND spot_price IS NOT NULL AND spot_price > 0
         ORDER BY snapshot_time
         """,
-        date,
+        date, asset,
     )
     bars = []
     for r in rows:
@@ -367,7 +370,7 @@ def print_results_table(results_by_strat: dict, wing_widths: list[int]) -> None:
 
 async def main() -> None:
     print(f"\n{'#'*72}")
-    print(f"  SPX DB BACKTEST — ALL FULL-DATA DAYS")
+    print(f"  {ASSET} DB BACKTEST — ALL FULL-DATA DAYS")
     print(f"  Dates: {FULL_DATA_DATES[0]} to {FULL_DATA_DATES[-1]}  ({len(FULL_DATA_DATES)} days)")
     print(f"  Wings: {WING_WIDTHS}    Strategies: {[s[0] for s in STRATEGIES]}")
     print(f"{'#'*72}")

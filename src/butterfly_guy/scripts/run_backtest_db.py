@@ -76,6 +76,12 @@ ASSET_DEFAULTS: dict[str, dict] = {
         center_tolerance=100.0,
         max_cost={25: 2.00, 50: 4.00, 75: 6.00},
     ),
+    "XSP": dict(
+        wing_widths=[1, 2, 3],
+        spot_range=10,
+        center_tolerance=1.5,
+        max_cost={1: 0.10, 2: 0.20, 3: 0.30},
+    ),
 }
 
 
@@ -97,7 +103,7 @@ def _strlist(s: str) -> list[str]:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Unified SPX/NDX DB backtest — single-config or parameter sweep",
+        description="Unified SPX/NDX/XSP DB backtest — single-config or parameter sweep",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         epilog=(
             "Comma-separated values (e.g. --wing 25,50,75) are only meaningful in "
@@ -109,7 +115,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("end", nargs="?", type=dt.date.fromisoformat,
                    help="End date YYYY-MM-DD (default: all available DB dates)")
 
-    p.add_argument("--asset", choices=["SPX", "NDX"], default="SPX",
+    p.add_argument("--asset", choices=["SPX", "NDX", "XSP"], default="SPX",
                    help="Underlying asset to backtest")
     p.add_argument("--direction", type=_strlist, default=None,
                    metavar="PUT|CALL|auto[,...]",

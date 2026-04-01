@@ -81,18 +81,21 @@ BEAR_VIX_THRESH    = [18.0,  20.0,  22.0]
 BULL_VIX_THRESH    = [15.0,  18.0]
 
 
-def parse_args() -> tuple[dt.date | None, dt.date | None, int]:
+def parse_args() -> tuple[dt.date | None, dt.date | None, int, str]:
     date_args = [a for a in sys.argv[1:] if a.startswith("20")]
     top_n = 30
+    asset = "SPX"
     for i, a in enumerate(sys.argv[1:]):
         if a == "--top" and i + 2 <= len(sys.argv) - 1:
             try:
                 top_n = int(sys.argv[i + 2])
             except ValueError:
                 pass
+        elif a == "--asset" and i + 1 < len(sys.argv):
+            asset = sys.argv[i + 1].upper()
     start = dt.date.fromisoformat(date_args[0]) if len(date_args) >= 1 else None
     end   = dt.date.fromisoformat(date_args[1]) if len(date_args) >= 2 else None
-    return start, end, top_n
+    return start, end, top_n, asset
 
 
 def summarize_adaptive(
@@ -195,14 +198,15 @@ def print_table(rows: list[dict], top_n: int) -> None:
 
 
 def main() -> None:
-    start_arg, end_arg, top_n = parse_args()
+    start_arg, end_arg, top_n, asset = parse_args()
+    spx_path = Path(f"data/{asset.lower()}_1min.csv")
 
-    if not SPX_PATH.exists() or not VIX_PATH.exists():
-        print(f"Missing CSV files: {SPX_PATH}, {VIX_PATH}")
+    if not spx_path.exists() or not VIX_PATH.exists():
+        print(f"Missing CSV files: {spx_path}, {VIX_PATH}")
         sys.exit(1)
 
-    print("\nLoading CSV data (this takes a few seconds)...")
-    loader = CsvDataLoader(SPX_PATH, VIX_PATH)
+    print(f"\nLoading CSV data for {asset} (this takes a few seconds)...")
+    loader = CsvDataLoader(spx_path, VIX_PATH)
     all_dates = loader.available_dates()
 
     start = start_arg or all_dates[0]

@@ -76,8 +76,10 @@ def parse_args() -> argparse.Namespace:
                    help="Data source")
     p.add_argument("--no-cache", action="store_true",
                    help="(Schwab) skip cache, fetch live")
-    p.add_argument("--spx-csv", type=Path, default=SPX_PATH,
-                   help="(CSV) SPX 1-min CSV path")
+    p.add_argument("--asset", choices=["SPX", "NDX", "XSP"], default="SPX",
+                   help="(CSV) Asset to backtest, builds path data/<asset>_1min.csv")
+    p.add_argument("--spx-csv", type=Path, default=None,
+                   help="(CSV) Explicit SPX/asset 1-min CSV path (overrides --asset)")
     p.add_argument("--vix-csv", type=Path, default=VIX_PATH,
                    help="(CSV) VIX 1-min CSV path")
 
@@ -312,7 +314,8 @@ async def main() -> None:
     if args.source == "schwab":
         day_data = await load_schwab_days(dates, args.no_cache)
     else:
-        day_data = load_csv_days(dates, args.spx_csv, args.vix_csv)
+        spx_path = args.spx_csv if args.spx_csv else Path(f"data/{args.asset.lower()}_1min.csv")
+        day_data = load_csv_days(dates, spx_path, args.vix_csv)
 
     if not day_data:
         print("No data loaded.")

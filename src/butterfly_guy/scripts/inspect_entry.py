@@ -37,10 +37,10 @@ SPX_PATH = Path("data/spx_1min.csv")
 VIX_PATH = Path("data/vix_1min.csv")
 
 
-def parse_args() -> tuple[dt.date, str | None, int, float]:
+def parse_args() -> tuple[dt.date, str | None, int, float, str]:
     date_str = next((a for a in sys.argv[1:] if a.startswith("20")), None)
     if not date_str:
-        print("Usage: inspect_entry.py YYYY-MM-DD [--direction CALL|PUT] [--wing N] [--rr F]")
+        print("Usage: inspect_entry.py YYYY-MM-DD [--direction CALL|PUT] [--wing N] [--rr F] [--asset SPX]")
         sys.exit(1)
     date = dt.date.fromisoformat(date_str)
 
@@ -56,15 +56,18 @@ def parse_args() -> tuple[dt.date, str | None, int, float]:
             wing = int(args[i + 1])
         elif a == "--rr" and i + 1 < len(args):
             rr = float(args[i + 1])
+        elif a == "--asset" and i + 1 < len(args):
+            asset = args[i + 1].upper()
 
-    return date, direction, wing, rr
+    return date, direction, wing, rr, asset
 
 
 def main() -> None:
-    date, direction_override, wing_width, rr_min = parse_args()
+    date, direction_override, wing_width, rr_min, asset = parse_args()
 
-    print(f"\nLoading CSV data...")
-    loader = CsvDataLoader(SPX_PATH, VIX_PATH)
+    spx_path = Path(f"data/{asset.lower()}_1min.csv")
+    print(f"\nLoading CSV data for {asset}...")
+    loader = CsvDataLoader(spx_path, VIX_PATH)
     day = loader.load_day(date)
     if not day:
         print(f"No data for {date}")

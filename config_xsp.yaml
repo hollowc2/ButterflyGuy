@@ -1,0 +1,52 @@
+schwab:
+  token_path: "tokens.json"
+  max_token_age: 518400  # 6 days in seconds
+
+strategy:
+  underlying: "XSP"
+  wing_widths: [1, 2, 3]
+  spot_range: 10
+  rr_min: 8.0
+  max_cost_per_width:
+    1: 0.10
+    2: 0.20
+    3: 0.30
+entry:
+  start_time: "07:00"  # PST
+  end_time: "07:45"    # PST
+  timezone: "America/Los_Angeles"
+  use_vix_center: true   # anchor center to VIX-implied expected move per width
+  center_tolerance: 1.5  # pts; candidate center must be within this of VIX target (1/10th of SPX)
+execution:
+  price_ladder_step: 0.01  # 1/10th of SPX step
+  price_ladder_steps: 4
+  retry_interval_seconds: 20
+  order_timeout_seconds: 300
+  paper_trading: true
+  paper_fill_buffer: 0.00
+profit_management:
+  regimes:
+    morning:
+      start_minutes_after_open: 0
+      end_minutes_after_open: 120
+      drawdown_threshold: 0.60
+    late_morning:
+      start_minutes_after_open: 120
+      end_minutes_after_open: 240
+      drawdown_threshold: 0.60
+    afternoon:
+      start_minutes_after_open: 240
+      end_minutes_after_open: 390
+      drawdown_threshold: 0.40
+  exit_before_close_minutes: 5
+  max_loss_from_cost: 0.50
+  use_absolute_loss_stop: false
+risk:
+  max_daily_loss: 50.0  # 1/10th of SPX
+  max_trades_per_day: 1
+  max_position_size: 1
+collector:
+  snapshot_interval_seconds: 60
+monitoring:
+  metrics_port: 8002
+  log_level: "INFO"
