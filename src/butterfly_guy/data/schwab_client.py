@@ -189,7 +189,6 @@ class SchwabClientWrapper:
             period_type=self.client.PriceHistory.PeriodType.MONTH,
             period=1,
             frequency_type=self.client.PriceHistory.FrequencyType.DAILY,
-            frequency=self.client.PriceHistory.Frequency.EVERY_DAY,
             endpoint="get_daily_bars",
         )
         data = resp.json()
