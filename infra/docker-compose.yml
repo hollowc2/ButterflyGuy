@@ -113,4 +113,4 @@ services:
     networks:
       - monitoring_net
     ports:
-      - "127.0.0.1:8002:8000"  # host:8002 → container:8000
+      - "127.0.0.1:8003:8000"  # host:8003 → container:8000
