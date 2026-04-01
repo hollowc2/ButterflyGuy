@@ -69,3 +69,48 @@ services:
     ports:
       - "127.0.0.1:8001:8000"  # host:8001 → container:8000
 
+  collector_ndx:
+    profiles: [ndx]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: butterfly_ndx_collector
+    restart: unless-stopped
+    command: ["python", "-m", "butterfly_guy.scripts.run_collector", "--config", "config_ndx.yaml"]
+    env_file:
+      - ../.env
+    volumes:
+      - ../tokens.json:/app/tokens.json
+      - ../config_ndx.yaml:/app/config_ndx.yaml
+    environment:
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__NAME: butterfly_guy
+      DATABASE__USER: butterfly
+      DATABASE__PASSWORD: butterfly_dev
+    networks:
+      - monitoring_net
+
+  app_xsp:
+    profiles: [xsp]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: butterfly_xsp_app
+    restart: unless-stopped
+    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "config_xsp.yaml"]
+    env_file:
+      - ../.env
+    volumes:
+      - ../tokens.json:/app/tokens.json
+      - ../config_xsp.yaml:/app/config_xsp.yaml
+    environment:
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__NAME: butterfly_guy
+      DATABASE__USER: butterfly
+      DATABASE__PASSWORD: butterfly_dev
+    networks:
+      - monitoring_net
+    ports:
+      - "127.0.0.1:8002:8000"  # host:8002 → container:8000
