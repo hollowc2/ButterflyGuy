@@ -761,11 +761,18 @@ async def run_sweep(args: argparse.Namespace) -> None:
 
         day_results: list[tuple[dt.date, object]] = []
         for date, d in all_date_data.items():
+            # Resolve "auto" direction per-date (same logic as single-config mode)
+            resolved_direction = (
+                ("CALL" if d["entry_spot"] >= d["prev_close"] else "PUT")
+                if direction == "auto"
+                else direction
+            )
+
             entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
             chosen = select_for_width(
                 quotes=entry_quotes,
                 spot=d["entry_spot"],
-                direction=direction,
+                direction=resolved_direction,
                 vix=d["vix"],
                 wing_width=wing,
                 rr_min=rr_min,
@@ -779,7 +786,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
             restore = _patch_chain_cache(d["chains"], date)
             sim_params = SimulationParams(
                 wing_width=chosen.wing_width,
-                direction_override=direction,
+                direction_override=resolved_direction,
                 rr_min=rr_min,
                 morning_drawdown=morning_dd,
                 late_morning_drawdown=late_morning_dd,
