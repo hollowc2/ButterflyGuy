@@ -19,7 +19,8 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from butterfly_guy.backtest.csv_loader import CsvDataLoader
-from butterfly_guy.core.config import StrategySettings
+from butterfly_guy.backtest.db_loader import DbDataLoader
+from butterfly_guy.core.config import StrategySettings, load_config
 from butterfly_guy.core.logging import setup_logging
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
@@ -33,14 +34,11 @@ EASTERN = ZoneInfo("America/New_York")
 ENTRY_START = dt.time(10, 0)
 ENTRY_END = dt.time(10, 30)
 
-SPX_PATH = Path("data/spx_1min.csv")
-VIX_PATH = Path("data/vix_1min.csv")
 
-
-def parse_args() -> tuple[dt.date, str | None, int, float, str]:
+def parse_args():
     date_str = next((a for a in sys.argv[1:] if a.startswith("20")), None)
     if not date_str:
-        print("Usage: inspect_entry.py YYYY-MM-DD [--direction CALL|PUT] [--wing N] [--rr F] [--asset SPX] [--method M]")
+        print("Usage: inspect_entry.py YYYY-MM-DD [--direction CALL|PUT] [--wing N] [--rr F] [--asset SPX] [--method M] [--csv]")
         sys.exit(1)
     date = dt.date.fromisoformat(date_str)
 
@@ -49,6 +47,7 @@ def parse_args() -> tuple[dt.date, str | None, int, float, str]:
     rr = 8.0
     asset = "SPX"
     method = "TARGET_COST"
+    use_csv = False
 
     args = sys.argv[1:]
     for i, a in enumerate(args):
@@ -62,19 +61,33 @@ def parse_args() -> tuple[dt.date, str | None, int, float, str]:
             asset = args[i + 1].upper()
         elif a == "--method" and i + 1 < len(args):
             method = args[i + 1].upper()
+        elif a == "--csv":
+            use_csv = True
 
-    return date, direction, wing, rr, asset, method
+    return date, direction, wing, rr, asset, method, use_csv
 
 
 def main() -> None:
-    date, direction_override, wing_width, rr_min, asset, method = parse_args()
+    date, direction_override, wing_width, rr_min, asset, method, use_csv = parse_args()
 
-    spx_path = Path(f"data/{asset.lower()}_1min.csv")
-    print(f"\nLoading CSV data for {asset}...")
-    loader = CsvDataLoader(spx_path, VIX_PATH)
+    if use_csv:
+        spx_path = Path(f"data/{asset.lower()}_1min.csv")
+        vix_path = Path("data/vix_1min.csv")
+        print(f"\nLoading CSV data for {asset}...")
+        loader = CsvDataLoader(spx_path, vix_path)
+    else:
+        cfg = load_config()
+        print(f"\nLoading DB data for {asset} on {date}...")
+        try:
+            loader = DbDataLoader(cfg.database.dsn, underlying=asset)
+        except Exception as e:
+            print(f"DB connection failed: {e}")
+            print("Tip: pass --csv to load from flat CSV files instead.")
+            sys.exit(1)
+
     day = loader.load_day(date)
     if not day:
-        print(f"No data for {date}")
+        print(f"No data found for {date} ({asset}) in the {'DB' if not use_csv else 'CSV'}.")
         sys.exit(1)
 
     print(f"Date: {date}  |  VIX: {day.vix:.2f}  |  Prev close: {day.prev_close:.2f}")
