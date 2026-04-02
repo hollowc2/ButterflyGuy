@@ -137,6 +137,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--afternoon-dd", type=_floatlist, default=None,
                    metavar="DD[,DD]",
                    help="Afternoon drawdown threshold(s). Default: 0.40.")
+    p.add_argument("--method", type=_strlist, default=None,
+                   metavar="M[,M]",
+                   help="Selection method(s): VIX, TARGET_COST, BEST_RR. Default: VIX.")
 
     p.add_argument("--slippage", type=float, default=0.05,
                    help="Per-spread slippage applied to entry and exit.")
@@ -170,6 +173,8 @@ def parse_args() -> argparse.Namespace:
         args.late_morning_dd = [0.60]
     if args.afternoon_dd is None:
         args.afternoon_dd = [0.40]
+    if args.method is None:
+        args.method = ["VIX"]
 
     return args
 
@@ -337,16 +342,29 @@ def select_for_width(
     spot_range: int,
     center_tolerance: float,
     rr_target: float = 10.0,
+    method: str = "VIX",
+    max_cost_per_width: dict[int, float] | None = None,
 ) -> ButterflyCandidate | None:
     """Select the best butterfly candidate for a single wing width."""
-    settings = StrategySettings(wing_widths=[wing_width], rr_min=rr_min, spot_range=spot_range)
+    settings = StrategySettings(
+        wing_widths=[wing_width],
+        rr_min=rr_min,
+        spot_range=spot_range,
+        max_cost_per_width=max_cost_per_width or {},
+    )
     builder = ButterflyBuilder(settings)
     selector = ButterflySelector(settings)
     candidates = builder.build_candidates(quotes, spot, direction)
-    target_center = vix_target_center(vix=vix, spot=spot, direction=direction, wing_width=wing_width)
     width_candidates = [c for c in candidates if c.wing_width == wing_width]
-    best = selector.select_best(width_candidates, target_center=target_center, center_tolerance=center_tolerance)
-    return best
+    
+    if method == "TARGET_COST":
+        return selector.select_best_by_target_cost(width_candidates)
+    
+    target_center = None
+    if method == "VIX":
+        target_center = vix_target_center(vix=vix, spot=spot, direction=direction, wing_width=wing_width)
+    
+    return selector.select_best(width_candidates, target_center=target_center, center_tolerance=center_tolerance)
 
 
 def select_live_width(
@@ -359,12 +377,27 @@ def select_live_width(
     spot_range: int,
     center_tolerance: float,
     rr_target: float = 10.0,
+    method: str = "VIX",
+    max_cost_per_width: dict[int, float] | None = None,
 ) -> ButterflyCandidate | None:
-    """Cross-width selection: pick width whose R/R is closest to rr_target."""
+    """Cross-width selection."""
+    if method == "TARGET_COST":
+        settings = StrategySettings(
+            wing_widths=wing_widths,
+            rr_min=rr_min,
+            spot_range=spot_range,
+            max_cost_per_width=max_cost_per_width or {},
+        )
+        builder = ButterflyBuilder(settings)
+        selector = ButterflySelector(settings)
+        candidates = builder.build_candidates(quotes, spot, direction)
+        return selector.select_best_by_target_cost(candidates)
+
     per_width_bests: list[ButterflyCandidate] = []
     for width in wing_widths:
         best = select_for_width(
             quotes, spot, direction, vix, width, rr_min, spot_range, center_tolerance, rr_target,
+            method=method, max_cost_per_width=max_cost_per_width,
         )
         if best:
             per_width_bests.append(best)
@@ -539,13 +572,14 @@ async def run_single(args: argparse.Namespace) -> None:
     morning_dd = args.morning_dd[0]
     late_morning_dd = args.late_morning_dd[0]
     afternoon_dd = args.afternoon_dd[0]
+    method = args.method[0]
     center_tolerance = asset_cfg["center_tolerance"]
     spot_range = asset_cfg["spot_range"]
 
     print(f"\n{'='*72}")
     print(f"  DB BACKTEST  |  {args.asset}  {direction_arg} butterfly")
     print(f"  Widths: {wing_widths}  rr_min: {rr_min}  DD: {morning_dd}/{late_morning_dd}/{afternoon_dd}")
-    print(f"  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  "
+    print(f"  Method: {method}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  "
           f"slippage: {args.slippage}  vix_max: {args.vix_max or 'none'}")
     print(f"{'='*72}\n")
 
@@ -595,6 +629,8 @@ async def run_single(args: argparse.Namespace) -> None:
             rr_min=rr_min,
             spot_range=spot_range,
             center_tolerance=center_tolerance,
+            method=method,
+            max_cost_per_width=asset_cfg["max_cost"],
         )
 
         if not chosen:
@@ -612,7 +648,9 @@ async def run_single(args: argparse.Namespace) -> None:
             late_morning_drawdown=late_morning_dd,
             afternoon_drawdown=afternoon_dd,
             slippage=args.slippage,
-            use_vix_center=True,
+            use_vix_center=(method == "VIX"),
+            selection_method=method,
+            max_cost_per_width=asset_cfg["max_cost"],
             use_absolute_loss_stop=args.use_abs_stop,
         )
 
@@ -694,14 +732,15 @@ async def run_sweep(args: argparse.Namespace) -> None:
         args.morning_dd,
         args.late_morning_dd,
         args.afternoon_dd,
+        args.method,
     ))
     total_combos = len(param_grid)
 
     print(f"\n{'='*72}")
     print(f"  PARAMETER SWEEP  |  {args.asset}  |  {total_combos} combos")
     print(f"  Wings: {args.wing}  Directions: {args.direction}  rr_min: {args.rr_min}")
-    print(f"  morning_dd: {args.morning_dd}  late_morning_dd: {args.late_morning_dd}  afternoon_dd: {args.afternoon_dd}")
-    print(f"  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  slippage: {args.slippage}")
+    print(f"  Methods: {args.method}  morning_dd: {args.morning_dd}  late_morning_dd: {args.late_morning_dd}")
+    print(f"  afternoon_dd: {args.afternoon_dd}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  slippage: {args.slippage}")
     print(f"{'='*72}\n")
 
     # Discover dates and pre-load all data from DB
@@ -744,7 +783,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
     engine = SimulationEngine()
     sweep_results: list[dict] = []
 
-    for i, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd) in enumerate(param_grid, 1):
+    for i, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method) in enumerate(param_grid, 1):
         combo_label = dict(
             wing_width=wing,
             direction=direction,
@@ -752,6 +791,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
             morning_dd=morning_dd,
             late_morning_dd=late_morning_dd,
             afternoon_dd=afternoon_dd,
+            method=method,
         )
         params = SimulationParams(
             wing_width=wing,
@@ -761,7 +801,9 @@ async def run_sweep(args: argparse.Namespace) -> None:
             late_morning_drawdown=late_morning_dd,
             afternoon_drawdown=afternoon_dd,
             slippage=args.slippage,
-            use_vix_center=True,
+            use_vix_center=(method == "VIX"),
+            selection_method=method,
+            max_cost_per_width=asset_cfg["max_cost"],
             use_absolute_loss_stop=args.use_abs_stop,
         )
 
@@ -784,6 +826,8 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 rr_min=rr_min,
                 spot_range=spot_range,
                 center_tolerance=center_tolerance,
+                method=method,
+                max_cost_per_width=asset_cfg["max_cost"],
             )
             if chosen is None:
                 day_results.append((date, None))
@@ -798,7 +842,9 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 late_morning_drawdown=late_morning_dd,
                 afternoon_drawdown=afternoon_dd,
                 slippage=args.slippage,
-                use_vix_center=True,
+                use_vix_center=(method == "VIX"),
+                selection_method=method,
+                max_cost_per_width=asset_cfg["max_cost"],
                 use_absolute_loss_stop=args.use_abs_stop,
             )
             result = engine.simulate_day(d["day"], sim_params)

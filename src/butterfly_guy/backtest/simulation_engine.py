@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Any, Literal
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -43,6 +44,8 @@ class SimulationParams:
     hold_to_expiry: bool = False  # skip all drawdown exits; let butterfly expire
     skip_morning_exit: bool = False  # never exit on drawdown during morning regime (<2h after open)
     use_vix_center: bool = False  # anchor center to VIX-implied expected move; sigma from VIX_SIGMA_BY_WIDTH
+    selection_method: Literal["VIX", "TARGET_COST", "BEST_RR"] = "VIX"
+    max_cost_per_width: dict[int, float] = field(default_factory=dict)
     vix_center_sigma: float = 0.0  # override per-width sigma (0.0 = use VIX_SIGMA_BY_WIDTH lookup)
     max_loss_from_cost: float = 0.50  # exit if position loses this fraction of cost (no profit required)
     use_absolute_loss_stop: bool = True  # set False to disable the absolute loss stop entirely
@@ -155,6 +158,7 @@ class SimulationEngine:
                     wing_widths=[params.wing_width],
                     rr_min=params.rr_min,
                     spot_range=100,
+                    max_cost_per_width=params.max_cost_per_width,
                 )
                 builder = ButterflyBuilder(settings_override)
                 candidates = builder.build_candidates(quotes, bar.close, direction)
@@ -170,7 +174,12 @@ class SimulationEngine:
                     )
 
                 selector = ButterflySelector(settings_override)
-                best = selector.select_best(candidates, target_center=target_center)
+                if params.selection_method == "TARGET_COST":
+                    best = selector.select_best_by_target_cost(candidates)
+                elif params.selection_method == "BEST_RR":
+                    best = selector.select_best(candidates, target_center=None)
+                else:  # VIX (default)
+                    best = selector.select_best(candidates, target_center=target_center)
 
                 if best:
                     entry_candidate = best
