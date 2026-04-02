@@ -99,6 +99,7 @@ class ButterflyBuilder:
         quotes: list[OptionQuote],
         spot_price: float,
         direction: Literal["CALL", "PUT"],
+        include_all: bool = False,
     ) -> list[ButterflyCandidate]:
         """
         O(N*W) scan: for each center strike within spot_range, for each wing_width,
@@ -141,16 +142,17 @@ class ButterflyBuilder:
                 fly_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
 
                 if cost < 0.05:  # minimum practical butterfly debit; filters fp-epsilon zeros
-                    continue
+                    if not include_all:
+                        continue
 
                 max_cost = self.settings.max_cost_per_width.get(width, float("inf"))
-                if cost > max_cost:
+                if not include_all and cost > max_cost:
                     continue
 
                 max_profit = width - cost
                 rr = max_profit / cost
 
-                if rr < self.settings.rr_min:
+                if not include_all and rr < self.settings.rr_min:
                     continue
 
                 lower_be = lower + cost

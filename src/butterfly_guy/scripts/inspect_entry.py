@@ -214,31 +214,75 @@ def main() -> None:
             f"{iv_str}  {delta_str}  {dist:>+6.1f}{marker}"
         )
 
-    # Build all candidates
-    candidates = builder.build_candidates(quotes, entry_bar.close, direction)
+    # Build all candidates (including those that fail filters for visualization)
+    all_candidates = builder.build_candidates(quotes, entry_bar.close, direction, include_all=True)
     
+    # Identify which ones would have actually passed the official filter
+    def passes_filter(c):
+        max_cost = settings.max_cost_per_width.get(c.wing_width, float("inf"))
+        return c.cost >= 0.05 and c.cost <= max_cost and c.reward_risk >= settings.rr_min
+
+    valid_candidates = [c for c in all_candidates if passes_filter(c)]
+
     if method == "TARGET_COST":
-        best = selector.select_best_by_target_cost(candidates)
+        best = selector.select_best_by_target_cost(valid_candidates)
     elif method == "VIX":
         from butterfly_guy.strategy.butterfly_builder import vix_target_center
         target_center = vix_target_center(
             vix=day.vix, spot=entry_bar.close,
             direction=direction, wing_width=wing_width,
         )
-        best = selector.select_best(candidates, target_center=target_center)
+        best = selector.select_best(valid_candidates, target_center=target_center)
     else:
-        best = selector.select_best(candidates)
+        # Default / BEST_RR
+        best = selector.select_best(valid_candidates)
 
     print(f"\n{'=' * 70}")
     print(f"  ALL CANDIDATES (wing={wing_width}, RR>={rr_min})")
     print(f"{'=' * 70}")
-    if not candidates:
-        print("  No candidates passed the RR filter.")
+    
+    # We want to show:
+    # 1. All valid candidates
+    # 2. Some rejected candidates that were closer to ATM than the selected one
+    
+    # Filter all_candidates to just the requested wing width
+    width_candidates = [c for c in all_candidates if c.wing_width == wing_width]
+    
+    if not width_candidates:
+        print("  No candidates found for this wing width.")
     else:
         print(f"  {'Center':>7}  {'Lower':>7}  {'Upper':>7}  {'Cost':>6}  {'MaxP':>6}  {'RR':>5}  {'Dist':>6}  {'LowerBE':>8}  {'UpperBE':>8}")
         print(f"  {'-' * 78}")
-        for c in candidates:
-            marker = " <-- SELECTED" if best and c.center_strike == best.center_strike else ""
+        
+        # Sort by distance from spot
+        width_candidates.sort(key=lambda c: c.distance_from_spot)
+        
+        # Only show candidates within a reasonable range of the "best" one
+        # or that are closer to ATM.
+        best_dist = best.distance_from_spot if best else 999
+        
+        for c in width_candidates:
+            is_valid = passes_filter(c)
+            is_selected = best and c.center_strike == best.center_strike
+            
+            # Show if it's valid, OR if it's closer to ATM than the selected one
+            # (up to 5 strikes closer)
+            should_show = is_valid or (c.distance_from_spot < best_dist and c.distance_from_spot >= best_dist - 25)
+            
+            if not should_show:
+                continue
+
+            marker = ""
+            if is_selected:
+                marker = " <-- SELECTED"
+            elif not is_valid:
+                if c.reward_risk < settings.rr_min:
+                    marker = f" [REJECTED: RR {c.reward_risk:.1f} < {settings.rr_min}]"
+                elif c.cost < 0.05:
+                    marker = " [REJECTED: cost too low]"
+                else:
+                    marker = " [REJECTED: cost too high]"
+
             print(
                 f"  {c.center_strike:>7.0f}  {c.lower_strike:>7.0f}  {c.upper_strike:>7.0f}  "
                 f"{c.cost:>6.4f}  {c.max_profit:>6.4f}  {c.reward_risk:>5.2f}  "
