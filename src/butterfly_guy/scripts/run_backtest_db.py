@@ -895,7 +895,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
     csv_path = args.csv or Path(f"sweep_{args.asset}_{start_str}_{end_str}_{ts_str}.csv")
 
     fieldnames = [
-        "wing_width", "direction", "rr_min", "morning_dd", "late_morning_dd", "afternoon_dd",
+        "wing_width", "direction", "method", "rr_min", "morning_dd", "late_morning_dd", "afternoon_dd",
         "trade_count", "win_rate", "total_pnl", "avg_pnl",
         "sharpe", "max_drawdown", "profit_factor", "max_consec_losses",
         "exit_morning_dd", "exit_late_morning_dd", "exit_afternoon_dd",
