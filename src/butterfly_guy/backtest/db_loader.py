@@ -1,8 +1,9 @@
 """DB-backed data loader for historical SPX + VIX data.
 
 Reads from the live TimescaleDB database:
-  - spot_prices  → 1-minute (or collector-interval) bars for SPX and VIX
-  - daily_bars   → daily closes for prev_close and VIX daily
+  - spot_prices          → 1-minute (or collector-interval) bars for SPX and VIX
+  - daily_bars           → daily closes for prev_close and VIX daily
+  - option_chain_snapshots → real option chain data for butterfly construction
 
 This is a synchronous wrapper around asyncpg so inspect_entry.py can call
 it without an async event loop, matching the same interface as CsvDataLoader.
@@ -17,6 +18,7 @@ from zoneinfo import ZoneInfo
 import asyncpg
 
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
+from butterfly_guy.data.schemas import OptionQuote
 from butterfly_guy.core.logging import get_logger
 
 log = get_logger(__name__)
@@ -53,6 +55,27 @@ class DbDataLoader:
     def load_day(self, date: dt.date) -> DayData | None:
         """Return DayData for *date*, or None if no bars found."""
         return self._run(self._load_day_async(date))
+
+    def load_chain_at_time(
+        self,
+        underlying: str,
+        expiration: dt.date,
+        at: dt.datetime,
+        window_minutes: int = 15,
+    ) -> list[OptionQuote]:
+        """Return real OptionQuotes from the nearest snapshot to *at*.
+
+        Searches the *window_minutes* window before *at* for the latest
+        snapshot timestamp, then returns all rows at that timestamp.
+        Returns an empty list if no snapshot exists in the window.
+
+        Args:
+            underlying: e.g. "SPX"
+            expiration: Option expiration date (0DTE = same as trade date)
+            at: Reference datetime (entry bar timestamp, UTC-aware)
+            window_minutes: How far back to search for a snapshot.
+        """
+        return self._run(self._load_chain_async(underlying, expiration, at, window_minutes))
 
     def available_dates(self) -> list[dt.date]:
         """Return all dates that have spot_price rows for this underlying."""
@@ -222,7 +245,106 @@ class DbDataLoader:
         )
         return [float(r["close"]) for r in reversed(rows)]
 
+    async def _load_chain_async(
+        self,
+        underlying: str,
+        expiration: dt.date,
+        at: dt.datetime,
+        window_minutes: int,
+    ) -> list[OptionQuote]:
+        """Query option_chain_snapshots for the nearest snapshot_time <= *at*."""
+        conn = await asyncpg.connect(self.dsn)
+        try:
+            window_start = at - dt.timedelta(minutes=window_minutes)
+
+            # Find the closest snapshot timestamp in the window
+            snap_ts = await conn.fetchval(
+                """
+                SELECT MAX(snapshot_time)
+                FROM   option_chain_snapshots
+                WHERE  underlying  = $1
+                  AND  expiration  = $2
+                  AND  snapshot_time >= $3
+                  AND  snapshot_time <= $4
+                """,
+                underlying, expiration, window_start, at,
+            )
+
+            if snap_ts is None:
+                log.warning(
+                    "db_loader_no_chain_snapshot",
+                    underlying=underlying,
+                    expiration=str(expiration),
+                    at=str(at),
+                    window_minutes=window_minutes,
+                )
+                return []
+
+            rows = await conn.fetch(
+                """
+                SELECT strike, option_type, bid, ask, mark, last, volume,
+                       open_interest, iv, delta, gamma, theta, vega,
+                       symbol, spot_price, bid_size, ask_size, rho,
+                       intrinsic_value, time_value, in_the_money,
+                       days_to_expiration, multiplier, theoretical_value
+                FROM   option_chain_snapshots
+                WHERE  underlying    = $1
+                  AND  expiration    = $2
+                  AND  snapshot_time = $3
+                ORDER  BY strike, option_type
+                """,
+                underlying, expiration, snap_ts,
+            )
+
+            def _f(v, default=0.0):
+                return float(v) if v is not None else default
+
+            def _i(v, default=0):
+                return int(v) if v is not None else default
+
+            quotes: list[OptionQuote] = []
+            for r in rows:
+                quotes.append(OptionQuote(
+                    symbol=r["symbol"] or "",
+                    underlying=underlying,
+                    expiration=expiration,
+                    strike=float(r["strike"]),
+                    option_type=r["option_type"],
+                    bid=_f(r["bid"]),
+                    ask=_f(r["ask"]),
+                    mark=_f(r["mark"]),
+                    last=_f(r["last"]),
+                    volume=_i(r["volume"]),
+                    open_interest=_i(r["open_interest"]),
+                    iv=_f(r["iv"]),
+                    delta=_f(r["delta"]),
+                    gamma=_f(r["gamma"]),
+                    theta=_f(r["theta"]),
+                    vega=_f(r["vega"]),
+                    bid_size=_i(r["bid_size"]),
+                    ask_size=_i(r["ask_size"]),
+                    rho=_f(r["rho"]),
+                    intrinsic_value=_f(r["intrinsic_value"]),
+                    time_value=_f(r["time_value"]),
+                    in_the_money=bool(r["in_the_money"]),
+                    days_to_expiration=_i(r["days_to_expiration"]),
+                    multiplier=_f(r["multiplier"], default=100.0),
+                    theoretical_value=_f(r["theoretical_value"]),
+                ))
+
+            log.info(
+                "db_loader_chain_loaded",
+                underlying=underlying,
+                expiration=str(expiration),
+                snapshot_time=str(snap_ts),
+                quotes=len(quotes),
+            )
+            return quotes
+        finally:
+            await conn.close()
+
     async def _available_dates_async(self) -> list[dt.date]:
+
         conn = await asyncpg.connect(self.dsn)
         try:
             rows = await conn.fetch(

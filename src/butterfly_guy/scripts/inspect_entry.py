@@ -23,7 +23,6 @@ from butterfly_guy.backtest.db_loader import DbDataLoader
 from butterfly_guy.core.config import StrategySettings, load_config
 from butterfly_guy.core.logging import setup_logging
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
-from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
@@ -95,9 +94,8 @@ def main() -> None:
     bar_times_et = [b.ts.astimezone(EASTERN).strftime("%H:%M") for b in day.bars]
     print(f"Time range: {bar_times_et[0]} → {bar_times_et[-1]} ET\n")
 
-    synth = SyntheticChainGenerator()
+    synth = SyntheticChainGenerator()  # kept as fallback for days without DB chain data
     direction_filter = DirectionFilter()
-    bias_filter = BiasScoreFilter()
 
     settings = StrategySettings(wing_widths=[wing_width], rr_min=rr_min, spot_range=100)
     builder = ButterflyBuilder(settings)
@@ -137,15 +135,34 @@ def main() -> None:
     print(f"  VIX:          {day.vix:.2f}")
     print(f"  Wing width:   {wing_width}  |  RR min: {rr_min}")
 
-    # Generate the synthetic chain
-    quotes = synth.generate_chain(
-        spot=entry_bar.close,
-        vix=day.vix,
-        expiration=date,
-        snapshot_time=entry_bar.ts,
-        strike_min=entry_bar.close - 110,
-        strike_max=entry_bar.close + 110,
-    )
+    # ------------------------------------------------------------------ #
+    # Option chain: real data from DB, synthetic as fallback              #
+    # ------------------------------------------------------------------ #
+    quotes: list = []
+    chain_source = "SYNTHETIC"
+
+    if not use_csv and hasattr(loader, "load_chain_at_time"):
+        quotes = loader.load_chain_at_time(
+            underlying=asset,
+            expiration=date,
+            at=entry_bar.ts,
+            window_minutes=15,
+        )
+        if quotes:
+            chain_source = "REAL (DB)"
+
+    if not quotes:
+        if chain_source == "REAL (DB)":
+            print("  ⚠  No DB chain snapshot found near entry — falling back to synthetic chain.")
+        quotes = synth.generate_chain(
+            spot=entry_bar.close,
+            vix=day.vix,
+            expiration=date,
+            snapshot_time=entry_bar.ts,
+            strike_min=entry_bar.close - 110,
+            strike_max=entry_bar.close + 110,
+        )
+        chain_source = "SYNTHETIC"
 
     # Show ATM chain slice (±30 pts)
     atm_quotes = [
@@ -155,16 +172,18 @@ def main() -> None:
     atm_quotes.sort(key=lambda q: q.strike)
 
     print(f"\n{'=' * 70}")
-    print(f"  SYNTHETIC CHAIN ({direction}, ±30pts around spot)")
+    print(f"  OPTION CHAIN [{chain_source}] ({direction}, ±30pts around spot)")
     print(f"{'=' * 70}")
     print(f"  {'Strike':>7}  {'Mark':>7}  {'Bid':>7}  {'Ask':>7}  {'IV':>6}  {'Delta':>7}  {'Dist':>6}")
     print(f"  {'-' * 65}")
     for q in atm_quotes:
         dist = q.strike - entry_bar.close
         marker = " <-- ATM" if abs(dist) < 2.5 else ""
+        iv_str = f"{q.iv*100:>5.1f}%" if q.iv else "   N/A"
+        delta_str = f"{q.delta:>+7.4f}" if q.delta else "    N/A"
         print(
             f"  {q.strike:>7.0f}  {q.mark:>7.4f}  {q.bid:>7.4f}  {q.ask:>7.4f}  "
-            f"{q.iv*100:>5.1f}%  {q.delta:>+7.4f}  {dist:>+6.1f}{marker}"
+            f"{iv_str}  {delta_str}  {dist:>+6.1f}{marker}"
         )
 
     # Build all candidates
