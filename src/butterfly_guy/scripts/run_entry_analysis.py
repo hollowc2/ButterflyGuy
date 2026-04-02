@@ -6,7 +6,7 @@ complete chain data in the DB (entry window 10:00–10:30 ET covered).
 Focus: ENTRY ANALYSIS — why, when, and at what price entries happen.
 
 Usage:
-    uv run python -m butterfly_guy.scripts.run_all_db_days
+    uv run python -m butterfly_guy.scripts.run_entry_analysis
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from butterfly_guy.strategy.butterfly_builder import (
 )
 
 setup_logging(log_level="WARNING", json_output=False)
-log = get_logger("run_all_db_days")
+log = get_logger("run_entry_analysis")
 
 EASTERN = ZoneInfo("America/New_York")
 DB_DSN = "postgresql://butterfly:butterfly_dev@localhost:5432/butterfly_guy"

@@ -3,9 +3,6 @@
 Uses hourly bars for SPX (^GSPC) and daily bars for VIX (^VIX).
 Hourly resolution is sufficient for 10:00-10:30 ET entry and
 regime-based drawdown exits throughout the day.
-
-Switch back to BacktestDataLoader (Polygon) by setting USE_YFINANCE=False
-in run_backtest.py if you have a paid Polygon account.
 """
 
 from __future__ import annotations
