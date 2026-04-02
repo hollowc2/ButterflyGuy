@@ -63,3 +63,17 @@ class RiskEngine:
         if state["realized_pnl"] <= -self.settings.max_daily_loss:
             await self.risk_queries.set_halted(today, self.underlying)
             log.warning("max_daily_loss_triggered", pnl=state["realized_pnl"])
+
+    async def sync_trade_count(self, count: int, trade_date: dt.date | None = None) -> None:
+        """
+        Manually sync the trade count in the risk state table.
+        Used at startup to ensure persistence matches reality.
+        """
+        today = trade_date or dt.date.today()
+        state = await self.risk_queries.get_or_create(today, self.underlying)
+        if state["trade_count"] != count:
+            log.info("syncing_risk_trade_count", old=state["trade_count"], new=count, underlying=self.underlying)
+            await self.risk_queries.db.execute(
+                "UPDATE daily_risk_state SET trade_count = $1 WHERE trade_date = $2 AND underlying = $3",
+                count, today, self.underlying
+            )

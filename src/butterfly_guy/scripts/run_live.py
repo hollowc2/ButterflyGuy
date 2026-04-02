@@ -238,6 +238,7 @@ async def main() -> None:
     today = dt.date.today()
     today_trades = await trade_q.get_trades_for_date(today, underlying)
     daily_trade_count.labels(underlying=underlying).set(len(today_trades))
+    await risk_engine.sync_trade_count(len(today_trades), today)
     realized_pnl = sum(float(t["pnl"]) for t in today_trades if t.get("pnl") is not None)
     daily_pnl.labels(underlying=underlying).set(realized_pnl)
 

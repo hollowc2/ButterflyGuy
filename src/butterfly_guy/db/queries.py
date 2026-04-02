@@ -109,7 +109,7 @@ class TradeQueries:
             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
             RETURNING id
             """,
-            trade.get("underlying", "SPX"),
+            trade["underlying"],
             trade["trade_date"], trade["direction"], trade["wing_width"],
             trade["center_strike"], trade["lower_strike"], trade["upper_strike"],
             trade["entry_price"], trade["entry_time"],
