@@ -6,7 +6,7 @@ exactly as the simulation engine would have seen them.
 Usage:
     uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03
     uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --direction CALL
-    uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --wing 10 --rr 8.0
+    uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --wing 10 --rr 8.0 --method TARGET_COST
 """
 
 from __future__ import annotations
@@ -40,13 +40,15 @@ VIX_PATH = Path("data/vix_1min.csv")
 def parse_args() -> tuple[dt.date, str | None, int, float, str]:
     date_str = next((a for a in sys.argv[1:] if a.startswith("20")), None)
     if not date_str:
-        print("Usage: inspect_entry.py YYYY-MM-DD [--direction CALL|PUT] [--wing N] [--rr F] [--asset SPX]")
+        print("Usage: inspect_entry.py YYYY-MM-DD [--direction CALL|PUT] [--wing N] [--rr F] [--asset SPX] [--method M]")
         sys.exit(1)
     date = dt.date.fromisoformat(date_str)
 
     direction: str | None = None
     wing = 10
     rr = 8.0
+    asset = "SPX"
+    method = "TARGET_COST"
 
     args = sys.argv[1:]
     for i, a in enumerate(args):
@@ -58,12 +60,14 @@ def parse_args() -> tuple[dt.date, str | None, int, float, str]:
             rr = float(args[i + 1])
         elif a == "--asset" and i + 1 < len(args):
             asset = args[i + 1].upper()
+        elif a == "--method" and i + 1 < len(args):
+            method = args[i + 1].upper()
 
-    return date, direction, wing, rr, asset
+    return date, direction, wing, rr, asset, method
 
 
 def main() -> None:
-    date, direction_override, wing_width, rr_min, asset = parse_args()
+    date, direction_override, wing_width, rr_min, asset, method = parse_args()
 
     spx_path = Path(f"data/{asset.lower()}_1min.csv")
     print(f"\nLoading CSV data for {asset}...")
@@ -152,7 +156,18 @@ def main() -> None:
 
     # Build all candidates
     candidates = builder.build_candidates(quotes, entry_bar.close, direction)
-    best = selector.select_best(candidates)
+    
+    if method == "TARGET_COST":
+        best = selector.select_best_by_target_cost(candidates)
+    elif method == "VIX":
+        from butterfly_guy.strategy.butterfly_builder import vix_target_center
+        target_center = vix_target_center(
+            vix=day.vix, spot=entry_bar.close,
+            direction=direction, wing_width=wing_width,
+        )
+        best = selector.select_best(candidates, target_center=target_center)
+    else:
+        best = selector.select_best(candidates)
 
     print(f"\n{'=' * 70}")
     print(f"  ALL CANDIDATES (wing={wing_width}, RR>={rr_min})")

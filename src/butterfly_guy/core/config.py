@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -37,7 +37,7 @@ class EntrySettings(BaseModel):
     end_time: str = "07:30"
     timezone: str = "America/Los_Angeles"
     use_bias_filter: bool = False  # if True, use BiasScoreFilter instead of simple gap
-    use_vix_center: bool = True   # anchor center strike to VIX-implied expected move
+    strike_selection_method: Literal["VIX", "TARGET_COST", "BEST_RR"] = "TARGET_COST"
     center_tolerance: float = 15.0  # pts; how far a candidate's center can stray from VIX target
 
 

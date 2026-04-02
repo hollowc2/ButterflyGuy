@@ -83,3 +83,42 @@ class ButterflySelector:
             target_center=target_center,
         )
         return best
+
+    def select_best_by_target_cost(
+        self,
+        candidates: list[ButterflyCandidate],
+    ) -> ButterflyCandidate | None:
+        """Select the candidate whose cost is closest to its max_cost_per_width."""
+        if not candidates:
+            log.warning("no_candidates_to_select_target_cost")
+            return None
+
+        # Try to find the closest to max cost for each width
+        per_width_bests = []
+        widths = {c.wing_width for c in candidates}
+        
+        for width in widths:
+            max_cost = self.settings.max_cost_per_width.get(width, 3.0)
+            width_candidates = [c for c in candidates if c.wing_width == width]
+            if width_candidates:
+                # Find candidate closest to max_cost
+                # Since candidates are pre-filtered to cost <= max_cost in the builder,
+                # this effectively selects the one just below the max cost limit
+                w_best = min(width_candidates, key=lambda c: abs(max_cost - c.cost))
+                per_width_bests.append(w_best)
+
+        if not per_width_bests:
+            return None
+
+        # Tie-breaker between widths: highest R/R
+        best = max(per_width_bests, key=lambda c: c.reward_risk)
+
+        log.info(
+            "target_cost_selected",
+            center=best.center_strike,
+            width=best.wing_width,
+            cost=best.cost,
+            rr=best.reward_risk,
+            distance=best.distance_from_spot,
+        )
+        return best

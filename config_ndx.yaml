@@ -15,7 +15,7 @@ entry:
   start_time: "07:00"  # PST
   end_time: "07:45"    # PST
   timezone: "America/Los_Angeles"
-  use_vix_center: true
+  strike_selection_method: "TARGET_COST"
   center_tolerance: 100.0  # NDX moves in larger point increments
 execution:
   price_ladder_step: 0.10

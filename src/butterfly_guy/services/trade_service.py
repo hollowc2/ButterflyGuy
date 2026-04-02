@@ -112,18 +112,17 @@ class TradeService:
         else:
             direction = self.direction_filter.get_direction(spot_price, previous_close)
 
-        # Fetch VIX once for center anchoring (stable throughout the entry window)
+        # Fetch VIX for metrics or VIX selection method
         vix_price: float | None = None
-        if self.config.entry.use_vix_center:
-            try:
-                raw = await self.chain_queries.db.fetchval(
-                    "SELECT price FROM spot_prices WHERE underlying = '$VIX' ORDER BY ts DESC LIMIT 1"
-                )
-                if raw:
-                    vix_price = float(raw)
-                    log.info("vix_fetched", vix=round(vix_price, 2))
-            except Exception as e:
-                log.warning("vix_fetch_failed", error=str(e))
+        try:
+            raw = await self.chain_queries.db.fetchval(
+                "SELECT price FROM spot_prices WHERE underlying = '$VIX' ORDER BY ts DESC LIMIT 1"
+            )
+            if raw:
+                vix_price = float(raw)
+                log.info("vix_fetched", vix=round(vix_price, 2))
+        except Exception as e:
+            log.warning("vix_fetch_failed", error=str(e))
 
         # Entry retry loop: re-scan chain each attempt so strikes flex with price movement.
         # Start at fly's composite ask, add price_step each retry to sweeten the offer.
@@ -147,9 +146,11 @@ class TradeService:
 
             candidates = self.builder.build_candidates(quotes, spot_price, direction)
 
-            # Select best — VIX-anchored per width if enabled, else global R/R
+            # Select best candidate based on configured method
             best: ButterflyCandidate | None = None
-            if vix_price and self.config.entry.use_vix_center:
+            selection_method = getattr(self.config.entry, 'strike_selection_method', "TARGET_COST")
+            
+            if selection_method == "VIX" and vix_price:
                 per_width_bests = []
                 for width in self.config.strategy.wing_widths:
                     target_center = vix_target_center(
@@ -170,7 +171,11 @@ class TradeService:
                     log.info("vix_center_selected", vix=round(vix_price, 2),
                              width=best.wing_width, center=best.center_strike,
                              rr=round(best.reward_risk, 2))
+            elif selection_method == "TARGET_COST":
+                best = self.selector.select_best_by_target_cost(candidates)
+
             if best is None:
+                # Fallback or BEST_RR method
                 best = self.selector.select_best(candidates)
 
             # Log candidates to DB on first scan only (avoid noise from retries)
