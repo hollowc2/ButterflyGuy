@@ -34,11 +34,39 @@ ENTRY_START = dt.time(10, 0)
 ENTRY_END = dt.time(10, 30)
 
 
+def print_help() -> None:
+    print("\nButterfly Entry Inspector - Help")
+    print("=" * 40)
+    print("Replicates the strategy logic for a specific historical date.")
+    print("\nUsage:")
+    print("  uv run python src/butterfly_guy/scripts/inspect_entry.py YYYY-MM-DD [options]")
+    print("\nRequired:")
+    print("  YYYY-MM-DD          The date to inspect (e.g., 2026-03-30)")
+    print("\nOptions:")
+    print("  --direction D       Force 'CALL' or 'PUT' (default: automatic based on gap)")
+    print("  --wing N            Wing width: 10, 20, or 30 (default: 10)")
+    print("  --rr F              Minimum Reward/Risk ratio (default: 8.0)")
+    print("  --asset A           'SPX', 'NDX', or 'XSP' (default: SPX)")
+    print("  --method M          Selection method: 'TARGET_COST', 'VIX', or 'BEST_RR'")
+    print("  --csv               Load from flat data/*.csv instead of the database")
+    print("  --help              Show this screen")
+    print("\nMethods:")
+    print("  TARGET_COST         Pick the candidate closest to target debit ($3.00/30w, etc.)")
+    print("  VIX                 Pick the candidate closest to the VIX-derived target strike")
+    print("  BEST_RR             Pick the candidate with the highest Reward/Risk ratio")
+    print()
+
+
 def parse_args():
+    if "--help" in sys.argv:
+        print_help()
+        sys.exit(0)
+
     date_str = next((a for a in sys.argv[1:] if a.startswith("20")), None)
     if not date_str:
-        print("Usage: inspect_entry.py YYYY-MM-DD [--direction CALL|PUT] [--wing N] [--rr F] [--asset SPX] [--method M] [--csv]")
+        print_help()
         sys.exit(1)
+
     date = dt.date.fromisoformat(date_str)
 
     direction: str | None = None
