@@ -857,7 +857,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
         # Progress every 10 combos
         if i % 10 == 0 or i == total_combos:
             print(f"  [{i:>{len(str(total_combos))}}/{total_combos}]  last: "
-                  f"{wing}W {direction} rr={rr_min} dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
+                  f"{wing}W {direction} method={method} rr={rr_min} dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
                   f"→ trades={row['trade_count']}  sharpe={row['sharpe']:.3f}  "
                   f"win={row['win_rate']*100:.0f}%")
 
@@ -869,16 +869,17 @@ async def run_sweep(args: argparse.Namespace) -> None:
 
     # ── Console table ────────────────────────────────────────────────────────
     top_n = min(args.top, len(sweep_results))
-    print(f"\n{'='*105}")
+    print(f"\n{'='*120}")
     print(f"  TOP {top_n} COMBOS BY SHARPE  (of {total_combos})")
-    print(f"{'='*105}")
-    print(f"  {'W':>3}  {'Dir':>4}  {'RR':>5}  {'Morn':>5}  {'LtMrn':>6}  {'Aftn':>5}  "
+    print(f"{'='*120}")
+    print(f"  {'W':>3}  {'Dir':>4}  {'Method':<11}  {'RR':>5}  {'Morn':>5}  {'LtMrn':>6}  {'Aftn':>5}  "
           f"{'Trd':>4}  {'Win%':>5}  {'TotPnL':>8}  {'AvgPnL':>8}  "
           f"{'Sharpe':>7}  {'PF':>5}  {'MaxDD':>7}  {'MaxCL':>6}")
-    print("  " + "-" * 103)
+    print("  " + "-" * 118)
 
     for row in sweep_results[:top_n]:
         print(f"  {row['wing_width']:>3}  {row['direction']:>4}  "
+              f"{row['method']:<11}  "
               f"{row['rr_min']:>5.1f}  {row['morning_dd']:>5.2f}  "
               f"{row['late_morning_dd']:>6.2f}  {row['afternoon_dd']:>5.2f}  "
               f"{row['trade_count']:>4}  {row['win_rate']*100:>4.0f}%  "
@@ -886,7 +887,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
               f"{row['sharpe']:>7.3f}  {row['profit_factor']:>5.3f}  "
               f"${row['max_drawdown']*100:>6.2f}  {row['max_consec_losses']:>6}")
 
-    print(f"{'='*105}\n")
+    print(f"{'='*120}\n")
 
     # ── CSV output ────────────────────────────────────────────────────────────
     ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
