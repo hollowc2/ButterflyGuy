@@ -16,6 +16,7 @@ HOLIDAYS_2026 = {
     dt.date(2026, 1, 1),   # New Year's Day
     dt.date(2026, 1, 19),  # MLK Day
     dt.date(2026, 2, 16),  # Presidents' Day
+    dt.date(2026, 4, 3),   # Good Friday
     dt.date(2026, 5, 25),  # Memorial Day
     dt.date(2026, 7, 3),   # Independence Day (observed)
     dt.date(2026, 9, 7),   # Labor Day
