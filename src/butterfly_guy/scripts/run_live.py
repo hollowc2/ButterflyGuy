@@ -195,6 +195,8 @@ async def main() -> None:
     recovered_trade: TradeRecord | None = None
     recovered_candidate: ButterflyCandidate | None = None
 
+    trades_active.labels(underlying=underlying).set(0)
+
     open_rows = await trade_q.get_open_trades(underlying)
     if open_rows:
         row = open_rows[0]

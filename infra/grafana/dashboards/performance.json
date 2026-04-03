@@ -67,9 +67,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "percent",
           "decimals": 1,
-          "displayName": "${__value}%",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -278,9 +277,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "percent",
           "decimals": 1,
-          "displayName": "${__value}%",
           "thresholds": {
             "mode": "absolute",
             "steps": [

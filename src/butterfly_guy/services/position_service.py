@@ -176,11 +176,9 @@ class PositionService:
         await self._record_exit_metrics(pnl, trade)
         log.info("eod_force_exit_complete", trade_id=trade.trade_id, pnl=pnl)
 
+    async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:
         underlying = self.config.strategy.underlying
         await self.risk_engine.record_pnl(pnl)
-        # Guard against multiple decrements or out-of-sync states
-        # We can't easily check the current gauge value through the prometheus_client easily without internal access,
-        # but we can ensure this is only called when we actually had a trade active.
         trades_active.labels(underlying=underlying).set(0)
         trades_total.labels(
             underlying=underlying,
