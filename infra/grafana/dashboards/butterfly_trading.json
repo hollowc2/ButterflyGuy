@@ -1,9 +1,29 @@
 {
-  "title": "NDX Trading",
-  "uid": "butterfly-trading-ndx",
+  "title": "Butterfly Trading",
+  "uid": "butterfly-trading",
   "schemaVersion": 38,
-  "version": 2,
+  "version": 1,
   "refresh": "10s",
+  "templating": {
+    "list": [
+      {
+        "name": "underlying",
+        "label": "Underlying",
+        "type": "custom",
+        "query": "SPX : SPX,NDX : NDX,XSP : XSP",
+        "current": { "text": "SPX", "value": "SPX" },
+        "options": [
+          { "text": "SPX", "value": "SPX", "selected": true },
+          { "text": "NDX", "value": "NDX", "selected": false },
+          { "text": "XSP", "value": "XSP", "selected": false }
+        ],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "refresh": 0
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -17,7 +37,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_daily_pnl_dollars{underlying=\"NDX\"}",
+          "expr": "butterfly_daily_pnl_dollars{underlying=\"$underlying\"}",
           "legendFormat": "Daily P&L ($)"
         }
       ]
@@ -54,7 +74,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_position_value{underlying=\"NDX\"}",
+          "expr": "butterfly_position_value{underlying=\"$underlying\"}",
           "legendFormat": "Current Value"
         }
       ]
@@ -71,11 +91,11 @@
       },
       "targets": [
         {
-          "expr": "butterfly_position_peak_value{underlying=\"NDX\"}",
+          "expr": "butterfly_position_peak_value{underlying=\"$underlying\"}",
           "legendFormat": "Peak"
         },
         {
-          "expr": "butterfly_position_value{underlying=\"NDX\"}",
+          "expr": "butterfly_position_value{underlying=\"$underlying\"}",
           "legendFormat": "Current"
         }
       ]
@@ -92,7 +112,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_daily_trade_count{underlying=\"NDX\"}",
+          "expr": "butterfly_daily_trade_count{underlying=\"$underlying\"}",
           "legendFormat": "Trades Today"
         }
       ]
@@ -109,7 +129,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_trades_active{underlying=\"NDX\"}",
+          "expr": "butterfly_trades_active{underlying=\"$underlying\"}",
           "legendFormat": "Active"
         }
       ]
@@ -126,7 +146,7 @@
       },
       "targets": [
         {
-          "expr": "rate(butterfly_chain_snapshots_total{underlying=\"NDX\"}[1h])",
+          "expr": "rate(butterfly_chain_snapshots_total{underlying=\"$underlying\"}[1h])",
           "legendFormat": "Snapshots/hr"
         }
       ]
@@ -143,7 +163,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_candidates_found{underlying=\"NDX\"}",
+          "expr": "butterfly_candidates_found{underlying=\"$underlying\"}",
           "legendFormat": "Candidates"
         }
       ]
@@ -160,7 +180,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket{underlying=\"NDX\"})",
+          "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket{underlying=\"$underlying\"})",
           "legendFormat": "p95 fill time (s)"
         }
       ]
@@ -173,7 +193,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 80
+        "y": 88
       },
       "targets": [
         {
@@ -184,7 +204,7 @@
     },
     {
       "id": 10,
-      "title": "NDX Spot Price",
+      "title": "$underlying Spot Price",
       "type": "timeseries",
       "datasource": {
         "type": "postgres",
@@ -202,7 +222,7 @@
             "mode": "fixed",
             "fixedColor": "green"
           },
-          "unit": "short",
+          "unit": "currencyUSD",
           "decimals": 2
         }
       },
@@ -213,7 +233,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = 'NDX' AND $__timeFilter(ts) ORDER BY time",
+          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = '$underlying' AND $__timeFilter(ts) ORDER BY time",
           "format": "time_series",
           "refId": "A"
         }
@@ -291,7 +311,7 @@
       },
       "targets": [
         {
-          "expr": "butterfly_chain_snapshot_rows{underlying=\"NDX\"}",
+          "expr": "butterfly_chain_snapshot_rows{underlying=\"$underlying\"}",
           "legendFormat": "Rows"
         }
       ]
@@ -317,7 +337,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT snapshot_time)::float AS value FROM option_chain_snapshots WHERE snapshot_time::date = CURRENT_DATE AND underlying = 'NDX'",
+          "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT snapshot_time)::float AS value FROM option_chain_snapshots WHERE snapshot_time::date = CURRENT_DATE AND underlying = '$underlying'",
           "format": "time_series",
           "refId": "A"
         }
@@ -344,11 +364,11 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"NDX\"}[5m]))",
+          "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"$underlying\"}[5m]))",
           "legendFormat": "p50"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"NDX\"}[5m]))",
+          "expr": "histogram_quantile(0.95, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"$underlying\"}[5m]))",
           "legendFormat": "p95"
         }
       ]
@@ -411,7 +431,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, center_strike::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "rawSql": "SELECT NOW() AS time, center_strike::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -463,7 +483,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, wing_width::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "rawSql": "SELECT NOW() AS time, wing_width::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -515,7 +535,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, entry_price::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "rawSql": "SELECT NOW() AS time, entry_price::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -567,7 +587,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, (wing_width - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "rawSql": "SELECT NOW() AS time, (wing_width - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -619,7 +639,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, (lower_strike + entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "rawSql": "SELECT NOW() AS time, (lower_strike + entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -671,7 +691,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, (upper_strike - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
+          "rawSql": "SELECT NOW() AS time, (upper_strike - entry_price)::float AS value FROM trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -731,7 +751,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, sp.price::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'NDX' AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
+          "rawSql": "SELECT NOW() AS time, sp.price::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -783,7 +803,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, ROUND((ndx.price * (vix.price / 100.0) / SQRT(252))::numeric, 0)::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) vix CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = 'NDX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) ndx WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'NDX' AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
+          "rawSql": "SELECT NOW() AS time, ROUND((spot.price * (vix.price / 100.0) / SQRT(252))::numeric, 0)::float AS value FROM trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) vix CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) spot WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
           "format": "time_series",
           "refId": "A"
         }
@@ -792,7 +812,7 @@
     {
       "id": 24,
       "type": "timeseries",
-      "title": "NDX vs Breakevens",
+      "title": "$underlying vs Breakevens",
       "datasource": {
         "type": "postgres",
         "uid": "timescaledb"
@@ -961,9 +981,9 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, price AS \"NDX\" FROM spot_prices WHERE underlying='NDX' AND $__timeFilter(ts) ORDER BY ts",
+          "rawSql": "SELECT ts AS time, price AS \"Spot\" FROM spot_prices WHERE underlying='$underlying' AND $__timeFilter(ts) ORDER BY ts",
           "format": "time_series",
-          "legendFormat": "NDX"
+          "legendFormat": "Spot"
         },
         {
           "datasource": {
@@ -971,7 +991,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT sp.ts AS time, (t.lower_strike + t.entry_price)::float AS \"lower_be\", t.center_strike::float AS \"center\", (t.upper_strike - t.entry_price)::float AS \"upper_be\" FROM spot_prices sp CROSS JOIN (SELECT lower_strike, center_strike, upper_strike, entry_price FROM trades WHERE trade_date = CURRENT_DATE AND underlying = 'NDX' AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1) t WHERE sp.underlying = 'NDX' AND $__timeFilter(sp.ts) ORDER BY sp.ts",
+          "rawSql": "SELECT sp.ts AS time, (t.lower_strike + t.entry_price)::float AS \"lower_be\", t.center_strike::float AS \"center\", (t.upper_strike - t.entry_price)::float AS \"upper_be\" FROM spot_prices sp CROSS JOIN (SELECT lower_strike, center_strike, upper_strike, entry_price FROM trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1) t WHERE sp.underlying = '$underlying' AND $__timeFilter(sp.ts) ORDER BY sp.ts",
           "format": "time_series"
         },
         {
@@ -980,7 +1000,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT t.entry_time AS time, sp.price AS \"Entry\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='NDX' AND ts <= t.entry_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'NDX' AND t.status != 'CANCELLED' ORDER BY t.entry_time LIMIT 1",
+          "rawSql": "SELECT t.entry_time AS time, sp.price AS \"Entry\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='$underlying' AND ts <= t.entry_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' ORDER BY t.entry_time LIMIT 1",
           "format": "time_series"
         },
         {
@@ -989,7 +1009,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT t.exit_time AS time, sp.price AS \"Exit\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='NDX' AND ts <= t.exit_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = 'NDX' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL ORDER BY t.entry_time LIMIT 1",
+          "rawSql": "SELECT t.exit_time AS time, sp.price AS \"Exit\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='$underlying' AND ts <= t.exit_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL ORDER BY t.entry_time LIMIT 1",
           "format": "time_series"
         }
       ]
@@ -1004,7 +1024,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 60,
+        "y": 68,
         "w": 24,
         "h": 8
       },
@@ -1023,7 +1043,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT\n  scan_time AS time,\n  direction,\n  wing_width AS width,\n  center_strike AS center,\n  ROUND(cost::numeric, 2) AS cost,\n  ROUND(reward_risk::numeric, 1) AS rr,\n  ROUND(lower_be::numeric, 0) AS lower_be,\n  ROUND(upper_be::numeric, 0) AS upper_be,\n  selected\nFROM butterfly_candidates\nWHERE scan_time::date = CURRENT_DATE AND underlying = 'NDX'\nORDER BY scan_time DESC, rr DESC\nLIMIT 50",
+          "rawSql": "SELECT\n  scan_time AS time,\n  direction,\n  wing_width AS width,\n  center_strike AS center,\n  ROUND(cost::numeric, 2) AS cost,\n  ROUND(reward_risk::numeric, 1) AS rr,\n  ROUND(lower_be::numeric, 0) AS lower_be,\n  ROUND(upper_be::numeric, 0) AS upper_be,\n  selected\nFROM butterfly_candidates\nWHERE scan_time::date = CURRENT_DATE\n  AND underlying = '$underlying'\nORDER BY scan_time DESC, rr DESC\nLIMIT 50",
           "format": "table"
         }
       ],
@@ -1063,14 +1083,14 @@
     {
       "id": 26,
       "type": "table",
-      "title": "Decision Log Today (NDX)",
+      "title": "Decision Log Today ($underlying)",
       "datasource": {
         "type": "postgres",
         "uid": "timescaledb"
       },
       "gridPos": {
         "x": 0,
-        "y": 70,
+        "y": 78,
         "w": 24,
         "h": 10
       },
@@ -1089,7 +1109,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT\n  ts AT TIME ZONE 'America/Los_Angeles' AS \"Time\",\n  event_type AS \"Event\",\n  data AS \"Details\"\nFROM decision_log\nWHERE ts::date = CURRENT_DATE\n  AND underlying = 'NDX'\nORDER BY ts DESC\nLIMIT 200",
+          "rawSql": "SELECT\n  ts AT TIME ZONE 'America/Los_Angeles' AS \"Time\",\n  event_type AS \"Event\",\n  CASE event_type\n    WHEN 'trade_entered' THEN\n      'fill=' || (data->>'cost') || '  width=' || (data->>'width') || '  center=' || (data->>'center') || '  dir=' || (data->>'direction') || '  step=' || (data->>'entry_step')\n    WHEN 'entry_step_unfilled' THEN\n      'step=' || (data->>'step') || '  center=' || (data->>'center') || '  width=' || (data->>'width') || '  mark=' || (data->>'mark') || '  ask=' || (data->>'ask') || '  limit=' || (data->>'limit')\n    WHEN 'entry_exhausted' THEN\n      'direction=' || (data->>'direction') || '  \u2014 no fill after all steps'\n    WHEN 'exit_signal_fired' THEN\n      'reason=' || (data->>'reason') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  drawdown=' || (data->>'drawdown_pct') || '%  regime=' || (data->>'regime')\n    WHEN 'trade_exited' THEN\n      'reason=' || (data->>'exit_reason') || '  entry=' || (data->>'entry_price') || '  mark_signal=' || (data->>'mark_at_signal') || '  bid=' || COALESCE(data->>'spread_bid','?') || '  mark=' || COALESCE(data->>'spread_mark','?') || '  fill=' || (data->>'fill_price') || '  pnl=' || (data->>'pnl') || CASE WHEN (data->>'forced')::boolean THEN '  [FORCED]' ELSE '' END\n    WHEN 'profit_state_transition' THEN\n      (data->>'from') || ' \u2192 ' || (data->>'to') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  regime=' || (data->>'regime')\n    WHEN 'entry_failed' THEN\n      'center=' || (data->>'center')\n    ELSE data::text\n  END AS \"Details\"\nFROM decision_log\nWHERE ts::date = CURRENT_DATE\n  AND underlying = '$underlying'\nORDER BY ts ASC\nLIMIT 200",
           "format": "table"
         }
       ],
