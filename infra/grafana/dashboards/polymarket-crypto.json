@@ -1247,6 +1247,37 @@
                 "value": "short"
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Sharpe"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 1},
+                    {"color": "green", "value": 2}
+                  ]
+                }
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-text"
+              }
+            ]
           }
         ]
       },
@@ -1257,7 +1288,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT\n  strategy AS \"Strategy\",\n  asset AS \"Asset\",\n  COUNT(*) AS \"Trades\",\n  ROUND(AVG(won::int)*100, 1)::float AS \"Win %\",\n  ROUND(SUM(pnl)::numeric, 2)::float AS \"Total P&L\",\n  ROUND(AVG(pnl)::numeric, 3)::float AS \"Avg P&L\"\nFROM polymarket_trades\nWHERE won IS NOT NULL\n  AND ('$paper' = 'all' OR paper::text = '$paper')\n  AND strategy ~ '${strategy:pipe}'\n  AND $__timeFilter(ts)\nGROUP BY strategy, asset\nORDER BY \"Total P&L\" DESC",
+          "rawSql": "SELECT\n  strategy AS \"Strategy\",\n  asset AS \"Asset\",\n  COUNT(*) AS \"Trades\",\n  ROUND(AVG(won::int)*100, 1)::float AS \"Win %\",\n  ROUND(SUM(pnl)::numeric, 2)::float AS \"Total P&L\",\n  ROUND(AVG(pnl)::numeric, 3)::float AS \"Avg P&L\",\n  CASE WHEN STDDEV(pnl) = 0 OR STDDEV(pnl) IS NULL THEN NULL\n       ELSE ROUND((AVG(pnl) / STDDEV(pnl) * SQRT(COUNT(*)))::numeric, 2)::float\n  END AS \"Sharpe\"\nFROM polymarket_trades\nWHERE won IS NOT NULL\n  AND ('$paper' = 'all' OR paper::text = '$paper')\n  AND strategy ~ '${strategy:pipe}'\n  AND $__timeFilter(ts)\nGROUP BY strategy, asset\nORDER BY \"Total P&L\" DESC",
           "format": "table",
           "refId": "A"
         }
