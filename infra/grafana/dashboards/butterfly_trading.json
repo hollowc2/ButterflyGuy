@@ -913,6 +913,21 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "Spot"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "Entry"
             },
             "properties": [
