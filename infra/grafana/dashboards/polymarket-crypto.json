@@ -99,248 +99,13 @@
   },
   "panels": [
     {
-      "id": 100,
-      "type": "row",
-      "title": "Strategy Cards",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 24,
-        "h": 1
-      }
-    },
-    {
-      "id": 101,
-      "type": "stat",
-      "title": "$strategy",
-      "repeat": "strategy",
-      "repeatDirection": "h",
-      "maxPerRow": 4,
-      "gridPos": {
-        "x": 0,
-        "y": 1,
-        "w": 6,
-        "h": 5
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "vertical",
-        "textMode": "value_and_name",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 10
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "Drill into strategy",
-              "url": "/d/polymarket-crypto?${__url.params}&var-selected_strategy=${__field.labels.strategy}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Total PnL"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Today"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    },
-                    {
-                      "color": "green",
-                      "value": 0
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Win%"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 1
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 0.48
-                    },
-                    {
-                      "color": "green",
-                      "value": 0.54
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Last Trade"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "s"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 900
-                    },
-                    {
-                      "color": "red",
-                      "value": 1800
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "polymarket_total_pnl_usd{strategy=\"$strategy\"}",
-          "legendFormat": "Total PnL",
-          "instant": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "polymarket_daily_pnl_usd{strategy=\"$strategy\"}",
-          "legendFormat": "Today",
-          "instant": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "polymarket_win_rate{strategy=\"$strategy\"}",
-          "legendFormat": "Win%",
-          "instant": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "polymarket_last_trade_age_sec{strategy=\"$strategy\"}",
-          "legendFormat": "Last Trade",
-          "instant": true,
-          "refId": "D"
-        }
-      ]
-    },
-    {
       "id": 11,
       "type": "row",
       "title": "Strategy Detail \u2014 $selected_strategy",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 9,
         "w": 24,
         "h": 1
       }
@@ -355,7 +120,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 10,
         "w": 4,
         "h": 4
       },
@@ -415,7 +180,7 @@
       },
       "gridPos": {
         "x": 4,
-        "y": 16,
+        "y": 10,
         "w": 4,
         "h": 4
       },
@@ -482,7 +247,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 16,
+        "y": 10,
         "w": 4,
         "h": 4
       },
@@ -549,7 +314,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 16,
+        "y": 10,
         "w": 4,
         "h": 4
       },
@@ -612,7 +377,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 16,
+        "y": 10,
         "w": 4,
         "h": 4
       },
@@ -679,7 +444,7 @@
       },
       "gridPos": {
         "x": 20,
-        "y": 16,
+        "y": 10,
         "w": 4,
         "h": 4
       },
@@ -746,7 +511,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 14,
         "w": 24,
         "h": 14
       },
@@ -793,7 +558,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 34,
+        "y": 28,
         "w": 24,
         "h": 10
       },
@@ -845,7 +610,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 44,
+        "y": 38,
         "w": 24,
         "h": 12
       },
@@ -935,7 +700,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 56,
+        "y": 50,
         "w": 24,
         "h": 20
       },
@@ -1106,7 +871,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 0,
         "w": 24,
         "h": 1
       }
@@ -1121,7 +886,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 1,
         "w": 24,
         "h": 8
       },
@@ -1267,15 +1032,40 @@
                 "value": {
                   "mode": "absolute",
                   "steps": [
-                    {"color": "red", "value": null},
-                    {"color": "yellow", "value": 1},
-                    {"color": "green", "value": 2}
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1
+                    },
+                    {
+                      "color": "green",
+                      "value": 2
+                    }
                   ]
                 }
               },
               {
                 "id": "custom.displayMode",
                 "value": "color-text"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last Trade"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "string"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
               }
             ]
           }
@@ -1288,7 +1078,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT\n  strategy AS \"Strategy\",\n  asset AS \"Asset\",\n  COUNT(*) AS \"Trades\",\n  ROUND(AVG(won::int)*100, 1)::float AS \"Win %\",\n  ROUND(SUM(pnl)::numeric, 2)::float AS \"Total P&L\",\n  ROUND(AVG(pnl)::numeric, 3)::float AS \"Avg P&L\",\n  CASE WHEN STDDEV(pnl) = 0 OR STDDEV(pnl) IS NULL THEN NULL\n       ELSE ROUND((AVG(pnl) / STDDEV(pnl) * SQRT(COUNT(*)))::numeric, 2)::float\n  END AS \"Sharpe\"\nFROM polymarket_trades\nWHERE won IS NOT NULL\n  AND ('$paper' = 'all' OR paper::text = '$paper')\n  AND strategy ~ '${strategy:pipe}'\n  AND $__timeFilter(ts)\nGROUP BY strategy, asset\nORDER BY \"Total P&L\" DESC",
+          "rawSql": "SELECT\n  strategy AS \"Strategy\",\n  asset AS \"Asset\",\n  COUNT(*) AS \"Trades\",\n  ROUND(AVG(won::int)*100, 1)::float AS \"Win %\",\n  ROUND(SUM(pnl)::numeric, 2)::float AS \"Total P&L\",\n  ROUND(AVG(pnl)::numeric, 3)::float AS \"Avg P&L\",\n  CASE WHEN STDDEV(pnl) = 0 OR STDDEV(pnl) IS NULL THEN NULL\n       ELSE ROUND((AVG(pnl) / STDDEV(pnl) * SQRT(COUNT(*)))::numeric, 2)::float\n  END AS \"Sharpe\",\n  CASE\n    WHEN EXTRACT(EPOCH FROM (NOW() - MAX(ts))) < 3600\n      THEN ROUND(EXTRACT(EPOCH FROM (NOW() - MAX(ts)))/60)::text || 'm ago'\n    WHEN EXTRACT(EPOCH FROM (NOW() - MAX(ts))) < 86400\n      THEN ROUND(EXTRACT(EPOCH FROM (NOW() - MAX(ts)))/3600, 1)::text || 'h ago'\n    ELSE ROUND(EXTRACT(EPOCH FROM (NOW() - MAX(ts)))/86400, 1)::text || 'd ago'\n  END AS \"Last Trade\"\nFROM polymarket_trades\nWHERE won IS NOT NULL\n  AND ('$paper' = 'all' OR paper::text = '$paper')\n  AND strategy ~ '${strategy:pipe}'\n  AND $__timeFilter(ts)\nGROUP BY strategy, asset\nORDER BY \"Total P&L\" DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1301,7 +1091,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 76,
+        "y": 70,
         "w": 24,
         "h": 1
       }
@@ -1316,7 +1106,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 77,
+        "y": 71,
         "w": 24,
         "h": 20
       },
@@ -1365,7 +1155,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 97,
+        "y": 91,
         "w": 24,
         "h": 1
       }
@@ -1380,7 +1170,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 98,
+        "y": 92,
         "w": 24,
         "h": 16
       },
@@ -1474,7 +1264,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 114,
+        "y": 108,
         "w": 24,
         "h": 16
       },
