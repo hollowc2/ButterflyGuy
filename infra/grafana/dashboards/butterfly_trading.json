@@ -144,6 +144,14 @@
         "x": 0,
         "y": 30
       },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        }
+      },
       "targets": [
         {
           "expr": "rate(butterfly_chain_snapshots_total{underlying=\"$underlying\"}[1h])",
@@ -220,7 +228,7 @@
         "defaults": {
           "color": {
             "mode": "fixed",
-            "fixedColor": "green"
+            "fixedColor": "blue"
           },
           "unit": "currencyUSD",
           "decimals": 2
