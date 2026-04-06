@@ -133,7 +133,7 @@ class PositionService:
                         "pnl": pnl,
                         "peak_value": pos_state.peak_value,
                         "forced": fill.get("forced", False) if fill else True,
-                    }, underlying=underlying)
+                    }, underlying=self.config.strategy.underlying)
 
                     log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason=signal.reason)
                     return
@@ -177,8 +177,11 @@ class PositionService:
         log.info("eod_force_exit_complete", trade_id=trade.trade_id, pnl=pnl)
 
     async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:
+        """Record trade exit metrics and update risk engine."""
         underlying = self.config.strategy.underlying
         await self.risk_engine.record_pnl(pnl)
+
+        # Update prometheus metrics
         trades_active.labels(underlying=underlying).set(0)
         trades_total.labels(
             underlying=underlying,
