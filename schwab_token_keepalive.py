@@ -2,9 +2,11 @@
 
 Schwab refresh tokens have a hard 7-day expiry from issue date.
 This script sends a Telegram alert 8 hours before expiry and every hour after.
+Also sends a weekly Sunday evening reminder to re-auth before the new week.
 
-Cron: run hourly
+Cron: run hourly + dedicated Sunday 6:50 PM PDT run
   0 * * * * /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
+  50 1 * * 1 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/schwab_token_keepalive.py --sunday-reminder >> /opt/butterflyguy/keepalive.log 2>&1
 """
 
 import json
@@ -15,6 +17,8 @@ from dotenv import dotenv_values
 
 sys.path.insert(0, str(Path(__file__).parent))
 from notify import send as notify
+
+SUNDAY_REMINDER = "--sunday-reminder" in sys.argv
 
 ROOT = Path(__file__).parent
 env = dotenv_values(ROOT / ".env")
@@ -43,6 +47,10 @@ expiry_ts = creation_ts + REFRESH_TOKEN_TTL
 now = time.time()
 seconds_remaining = expiry_ts - now
 hours_remaining = seconds_remaining / 3600
+
+if SUNDAY_REMINDER:
+    notify(f"📅 Weekly reminder: re-auth Schwab before market open tomorrow.\nRefresh token expires in {hours_remaining:.1f}h.\ncd /opt/butterflyguy && .venv/bin/python auth_init.py")
+    print(f"SUNDAY REMINDER: sent, refresh token expires in {hours_remaining:.1f}h")
 
 if seconds_remaining <= 0:
     notify(f"🚨 Schwab refresh token has EXPIRED. Re-auth required immediately: cd /opt/butterflyguy && .venv/bin/python auth_init.py")
