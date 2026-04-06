@@ -53,7 +53,8 @@ class PositionService:
 
         log.info("position_monitor_started", trade_id=trade.trade_id)
 
-        while is_market_open():
+        exited = False
+        while is_market_open() and not exited:
             try:
                 # Fetch latest chain for position valuation
                 expiration = get_0dte_expiration()
@@ -121,6 +122,10 @@ class PositionService:
 
                     await self._record_exit_metrics(pnl, trade)
 
+                    # Mark exited before logging so any downstream exception
+                    # cannot cause the loop to re-trigger the exit path.
+                    exited = True
+
                     await self.decision_queries.log_event("trade_exited", {
                         "trade_id": trade.trade_id,
                         "exit_reason": signal.reason,
@@ -136,12 +141,15 @@ class PositionService:
                     }, underlying=self.config.strategy.underlying)
 
                     log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason=signal.reason)
-                    return
 
             except Exception as e:
                 log.error("monitor_error", error=str(e))
 
-            await asyncio.sleep(poll_interval)
+            if not exited:
+                await asyncio.sleep(poll_interval)
+
+        if exited:
+            return
 
         # Market closed — force exit at whatever the current value is
         log.warning("market_closed_force_exit", trade_id=trade.trade_id)
