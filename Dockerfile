@@ -18,5 +18,9 @@ COPY src/ ./src/
 COPY config.yaml notify.py ./
 RUN uv sync --frozen --no-dev --no-editable
 
+# Ensure SQL migration files are present (uv may use a cached wheel that omits new .sql files)
+RUN cp -r src/butterfly_guy/db/migrations/*.sql \
+    .venv/lib/python3.12/site-packages/butterfly_guy/db/migrations/
+
 # Default: run live trader. Override CMD for collector or backtest.
 CMD ["python", "-m", "butterfly_guy.scripts.run_live"]
