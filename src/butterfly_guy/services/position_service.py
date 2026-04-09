@@ -11,7 +11,7 @@ from butterfly_guy.core.metrics import daily_pnl, trades_active, trades_total
 from butterfly_guy.core.time_utils import get_0dte_expiration, is_market_open, now_eastern
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
-from butterfly_guy.db.queries import DecisionQueries, TradeQueries
+from butterfly_guy.db.queries import DecisionQueries, TentQueries, TradeQueries
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.position.position_manager import PositionManager
 from butterfly_guy.position.state_machine import ProfitStateMachine
@@ -31,6 +31,7 @@ class PositionService:
         risk_engine: RiskEngine,
         trade_queries: TradeQueries,
         decision_queries: DecisionQueries,
+        tent_queries: TentQueries,
     ) -> None:
         self.config = config
         self.schwab = schwab
@@ -38,6 +39,7 @@ class PositionService:
         self.risk_engine = risk_engine
         self.trade_queries = trade_queries
         self.decision_queries = decision_queries
+        self.tent_queries = tent_queries
         self.position_manager = PositionManager(config.strategy.underlying)
         self.state_machine = ProfitStateMachine(config.profit_management)
         self._last_profit_state: str | None = None
@@ -66,6 +68,14 @@ class PositionService:
 
                 # Update position
                 pos_state = self.position_manager.update_position_value(candidate, quotes)
+
+                # Persist tent boundaries for Grafana visualization
+                await self.tent_queries.insert(
+                    ts=now_eastern(),
+                    underlying=self.config.strategy.underlying,
+                    lower_tent=pos_state.lower_tent,
+                    upper_tent=pos_state.upper_tent,
+                )
 
                 # Evaluate state machine
                 signal = self.state_machine.evaluate(pos_state)
@@ -226,5 +236,6 @@ class PositionService:
                         bid=opt.get("bid", 0),
                         ask=opt.get("ask", 0),
                         mark=opt.get("mark", 0),
+                        iv=opt.get("volatility", 0.0),
                     )
         return quotes

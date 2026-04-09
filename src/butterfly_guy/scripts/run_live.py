@@ -25,6 +25,7 @@ from butterfly_guy.db.queries import (
     DecisionQueries,
     RiskQueries,
     SpotQueries,
+    TentQueries,
     TradeQueries,
 )
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
@@ -102,6 +103,8 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         await asyncio.sleep(sleep_secs)
         today = dt.date.today()
         await risk_queries.get_or_create(today, underlying)
+        daily_trade_count.labels(underlying=underlying).set(0)
+        trades_active.labels(underlying=underlying).set(0)
         log.info("daily_risk_reset", date=str(today))
 
 
@@ -133,6 +136,7 @@ async def main() -> None:
     decision_q = DecisionQueries(db)
     candidate_q = CandidateQueries(db)
     daily_bar_q = DailyBarQueries(db)
+    tent_q = TentQueries(db)
 
     # Build service objects
     risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
@@ -160,6 +164,7 @@ async def main() -> None:
         risk_engine=risk_engine,
         trade_queries=trade_q,
         decision_queries=decision_q,
+        tent_queries=tent_q,
     )
 
     collector = OptionChainCollector(

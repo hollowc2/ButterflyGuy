@@ -994,6 +994,64 @@
                 "value": "always"
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_tent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_tent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
           }
         ]
       },
@@ -1033,6 +1091,15 @@
           },
           "rawQuery": true,
           "rawSql": "SELECT t.exit_time AS time, sp.price AS \"Exit\" FROM trades t CROSS JOIN LATERAL (  SELECT price FROM spot_prices   WHERE underlying='$underlying' AND ts <= t.exit_time   ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL ORDER BY t.entry_time LIMIT 1",
+          "format": "time_series"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "timescaledb"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, lower_tent AS \"lower_tent\", upper_tent AS \"upper_tent\" FROM tent_boundaries WHERE underlying = '$underlying' AND $__timeFilter(ts) ORDER BY ts",
           "format": "time_series"
         }
       ]

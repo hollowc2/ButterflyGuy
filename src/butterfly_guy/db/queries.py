@@ -254,6 +254,28 @@ class DailyBarQueries:
         return [float(r["close"]) for r in reversed(rows)]
 
 
+class TentQueries:
+    """Queries for tent_boundaries table."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def insert(
+        self,
+        ts: dt.datetime,
+        underlying: str,
+        lower_tent: float | None,
+        upper_tent: float | None,
+    ) -> None:
+        await self.db.execute(
+            """
+            INSERT INTO tent_boundaries (ts, underlying, lower_tent, upper_tent)
+            VALUES ($1, $2, $3, $4)
+            """,
+            ts, underlying, lower_tent, upper_tent,
+        )
+
+
 class CandidateQueries:
     """Queries for butterfly_candidates table."""
 
