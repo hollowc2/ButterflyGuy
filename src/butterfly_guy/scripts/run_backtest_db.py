@@ -658,7 +658,9 @@ async def run_single(args: argparse.Namespace) -> None:
         result = engine.simulate_day(d["day"], params)
         restore()
 
-        day_rows.append({"data": d, "chosen": chosen, "result": result})
+        # Drop heavy chain/bar data before storing — only keep scalars needed for output
+        d_slim = {k: d[k] for k in ("date", "vix", "entry_spot", "prev_close")}
+        day_rows.append({"data": d_slim, "chosen": chosen, "result": result})
 
     if not day_rows:
         print("\nNo tradeable days found.")
