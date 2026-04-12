@@ -15,9 +15,6 @@ docker compose --profile spx up -d butterfly_spx_app
 # Start NDX live trader
 docker compose --profile ndx up -d butterfly_ndx_app
 
-# Start collector only (no trading)
-docker compose --profile spx up -d butterfly_spx_collector
-
 # View logs
 docker compose logs -f butterfly_spx_app
 ```
@@ -103,7 +100,7 @@ Polls mark price every 2 seconds. Exit triggers:
 
 ### Infrastructure
 
-- **Docker Compose** (`infra/docker-compose.yml`): 4 containers (spx/ndx × app/collector), external `monitoring_net`
+- **Docker Compose** (`infra/docker-compose.yml`): 3 containers (spx app + ndx app + xsp app), external `monitoring_net`
 - **Prometheus** scrapes `:8000` (SPX) and `:8001` (NDX) every 15s
 - **Grafana** dashboards in `infra/grafana/dashboards/` (symlinked to `/opt/monitoring/grafana/dashboards/`)
 - **Cron** (hourly): `schwab_token_keepalive.py` — refreshes OAuth token, Telegram alert if refresh token expiring

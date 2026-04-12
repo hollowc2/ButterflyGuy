@@ -24,27 +24,6 @@ services:
     ports:
       - "127.0.0.1:8000:8000"  # Prometheus metrics
 
-  collector_spx:
-    profiles: [spx]
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    container_name: butterfly_spx_collector
-    restart: unless-stopped
-    command: ["python", "-m", "butterfly_guy.scripts.run_collector"]
-    env_file:
-      - ../.env
-    volumes:
-      - ../tokens.json:/app/tokens.json
-    environment:
-      DATABASE__HOST: timescaledb
-      DATABASE__PORT: 5432
-      DATABASE__NAME: butterfly_guy
-      DATABASE__USER: butterfly
-      DATABASE__PASSWORD: butterfly_dev
-    networks:
-      - monitoring_net
-
   app_ndx:
     profiles: [ndx]
     build:
@@ -68,28 +47,6 @@ services:
       - monitoring_net
     ports:
       - "127.0.0.1:8001:8000"  # host:8001 → container:8000
-
-  collector_ndx:
-    profiles: [ndx]
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    container_name: butterfly_ndx_collector
-    restart: unless-stopped
-    command: ["python", "-m", "butterfly_guy.scripts.run_collector", "--config", "config_ndx.yaml"]
-    env_file:
-      - ../.env
-    volumes:
-      - ../tokens.json:/app/tokens.json
-      - ../config_ndx.yaml:/app/config_ndx.yaml
-    environment:
-      DATABASE__HOST: timescaledb
-      DATABASE__PORT: 5432
-      DATABASE__NAME: butterfly_guy
-      DATABASE__USER: butterfly
-      DATABASE__PASSWORD: butterfly_dev
-    networks:
-      - monitoring_net
 
   app_xsp:
     profiles: [xsp]
