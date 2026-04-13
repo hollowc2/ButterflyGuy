@@ -41,8 +41,8 @@ CREATE TABLE IF NOT EXISTS spot_prices (
 
 SELECT create_hypertable('spot_prices', 'ts', if_not_exists => TRUE);
 
--- Trades table (full lifecycle)
-CREATE TABLE IF NOT EXISTS trades (
+-- Butterfly trades table (full lifecycle)
+CREATE TABLE IF NOT EXISTS butterfly_trades (
     id              SERIAL PRIMARY KEY,
     trade_date      DATE NOT NULL,
     direction       TEXT NOT NULL,  -- 'CALL' or 'PUT'
@@ -65,8 +65,8 @@ CREATE TABLE IF NOT EXISTS trades (
     metadata        JSONB DEFAULT '{}'
 );
 
-CREATE INDEX IF NOT EXISTS idx_trades_date ON trades (trade_date);
-CREATE INDEX IF NOT EXISTS idx_trades_status ON trades (status);
+CREATE INDEX IF NOT EXISTS idx_butterfly_trades_date ON butterfly_trades (trade_date);
+CREATE INDEX IF NOT EXISTS idx_butterfly_trades_status ON butterfly_trades (status);
 
 -- Decision log (event-based JSONB logging)
 CREATE TABLE IF NOT EXISTS decision_log (

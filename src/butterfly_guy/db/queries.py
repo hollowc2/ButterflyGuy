@@ -102,7 +102,7 @@ class TradeQueries:
     async def insert_trade(self, trade: dict[str, Any]) -> int:
         return await self.db.fetchval(
             """
-            INSERT INTO trades (
+            INSERT INTO butterfly_trades (
                 underlying, trade_date, direction, wing_width, center_strike,
                 lower_strike, upper_strike, entry_price, entry_time,
                 lower_symbol, center_symbol, upper_symbol, quantity, status, metadata
@@ -124,7 +124,7 @@ class TradeQueries:
     ) -> None:
         await self.db.execute(
             """
-            UPDATE trades SET
+            UPDATE butterfly_trades SET
                 exit_price = $2, exit_time = $3, exit_reason = $4,
                 pnl = $5, peak_value = $6, status = 'CLOSED'
             WHERE id = $1
@@ -134,14 +134,14 @@ class TradeQueries:
 
     async def get_open_trades(self, underlying: str) -> list[dict]:
         rows = await self.db.fetch(
-            "SELECT * FROM trades WHERE status = 'OPEN' AND underlying = $1 ORDER BY entry_time",
+            "SELECT * FROM butterfly_trades WHERE status = 'OPEN' AND underlying = $1 ORDER BY entry_time",
             underlying,
         )
         return [dict(r) for r in rows]
 
     async def get_trades_for_date(self, trade_date: dt.date, underlying: str) -> list[dict]:
         rows = await self.db.fetch(
-            "SELECT * FROM trades WHERE trade_date = $1 AND underlying = $2 ORDER BY entry_time",
+            "SELECT * FROM butterfly_trades WHERE trade_date = $1 AND underlying = $2 ORDER BY entry_time",
             trade_date, underlying,
         )
         return [dict(r) for r in rows]
