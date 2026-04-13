@@ -47,7 +47,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
+          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
           "format": "time_series",
           "refId": "A"
         }
@@ -82,7 +82,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='SPX' AND trade_date = CURRENT_DATE",
+          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX' AND trade_date = CURRENT_DATE",
           "format": "time_series",
           "refId": "A"
         }
@@ -117,7 +117,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='NDX' AND trade_date = CURRENT_DATE",
+          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX' AND trade_date = CURRENT_DATE",
           "format": "time_series",
           "refId": "A"
         }
@@ -151,7 +151,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS value FROM trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
+          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
           "format": "time_series",
           "refId": "A"
         }
@@ -187,7 +187,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE pnl > 0) / NULLIF(COUNT(*), 0), 0), 0)::float AS value FROM trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
+          "rawSql": "SELECT NOW() AS time, COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE pnl > 0) / NULLIF(COUNT(*), 0), 0), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
           "format": "time_series",
           "refId": "A"
         }
@@ -222,7 +222,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl), 0)::float AS value FROM trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
+          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
           "format": "time_series",
           "refId": "A"
         }
@@ -256,7 +256,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 60.0), 0)::float AS value FROM trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
+          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 60.0), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
           "format": "time_series",
           "refId": "A"
         }
@@ -453,7 +453,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(MAX(pnl), 0)::float AS value FROM trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
+          "rawSql": "SELECT NOW() AS time, COALESCE(MAX(pnl), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
           "format": "time_series",
           "refId": "A"
         }
@@ -488,7 +488,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(MIN(pnl), 0)::float AS value FROM trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
+          "rawSql": "SELECT NOW() AS time, COALESCE(MIN(pnl), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX')",
           "format": "time_series",
           "refId": "A"
         }
@@ -567,7 +567,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT entry_time, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 60.0)::float AS duration_min FROM trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX') ORDER BY entry_time DESC",
+          "rawSql": "SELECT entry_time, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 60.0)::float AS duration_min FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX') ORDER BY entry_time DESC",
           "format": "table",
           "refId": "A"
         }
@@ -609,7 +609,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='SPX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -645,7 +645,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE pnl > 0) / NULLIF(COUNT(*), 0), 1), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='SPX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE pnl > 0) / NULLIF(COUNT(*), 0), 1), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -679,7 +679,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl) FILTER (WHERE pnl > 0), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='SPX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl) FILTER (WHERE pnl > 0), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -714,7 +714,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl) FILTER (WHERE pnl < 0), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='SPX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl) FILTER (WHERE pnl < 0), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -750,7 +750,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl) FILTER (WHERE pnl > 0) / NULLIF(ABS(SUM(pnl) FILTER (WHERE pnl < 0)), 0), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='SPX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl) FILTER (WHERE pnl > 0) / NULLIF(ABS(SUM(pnl) FILTER (WHERE pnl < 0)), 0), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -784,7 +784,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS value FROM trades WHERE status='CLOSED' AND underlying='SPX'",
+          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -819,7 +819,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='NDX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -855,7 +855,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE pnl > 0) / NULLIF(COUNT(*), 0), 1), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='NDX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE pnl > 0) / NULLIF(COUNT(*), 0), 1), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -889,7 +889,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl) FILTER (WHERE pnl > 0), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='NDX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl) FILTER (WHERE pnl > 0), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -924,7 +924,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl) FILTER (WHERE pnl < 0), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='NDX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(AVG(pnl) FILTER (WHERE pnl < 0), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -960,7 +960,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl) FILTER (WHERE pnl > 0) / NULLIF(ABS(SUM(pnl) FILTER (WHERE pnl < 0)), 0), 0)::float AS value FROM trades WHERE status='CLOSED' AND underlying='NDX'",
+          "rawSql": "SELECT NOW() AS time, COALESCE(SUM(pnl) FILTER (WHERE pnl > 0) / NULLIF(ABS(SUM(pnl) FILTER (WHERE pnl < 0)), 0), 0)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -994,7 +994,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS value FROM trades WHERE status='CLOSED' AND underlying='NDX'",
+          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS value FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX'",
           "format": "time_series",
           "refId": "A"
         }
@@ -1148,14 +1148,14 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"SPX\" FROM trades WHERE status='CLOSED' AND underlying='SPX' AND $__timeFilter(exit_time) ORDER BY exit_time",
+          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"SPX\" FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX' AND $__timeFilter(exit_time) ORDER BY exit_time",
           "format": "time_series",
           "refId": "A"
         },
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"NDX\" FROM trades WHERE status='CLOSED' AND underlying='NDX' AND $__timeFilter(exit_time) ORDER BY exit_time",
+          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"NDX\" FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX' AND $__timeFilter(exit_time) ORDER BY exit_time",
           "format": "time_series",
           "refId": "B"
         }
@@ -1194,7 +1194,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT direction, COALESCE(SUM(pnl) FILTER (WHERE underlying='SPX'), 0)::float AS \"SPX P&L\", COALESCE(SUM(pnl) FILTER (WHERE underlying='NDX'), 0)::float AS \"NDX P&L\" FROM trades WHERE status='CLOSED' GROUP BY direction ORDER BY direction",
+          "rawSql": "SELECT direction, COALESCE(SUM(pnl) FILTER (WHERE underlying='SPX'), 0)::float AS \"SPX P&L\", COALESCE(SUM(pnl) FILTER (WHERE underlying='NDX'), 0)::float AS \"NDX P&L\" FROM butterfly_trades WHERE status='CLOSED' GROUP BY direction ORDER BY direction",
           "format": "table",
           "refId": "A"
         }
@@ -1226,7 +1226,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT wing_width::text AS wing_width, COALESCE(SUM(pnl) FILTER (WHERE underlying='SPX'), 0)::float AS \"SPX P&L\", COALESCE(SUM(pnl) FILTER (WHERE underlying='NDX'), 0)::float AS \"NDX P&L\" FROM trades WHERE status='CLOSED' GROUP BY wing_width ORDER BY wing_width",
+          "rawSql": "SELECT wing_width::text AS wing_width, COALESCE(SUM(pnl) FILTER (WHERE underlying='SPX'), 0)::float AS \"SPX P&L\", COALESCE(SUM(pnl) FILTER (WHERE underlying='NDX'), 0)::float AS \"NDX P&L\" FROM butterfly_trades WHERE status='CLOSED' GROUP BY wing_width ORDER BY wing_width",
           "format": "table",
           "refId": "A"
         }
@@ -1258,7 +1258,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT COALESCE(exit_reason, 'unknown') AS exit_reason, COALESCE(SUM(pnl) FILTER (WHERE underlying='SPX'), 0)::float AS \"SPX P&L\", COALESCE(SUM(pnl) FILTER (WHERE underlying='NDX'), 0)::float AS \"NDX P&L\" FROM trades WHERE status='CLOSED' GROUP BY exit_reason ORDER BY (COALESCE(SUM(pnl) FILTER (WHERE underlying='SPX'), 0) + COALESCE(SUM(pnl) FILTER (WHERE underlying='NDX'), 0)) DESC",
+          "rawSql": "SELECT COALESCE(exit_reason, 'unknown') AS exit_reason, COALESCE(SUM(pnl) FILTER (WHERE underlying='SPX'), 0)::float AS \"SPX P&L\", COALESCE(SUM(pnl) FILTER (WHERE underlying='NDX'), 0)::float AS \"NDX P&L\" FROM butterfly_trades WHERE status='CLOSED' GROUP BY exit_reason ORDER BY (COALESCE(SUM(pnl) FILTER (WHERE underlying='SPX'), 0) + COALESCE(SUM(pnl) FILTER (WHERE underlying='NDX'), 0)) DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1346,7 +1346,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT trade_date, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 3600.0, 1)::float AS duration_hrs FROM trades WHERE status='CLOSED' AND underlying IN ('SPX', 'NDX') ORDER BY trade_date DESC, entry_time DESC",
+          "rawSql": "SELECT trade_date, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 3600.0, 1)::float AS duration_hrs FROM butterfly_trades WHERE status='CLOSED' AND underlying IN ('SPX', 'NDX') ORDER BY trade_date DESC, entry_time DESC",
           "format": "table",
           "refId": "A"
         }
