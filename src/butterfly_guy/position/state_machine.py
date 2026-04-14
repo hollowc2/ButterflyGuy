@@ -93,6 +93,9 @@ class ProfitStateMachine:
                     regime=pos.time_regime,
                     peak=pos.peak_value,
                     current=pos.current_value,
+                    spread_bid=pos.spread_bid,
+                    peak_bid=pos.peak_bid,
+                    bid_to_mark_ratio=pos.bid_to_mark_ratio,
                 )
                 return ExitSignal(
                     reason=f"drawdown_{pos.time_regime}",

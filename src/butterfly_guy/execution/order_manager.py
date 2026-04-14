@@ -364,6 +364,9 @@ class OrderManager:
                             "order_id": order_id,
                             "fill_price": limit_price,
                             "fill_time": dt.datetime.now(dt.timezone.utc),
+                            "spread_bid": spread.bid if spread is not None else None,
+                            "spread_mark": spread.mark if spread is not None else None,
+                            "spread_ask": spread.ask if spread is not None else None,
                         }
 
                     await self.schwab.cancel_order(order_id)

@@ -16,6 +16,11 @@ from butterfly_guy.quant_engine.black_scholes import bs_call_price, bs_put_price
 log = get_logger(__name__)
 
 
+def fly_bid_value(lower: OptionQuote, center: OptionQuote, upper: OptionQuote) -> float:
+    """Butterfly value at market bid (what a MM pays to buy it from you)."""
+    return lower.bid + upper.bid - 2 * center.ask
+
+
 @dataclass
 class PositionState:
     """Current state of an open position."""
@@ -30,6 +35,11 @@ class PositionState:
     minutes_since_open: float
     lower_tent: float | None = None
     upper_tent: float | None = None
+    # Bid-side tracking for slippage analysis
+    spread_bid: float | None = None   # fly bid = lower.bid + upper.bid - 2*center.ask
+    spread_ask: float | None = None   # fly ask = lower.ask + upper.ask - 2*center.bid
+    peak_bid: float | None = None     # highest spread_bid seen since entry
+    bid_to_mark_ratio: float | None = None  # spread_bid / current_value; <1 always, lower = worse liquidity
 
 
 def compute_tent_boundaries(
@@ -88,12 +98,14 @@ class PositionManager:
     def __init__(self, underlying: str) -> None:
         self._underlying = underlying
         self._peak_value: float = 0.0
+        self._peak_bid: float = 0.0
         self._entry_price: float = 0.0
 
     def reset(self, entry_price: float, peak_value: float | None = None) -> None:
         """Reset for a new position. Optionally restore a persisted peak (e.g. after restart)."""
         self._entry_price = entry_price
         self._peak_value = peak_value if (peak_value and peak_value > 0) else entry_price
+        self._peak_bid = 0.0
 
     def update_position_value(
         self,
@@ -108,21 +120,34 @@ class PositionManager:
         center_q = current_quotes.get(candidate.center_strike)
         upper_q = current_quotes.get(candidate.upper_strike)
 
+        spread_bid: float | None = None
+        spread_ask: float | None = None
+
         if not all([lower_q, center_q, upper_q]):
             # Use last known value if quotes missing
             current_value = self._peak_value
             log.warning("missing_quotes_for_position")
         else:
             current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
+            spread_bid = max(0.0, fly_bid_value(lower_q, center_q, upper_q))
+            spread_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
 
-        # Update peak
+        # Update mark peak
         if current_value > self._peak_value:
             self._peak_value = current_value
+
+        # Update bid peak
+        if spread_bid is not None and spread_bid > self._peak_bid:
+            self._peak_bid = spread_bid
 
         pnl = current_value - self._entry_price
         drawdown = 0.0
         if self._peak_value > 0:
             drawdown = (self._peak_value - current_value) / self._peak_value
+
+        bid_to_mark_ratio: float | None = None
+        if spread_bid is not None and current_value > 0:
+            bid_to_mark_ratio = round(spread_bid / current_value, 4)
 
         # Determine time regime
         mins_open = minutes_since_open()
@@ -154,5 +179,9 @@ class PositionManager:
             minutes_since_open=mins_open,
             lower_tent=lower_tent,
             upper_tent=upper_tent,
+            spread_bid=round(spread_bid, 4) if spread_bid is not None else None,
+            spread_ask=round(spread_ask, 4) if spread_ask is not None else None,
+            peak_bid=round(self._peak_bid, 4) if self._peak_bid > 0 else None,
+            bid_to_mark_ratio=bid_to_mark_ratio,
         )
 

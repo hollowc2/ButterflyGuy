@@ -180,6 +180,8 @@ class PositionService:
                             "fill_price": exit_price,
                             "pnl": pnl,
                             "peak_value": pos_state.peak_value,
+                            "peak_bid": pos_state.peak_bid,
+                            "bid_to_mark_at_exit": pos_state.bid_to_mark_ratio,
                             "forced": fill.get("forced", False),
                         }, underlying=self.config.strategy.underlying)
 
