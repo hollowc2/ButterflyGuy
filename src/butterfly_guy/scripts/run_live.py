@@ -49,6 +49,7 @@ async def entry_loop(
     position_service: PositionService,
     recovered_trade: TradeRecord | None = None,
     recovered_candidate: ButterflyCandidate | None = None,
+    recovered_peak: float | None = None,
 ) -> None:
     """Periodically attempt entries during the entry window."""
     active_trade: TradeRecord | None = recovered_trade
@@ -57,7 +58,7 @@ async def entry_loop(
     if recovered_trade is not None and recovered_candidate is not None:
         log.info("resuming_monitor_for_recovered_trade", trade_id=recovered_trade.trade_id)
         monitor_task = asyncio.create_task(
-            position_service.monitor_loop(recovered_trade, recovered_candidate),
+            position_service.monitor_loop(recovered_trade, recovered_candidate, recovered_peak=recovered_peak),
             name=f"monitor_{recovered_trade.trade_id}",
         )
 
@@ -165,6 +166,7 @@ async def main() -> None:
         trade_queries=trade_q,
         decision_queries=decision_q,
         tent_queries=tent_q,
+        notifier=notifier,
     )
 
     collector = OptionChainCollector(
@@ -202,6 +204,8 @@ async def main() -> None:
 
     trades_active.labels(underlying=underlying).set(0)
 
+    recovered_peak: float | None = None
+
     open_rows = await trade_q.get_open_trades(underlying)
     if open_rows:
         row = open_rows[0]
@@ -238,8 +242,16 @@ async def main() -> None:
             center_symbol=recovered_trade.center_symbol,
             upper_symbol=recovered_trade.upper_symbol,
         )
+        # Restore persisted peak so drawdown thresholds are correct after restart
+        raw_peak = row.get("peak_value")
+        recovered_peak = float(raw_peak) if raw_peak is not None else None
         trades_active.labels(underlying=underlying).set(len(open_rows))
-        log.info("recovered_open_trade", trade_id=recovered_trade.trade_id, underlying=underlying)
+        log.info(
+            "recovered_open_trade",
+            trade_id=recovered_trade.trade_id,
+            underlying=underlying,
+            recovered_peak=recovered_peak,
+        )
 
     # Initialize daily counters from DB so metrics survive restarts
     today = dt.date.today()
@@ -283,7 +295,7 @@ async def main() -> None:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(collector.run_loop(), name="collector")
             tg.create_task(
-                entry_loop(trade_service, position_service, recovered_trade, recovered_candidate),
+                entry_loop(trade_service, position_service, recovered_trade, recovered_candidate, recovered_peak),
                 name="entry_loop",
             )
             tg.create_task(daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset")

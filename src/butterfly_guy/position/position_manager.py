@@ -90,10 +90,10 @@ class PositionManager:
         self._peak_value: float = 0.0
         self._entry_price: float = 0.0
 
-    def reset(self, entry_price: float) -> None:
-        """Reset for a new position."""
+    def reset(self, entry_price: float, peak_value: float | None = None) -> None:
+        """Reset for a new position. Optionally restore a persisted peak (e.g. after restart)."""
         self._entry_price = entry_price
-        self._peak_value = entry_price
+        self._peak_value = peak_value if (peak_value and peak_value > 0) else entry_price
 
     def update_position_value(
         self,

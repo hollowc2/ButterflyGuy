@@ -156,6 +156,9 @@ class OrderManager:
 
             await self.schwab.cancel_order(order_id)
             log.info("entry_unfilled_cancelled", price=limit_price)
+            post_fill = await self._check_post_cancel_fill(order_id, limit_price)
+            if post_fill:
+                return post_fill
 
         except Exception as e:
             log.error("entry_attempt_failed", error=str(e))
@@ -214,6 +217,25 @@ class OrderManager:
 
                 log.info("paper_entry_ladder_exhausted_repricing", candidate_center=candidate.center_strike)
 
+        # Guard: abort if any working entry orders already exist today (prevents duplicates
+        # from network-drop retries where Schwab accepted an order but we never got the ID).
+        try:
+            todays_orders = await self.schwab.get_todays_orders()
+            working = [
+                o for o in todays_orders
+                if o.get("status") in ("WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED")
+            ]
+            if working:
+                log.error(
+                    "entry_blocked_open_orders_exist",
+                    count=len(working),
+                    order_ids=[o.get("orderId") for o in working],
+                )
+                return None
+        except Exception as e:
+            log.warning("open_orders_check_failed", error=str(e))
+            # Degrade gracefully — DB-level max_trades_per_day remains the backstop
+
         deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
         mid_price = candidate.cost
 
@@ -255,6 +277,9 @@ class OrderManager:
 
                     await self.schwab.cancel_order(order_id)
                     log.info("entry_step_cancelled", step=i, price=limit_price)
+                    post_fill = await self._check_post_cancel_fill(order_id, limit_price)
+                    if post_fill:
+                        return post_fill
 
                 except Exception as e:
                     log.error("entry_step_failed", step=i, error=str(e))
@@ -347,6 +372,23 @@ class OrderManager:
                     log.error("exit_step_failed", step=i, error=str(e))
 
             log.warning("exit_ladder_exhausted")
+
+    async def _check_post_cancel_fill(self, order_id: str, limit_price: float) -> dict | None:
+        """After a cancel, confirm the order didn't sneak through as filled."""
+        try:
+            status = await self.schwab.get_order_status(order_id)
+            if status.get("status") == "FILLED":
+                log.warning("post_cancel_fill_detected", order_id=order_id, price=limit_price)
+                orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
+                return {
+                    "order_id": order_id,
+                    "fill_price": limit_price,
+                    "fill_time": dt.datetime.now(dt.timezone.utc),
+                    "post_cancel": True,
+                }
+        except Exception as e:
+            log.warning("post_cancel_check_failed", error=str(e))
+        return None
 
     async def _wait_for_fill(self, order_id: str, timeout: int) -> bool:
         """Poll order status until filled or timeout."""

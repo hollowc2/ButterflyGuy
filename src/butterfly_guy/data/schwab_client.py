@@ -193,6 +193,19 @@ class SchwabClientWrapper:
         data = resp.json()
         return data.get("candles", [])
 
+    async def get_todays_orders(self) -> list[dict[str, Any]]:
+        """Fetch all orders entered today from Schwab."""
+        today = dt.date.today()
+        resp = await self._retry(
+            self.client.get_orders_for_account,
+            self.account_hash,
+            from_entered_datetime=dt.datetime.combine(today, dt.time.min),
+            to_entered_datetime=dt.datetime.combine(today, dt.time.max),
+            endpoint="get_todays_orders",
+        )
+        data = resp.json()
+        return data if isinstance(data, list) else []
+
     async def get_positions(self) -> dict:
         """Fetch account positions and buying power."""
         resp = await self._retry(

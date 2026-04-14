@@ -132,6 +132,15 @@ class TradeQueries:
             trade_id, exit_price, exit_time, exit_reason, pnl, peak_value,
         )
 
+    async def update_peak_value(self, trade_id: int, peak_value: float) -> None:
+        await self.db.execute(
+            """
+            UPDATE butterfly_trades SET peak_value = $2
+            WHERE id = $1 AND (peak_value IS NULL OR peak_value < $2)
+            """,
+            trade_id, peak_value,
+        )
+
     async def get_open_trades(self, underlying: str) -> list[dict]:
         rows = await self.db.fetch(
             "SELECT * FROM butterfly_trades WHERE status = 'OPEN' AND underlying = $1 ORDER BY entry_time",
