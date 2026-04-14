@@ -106,6 +106,7 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         await risk_queries.get_or_create(today, underlying)
         daily_trade_count.labels(underlying=underlying).set(0)
         trades_active.labels(underlying=underlying).set(0)
+        daily_pnl.labels(underlying=underlying).set(0)
         log.info("daily_risk_reset", date=str(today))
 
 
