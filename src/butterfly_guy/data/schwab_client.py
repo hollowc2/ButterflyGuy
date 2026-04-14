@@ -83,14 +83,13 @@ class SchwabClientWrapper:
             try:
                 schwab_api_calls.labels(endpoint=endpoint).inc()
                 resp = await func(*args, **kwargs)
-                if resp.status_code == httpx.codes.OK:
-                    return resp
                 if resp.status_code == 429:
                     wait = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
                     log.warning("rate_limited", endpoint=endpoint, wait=wait)
                     await asyncio.sleep(wait)
                     continue
                 resp.raise_for_status()
+                return resp
             except Exception as e:
                 schwab_api_errors.labels(endpoint=endpoint).inc()
                 last_err = e

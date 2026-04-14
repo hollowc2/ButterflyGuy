@@ -757,9 +757,13 @@ async def run_sweep(args: argparse.Namespace) -> None:
         return
 
     print(f"  {len(dates)} trading day(s): {dates[0]} → {dates[-1]}")
-    print(f"  Pre-loading chain data from DB...")
+    print(f"  Running {total_combos} combos (loading one day at a time)...\n")
 
-    all_date_data: dict[dt.date, dict] = {}
+    engine = SimulationEngine()
+    # One result list per combo, accumulated as we stream through dates
+    combo_day_results: list[list[tuple[dt.date, object]]] = [[] for _ in param_grid]
+    usable_dates: list[dt.date] = []
+
     for date in dates:
         conn = await asyncpg.connect(DB_DSN)
         try:
@@ -774,44 +778,10 @@ async def run_sweep(args: argparse.Namespace) -> None:
             print(f"    {date} SKIPPED (VIX {d['vix']:.1f} > {args.vix_max})")
             continue
         print(f"    {date}  VIX={d['vix']:.1f}  spot={d['entry_spot']:.0f}")
-        all_date_data[date] = d
+        usable_dates.append(date)
 
-    if not all_date_data:
-        print("\nNo usable dates loaded.")
-        return
-
-    print(f"\n  Running {total_combos} combos across {len(all_date_data)} dates...\n")
-
-    engine = SimulationEngine()
-    sweep_results: list[dict] = []
-
-    for i, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method) in enumerate(param_grid, 1):
-        combo_label = dict(
-            wing_width=wing,
-            direction=direction,
-            rr_min=rr_min,
-            morning_dd=morning_dd,
-            late_morning_dd=late_morning_dd,
-            afternoon_dd=afternoon_dd,
-            method=method,
-        )
-        params = SimulationParams(
-            wing_width=wing,
-            direction_override=direction,
-            rr_min=rr_min,
-            morning_drawdown=morning_dd,
-            late_morning_drawdown=late_morning_dd,
-            afternoon_drawdown=afternoon_dd,
-            slippage=args.slippage,
-            use_vix_center=(method == "VIX"),
-            selection_method=method,
-            max_cost_per_width=asset_cfg["max_cost"],
-            use_absolute_loss_stop=args.use_abs_stop,
-        )
-
-        day_results: list[tuple[dt.date, object]] = []
-        for date, d in all_date_data.items():
-            # Resolve "auto" direction per-date (same logic as single-config mode)
+        # Run all combos against this day, then let it be GC'd
+        for ci, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method) in enumerate(param_grid):
             resolved_direction = (
                 ("CALL" if d["entry_spot"] >= d["prev_close"] else "PUT")
                 if direction == "auto"
@@ -832,7 +802,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 max_cost_per_width=asset_cfg["max_cost"],
             )
             if chosen is None:
-                day_results.append((date, None))
+                combo_day_results[ci].append((date, None))
                 continue
 
             restore = _patch_chain_cache(d["chains"], date)
@@ -851,14 +821,30 @@ async def run_sweep(args: argparse.Namespace) -> None:
             )
             result = engine.simulate_day(d["day"], sim_params)
             restore()
-            day_results.append((date, result))
+            combo_day_results[ci].append((date, result))
 
-        row = _summarize_combo(combo_label, day_results)
+    if not usable_dates:
+        print("\nNo usable dates loaded.")
+        return
+
+    print(f"\n  Summarizing {total_combos} combos across {len(usable_dates)} dates...\n")
+
+    sweep_results: list[dict] = []
+    for i, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method) in enumerate(param_grid, 1):
+        combo_label = dict(
+            wing_width=wing,
+            direction=direction,
+            rr_min=rr_min,
+            morning_dd=morning_dd,
+            late_morning_dd=late_morning_dd,
+            afternoon_dd=afternoon_dd,
+            method=method,
+        )
+        row = _summarize_combo(combo_label, combo_day_results[i - 1])
         sweep_results.append(row)
 
-        # Progress every 10 combos
         if i % 10 == 0 or i == total_combos:
-            print(f"  [{i:>{len(str(total_combos))}}/{total_combos}]  last: "
+            print(f"  [{i:>{len(str(total_combos))}}/{total_combos}]  "
                   f"{wing}W {direction} method={method} rr={rr_min} dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
                   f"→ trades={row['trade_count']}  sharpe={row['sharpe']:.3f}  "
                   f"win={row['win_rate']*100:.0f}%")
