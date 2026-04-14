@@ -20,9 +20,17 @@ class RiskEngine:
         self.risk_queries = risk_queries
         self.underlying = underlying
 
-    async def can_trade(self, trade_date: dt.date | None = None) -> tuple[bool, str]:
+    async def can_trade(
+        self,
+        trade_date: dt.date | None = None,
+        account_value: float | None = None,
+        buying_power: float | None = None,
+    ) -> tuple[bool, str]:
         """
         Check all risk conditions. Returns (allowed, reason).
+
+        account_value and buying_power are optional — pass them from a pre-fetched
+        Schwab balance call. If None, those checks are skipped.
         """
         today = trade_date or dt.date.today()
 
@@ -45,6 +53,47 @@ class RiskEngine:
             await self.risk_queries.set_halted(today, self.underlying)
             return False, f"max_daily_loss ({state['realized_pnl']})"
 
+        # Account floor — PDT compliance
+        if account_value is not None:
+            if account_value < self.settings.min_account_value:
+                log.warning(
+                    "account_below_minimum",
+                    account_value=account_value,
+                    minimum=self.settings.min_account_value,
+                )
+                await self.risk_queries.set_halted(today, self.underlying)
+                return False, f"account_below_minimum ({account_value:.2f})"
+
+        # Buying power guard
+        if buying_power is not None:
+            if buying_power < self.settings.min_buying_power:
+                log.warning(
+                    "insufficient_buying_power",
+                    buying_power=buying_power,
+                    minimum=self.settings.min_buying_power,
+                )
+                return False, f"insufficient_buying_power ({buying_power:.2f})"
+
+        # Weekly loss circuit breaker
+        weekly_pnl = await self.risk_queries.get_weekly_pnl(self.underlying)
+        if weekly_pnl <= -self.settings.max_weekly_loss:
+            log.warning("max_weekly_loss_hit", weekly_pnl=weekly_pnl)
+            await self.risk_queries.set_halted(today, self.underlying)
+            return False, f"max_weekly_loss ({weekly_pnl:.4f})"
+
+        # Consecutive loss circuit breaker
+        if self.settings.max_consecutive_losses > 0:
+            recent_pnls = await self.risk_queries.get_recent_closed_pnls(
+                self.underlying, self.settings.max_consecutive_losses
+            )
+            if (
+                len(recent_pnls) >= self.settings.max_consecutive_losses
+                and all(p < 0 for p in recent_pnls)
+            ):
+                log.warning("consecutive_loss_limit_hit", losses=recent_pnls, count=len(recent_pnls))
+                await self.risk_queries.set_halted(today, self.underlying)
+                return False, f"consecutive_losses ({len(recent_pnls)})"
+
         return True, "ok"
 
     async def record_trade(self, trade_date: dt.date | None = None) -> None:
@@ -63,6 +112,19 @@ class RiskEngine:
         if state["realized_pnl"] <= -self.settings.max_daily_loss:
             await self.risk_queries.set_halted(today, self.underlying)
             log.warning("max_daily_loss_triggered", pnl=state["realized_pnl"])
+
+    async def sync_realized_pnl(self, pnl: float, trade_date: dt.date | None = None) -> None:
+        """
+        Overwrite realized_pnl in risk state (SET, not ADD).
+        Used at startup to restore correct state, including worst-case open trade exposure.
+        """
+        today = trade_date or dt.date.today()
+        await self.risk_queries.get_or_create(today, self.underlying)
+        await self.risk_queries.db.execute(
+            "UPDATE daily_risk_state SET realized_pnl = $1 WHERE trade_date = $2 AND underlying = $3",
+            pnl, today, self.underlying,
+        )
+        log.info("synced_realized_pnl", pnl=pnl, underlying=self.underlying)
 
     async def sync_trade_count(self, count: int, trade_date: dt.date | None = None) -> None:
         """

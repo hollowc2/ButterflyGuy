@@ -247,6 +247,21 @@ async def main() -> None:
     daily_trade_count.labels(underlying=underlying).set(len(today_trades))
     await risk_engine.sync_trade_count(len(today_trades), today)
     realized_pnl = sum(float(t["pnl"]) for t in today_trades if t.get("pnl") is not None)
+
+    # Sync risk state PnL — if an open trade was recovered, include its entry cost as
+    # worst-case committed exposure so the daily loss budget is correctly consumed.
+    if recovered_trade is not None:
+        worst_case_pnl = realized_pnl - recovered_trade.entry_price
+        await risk_engine.sync_realized_pnl(worst_case_pnl, today)
+        log.info(
+            "startup_pnl_sync_with_open_trade",
+            realized_pnl=realized_pnl,
+            open_trade_entry=recovered_trade.entry_price,
+            worst_case_pnl=worst_case_pnl,
+        )
+    else:
+        await risk_engine.sync_realized_pnl(realized_pnl, today)
+
     daily_pnl.labels(underlying=underlying).set(realized_pnl)
 
     # Seed candidates_found from the most recent scan today

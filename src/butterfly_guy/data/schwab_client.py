@@ -203,6 +203,24 @@ class SchwabClientWrapper:
         )
         return resp.json()
 
+    async def get_account_balances(self) -> dict[str, float]:
+        """Fetch account balances including liquidation value and buying power."""
+        resp = await self._retry(
+            self.client.get_account,
+            self.account_hash,
+            endpoint="get_account_balances",
+        )
+        data = resp.json()
+        balances = (
+            data.get("securitiesAccount", {})
+                .get("currentBalances", {})
+        )
+        return {
+            "liquidation_value": float(balances.get("liquidationValue", 0.0)),
+            "buying_power": float(balances.get("buyingPowerNonMarginableTrade", 0.0)),
+            "available_funds": float(balances.get("availableFunds", 0.0)),
+        }
+
     async def close(self) -> None:
         """Close the client session."""
         if self._client is not None:

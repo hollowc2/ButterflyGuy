@@ -58,20 +58,45 @@ class TradeService:
         self.decision_queries = decision_queries
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
-        """Full entry flow: risk → time → direction (once) → retry loop (re-scan + fill)."""
-        # Risk check
-        allowed, reason = await self.risk_engine.can_trade()
-        if not allowed:
-            await self.decision_queries.log_event("entry_blocked", {"reason": reason}, underlying=self.config.strategy.underlying)
-            log.info("entry_blocked", reason=reason)
-            return None
-
-        # Time window check
+        """Full entry flow: time → balance → risk → direction (once) → retry loop (re-scan + fill)."""
+        # Time window check first — cheapest guard, avoids unnecessary API calls outside window
         if not time_in_window(
             self.config.entry.start_time,
             self.config.entry.end_time,
             self.config.entry.timezone,
         ):
+            return None
+
+        # Fetch account balances for PDT floor and buying power checks
+        account_value: float | None = None
+        buying_power: float | None = None
+        try:
+            balances = await self.schwab.get_account_balances()
+            account_value = balances["liquidation_value"]
+            buying_power = balances["buying_power"]
+            log.info(
+                "account_balances_fetched",
+                account_value=round(account_value, 2),
+                buying_power=round(buying_power, 2),
+            )
+        except Exception as e:
+            log.error("account_balance_fetch_failed", error=str(e))
+            if self.config.risk.fail_safe_on_balance_error:
+                await self.decision_queries.log_event(
+                    "entry_blocked",
+                    {"reason": "balance_fetch_failed", "error": str(e)},
+                    underlying=self.config.strategy.underlying,
+                )
+                return None
+
+        # Risk check (includes account floor, weekly loss, consecutive loss checks)
+        allowed, reason = await self.risk_engine.can_trade(
+            account_value=account_value,
+            buying_power=buying_power,
+        )
+        if not allowed:
+            await self.decision_queries.log_event("entry_blocked", {"reason": reason}, underlying=self.config.strategy.underlying)
+            log.info("entry_blocked", reason=reason)
             return None
 
         expiration = get_0dte_expiration()
