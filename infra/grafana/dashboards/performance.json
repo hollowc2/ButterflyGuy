@@ -1,6 +1,7 @@
 {
   "title": "Butterfly Performance",
   "uid": "butterfly-performance",
+  "tags": ["options", "trading", "index"],
   "schemaVersion": 38,
   "version": 1,
   "refresh": "30s",
