@@ -140,6 +140,12 @@ async def main() -> None:
     daily_bar_q = DailyBarQueries(db)
     tent_q = TentQueries(db)
 
+    # Discord notifier (optional)
+    from dotenv import dotenv_values
+    env = dotenv_values(".env")
+    webhook = env.get("DISCORD_WEBHOOK_URL", "")
+    notifier = DiscordNotifier(webhook) if webhook else None
+
     # Build service objects
     risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
     order_builder = ButterflyOrderBuilder()
@@ -188,12 +194,6 @@ async def main() -> None:
     vix_level = vix_closes[0] if vix_closes else 0.0
     regime = regime_classifier.classify(recent_spx, vix_level)
     log.info("regime_classified", regime=regime.value, spx_bars=len(recent_spx), vix=vix_level)
-
-    # Discord notifier (optional)
-    from dotenv import dotenv_values
-    env = dotenv_values(".env")
-    webhook = env.get("DISCORD_WEBHOOK_URL", "")
-    notifier = DiscordNotifier(webhook) if webhook else None
 
     if notifier:
         await notifier._post("🚀 Butterfly Guy starting up!")
