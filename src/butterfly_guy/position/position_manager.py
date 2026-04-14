@@ -11,7 +11,7 @@ from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import position_peak_value, position_pnl, position_value
 from butterfly_guy.core.time_utils import get_time_regime, minutes_since_open, minutes_to_close
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord, fly_mark_value
-from butterfly_guy.quant_engine.black_scholes import bs_call_price, bs_put_price
+from butterfly_guy.quant_engine.black_scholes import bs_call_price, bs_put_price, implied_vol
 
 log = get_logger(__name__)
 
@@ -64,11 +64,22 @@ def compute_tent_boundaries(
     entry_cost = candidate.cost
     kl, kc, ku = candidate.lower_strike, candidate.center_strike, candidate.upper_strike
     wing = float(candidate.wing_width)
+    S = candidate.spot_price
 
-    # Schwab returns volatility as a percentage (e.g. 15.3 → σ=0.153)
-    iv_l = lower_q.iv
-    iv_c = center_q.iv
-    iv_u = upper_q.iv
+    # Schwab returns volatility as a percentage (e.g. 15.3 → σ=0.153).
+    # For index options (SPX, NDX) Schwab often returns null/-999; fall back to
+    # BS-implied vol from the mark price so tent lines still appear.
+    def _resolve_iv(raw_iv: float | None, mark: float, K: float) -> float:
+        v = float(raw_iv) if raw_iv is not None else 0.0
+        if v > 0 and not (v != v):  # v != v is True only for NaN
+            return v
+        imp = implied_vol(mark, S, K, T_years, r, candidate.direction)
+        return imp * 100.0 if imp is not None else 0.0
+
+    iv_l = _resolve_iv(lower_q.iv, lower_q.mark, kl)
+    iv_c = _resolve_iv(center_q.iv, center_q.mark, kc)
+    iv_u = _resolve_iv(upper_q.iv, upper_q.mark, ku)
+
     if iv_l <= 0 or iv_c <= 0 or iv_u <= 0:
         return None, None
 
@@ -78,8 +89,8 @@ def compute_tent_boundaries(
 
     pricer = bs_call_price if candidate.direction == "CALL" else bs_put_price
 
-    def fly_val(S: float) -> float:
-        return pricer(S, kl, T_years, r, σl) - 2 * pricer(S, kc, T_years, r, σc) + pricer(S, ku, T_years, r, σu)
+    def fly_val(spot: float) -> float:
+        return pricer(spot, kl, T_years, r, σl) - 2 * pricer(spot, kc, T_years, r, σc) + pricer(spot, ku, T_years, r, σu)
 
     if fly_val(kc) <= entry_cost:
         return None, None

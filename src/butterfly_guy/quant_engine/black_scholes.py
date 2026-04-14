@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from scipy.optimize import brentq
 from scipy.stats import norm
 
 
@@ -85,3 +86,30 @@ def bs_vega(S: float, K: float, T: float, r: float, sigma: float) -> float:
         return 0.0
     d1 = _d1(S, K, T, r, sigma)
     return S * norm.pdf(d1) * math.sqrt(T) * 0.01  # per 1% IV move
+
+
+def implied_vol(
+    price: float,
+    S: float,
+    K: float,
+    T: float,
+    r: float,
+    option_type: str = "CALL",
+    lo: float = 0.001,
+    hi: float = 5.0,
+) -> float | None:
+    """Back-solve for implied volatility given an option market price.
+
+    Returns None if the price is outside BS no-arbitrage bounds or the
+    solver fails to converge (e.g. deep OTM near expiry with near-zero price).
+    """
+    if T <= 0 or price <= 0:
+        return None
+    pricer = bs_call_price if option_type == "CALL" else bs_put_price
+    intrinsic = max(0.0, S - K) if option_type == "CALL" else max(0.0, K - S)
+    if price <= intrinsic:
+        return None
+    try:
+        return brentq(lambda sigma: pricer(S, K, T, r, sigma) - price, lo, hi, xtol=1e-4)
+    except ValueError:
+        return None

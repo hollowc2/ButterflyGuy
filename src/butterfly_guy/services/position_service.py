@@ -268,6 +268,8 @@ class PositionService:
                         bid=opt.get("bid", 0),
                         ask=opt.get("ask", 0),
                         mark=opt.get("mark", 0),
-                        iv=opt.get("volatility", 0.0),
+                        # Schwab returns null/-999 for index options (SPX, NDX);
+                        # treat as 0 here and let compute_tent_boundaries impute via BS inverse
+                        iv=float(opt.get("volatility") or 0.0),
                     )
         return quotes
