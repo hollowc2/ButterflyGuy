@@ -140,11 +140,11 @@ async def main() -> None:
     daily_bar_q = DailyBarQueries(db)
     tent_q = TentQueries(db)
 
-    # Discord notifier (optional)
+    # Discord notifier — only for live trading, not paper
+    import os
     from dotenv import dotenv_values
-    env = dotenv_values(".env")
-    webhook = env.get("DISCORD_WEBHOOK_URL", "")
-    notifier = DiscordNotifier(webhook) if webhook else None
+    webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get("DISCORD_WEBHOOK_URL", "")
+    notifier = DiscordNotifier(webhook) if (webhook and not config.execution.paper_trading) else None
 
     # Build service objects
     risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
@@ -163,6 +163,7 @@ async def main() -> None:
         trade_queries=trade_q,
         candidate_queries=candidate_q,
         decision_queries=decision_q,
+        notifier=notifier,
     )
 
     position_service = PositionService(

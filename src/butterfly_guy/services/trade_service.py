@@ -21,6 +21,7 @@ from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
+from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, vix_target_center
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
@@ -44,6 +45,7 @@ class TradeService:
         trade_queries: TradeQueries,
         candidate_queries: CandidateQueries,
         decision_queries: DecisionQueries,
+        notifier: DiscordNotifier | None = None,
     ) -> None:
         self.config = config
         self.schwab = schwab
@@ -56,6 +58,7 @@ class TradeService:
         self.trade_queries = trade_queries
         self.candidate_queries = candidate_queries
         self.decision_queries = decision_queries
+        self.notifier = notifier
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
         """Full entry flow: time → balance → risk → direction (once) → retry loop (re-scan + fill)."""
@@ -302,6 +305,24 @@ class TradeService:
                     "direction": direction,
                     "entry_step": step,
                 }, underlying=underlying)
+
+                if self.notifier:
+                    try:
+                        await self.notifier.notify_entry(
+                            trade_id=trade_id,
+                            underlying=underlying,
+                            direction=direction,
+                            expiration=expiration,
+                            lower_strike=best.lower_strike,
+                            center_strike=best.center_strike,
+                            upper_strike=best.upper_strike,
+                            wing_width=best.wing_width,
+                            entry_price=fill["fill_price"],
+                            spot=spot_price,
+                            order_id=str(fill.get("order_id", "")),
+                        )
+                    except Exception as e:
+                        log.warning("notify_entry_failed", error=str(e))
 
                 log.info("trade_entered", trade_id=trade_id, center=best.center_strike, step=step)
                 return record, best

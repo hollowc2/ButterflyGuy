@@ -185,6 +185,22 @@ class PositionService:
                             "forced": fill.get("forced", False),
                         }, underlying=self.config.strategy.underlying)
 
+                        if self.notifier:
+                            try:
+                                await self.notifier.notify_exit(
+                                    trade_id=trade.trade_id,
+                                    underlying=self.config.strategy.underlying,
+                                    direction=trade.direction,
+                                    exit_reason=signal.reason,
+                                    entry_price=trade.entry_price,
+                                    exit_price=exit_price,
+                                    pnl=pnl,
+                                    peak_value=pos_state.peak_value,
+                                    entry_time=trade.entry_time,
+                                )
+                            except Exception as e:
+                                log.warning("notify_exit_failed", error=str(e))
+
                         log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason=signal.reason)
 
             except Exception as e:
@@ -224,6 +240,23 @@ class PositionService:
             peak,
         )
         await self._record_exit_metrics(pnl, trade)
+
+        if self.notifier:
+            try:
+                await self.notifier.notify_exit(
+                    trade_id=trade.trade_id,
+                    underlying=self.config.strategy.underlying,
+                    direction=trade.direction,
+                    exit_reason="cash_settled",
+                    entry_price=trade.entry_price,
+                    exit_price=settlement_value,
+                    pnl=pnl,
+                    peak_value=peak,
+                    entry_time=trade.entry_time,
+                )
+            except Exception as e:
+                log.warning("notify_exit_failed", error=str(e))
+
         log.info("cash_settle_complete", trade_id=trade.trade_id, settlement_value=settlement_value, pnl=pnl)
 
     async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:

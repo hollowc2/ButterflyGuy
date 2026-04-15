@@ -33,39 +33,63 @@ class DiscordNotifier:
     async def notify_entry(
         self,
         trade_id: int,
+        underlying: str,
         direction: str,
+        expiration: "dt.date",
+        lower_strike: float,
         center_strike: float,
+        upper_strike: float,
         wing_width: int,
         entry_price: float,
         spot: float,
+        order_id: str = "",
     ) -> None:
-        emoji = "🦋"
+        max_profit = wing_width - entry_price
+        rr = max_profit / entry_price if entry_price > 0 else 0
+        order_str = f" `{order_id}`" if order_id and order_id != "PAPER" else (" `PAPER`" if order_id == "PAPER" else "")
+        now_et = dt.datetime.now().strftime("%H:%M:%S ET")
         msg = (
-            f"{emoji} **BUTTERFLY ENTERED** #{trade_id}\n"
-            f"> Direction: {direction}\n"
-            f"> Center: {center_strike} | Width: ±{wing_width}\n"
-            f"> Cost: ${entry_price:.2f} | Spot: {spot:.2f}\n"
-            f"> Max Profit: ${wing_width - entry_price:.2f} | R/R: {(wing_width - entry_price) / entry_price:.1f}x\n"
-            f"> Time: {dt.datetime.now().strftime('%H:%M:%S')}"
+            f"🦋 **{underlying} BUTTERFLY ENTERED** #{trade_id}{order_str}\n"
+            f"> **{direction}** | Exp: {expiration}\n"
+            f"> Strikes: {lower_strike:.0f} / **{center_strike:.0f}** / {upper_strike:.0f}  (±{wing_width} pts)\n"
+            f"> Fill: **${entry_price:.2f}** | Spot @ entry: {spot:.2f}\n"
+            f"> Max Profit: ${max_profit:.2f} | R/R: {rr:.1f}x\n"
+            f"> Breakevens: {lower_strike + entry_price:.2f} – {upper_strike - entry_price:.2f}\n"
+            f"> Time: {now_et}"
         )
         await self._post(msg)
 
     async def notify_exit(
         self,
         trade_id: int,
+        underlying: str,
+        direction: str,
         exit_reason: str,
+        entry_price: float,
+        exit_price: float,
         pnl: float,
         peak_value: float,
-        exit_price: float,
+        entry_time: "dt.datetime | None" = None,
     ) -> None:
         emoji = "✅" if pnl > 0 else "❌"
         pnl_str = f"+${pnl:.2f}" if pnl > 0 else f"-${abs(pnl):.2f}"
+        pnl_pct = (pnl / entry_price * 100) if entry_price > 0 else 0
+        pnl_pct_str = f"+{pnl_pct:.0f}%" if pnl_pct >= 0 else f"{pnl_pct:.0f}%"
+        now_et = dt.datetime.now()
+        duration_str = ""
+        if entry_time is not None:
+            try:
+                held = now_et - entry_time.replace(tzinfo=None)
+                mins = int(held.total_seconds() // 60)
+                duration_str = f" | Held: {mins}m"
+            except Exception:
+                pass
         msg = (
-            f"{emoji} **BUTTERFLY EXITED** #{trade_id}\n"
-            f"> P&L: {pnl_str}\n"
-            f"> Exit Reason: {exit_reason}\n"
-            f"> Exit Price: ${exit_price:.2f} | Peak: ${peak_value:.2f}\n"
-            f"> Time: {dt.datetime.now().strftime('%H:%M:%S')}"
+            f"{emoji} **{underlying} BUTTERFLY EXITED** #{trade_id}\n"
+            f"> **{direction}** | Reason: `{exit_reason}`\n"
+            f"> Entry: ${entry_price:.2f} → Exit: ${exit_price:.2f}\n"
+            f"> P&L: **{pnl_str}** ({pnl_pct_str}) | Peak: ${peak_value:.2f}\n"
+            f"> Time: {now_et.strftime('%H:%M:%S ET')}{duration_str}"
         )
         await self._post(msg)
 
