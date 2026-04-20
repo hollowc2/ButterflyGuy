@@ -120,7 +120,7 @@ class RiskEngine:
         """
         today = trade_date or dt.date.today()
         await self.risk_queries.get_or_create(today, self.underlying)
-        await self.risk_queries.db.execute(
+        await self.risk_queries.db.pool.execute(
             "UPDATE daily_risk_state SET realized_pnl = $1 WHERE trade_date = $2 AND underlying = $3",
             pnl, today, self.underlying,
         )
@@ -135,7 +135,7 @@ class RiskEngine:
         state = await self.risk_queries.get_or_create(today, self.underlying)
         if state["trade_count"] != count:
             log.info("syncing_risk_trade_count", old=state["trade_count"], new=count, underlying=self.underlying)
-            await self.risk_queries.db.execute(
+            await self.risk_queries.db.pool.execute(
                 "UPDATE daily_risk_state SET trade_count = $1 WHERE trade_date = $2 AND underlying = $3",
                 count, today, self.underlying
             )
