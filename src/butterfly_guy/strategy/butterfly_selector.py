@@ -66,9 +66,7 @@ class ButterflySelector:
                 )
 
         # Filter out unrealistically high R/R (too far OTM, nearly worthless)
-        filtered = [c for c in pool if c.reward_risk <= self.settings.rr_max]
-        if not filtered:
-            filtered = pool
+        filtered = [c for c in pool if c.reward_risk <= self.settings.rr_max] or pool
 
         # Among remaining, pick closest to target R/R
         best = min(filtered, key=lambda c: abs(c.reward_risk - self.settings.rr_target))

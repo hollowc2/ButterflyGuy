@@ -10,6 +10,7 @@ from typing import Any
 import polars as pl
 
 from butterfly_guy.backtest.data_loader import BacktestDataLoader
+from butterfly_guy.backtest.metrics import max_consecutive_losses, max_drawdown, profit_factor, sharpe
 from butterfly_guy.backtest.simulation_engine import DayResult, SimulationEngine, SimulationParams
 from butterfly_guy.core.logging import get_logger
 
@@ -25,52 +26,6 @@ class SweepConfig:
     morning_drawdowns: list[float]
     late_morning_drawdowns: list[float]
     afternoon_drawdowns: list[float]
-
-
-def _sharpe(pnls: list[float]) -> float:
-    if len(pnls) < 2:
-        return 0.0
-    import statistics
-    mean = statistics.mean(pnls)
-    stdev = statistics.stdev(pnls)
-    if stdev == 0:
-        return 0.0
-    return mean / stdev * (252**0.5)
-
-
-def _max_drawdown(pnls: list[float]) -> float:
-    """Max drawdown on cumulative PnL series."""
-    equity = 0.0
-    peak = 0.0
-    max_dd = 0.0
-    for p in pnls:
-        equity += p
-        peak = max(peak, equity)
-        dd = peak - equity
-        max_dd = max(max_dd, dd)
-    return max_dd
-
-
-def _profit_factor(pnls: list[float]) -> float:
-    """Gross profit / gross loss. Returns 0 if no losses."""
-    gross_profit = sum(p for p in pnls if p > 0)
-    gross_loss = abs(sum(p for p in pnls if p < 0))
-    if gross_loss == 0:
-        return 0.0
-    return round(gross_profit / gross_loss, 4)
-
-
-def _max_consecutive_losses(pnls: list[float]) -> int:
-    """Longest streak of negative PnL trades."""
-    max_streak = 0
-    streak = 0
-    for p in pnls:
-        if p < 0:
-            streak += 1
-            max_streak = max(max_streak, streak)
-        else:
-            streak = 0
-    return max_streak
 
 
 class ParameterSweeper:
@@ -181,10 +136,10 @@ class ParameterSweeper:
             "total_pnl": round(sum(pnls), 4),
             "win_rate": round(wins / len(traded), 4),
             "avg_pnl": round(sum(pnls) / len(traded), 4),
-            "max_drawdown": round(_max_drawdown(pnls), 4),
-            "sharpe": round(_sharpe(pnls), 4),
-            "profit_factor": _profit_factor(pnls),
-            "max_consec_losses": _max_consecutive_losses(pnls),
+            "max_drawdown": round(max_drawdown(pnls), 4),
+            "sharpe": sharpe(pnls),
+            "profit_factor": profit_factor(pnls),
+            "max_consec_losses": max_consecutive_losses(pnls),
             **regime_counts,
         }
 

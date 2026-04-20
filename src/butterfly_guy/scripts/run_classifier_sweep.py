@@ -24,18 +24,18 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import csv as csv_mod
 import datetime as dt
 import itertools
-import statistics
 import sys
-from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from butterfly_guy.backtest.csv_loader import CsvDataLoader
 from butterfly_guy.backtest.data_loader import DayData
+from butterfly_guy.backtest.metrics import profit_factor, sharpe, win_pct
 from butterfly_guy.backtest.simulation_engine import (
     RegimeDispatch,
     SimulationEngine,
@@ -81,92 +81,63 @@ BEAR_VIX_THRESH    = [18.0,  20.0,  22.0]
 BULL_VIX_THRESH    = [15.0,  18.0]
 
 
-def parse_args() -> tuple[dt.date | None, dt.date | None, int, str]:
-    date_args = [a for a in sys.argv[1:] if a.startswith("20")]
-    top_n = 30
-    asset = "SPX"
-    for i, a in enumerate(sys.argv[1:]):
-        if a == "--top" and i + 2 <= len(sys.argv) - 1:
-            try:
-                top_n = int(sys.argv[i + 2])
-            except ValueError:
-                pass
-        elif a == "--asset" and i + 1 < len(sys.argv):
-            asset = sys.argv[i + 1].upper()
-    start = dt.date.fromisoformat(date_args[0]) if len(date_args) >= 1 else None
-    end   = dt.date.fromisoformat(date_args[1]) if len(date_args) >= 2 else None
-    return start, end, top_n, asset
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Sweep classifier thresholds over historical CSV data")
+    p.add_argument("start", nargs="?", type=dt.date.fromisoformat, help="Start date (YYYY-MM-DD)")
+    p.add_argument("end", nargs="?", type=dt.date.fromisoformat, help="End date (YYYY-MM-DD)")
+    p.add_argument("--top", type=int, default=30, help="Number of top results to display")
+    p.add_argument("--asset", default="SPX", help="Asset symbol (SPX, NDX, XSP)")
+    return p.parse_args()
 
 
 def summarize_adaptive(
     results: list[tuple],
     classifier: RegimeClassifier,
 ) -> dict | None:
+    from collections import Counter
     traded_pairs = [(r, reg) for r, reg in results if r.traded]
     if not traded_pairs:
         return None
 
-    pnls   = [r.pnl for r, _ in traded_pairs]
-    wins   = [p for p in pnls if p > 0]
-    losses = [p for p in pnls if p < 0]
-    gross_profit = sum(wins)   if wins   else 0.0
-    gross_loss   = abs(sum(losses)) if losses else 0.0
-    profit_factor = round(gross_profit / gross_loss, 3) if gross_loss > 0 else 999.0
-
-    if len(pnls) >= 2:
-        mean  = statistics.mean(pnls)
-        stdev = statistics.stdev(pnls)
-        sharpe = round(mean / stdev * (252 ** 0.5), 3) if stdev > 0 else 0.0
-    else:
-        sharpe = 0.0
-
+    pnls = [r.pnl for r, _ in traded_pairs]
+    wins = [p for p in pnls if p > 0]
     regime_counts: Counter = Counter(reg for _, reg in results)
 
     return {
-        "lookback":   classifier.lookback_days,
-        "bear_ret":   classifier.bear_return_thresh,
-        "bull_ret":   classifier.bull_return_thresh,
-        "bear_vix":   classifier.bear_vix_thresh,
-        "bull_vix":   classifier.bull_vix_thresh,
-        "trades":     len(traded_pairs),
-        "wins":       len(wins),
-        "win_pct":    round(len(wins) / len(traded_pairs) * 100, 1),
-        "total_pnl":  round(sum(pnls), 4),
-        "profit_factor": profit_factor,
-        "sharpe":     sharpe,
-        "n_bull":     regime_counts[Regime.BULL],
-        "n_bear":     regime_counts[Regime.BEAR],
-        "n_chop":     regime_counts[Regime.CHOP],
-        "n_unknown":  regime_counts[Regime.UNKNOWN],
+        "lookback":      classifier.lookback_days,
+        "bear_ret":      classifier.bear_return_thresh,
+        "bull_ret":      classifier.bull_return_thresh,
+        "bear_vix":      classifier.bear_vix_thresh,
+        "bull_vix":      classifier.bull_vix_thresh,
+        "trades":        len(traded_pairs),
+        "wins":          len(wins),
+        "win_pct":       win_pct(pnls),
+        "total_pnl":     round(sum(pnls), 4),
+        "profit_factor": profit_factor(pnls),
+        "sharpe":        sharpe(pnls),
+        "n_bull":        regime_counts[Regime.BULL],
+        "n_bear":        regime_counts[Regime.BEAR],
+        "n_chop":        regime_counts[Regime.CHOP],
+        "n_unknown":     regime_counts[Regime.UNKNOWN],
     }
 
 
 def summarize_baseline(results: list, day_data: list[DayData]) -> dict | None:
-    traded  = [r for r in results if r.traded]
+    traded = [r for r in results if r.traded]
     if not traded:
         return None
-    pnls   = [r.pnl for r in traded]
-    wins   = [p for p in pnls if p > 0]
-    losses = [p for p in pnls if p < 0]
-    gross_profit = sum(wins)   if wins   else 0.0
-    gross_loss   = abs(sum(losses)) if losses else 0.0
-    profit_factor = round(gross_profit / gross_loss, 3) if gross_loss > 0 else 999.0
-    if len(pnls) >= 2:
-        mean  = statistics.mean(pnls)
-        stdev = statistics.stdev(pnls)
-        sharpe = round(mean / stdev * (252 ** 0.5), 3) if stdev > 0 else 0.0
-    else:
-        sharpe = 0.0
+    pnls = [r.pnl for r in traded]
+    wins = [p for p in pnls if p > 0]
     return {
-        "lookback":  "BASE", "bear_ret": "-", "bull_ret": "-",
-        "bear_vix":  "-",    "bull_vix": "-",
-        "trades":    len(traded),
-        "wins":      len(wins),
-        "win_pct":   round(len(wins) / len(traded) * 100, 1),
-        "total_pnl": round(sum(pnls), 4),
-        "profit_factor": profit_factor,
-        "sharpe":    sharpe,
-        "n_bull":    0, "n_bear": 0, "n_chop": 0, "n_unknown": 0,
+        "lookback": "BASE", "bear_ret": "-", "bull_ret": "-",
+        "bear_vix": "-",    "bull_vix": "-",
+        "trades":        len(traded),
+        "wins":          len(wins),
+        "win_pct":       win_pct(pnls),
+        "total_pnl":     round(sum(pnls), 4),
+        "profit_factor": profit_factor(pnls),
+        "sharpe":        sharpe(pnls),
+        "n_bull": 0, "n_bear": 0, "n_chop": 0, "n_unknown": 0,
     }
 
 
@@ -198,7 +169,8 @@ def print_table(rows: list[dict], top_n: int) -> None:
 
 
 def main() -> None:
-    start_arg, end_arg, top_n, asset = parse_args()
+    args = parse_args()
+    start_arg, end_arg, top_n, asset = args.start, args.end, args.top, args.asset.upper()
     spx_path = Path(f"data/{asset.lower()}_1min.csv")
 
     if not spx_path.exists() or not VIX_PATH.exists():

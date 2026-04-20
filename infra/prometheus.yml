@@ -13,6 +13,11 @@ scrape_configs:
       - targets: ["app_ndx:8000"]
     metrics_path: /metrics
 
+  - job_name: "butterfly_xsp"
+    static_configs:
+      - targets: ["app_xsp:8000"]
+    metrics_path: /metrics
+
   - job_name: "prometheus"
     static_configs:
       - targets: ["localhost:9090"]

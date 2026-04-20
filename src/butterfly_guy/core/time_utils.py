@@ -25,6 +25,11 @@ HOLIDAYS_2026 = {
 }
 
 
+def now_utc() -> dt.datetime:
+    """Current time in UTC."""
+    return dt.datetime.now(dt.timezone.utc)
+
+
 def now_eastern() -> dt.datetime:
     """Current time in US/Eastern."""
     return dt.datetime.now(EASTERN)

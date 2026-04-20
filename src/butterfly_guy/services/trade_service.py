@@ -24,6 +24,7 @@ from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, vix_target_center
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
+from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.strategy.direction_filter import DirectionFilter
 
 log = get_logger(__name__)
@@ -149,7 +150,7 @@ class TradeService:
             )
             if raw:
                 vix_price = float(raw)
-                log.info("vix_fetched", vix=round(vix_price, 2))
+                log.debug("vix_fetched", vix=round(vix_price, 2))
         except Exception as e:
             log.warning("vix_fetch_failed", error=str(e))
 
@@ -177,7 +178,7 @@ class TradeService:
 
             # Select best candidate based on configured method
             best: ButterflyCandidate | None = None
-            selection_method = getattr(self.config.entry, 'strike_selection_method', "TARGET_COST")
+            selection_method = self.config.entry.strike_selection_method
             
             if selection_method == "VIX" and vix_price:
                 per_width_bests = []
@@ -247,8 +248,8 @@ class TradeService:
 
             # Price at fly's composite ask + per-step increment to sweeten the offer
             limit_price = round(best.ask + step * price_step, 2)
-            log.info("entry_attempt", step=step, center=best.center_strike,
-                     width=best.wing_width, ask=best.ask, limit=limit_price)
+            log.debug("entry_attempt", step=step, center=best.center_strike,
+                      width=best.wing_width, ask=best.ask, limit=limit_price)
 
             fill = await self.order_manager.execute_single_attempt(best, limit_price)
             if fill:
@@ -332,7 +333,7 @@ class TradeService:
                 "step": step, "limit": limit_price, "mark": best.cost, "ask": best.ask,
                 "center": best.center_strike, "width": best.wing_width,
             }, underlying=underlying)
-            log.info("entry_step_unfilled", step=step, limit=limit_price, ask=best.ask, center=best.center_strike)
+            log.debug("entry_step_unfilled", step=step, limit=limit_price, ask=best.ask, center=best.center_strike)
 
         await self.decision_queries.log_event("entry_exhausted", {"direction": direction}, underlying=underlying)
         log.warning("entry_exhausted", direction=direction)
@@ -371,34 +372,25 @@ class TradeService:
         self, chain_data: dict, expiration: dt.date
     ) -> list[OptionQuote]:
         """Parse Schwab chain response into OptionQuote objects."""
-        quotes: list[OptionQuote] = []
         underlying = self.config.strategy.underlying
-
-        for option_type, map_key in [("CALL", "callExpDateMap"), ("PUT", "putExpDateMap")]:
-            exp_map = chain_data.get(map_key, {})
-            for exp_key, strikes in exp_map.items():
-                if str(expiration) not in exp_key:
-                    continue
-                for strike_str, options in strikes.items():
-                    for opt in options:
-                        quotes.append(
-                            OptionQuote(
-                                symbol=opt.get("symbol", ""),
-                                underlying=underlying,
-                                expiration=expiration,
-                                strike=float(strike_str),
-                                option_type=option_type,
-                                bid=opt.get("bid", 0),
-                                ask=opt.get("ask", 0),
-                                mark=opt.get("mark", 0),
-                                last=opt.get("last", 0),
-                                volume=opt.get("totalVolume", 0),
-                                open_interest=opt.get("openInterest", 0),
-                                iv=opt.get("volatility", 0),
-                                delta=opt.get("delta", 0),
-                                gamma=opt.get("gamma", 0),
-                                theta=opt.get("theta", 0),
-                                vega=opt.get("vega", 0),
-                            )
-                        )
-        return quotes
+        return [
+            OptionQuote(
+                symbol=opt.get("symbol", ""),
+                underlying=underlying,
+                expiration=expiration,
+                strike=strike,
+                option_type=option_type,
+                bid=opt.get("bid", 0),
+                ask=opt.get("ask", 0),
+                mark=opt.get("mark", 0),
+                last=opt.get("last", 0),
+                volume=opt.get("totalVolume", 0),
+                open_interest=opt.get("openInterest", 0),
+                iv=opt.get("volatility", 0),
+                delta=opt.get("delta", 0),
+                gamma=opt.get("gamma", 0),
+                theta=opt.get("theta", 0),
+                vega=opt.get("vega", 0),
+            )
+            for strike, option_type, opt in iter_chain_options(chain_data, expiration)
+        ]

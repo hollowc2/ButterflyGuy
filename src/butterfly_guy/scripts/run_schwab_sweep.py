@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import datetime as dt
 import itertools
@@ -33,6 +34,7 @@ from dotenv import dotenv_values
 
 from butterfly_guy.backtest._cache_utils import day_cache_path, load_day, save_day
 from butterfly_guy.backtest.data_loader import DayData
+from butterfly_guy.backtest.metrics import max_consecutive_losses, profit_factor, sharpe, win_pct
 from butterfly_guy.backtest.schwab_loader import SchwabDataLoader
 from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
 from butterfly_guy.core.logging import get_logger, setup_logging
@@ -51,7 +53,7 @@ def date_range(start: dt.date, end: dt.date) -> list[dt.date]:
     return dates
 
 
-def summarize(params: SimulationParams, results: list) -> dict:
+def summarize(params: SimulationParams, results: list) -> dict | None:
     traded = [r for r in results if r.traded]
     if not traded:
         return None
@@ -61,33 +63,11 @@ def summarize(params: SimulationParams, results: list) -> dict:
     losses = [p for p in pnls if p < 0]
     gross_profit = sum(wins) if wins else 0.0
     gross_loss = abs(sum(losses)) if losses else 0.0
-    profit_factor = round(gross_profit / gross_loss, 3) if gross_loss > 0 else 999.0
-
-    # Sharpe on trade PnLs
-    if len(pnls) >= 2:
-        import statistics
-        mean = statistics.mean(pnls)
-        stdev = statistics.stdev(pnls)
-        sharpe = round(mean / stdev * (252 ** 0.5), 3) if stdev > 0 else 0.0
-    else:
-        sharpe = 0.0
-
-    # Max consecutive losses
-    max_streak = streak = 0
-    for p in pnls:
-        streak = streak + 1 if p < 0 else 0
-        max_streak = max(max_streak, streak)
-
     reasons = Counter(r.exit_reason for r in traded)
-    morning_dd_exits = reasons.get("drawdown_morning", 0)
-    eod_exits = reasons.get("end_of_day", 0)
-
-    direction_str = params.direction_override or "auto"
-    filter_str = "bias" if params.use_bias_filter else "gap_dir"
 
     return {
-        "direction": direction_str,
-        "filter": filter_str,
+        "direction": params.direction_override or "auto",
+        "filter": "bias" if params.use_bias_filter else "gap_dir",
         "wing": params.wing_width,
         "rr_min": params.rr_min,
         "morn_dd": params.morning_drawdown,
@@ -95,32 +75,33 @@ def summarize(params: SimulationParams, results: list) -> dict:
         "aft_dd": params.afternoon_drawdown,
         "trades": len(traded),
         "wins": len(wins),
-        "win_pct": round(len(wins) / len(traded) * 100, 1),
+        "win_pct": win_pct(pnls),
         "total_pnl": round(sum(pnls), 4),
         "avg_win": round(gross_profit / len(wins), 4) if wins else 0.0,
         "avg_loss": round(-gross_loss / len(losses), 4) if losses else 0.0,
-        "profit_factor": profit_factor,
-        "sharpe": sharpe,
-        "max_streak": max_streak,
-        "eod_exits": eod_exits,
-        "morning_dd_exits": morning_dd_exits,
+        "profit_factor": profit_factor(pnls),
+        "sharpe": sharpe(pnls),
+        "max_streak": max_consecutive_losses(pnls),
+        "eod_exits": reasons.get("end_of_day", 0),
+        "morning_dd_exits": reasons.get("drawdown_morning", 0),
     }
 
 
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Parameter sweep using Schwab 1-minute SPY data")
+    p.add_argument("start", nargs="?", type=dt.date.fromisoformat, help="Start date (YYYY-MM-DD)")
+    p.add_argument("end", nargs="?", type=dt.date.fromisoformat, help="End date (YYYY-MM-DD)")
+    p.add_argument("--no-cache", action="store_true", help="Fetch all days from Schwab API, ignoring cache")
+    return p.parse_args()
+
+
 async def main() -> None:
-    no_cache = "--no-cache" in sys.argv
-    date_args = [a for a in sys.argv[1:] if a.startswith("20")]
+    args = parse_args()
+    no_cache = args.no_cache
     today = dt.date.today()
 
-    if len(date_args) >= 2:
-        start = dt.date.fromisoformat(date_args[0])
-        end = dt.date.fromisoformat(date_args[1])
-    elif len(date_args) == 1:
-        start = dt.date.fromisoformat(date_args[0])
-        end = today - dt.timedelta(days=1)
-    else:
-        start = today - dt.timedelta(days=45)
-        end = today - dt.timedelta(days=1)
+    start = args.start or (today - dt.timedelta(days=45))
+    end = args.end or (today - dt.timedelta(days=1))
 
     dates = date_range(start, end)
     cache_hits = sum(1 for d in dates if day_cache_path(d, CACHE_DIR).exists() and not no_cache)

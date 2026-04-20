@@ -14,40 +14,33 @@ from __future__ import annotations
 import csv as csv_mod
 import datetime as dt
 import itertools
-import statistics
 import sys
 from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
+import argparse
+
 from butterfly_guy.backtest.csv_loader import CsvDataLoader
 from butterfly_guy.backtest.data_loader import DayData
+from butterfly_guy.backtest.metrics import max_consecutive_losses, profit_factor, sharpe, win_pct
 from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
 from butterfly_guy.core.logging import get_logger, setup_logging
 
 setup_logging(log_level="WARNING", json_output=False)
 log = get_logger("run_csv_sweep")
 
-SPX_PATH = Path("data/spx_1min.csv")
 VIX_PATH = Path("data/vix_1min.csv")
 
 
-def parse_args() -> tuple[dt.date | None, dt.date | None, int, str]:
-    date_args = [a for a in sys.argv[1:] if a.startswith("20")]
-    top_n = 30
-    asset = "SPX"
-    for i, a in enumerate(sys.argv[1:]):
-        if a == "--top" and i + 2 <= len(sys.argv) - 1:
-            try:
-                top_n = int(sys.argv[i + 2])
-            except ValueError:
-                pass
-        elif a == "--asset" and i + 1 < len(sys.argv):
-            asset = sys.argv[i + 1].upper()
-    start = dt.date.fromisoformat(date_args[0]) if len(date_args) >= 1 else None
-    end = dt.date.fromisoformat(date_args[1]) if len(date_args) >= 2 else None
-    return start, end, top_n, asset
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Parameter sweep using historical SPX/NDX 1-minute CSV data")
+    p.add_argument("start", nargs="?", type=dt.date.fromisoformat, help="Start date (YYYY-MM-DD)")
+    p.add_argument("end", nargs="?", type=dt.date.fromisoformat, help="End date (YYYY-MM-DD)")
+    p.add_argument("--top", type=int, default=30, help="Number of top results to display")
+    p.add_argument("--asset", default="SPX", help="Asset symbol (SPX, NDX, XSP)")
+    return p.parse_args()
 
 
 def summarize(params: SimulationParams, results: list) -> dict | None:
@@ -60,27 +53,11 @@ def summarize(params: SimulationParams, results: list) -> dict | None:
     losses = [p for p in pnls if p < 0]
     gross_profit = sum(wins) if wins else 0.0
     gross_loss = abs(sum(losses)) if losses else 0.0
-    profit_factor = round(gross_profit / gross_loss, 3) if gross_loss > 0 else 999.0
-
-    if len(pnls) >= 2:
-        mean = statistics.mean(pnls)
-        stdev = statistics.stdev(pnls)
-        sharpe = round(mean / stdev * (252 ** 0.5), 3) if stdev > 0 else 0.0
-    else:
-        sharpe = 0.0
-
-    max_streak = streak = 0
-    for p in pnls:
-        streak = streak + 1 if p < 0 else 0
-        max_streak = max(max_streak, streak)
-
     reasons = Counter(r.exit_reason for r in traded)
-    direction_str = params.direction_override or "auto"
-    filter_str = "bias" if params.use_bias_filter else "gap_dir"
 
     return {
-        "direction": direction_str,
-        "filter": filter_str,
+        "direction": params.direction_override or "auto",
+        "filter": "bias" if params.use_bias_filter else "gap_dir",
         "wing": params.wing_width,
         "rr_min": params.rr_min,
         "vix_max": params.vix_max if params.vix_max is not None else "-",
@@ -89,13 +66,13 @@ def summarize(params: SimulationParams, results: list) -> dict | None:
         "aft_dd": params.afternoon_drawdown,
         "trades": len(traded),
         "wins": len(wins),
-        "win_pct": round(len(wins) / len(traded) * 100, 1),
+        "win_pct": win_pct(pnls),
         "total_pnl": round(sum(pnls), 4),
         "avg_win": round(gross_profit / len(wins), 4) if wins else 0.0,
         "avg_loss": round(-gross_loss / len(losses), 4) if losses else 0.0,
-        "profit_factor": profit_factor,
-        "sharpe": sharpe,
-        "max_streak": max_streak,
+        "profit_factor": profit_factor(pnls),
+        "sharpe": sharpe(pnls),
+        "max_streak": max_consecutive_losses(pnls),
         "eod_exits": reasons.get("end_of_day", 0),
         "dd_exits": sum(v for k, v in reasons.items() if k.startswith("drawdown")),
         "expired": reasons.get("expired", 0),
@@ -129,7 +106,8 @@ def print_table(rows: list[dict], top_n: int) -> None:
 
 
 def main() -> None:
-    start_arg, end_arg, top_n, asset = parse_args()
+    args = parse_args()
+    start_arg, end_arg, top_n, asset = args.start, args.end, args.top, args.asset.upper()
     spx_path = Path(f"data/{asset.lower()}_1min.csv")
 
     if not spx_path.exists() or not VIX_PATH.exists():

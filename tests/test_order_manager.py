@@ -230,125 +230,6 @@ async def test_fetch_live_spread_returns_none_on_nonpositive_mark():
     assert result is None
 
 
-@pytest.mark.asyncio
-async def test_fetch_live_mark_delegates_to_fetch_live_spread():
-    settings = make_settings()
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-    spread = LiveSpread(bid=-0.9, mark=0.5, ask=0.9)
-
-    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)):
-        result = await om._fetch_live_mark(candidate)
-
-    assert result == pytest.approx(0.5)
-
-
-# ---------------------------------------------------------------------------
-# _fetch_live_mark (existing tests preserved via make_chain_data)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_fetch_live_mark_returns_net_debit():
-    settings = make_settings()
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-    exp = dt.date(2026, 3, 21)
-
-    schwab.get_option_chain = AsyncMock(
-        return_value=make_chain_data(exp, 5900, 5950, 6000, 1.0, 1.5, 2.5)
-    )
-
-    result = await om._fetch_live_mark(candidate)
-
-    # lower + upper - 2*center = 1.0 + 2.5 - 3.0 = 0.5
-    assert result == pytest.approx(0.5)
-
-
-@pytest.mark.asyncio
-async def test_fetch_live_mark_returns_none_on_exception():
-    settings = make_settings()
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-
-    schwab.get_option_chain = AsyncMock(side_effect=RuntimeError("network error"))
-
-    result = await om._fetch_live_mark(candidate)
-
-    assert result is None
-
-
-@pytest.mark.asyncio
-async def test_fetch_live_mark_returns_none_on_missing_strikes():
-    settings = make_settings()
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-    exp = dt.date(2026, 3, 21)
-
-    # Only 2 strikes present
-    schwab.get_option_chain = AsyncMock(return_value={
-        "putExpDateMap": {
-            f"{exp}:0": {
-                "5900.0": [{"mark": 1.0, "bid": 0.9, "ask": 1.1}],
-                "5950.0": [{"mark": 1.5, "bid": 1.4, "ask": 1.6}],
-            }
-        }
-    })
-
-    result = await om._fetch_live_mark(candidate)
-
-    assert result is None
-
-
-@pytest.mark.asyncio
-async def test_fetch_live_mark_returns_none_on_nonpositive():
-    settings = make_settings()
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-    exp = dt.date(2026, 3, 21)
-
-    # lower + upper - 2*center = 1.0 + 1.0 - 2*2.0 = -2.0
-    schwab.get_option_chain = AsyncMock(
-        return_value=make_chain_data(exp, 5900, 5950, 6000, 1.0, 2.0, 1.0)
-    )
-
-    result = await om._fetch_live_mark(candidate)
-
-    assert result is None
-
-
-@pytest.mark.asyncio
-async def test_fetch_live_mark_uses_correct_spx_symbol():
-    settings = make_settings()
-    om, schwab = make_order_manager(settings, underlying="SPX")
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-    exp = dt.date(2026, 3, 21)
-
-    schwab.get_option_chain = AsyncMock(
-        return_value=make_chain_data(exp, 5900, 5950, 6000, 1.0, 1.5, 2.5)
-    )
-
-    await om._fetch_live_mark(candidate)
-
-    schwab.get_option_chain.assert_called_once_with("$SPX", exp)
-
-
-@pytest.mark.asyncio
-async def test_fetch_live_mark_uses_correct_ndx_symbol():
-    settings = make_settings()
-    om, schwab = make_order_manager(settings, underlying="NDX")
-    candidate = make_candidate(20000, 20050, 20100, 3.00)
-    exp = dt.date(2026, 3, 21)
-    candidate.lower_quote.expiration = exp
-
-    schwab.get_option_chain = AsyncMock(
-        return_value=make_chain_data(exp, 20000, 20050, 20100, 1.0, 1.5, 2.5)
-    )
-
-    await om._fetch_live_mark(candidate)
-
-    schwab.get_option_chain.assert_called_once_with("$NDX", exp)
-
-
 # ---------------------------------------------------------------------------
 # Paper trading — entry
 # ---------------------------------------------------------------------------
@@ -581,7 +462,7 @@ async def test_entry_uses_live_mark_not_candidate_cost():
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     live_mark = 2.75
 
-    with patch.object(om, "_fetch_live_mark", new=AsyncMock(return_value=live_mark)), \
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=LiveSpread(bid=2.60, mark=live_mark, ask=2.90))), \
          patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
         result = await om.execute_entry(candidate, quantity=1)
 
@@ -597,7 +478,7 @@ async def test_entry_steps_up_from_live_mark():
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     live_mark = 2.75
 
-    with patch.object(om, "_fetch_live_mark", new=AsyncMock(return_value=live_mark)), \
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=LiveSpread(bid=2.60, mark=live_mark, ask=2.90))), \
          patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=[False, True])):
         result = await om.execute_entry(candidate, quantity=1)
 
@@ -614,7 +495,7 @@ async def test_entry_falls_back_to_candidate_cost_when_fetch_fails():
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
 
-    with patch.object(om, "_fetch_live_mark", new=AsyncMock(return_value=None)), \
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)), \
          patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
         result = await om.execute_entry(candidate, quantity=1)
 
@@ -629,11 +510,11 @@ async def test_entry_reprice_called_per_step():
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
 
-    fetch_mock = AsyncMock(return_value=2.75)
+    fetch_mock = AsyncMock(return_value=LiveSpread(bid=2.60, mark=2.75, ask=2.90))
     # Fill on the last step so we traverse all 4 steps
     wait_mock = AsyncMock(side_effect=[False, False, False, True])
 
-    with patch.object(om, "_fetch_live_mark", new=fetch_mock), \
+    with patch.object(om, "_fetch_live_spread", new=fetch_mock), \
          patch.object(om, "_wait_for_fill", new=wait_mock):
         await om.execute_entry(candidate, quantity=1)
 
@@ -659,7 +540,7 @@ async def test_entry_does_not_mutate_candidate_cost():
     original_cost = candidate.cost
     live_mark = 2.75
 
-    with patch.object(om, "_fetch_live_mark", new=AsyncMock(return_value=live_mark)), \
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=LiveSpread(bid=2.60, mark=live_mark, ask=2.90))), \
          patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
         await om.execute_entry(candidate, quantity=1)
 

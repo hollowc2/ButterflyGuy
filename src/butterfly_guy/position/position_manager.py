@@ -11,6 +11,8 @@ from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import position_peak_value, position_pnl, position_value
 from butterfly_guy.core.time_utils import get_time_regime, minutes_since_open, minutes_to_close
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord, fly_mark_value
+import math
+
 from butterfly_guy.quant_engine.black_scholes import bs_call_price, bs_put_price, implied_vol
 
 log = get_logger(__name__)
@@ -71,7 +73,7 @@ def compute_tent_boundaries(
     # BS-implied vol from the mark price so tent lines still appear.
     def _resolve_iv(raw_iv: float | None, mark: float, K: float) -> float:
         v = float(raw_iv) if raw_iv is not None else 0.0
-        if v > 0 and not (v != v):  # v != v is True only for NaN
+        if math.isfinite(v) and v > 0:
             return v
         imp = implied_vol(mark, S, K, T_years, r, candidate.direction)
         return imp * 100.0 if imp is not None else 0.0

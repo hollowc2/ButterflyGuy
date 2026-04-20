@@ -9,6 +9,7 @@ from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import daily_pnl, trades_active, trades_total
 from butterfly_guy.core.time_utils import get_0dte_expiration, is_market_open, now_eastern
+from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
 from butterfly_guy.db.queries import DecisionQueries, TentQueries, TradeQueries
@@ -279,30 +280,23 @@ class PositionService:
         expiration: dt.date,
         candidate: ButterflyCandidate,
     ) -> dict[float, OptionQuote]:
-        """Extract relevant quotes for position valuation."""
-        quotes: dict[float, OptionQuote] = {}
+        """Extract the three butterfly leg quotes from the chain for position valuation."""
         target_strikes = {candidate.lower_strike, candidate.center_strike, candidate.upper_strike}
-        map_key = "callExpDateMap" if candidate.direction == "CALL" else "putExpDateMap"
-
-        exp_map = chain_data.get(map_key, {})
-        for exp_key, strikes in exp_map.items():
-            if str(expiration) not in exp_key:
-                continue
-            for strike_str, options in strikes.items():
-                strike = float(strike_str)
-                if strike in target_strikes and options:
-                    opt = options[0]
-                    quotes[strike] = OptionQuote(
-                        symbol=opt.get("symbol", ""),
-                        underlying=self.config.strategy.underlying,
-                        expiration=expiration,
-                        strike=strike,
-                        option_type=candidate.direction,
-                        bid=opt.get("bid", 0),
-                        ask=opt.get("ask", 0),
-                        mark=opt.get("mark", 0),
-                        # Schwab returns null/-999 for index options (SPX, NDX);
-                        # treat as 0 here and let compute_tent_boundaries impute via BS inverse
-                        iv=float(opt.get("volatility") or 0.0),
-                    )
-        return quotes
+        underlying = self.config.strategy.underlying
+        return {
+            strike: OptionQuote(
+                symbol=opt.get("symbol", ""),
+                underlying=underlying,
+                expiration=expiration,
+                strike=strike,
+                option_type=candidate.direction,
+                bid=opt.get("bid", 0),
+                ask=opt.get("ask", 0),
+                mark=opt.get("mark", 0),
+                # Schwab returns null/-999 for index options (SPX, NDX);
+                # treat as 0 here and let compute_tent_boundaries impute via BS inverse
+                iv=float(opt.get("volatility") or 0.0),
+            )
+            for strike, _, opt in iter_chain_options(chain_data, expiration, direction=candidate.direction)
+            if strike in target_strikes
+        }

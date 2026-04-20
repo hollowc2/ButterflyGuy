@@ -43,7 +43,7 @@ class ChainQueries:
     async def get_latest_chain(
         self, underlying: str, expiration: dt.date
     ) -> list[dict]:
-        rows = await self.db.fetch(
+        rows = await self.db.pool.fetch(
             """
             SELECT * FROM option_chain_snapshots
             WHERE underlying = $1 AND expiration = $2
@@ -60,7 +60,7 @@ class ChainQueries:
     async def get_chain_at_time(
         self, underlying: str, expiration: dt.date, at: dt.datetime
     ) -> list[dict]:
-        rows = await self.db.fetch(
+        rows = await self.db.pool.fetch(
             """
             SELECT * FROM option_chain_snapshots
             WHERE underlying = $1 AND expiration = $2
@@ -81,13 +81,13 @@ class SpotQueries:
 
     async def insert(self, underlying: str, price: float, ts: dt.datetime | None = None) -> None:
         ts = ts or dt.datetime.now(dt.timezone.utc)
-        await self.db.execute(
+        await self.db.pool.execute(
             "INSERT INTO spot_prices (ts, underlying, price) VALUES ($1, $2, $3)",
             ts, underlying, price,
         )
 
     async def get_latest(self, underlying: str) -> float | None:
-        return await self.db.fetchval(
+        return await self.db.pool.fetchval(
             "SELECT price FROM spot_prices WHERE underlying = $1 ORDER BY ts DESC LIMIT 1",
             underlying,
         )
@@ -100,7 +100,7 @@ class TradeQueries:
         self.db = db
 
     async def insert_trade(self, trade: dict[str, Any]) -> int:
-        return await self.db.fetchval(
+        return await self.db.pool.fetchval(
             """
             INSERT INTO butterfly_trades (
                 underlying, trade_date, direction, wing_width, center_strike,
@@ -122,7 +122,7 @@ class TradeQueries:
         self, trade_id: int, exit_price: float, exit_time: dt.datetime,
         exit_reason: str, pnl: float, peak_value: float
     ) -> None:
-        await self.db.execute(
+        await self.db.pool.execute(
             """
             UPDATE butterfly_trades SET
                 exit_price = $2, exit_time = $3, exit_reason = $4,
@@ -133,7 +133,7 @@ class TradeQueries:
         )
 
     async def update_peak_value(self, trade_id: int, peak_value: float) -> None:
-        await self.db.execute(
+        await self.db.pool.execute(
             """
             UPDATE butterfly_trades SET peak_value = $2
             WHERE id = $1 AND (peak_value IS NULL OR peak_value < $2)
@@ -142,14 +142,14 @@ class TradeQueries:
         )
 
     async def get_open_trades(self, underlying: str) -> list[dict]:
-        rows = await self.db.fetch(
+        rows = await self.db.pool.fetch(
             "SELECT * FROM butterfly_trades WHERE status = 'OPEN' AND underlying = $1 ORDER BY entry_time",
             underlying,
         )
         return [dict(r) for r in rows]
 
     async def get_trades_for_date(self, trade_date: dt.date, underlying: str) -> list[dict]:
-        rows = await self.db.fetch(
+        rows = await self.db.pool.fetch(
             "SELECT * FROM butterfly_trades WHERE trade_date = $1 AND underlying = $2 ORDER BY entry_time",
             trade_date, underlying,
         )
@@ -163,24 +163,24 @@ class RiskQueries:
         self.db = db
 
     async def get_or_create(self, trade_date: dt.date, underlying: str) -> dict:
-        row = await self.db.fetchrow(
+        row = await self.db.pool.fetchrow(
             "SELECT * FROM daily_risk_state WHERE trade_date = $1 AND underlying = $2",
             trade_date, underlying,
         )
         if row:
             return dict(row)
-        await self.db.execute(
+        await self.db.pool.execute(
             "INSERT INTO daily_risk_state (trade_date, underlying) VALUES ($1, $2) ON CONFLICT DO NOTHING",
             trade_date, underlying,
         )
-        row = await self.db.fetchrow(
+        row = await self.db.pool.fetchrow(
             "SELECT * FROM daily_risk_state WHERE trade_date = $1 AND underlying = $2",
             trade_date, underlying,
         )
         return dict(row)
 
     async def increment_trade_count(self, trade_date: dt.date, underlying: str) -> None:
-        await self.db.execute(
+        await self.db.pool.execute(
             """
             UPDATE daily_risk_state
             SET trade_count = trade_count + 1
@@ -190,7 +190,7 @@ class RiskQueries:
         )
 
     async def update_pnl(self, trade_date: dt.date, pnl_delta: float, underlying: str) -> None:
-        await self.db.execute(
+        await self.db.pool.execute(
             """
             UPDATE daily_risk_state
             SET realized_pnl = realized_pnl + $2
@@ -200,7 +200,7 @@ class RiskQueries:
         )
 
     async def set_halted(self, trade_date: dt.date, underlying: str) -> None:
-        await self.db.execute(
+        await self.db.pool.execute(
             "UPDATE daily_risk_state SET halted = TRUE, max_loss_hit = TRUE WHERE trade_date = $1 AND underlying = $2",
             trade_date, underlying,
         )
@@ -221,7 +221,7 @@ class RiskQueries:
 
     async def get_recent_closed_pnls(self, underlying: str, n: int) -> list[float]:
         """PnL of the last N closed trades (most recent first), for consecutive loss detection."""
-        rows = await self.db.fetch(
+        rows = await self.db.pool.fetch(
             """
             SELECT pnl FROM butterfly_trades
             WHERE underlying = $1 AND status = 'CLOSED' AND pnl IS NOT NULL
@@ -240,7 +240,7 @@ class DecisionQueries:
         self.db = db
 
     async def log_event(self, event_type: str, data: dict[str, Any], underlying: str | None = None) -> None:
-        await self.db.execute(
+        await self.db.pool.execute(
             "INSERT INTO decision_log (event_type, data, underlying) VALUES ($1, $2::jsonb, $3)",
             event_type, json.dumps(data), underlying,
         )
@@ -278,7 +278,7 @@ class DailyBarQueries:
 
     async def get_recent_closes(self, underlying: str, days: int) -> list[float]:
         """Return the last `days` daily closes in chronological order (oldest first)."""
-        rows = await self.db.fetch(
+        rows = await self.db.pool.fetch(
             """
             SELECT close FROM daily_bars
             WHERE underlying = $1
@@ -303,7 +303,7 @@ class TentQueries:
         lower_tent: float | None,
         upper_tent: float | None,
     ) -> None:
-        await self.db.execute(
+        await self.db.pool.execute(
             """
             INSERT INTO tent_boundaries (ts, underlying, lower_tent, upper_tent)
             VALUES ($1, $2, $3, $4)

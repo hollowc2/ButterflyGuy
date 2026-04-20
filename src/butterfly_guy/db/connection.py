@@ -36,15 +36,3 @@ class DatabasePool:
             await self._pool.close()
             self._pool = None
             log.info("database_pool_closed")
-
-    async def execute(self, query: str, *args) -> str:
-        return await self.pool.execute(query, *args)
-
-    async def fetch(self, query: str, *args) -> list[asyncpg.Record]:
-        return await self.pool.fetch(query, *args)
-
-    async def fetchrow(self, query: str, *args) -> asyncpg.Record | None:
-        return await self.pool.fetchrow(query, *args)
-
-    async def fetchval(self, query: str, *args):
-        return await self.pool.fetchval(query, *args)
