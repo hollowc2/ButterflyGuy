@@ -304,8 +304,8 @@ def main() -> None:
         print_regime_table(regime["label"], rows, top_n)
 
         # Save per-regime CSV
-        Path("results").mkdir(exist_ok=True)
-        out = Path(f"results/regime_sweep_{regime['name'].lower()}.csv")
+        Path("data/results").mkdir(exist_ok=True)
+        out = Path(f"data/results/regime_sweep_{regime['name'].lower()}.csv")
         with open(out, "w", newline="") as f:
             save_rows = [{k: v for k, v in r.items() if k != "key"} for r in rows]
             writer = csv_mod.DictWriter(f, fieldnames=save_rows[0].keys())

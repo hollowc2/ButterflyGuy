@@ -881,7 +881,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
     ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     start_str = (args.start or dates[0]).strftime("%Y%m%d")
     end_str = (args.end or dates[-1]).strftime("%Y%m%d")
-    results_dir = Path("results")
+    results_dir = Path("data/results")
     results_dir.mkdir(exist_ok=True)
     csv_path = args.csv or results_dir / f"sweep_{args.asset}_{start_str}_{end_str}_{ts_str}.csv"
 
