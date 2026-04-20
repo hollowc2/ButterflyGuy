@@ -37,11 +37,11 @@ import asyncpg
 import yfinance as yf
 
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
-from butterfly_guy.backtest.parameter_sweeper import (
-    _max_consecutive_losses,
-    _max_drawdown,
-    _profit_factor,
-    _sharpe,
+from butterfly_guy.backtest.metrics import (
+    max_consecutive_losses as _max_consecutive_losses,
+    max_drawdown as _max_drawdown,
+    profit_factor as _profit_factor,
+    sharpe as _sharpe,
 )
 from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
 from butterfly_guy.core.config import StrategySettings
