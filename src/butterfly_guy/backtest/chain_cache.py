@@ -22,6 +22,7 @@ Simulation uses real quotes when available, falls back to synthetic otherwise.
 
 from __future__ import annotations
 
+import bisect
 import datetime as dt
 import json
 from pathlib import Path
@@ -29,6 +30,16 @@ from pathlib import Path
 from butterfly_guy.data.schemas import OptionQuote
 
 CHAIN_CACHE_DIR = Path("data/chains")
+
+
+class ChainDay(dict):
+    """dict of {UTC datetime: OptionQuote list} with a pre-sorted key index for O(log n) lookups."""
+
+    _sorted_keys: list
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._sorted_keys = sorted(self.keys())
 
 
 def chain_cache_path(date: dt.date, cache_dir: Path = CHAIN_CACHE_DIR) -> Path:
@@ -115,7 +126,7 @@ def load_chain_day(
         ]
         result[ts] = quotes
 
-    return result or None
+    return ChainDay(result) if result else None
 
 
 def nearest_snapshot(
@@ -123,7 +134,9 @@ def nearest_snapshot(
     bar_ts: dt.datetime,
 ) -> list[OptionQuote] | None:
     """Return quotes from the most recent snapshot at or before bar_ts."""
+    if isinstance(chains, ChainDay):
+        keys = chains._sorted_keys
+        i = bisect.bisect_right(keys, bar_ts) - 1
+        return chains[keys[i]] if i >= 0 else None
     candidates = [ts for ts in chains if ts <= bar_ts]
-    if not candidates:
-        return None
-    return chains[max(candidates)]
+    return chains[max(candidates)] if candidates else None

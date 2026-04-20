@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import bisect
 import csv
 import datetime as dt
 import itertools
@@ -36,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 import asyncpg
 import yfinance as yf
 
+from butterfly_guy.backtest.chain_cache import ChainDay
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.backtest.metrics import (
     max_consecutive_losses as _max_consecutive_losses,
@@ -250,7 +252,115 @@ async def load_chains_from_db(
                 vega=float(r["vega"] or 0),
             )
         )
-    return dict(chains)
+    return ChainDay(chains)
+
+
+async def load_entry_chains(
+    conn: asyncpg.Connection,
+    date: dt.date,
+    underlying: str,
+) -> ChainDay:
+    """Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection."""
+    start_utc = dt.datetime(date.year, date.month, date.day, 9, 30, tzinfo=EASTERN).astimezone(dt.timezone.utc)
+    end_utc = dt.datetime(date.year, date.month, date.day, 10, 45, tzinfo=EASTERN).astimezone(dt.timezone.utc)
+    rows = await conn.fetch(
+        """
+        SELECT snapshot_time, strike, option_type, bid, ask, mark, last,
+               volume, open_interest, iv, delta, gamma, theta, vega, symbol, spot_price
+        FROM option_chain_snapshots
+        WHERE underlying = $1
+          AND expiration = $2
+          AND snapshot_time >= $3
+          AND snapshot_time <= $4
+        ORDER BY snapshot_time, strike, option_type
+        """,
+        underlying, date, start_utc, end_utc,
+    )
+    chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
+    for r in rows:
+        ts = r["snapshot_time"]
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=dt.timezone.utc)
+        chains[ts].append(
+            OptionQuote(
+                symbol=r["symbol"] or f"DB_{r['option_type'][0]}{int(r['strike'])}",
+                underlying=underlying,
+                expiration=date,
+                strike=float(r["strike"]),
+                option_type=r["option_type"],
+                bid=float(r["bid"] or 0),
+                ask=float(r["ask"] or 0),
+                mark=float(r["mark"] or 0),
+                last=float(r["last"] or 0),
+                volume=int(r["volume"] or 0),
+                open_interest=int(r["open_interest"] or 0),
+                iv=float(r["iv"] or 0),
+                delta=float(r["delta"] or 0),
+                gamma=float(r["gamma"] or 0),
+                theta=float(r["theta"] or 0),
+                vega=float(r["vega"] or 0),
+            )
+        )
+    return ChainDay(chains)
+
+
+async def load_monitoring_chains(
+    conn: asyncpg.Connection,
+    date: dt.date,
+    underlying: str,
+    strikes: list[float],
+    option_types: list[str],
+) -> ChainDay:
+    """Load full-day snapshots for specific strikes only (3 legs of a butterfly)."""
+    rows = await conn.fetch(
+        """
+        SELECT snapshot_time, strike, option_type, bid, ask, mark, last,
+               volume, open_interest, iv, delta, gamma, theta, vega, symbol, spot_price
+        FROM option_chain_snapshots
+        WHERE underlying = $1
+          AND expiration = $2
+          AND snapshot_time::date = $2
+          AND strike = ANY($3::numeric[])
+          AND option_type = ANY($4)
+        ORDER BY snapshot_time, strike, option_type
+        """,
+        underlying, date, strikes, option_types,
+    )
+    chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
+    for r in rows:
+        ts = r["snapshot_time"]
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=dt.timezone.utc)
+        chains[ts].append(
+            OptionQuote(
+                symbol=r["symbol"] or f"DB_{r['option_type'][0]}{int(r['strike'])}",
+                underlying=underlying,
+                expiration=date,
+                strike=float(r["strike"]),
+                option_type=r["option_type"],
+                bid=float(r["bid"] or 0),
+                ask=float(r["ask"] or 0),
+                mark=float(r["mark"] or 0),
+                last=float(r["last"] or 0),
+                volume=int(r["volume"] or 0),
+                open_interest=int(r["open_interest"] or 0),
+                iv=float(r["iv"] or 0),
+                delta=float(r["delta"] or 0),
+                gamma=float(r["gamma"] or 0),
+                theta=float(r["theta"] or 0),
+                vega=float(r["vega"] or 0),
+            )
+        )
+    return ChainDay(chains)
+
+
+def merge_chains(entry: ChainDay, monitoring: ChainDay) -> ChainDay:
+    """Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains.
+
+    Entry wins on overlapping timestamps so butterfly selection sees full strike data.
+    """
+    merged = {**monitoring, **entry}
+    return ChainDay(merged)
 
 
 async def load_bars_from_db(
@@ -326,10 +436,12 @@ def nearest_snapshot(
     chains: dict[dt.datetime, list[OptionQuote]],
     bar_ts: dt.datetime,
 ) -> list[OptionQuote] | None:
+    if isinstance(chains, ChainDay):
+        keys = chains._sorted_keys
+        i = bisect.bisect_right(keys, bar_ts) - 1
+        return chains[keys[i]] if i >= 0 else None
     candidates = [ts for ts in chains if ts <= bar_ts]
-    if not candidates:
-        return None
-    return chains[max(candidates)]
+    return chains[max(candidates)] if candidates else None
 
 
 def select_for_width(
@@ -448,7 +560,7 @@ async def load_date_data(
     underlying: str,
 ) -> dict | None:
     """Load all data for one date. Returns None if insufficient data."""
-    chains = await load_chains_from_db(conn, date, underlying)
+    chains = await load_entry_chains(conn, date, underlying)
     bars = await load_bars_from_db(conn, date, underlying)
     if not chains or not bars:
         return None
@@ -586,81 +698,85 @@ async def run_single(args: argparse.Namespace) -> None:
     conn = await asyncpg.connect(DB_DSN)
     try:
         dates = await discover_dates(conn, args.asset, args.start, args.end)
+
+        if not dates:
+            print("ERROR: No full trading days found in DB for the specified range.")
+            return
+
+        print(f"  {len(dates)} trading day(s): {dates[0]} → {dates[-1]}\n")
+
+        engine = SimulationEngine()
+        day_rows: list[dict] = []
+
+        for date in dates:
+            print(f"  Loading {date}...", end="", flush=True)
+            d = await load_date_data(conn, date, args.asset)
+
+            if d is None:
+                print(" SKIPPED (no data)")
+                continue
+
+            if args.vix_max and d["vix"] > args.vix_max:
+                print(f" SKIPPED (VIX {d['vix']:.1f} > {args.vix_max})")
+                continue
+
+            if direction_arg == "auto":
+                direction = "CALL" if d["entry_spot"] >= d["prev_close"] else "PUT"
+            else:
+                direction = direction_arg
+
+            entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
+            chosen = select_live_width(
+                quotes=entry_quotes,
+                spot=d["entry_spot"],
+                direction=direction,
+                vix=d["vix"],
+                wing_widths=wing_widths,
+                rr_min=rr_min,
+                spot_range=spot_range,
+                center_tolerance=center_tolerance,
+                method=method,
+                max_cost_per_width=asset_cfg["max_cost"],
+            )
+
+            if not chosen:
+                print(f" SKIPPED (no qualifying butterfly)")
+                continue
+
+            print(f" {chosen.wing_width}W {direction} center={chosen.center_strike:.0f}  "
+                  f"R/R={chosen.reward_risk:.1f}  cost=${chosen.cost:.2f}")
+
+            monitoring = await load_monitoring_chains(
+                conn, date, args.asset,
+                [chosen.lower_strike, chosen.center_strike, chosen.upper_strike],
+                [chosen.direction],
+            )
+            full_chains = merge_chains(d["chains"], monitoring)
+
+            params = SimulationParams(
+                wing_width=chosen.wing_width,
+                direction_override=direction,
+                rr_min=rr_min,
+                morning_drawdown=morning_dd,
+                late_morning_drawdown=late_morning_dd,
+                afternoon_drawdown=afternoon_dd,
+                slippage=args.slippage,
+                use_vix_center=(method == "VIX"),
+                selection_method=method,
+                max_cost_per_width=asset_cfg["max_cost"],
+                use_absolute_loss_stop=args.use_abs_stop,
+            )
+
+            restore = _patch_chain_cache(full_chains, date)
+            result = engine.simulate_day(d["day"], params)
+            restore()
+
+            # Drop heavy chain/bar data before storing — only keep scalars needed for output
+            d_slim = {k: d[k] for k in ("date", "vix", "entry_spot", "prev_close")}
+            day_rows.append({"data": d_slim, "chosen": chosen, "result": result})
+
     finally:
         await conn.close()
-
-    if not dates:
-        print("ERROR: No full trading days found in DB for the specified range.")
-        return
-
-    print(f"  {len(dates)} trading day(s): {dates[0]} → {dates[-1]}\n")
-
-    engine = SimulationEngine()
-    day_rows: list[dict] = []
-
-    for date in dates:
-        print(f"  Loading {date}...", end="", flush=True)
-        conn = await asyncpg.connect(DB_DSN)
-        try:
-            d = await load_date_data(conn, date, args.asset)
-        finally:
-            await conn.close()
-
-        if d is None:
-            print(" SKIPPED (no data)")
-            continue
-
-        if args.vix_max and d["vix"] > args.vix_max:
-            print(f" SKIPPED (VIX {d['vix']:.1f} > {args.vix_max})")
-            continue
-
-        if direction_arg == "auto":
-            direction = "CALL" if d["entry_spot"] >= d["prev_close"] else "PUT"
-        else:
-            direction = direction_arg
-
-        entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
-        chosen = select_live_width(
-            quotes=entry_quotes,
-            spot=d["entry_spot"],
-            direction=direction,
-            vix=d["vix"],
-            wing_widths=wing_widths,
-            rr_min=rr_min,
-            spot_range=spot_range,
-            center_tolerance=center_tolerance,
-            method=method,
-            max_cost_per_width=asset_cfg["max_cost"],
-        )
-
-        if not chosen:
-            print(f" SKIPPED (no qualifying butterfly)")
-            continue
-
-        print(f" {chosen.wing_width}W {direction} center={chosen.center_strike:.0f}  "
-              f"R/R={chosen.reward_risk:.1f}  cost=${chosen.cost:.2f}")
-
-        params = SimulationParams(
-            wing_width=chosen.wing_width,
-            direction_override=direction,
-            rr_min=rr_min,
-            morning_drawdown=morning_dd,
-            late_morning_drawdown=late_morning_dd,
-            afternoon_drawdown=afternoon_dd,
-            slippage=args.slippage,
-            use_vix_center=(method == "VIX"),
-            selection_method=method,
-            max_cost_per_width=asset_cfg["max_cost"],
-            use_absolute_loss_stop=args.use_abs_stop,
-        )
-
-        restore = _patch_chain_cache(d["chains"], date)
-        result = engine.simulate_day(d["day"], params)
-        restore()
-
-        # Drop heavy chain/bar data before storing — only keep scalars needed for output
-        d_slim = {k: d[k] for k in ("date", "vix", "entry_spot", "prev_close")}
-        day_rows.append({"data": d_slim, "chosen": chosen, "result": result})
 
     if not day_rows:
         print("\nNo tradeable days found.")
@@ -745,83 +861,97 @@ async def run_sweep(args: argparse.Namespace) -> None:
     print(f"  afternoon_dd: {args.afternoon_dd}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  slippage: {args.slippage}")
     print(f"{'='*72}\n")
 
-    # Discover dates and pre-load all data from DB
     conn = await asyncpg.connect(DB_DSN)
     try:
         dates = await discover_dates(conn, args.asset, args.start, args.end)
+
+        if not dates:
+            print("ERROR: No full trading days found in DB for the specified range.")
+            return
+
+        print(f"  {len(dates)} trading day(s): {dates[0]} → {dates[-1]}")
+        print(f"  Running {total_combos} combos (loading one day at a time)...\n")
+
+        engine = SimulationEngine()
+        combo_day_results: list[list[tuple[dt.date, object]]] = [[] for _ in param_grid]
+        usable_dates: list[dt.date] = []
+
+        for date in dates:
+            d = await load_date_data(conn, date, args.asset)
+
+            if d is None:
+                print(f"    {date} SKIPPED (no data)")
+                continue
+            if args.vix_max and d["vix"] > args.vix_max:
+                print(f"    {date} SKIPPED (VIX {d['vix']:.1f} > {args.vix_max})")
+                continue
+            print(f"    {date}  VIX={d['vix']:.1f}  spot={d['entry_spot']:.0f}")
+            usable_dates.append(date)
+
+            # Phase 1: run all combo selections using entry-window chains
+            entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
+            per_combo: list[tuple] = []  # (resolved_direction, chosen | None, sim_params)
+            needed_strikes: set[float] = set()
+            needed_types: set[str] = set()
+
+            for wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method in param_grid:
+                resolved_direction = (
+                    ("CALL" if d["entry_spot"] >= d["prev_close"] else "PUT")
+                    if direction == "auto"
+                    else direction
+                )
+                chosen = select_for_width(
+                    quotes=entry_quotes,
+                    spot=d["entry_spot"],
+                    direction=resolved_direction,
+                    vix=d["vix"],
+                    wing_width=wing,
+                    rr_min=rr_min,
+                    spot_range=spot_range,
+                    center_tolerance=center_tolerance,
+                    method=method,
+                    max_cost_per_width=asset_cfg["max_cost"],
+                )
+                if chosen is not None:
+                    needed_strikes |= {chosen.lower_strike, chosen.center_strike, chosen.upper_strike}
+                    needed_types.add(chosen.direction)
+                    sim_params = SimulationParams(
+                        wing_width=chosen.wing_width,
+                        direction_override=resolved_direction,
+                        rr_min=rr_min,
+                        morning_drawdown=morning_dd,
+                        late_morning_drawdown=late_morning_dd,
+                        afternoon_drawdown=afternoon_dd,
+                        slippage=args.slippage,
+                        use_vix_center=(method == "VIX"),
+                        selection_method=method,
+                        max_cost_per_width=asset_cfg["max_cost"],
+                        use_absolute_loss_stop=args.use_abs_stop,
+                    )
+                else:
+                    sim_params = None
+                per_combo.append((resolved_direction, chosen, sim_params))
+
+            # Phase 2: load monitoring chains for all needed strikes, patch once
+            if needed_strikes:
+                monitoring = await load_monitoring_chains(
+                    conn, date, args.asset, list(needed_strikes), list(needed_types)
+                )
+                full_chains = merge_chains(d["chains"], monitoring)
+            else:
+                full_chains = d["chains"]
+
+            restore = _patch_chain_cache(full_chains, date)
+            for ci, (resolved_direction, chosen, sim_params) in enumerate(per_combo):
+                if chosen is None:
+                    combo_day_results[ci].append((date, None))
+                    continue
+                result = engine.simulate_day(d["day"], sim_params)
+                combo_day_results[ci].append((date, result))
+            restore()
+
     finally:
         await conn.close()
-
-    if not dates:
-        print("ERROR: No full trading days found in DB for the specified range.")
-        return
-
-    print(f"  {len(dates)} trading day(s): {dates[0]} → {dates[-1]}")
-    print(f"  Running {total_combos} combos (loading one day at a time)...\n")
-
-    engine = SimulationEngine()
-    # One result list per combo, accumulated as we stream through dates
-    combo_day_results: list[list[tuple[dt.date, object]]] = [[] for _ in param_grid]
-    usable_dates: list[dt.date] = []
-
-    for date in dates:
-        conn = await asyncpg.connect(DB_DSN)
-        try:
-            d = await load_date_data(conn, date, args.asset)
-        finally:
-            await conn.close()
-
-        if d is None:
-            print(f"    {date} SKIPPED (no data)")
-            continue
-        if args.vix_max and d["vix"] > args.vix_max:
-            print(f"    {date} SKIPPED (VIX {d['vix']:.1f} > {args.vix_max})")
-            continue
-        print(f"    {date}  VIX={d['vix']:.1f}  spot={d['entry_spot']:.0f}")
-        usable_dates.append(date)
-
-        # Run all combos against this day, then let it be GC'd
-        for ci, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method) in enumerate(param_grid):
-            resolved_direction = (
-                ("CALL" if d["entry_spot"] >= d["prev_close"] else "PUT")
-                if direction == "auto"
-                else direction
-            )
-
-            entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
-            chosen = select_for_width(
-                quotes=entry_quotes,
-                spot=d["entry_spot"],
-                direction=resolved_direction,
-                vix=d["vix"],
-                wing_width=wing,
-                rr_min=rr_min,
-                spot_range=spot_range,
-                center_tolerance=center_tolerance,
-                method=method,
-                max_cost_per_width=asset_cfg["max_cost"],
-            )
-            if chosen is None:
-                combo_day_results[ci].append((date, None))
-                continue
-
-            restore = _patch_chain_cache(d["chains"], date)
-            sim_params = SimulationParams(
-                wing_width=chosen.wing_width,
-                direction_override=resolved_direction,
-                rr_min=rr_min,
-                morning_drawdown=morning_dd,
-                late_morning_drawdown=late_morning_dd,
-                afternoon_drawdown=afternoon_dd,
-                slippage=args.slippage,
-                use_vix_center=(method == "VIX"),
-                selection_method=method,
-                max_cost_per_width=asset_cfg["max_cost"],
-                use_absolute_loss_stop=args.use_abs_stop,
-            )
-            result = engine.simulate_day(d["day"], sim_params)
-            restore()
-            combo_day_results[ci].append((date, result))
 
     if not usable_dates:
         print("\nNo usable dates loaded.")
