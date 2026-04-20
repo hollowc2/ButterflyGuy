@@ -19,7 +19,7 @@ async def run_migrations(db: DatabasePool) -> None:
         log.info("running_migration", file=sql_file.name)
         sql = sql_file.read_text()
         try:
-            await db.execute(sql)
+            await db.pool.execute(sql)
             log.info("migration_complete", file=sql_file.name)
         except Exception as e:
             log.error("migration_failed", file=sql_file.name, error=str(e))
