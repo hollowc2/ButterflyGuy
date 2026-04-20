@@ -26,16 +26,13 @@ docker compose logs -f butterfly_spx_app
 uv sync
 
 # Run a script directly (outside Docker)
-.venv/bin/python src/butterfly_guy/scripts/run_live.py --config configs/config.yaml
+.venv/bin/python src/butterfly_guy/scripts/run_live.py
 
 # Run a DB backtest (single day)
-.venv/bin/python src/butterfly_guy/scripts/run_backtest_db.py --config configs/config.yaml --date 2025-01-15
+.venv/bin/python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-15 2025-01-15 --asset SPX
 
-# Run a DB backtest sweep (all available days)
-.venv/bin/python src/butterfly_guy/scripts/run_all_db_days.py --config configs/config.yaml
-
-# Run drawdown threshold sweep
-.venv/bin/python src/butterfly_guy/scripts/run_dd_sweep.py --config configs/config.yaml
+# Run a DB backtest sweep (all available days, all params)
+.venv/bin/python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
 ```
 
 ## Architecture
