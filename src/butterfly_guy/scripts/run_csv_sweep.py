@@ -215,7 +215,8 @@ def main() -> None:
             f"{r['profit_factor']:>5.2f}  {r['sharpe']:>6.3f}"
         )
 
-    out = Path("csv_sweep_results.csv")
+    Path("results").mkdir(exist_ok=True)
+    out = Path("results/csv_sweep_results.csv")
     with open(out, "w", newline="") as f:
         writer = csv_mod.DictWriter(f, fieldnames=rows[0].keys())
         writer.writeheader()

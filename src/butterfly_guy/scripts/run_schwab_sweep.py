@@ -246,7 +246,8 @@ async def main() -> None:
 
     # Save full results to CSV
     import csv
-    out = Path("schwab_sweep_results.csv")
+    Path("results").mkdir(exist_ok=True)
+    out = Path("results/schwab_sweep_results.csv")
     with open(out, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=rows[0].keys())
         writer.writeheader()

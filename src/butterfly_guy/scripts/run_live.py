@@ -113,7 +113,7 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
 async def main() -> None:
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
+    parser.add_argument("--config", default="configs/config.yaml", help="Path to config YAML file")
     args = parser.parse_args()
     config = load_config(args.config)
     setup_logging(config.monitoring.log_level, json_output=True)

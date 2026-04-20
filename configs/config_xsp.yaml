@@ -15,7 +15,7 @@ entry:
   start_time: "07:00"  # PST
   end_time: "07:45"    # PST
   timezone: "America/Los_Angeles"
-  strike_selection_method: "TARGET_COST"   # anchor center to VIX-implied expected move per width
+  strike_selection_method: "VIX"   # anchor center to VIX-implied expected move per width
   center_tolerance: 1.5  # pts; candidate center must be within this of VIX target (1/10th of SPX)
 execution:
   price_ladder_step: 0.01  # 1/10th of SPX step
@@ -33,11 +33,11 @@ profit_management:
     late_morning:
       start_minutes_after_open: 120
       end_minutes_after_open: 240
-      drawdown_threshold: 0.60
+      drawdown_threshold: 0.90
     afternoon:
       start_minutes_after_open: 240
       end_minutes_after_open: 390
-      drawdown_threshold: 0.40
+      drawdown_threshold: 0.75
   exit_before_close_minutes: 0
   max_loss_from_cost: 0.50
   use_absolute_loss_stop: false

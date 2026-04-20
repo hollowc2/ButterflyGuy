@@ -15,7 +15,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy source and install project
 COPY src/ ./src/
-COPY config.yaml notify.py ./
+COPY configs/config.yaml configs/config.yaml
+COPY tools/notify.py ./
 RUN uv sync --frozen --no-dev --no-editable
 
 # Ensure SQL migration files are present (uv may use a cached wheel that omits new .sql files)

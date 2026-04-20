@@ -5,8 +5,8 @@ This script sends a Telegram alert 8 hours before expiry and every hour after.
 Also sends a weekly Sunday evening reminder to re-auth before the new week.
 
 Cron: run hourly + dedicated Sunday 6:50 PM PDT run
-  0 * * * * /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
-  50 1 * * 1 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/schwab_token_keepalive.py --sunday-reminder >> /opt/butterflyguy/keepalive.log 2>&1
+  0 * * * * /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
+  50 1 * * 1 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py --sunday-reminder >> /opt/butterflyguy/keepalive.log 2>&1
 """
 
 import json
@@ -20,7 +20,7 @@ from notify import send as notify
 
 SUNDAY_REMINDER = "--sunday-reminder" in sys.argv
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).parent.parent
 env = dotenv_values(ROOT / ".env")
 
 TOKEN_PATH = ROOT / "tokens.json"
@@ -49,14 +49,14 @@ seconds_remaining = expiry_ts - now
 hours_remaining = seconds_remaining / 3600
 
 if SUNDAY_REMINDER:
-    notify(f"📅 Weekly reminder: re-auth Schwab before market open tomorrow.\nRefresh token expires in {hours_remaining:.1f}h.\ncd /opt/butterflyguy && .venv/bin/python auth_init.py")
+    notify(f"📅 Weekly reminder: re-auth Schwab before market open tomorrow.\nRefresh token expires in {hours_remaining:.1f}h.\ncd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
     print(f"SUNDAY REMINDER: sent, refresh token expires in {hours_remaining:.1f}h")
 
 if seconds_remaining <= 0:
-    notify(f"🚨 Schwab refresh token has EXPIRED. Re-auth required immediately: cd /opt/butterflyguy && .venv/bin/python auth_init.py")
+    notify(f"🚨 Schwab refresh token has EXPIRED. Re-auth required immediately: cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
     print(f"ALERT: refresh token expired {abs(hours_remaining):.1f}h ago")
 elif seconds_remaining <= WARN_BEFORE:
-    notify(f"⏰ Schwab refresh token expires in {hours_remaining:.1f} hours. Re-auth soon: cd /opt/butterflyguy && .venv/bin/python auth_init.py")
+    notify(f"⏰ Schwab refresh token expires in {hours_remaining:.1f} hours. Re-auth soon: cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
     print(f"ALERT: refresh token expires in {hours_remaining:.1f}h")
 
 # Always try to refresh the access token

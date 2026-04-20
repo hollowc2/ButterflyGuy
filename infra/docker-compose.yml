@@ -31,12 +31,12 @@ services:
       dockerfile: Dockerfile
     container_name: butterfly_ndx_app
     restart: unless-stopped
-    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "config_ndx.yaml"]
+    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "configs/config_ndx.yaml"]
     env_file:
       - ../.env
     volumes:
       - ../tokens.json:/app/tokens.json
-      - ../config_ndx.yaml:/app/config_ndx.yaml
+      - ../configs/config_ndx.yaml:/app/configs/config_ndx.yaml
     environment:
       DATABASE__HOST: timescaledb
       DATABASE__PORT: 5432
@@ -55,12 +55,12 @@ services:
       dockerfile: Dockerfile
     container_name: butterfly_xsp_app
     restart: unless-stopped
-    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "config_xsp.yaml"]
+    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "configs/config_xsp.yaml"]
     env_file:
       - ../.env
     volumes:
       - ../tokens.json:/app/tokens.json
-      - ../config_xsp.yaml:/app/config_xsp.yaml
+      - ../configs/config_xsp.yaml:/app/configs/config_xsp.yaml
     environment:
       DATABASE__HOST: timescaledb
       DATABASE__PORT: 5432

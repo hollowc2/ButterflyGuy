@@ -37,7 +37,7 @@ htmlcov/
 *.swo
 
 # Data / outputs
-backtest_results.csv
+results/
 *.csv
 
 # Schwab day cache
