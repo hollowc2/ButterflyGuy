@@ -119,6 +119,16 @@ uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
 
 Sweep mode runs the `ParameterSweeper`, which tries every combination of wing widths, drawdown thresholds, and other strategy parameters, then ranks results by Sharpe ratio so you can compare configurations objectively.
 
+### Comparing Real vs Synthetic Chains
+
+Use `--compare-synthetic` (single-config mode only) to run each date twice — once with real DB chain data, once with Black-Scholes synthetic chains — and print a side-by-side table. This measures how accurately the synthetic model approximates real market behavior.
+
+```bash
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-04-14 2026-04-20 --asset SPX --compare-synthetic
+```
+
+The comparison table shows entry price, peak, exit price, exit reason, and PnL/contract for each run. Key observations from testing: BS synthetic tends to underestimate PnL on large directional days (smooth mark paths miss the peak), but can overshoot on low-vol trending days (smoother marks delay the drawdown trigger).
+
 ### Running Tests
 
 ```bash

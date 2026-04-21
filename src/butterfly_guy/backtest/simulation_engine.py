@@ -122,7 +122,7 @@ class SimulationEngine:
             bar_et = bar.ts.astimezone(EASTERN)
             bar_time = bar_et.time()
 
-            if ENTRY_START <= bar_time <= ENTRY_END:
+            if params.entry_start <= bar_time <= params.entry_end:
                 # Use real chain if available, else synthetic
                 real_quotes = nearest_snapshot(real_chains, bar.ts) if real_chains else None
                 quotes = real_quotes if real_quotes else self.synth.generate_chain(

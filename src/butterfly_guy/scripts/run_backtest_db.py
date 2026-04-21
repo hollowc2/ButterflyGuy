@@ -103,6 +103,26 @@ def _strlist(s: str) -> list[str]:
     return [x.strip().upper() for x in s.split(",")]
 
 
+def _timelist_pst(s: str) -> list[dt.time]:
+    result = []
+    for t in s.split(","):
+        h, m = t.strip().split(":")
+        result.append(dt.time(int(h), int(m)))
+    return result
+
+
+def _pst_to_et(t: dt.time) -> dt.time:
+    total = t.hour * 60 + t.minute + 180  # PT is always ET-3
+    return dt.time(total // 60, total % 60)
+
+
+def _find_bar_at(bars: list[MinuteBar], target_et: dt.datetime) -> MinuteBar | None:
+    for bar in bars:
+        if bar.ts >= target_et:
+            return bar
+    return None
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Unified SPX/NDX/XSP DB backtest — single-config or parameter sweep",
@@ -142,6 +162,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--method", type=_strlist, default=None,
                    metavar="M[,M]",
                    help="Selection method(s): VIX, TARGET_COST, BEST_RR. Default: VIX.")
+    p.add_argument("--entry-time", type=_timelist_pst, default=None,
+                   metavar="T[,T]",
+                   help="Entry window start time(s) in PST, e.g. 7:00,7:10,7:30. "
+                        "Each defines a 10-minute entry window. Default: 7:00.")
 
     p.add_argument("--slippage", type=float, default=0.05,
                    help="Per-spread slippage applied to entry and exit.")
@@ -158,6 +182,9 @@ def parse_args() -> argparse.Namespace:
                    help="(Sweep) CSV output path. Default: auto-named in current dir.")
     p.add_argument("--thinkback", action="store_true",
                    help="Print ToS ThinkBack validation checklists after per-day results.")
+    p.add_argument("--compare-synthetic", action="store_true",
+                   help="Run a second synthetic-only pass and print side-by-side comparison. "
+                        "Single-config mode only; ignored with --sweep.")
 
     args = p.parse_args()
 
@@ -177,6 +204,8 @@ def parse_args() -> argparse.Namespace:
         args.afternoon_dd = [0.40]
     if args.method is None:
         args.method = ["VIX"]
+    if args.entry_time is None:
+        args.entry_time = [dt.time(7, 0)]
 
     return args
 
@@ -262,7 +291,7 @@ async def load_entry_chains(
 ) -> ChainDay:
     """Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection."""
     start_utc = dt.datetime(date.year, date.month, date.day, 9, 30, tzinfo=EASTERN).astimezone(dt.timezone.utc)
-    end_utc = dt.datetime(date.year, date.month, date.day, 10, 45, tzinfo=EASTERN).astimezone(dt.timezone.utc)
+    end_utc = dt.datetime(date.year, date.month, date.day, 12, 15, tzinfo=EASTERN).astimezone(dt.timezone.utc)
     rows = await conn.fetch(
         """
         SELECT snapshot_time, strike, option_type, bid, ask, mark, last,
@@ -550,6 +579,31 @@ def _patch_chain_cache(chains: dict, date: dt.date):
     return restore
 
 
+def _force_synthetic_for_date(date: dt.date):
+    """Patch load_chain_day to return None for `date`, forcing BS synthetic fallback.
+    Returns a restore callable.
+    """
+    import butterfly_guy.backtest.chain_cache as _cc
+    import butterfly_guy.backtest.simulation_engine as _se
+
+    _original_cc_load = _cc.load_chain_day
+    _original_se_load = _se.load_chain_day  # type: ignore[attr-defined]
+
+    def _patched(d, cache_dir=None):
+        if d == date:
+            return None
+        return _original_cc_load(d, cache_dir) if cache_dir else _original_cc_load(d)
+
+    _cc.load_chain_day = _patched  # type: ignore[assignment]
+    _se.load_chain_day = _patched  # type: ignore[assignment]
+
+    def restore():
+        _cc.load_chain_day = _original_cc_load  # type: ignore[assignment]
+        _se.load_chain_day = _original_se_load  # type: ignore[assignment]
+
+    return restore
+
+
 # ---------------------------------------------------------------------------
 # Per-date data loading (shared between single and sweep modes)
 # ---------------------------------------------------------------------------
@@ -673,6 +727,46 @@ def print_thinkback_checklist(day_rows: list[dict], asset: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Comparison table (real vs synthetic)
+# ---------------------------------------------------------------------------
+
+def _print_comparison_table(day_rows: list[dict]) -> None:
+    w = 92
+    print(f"\n{'='*w}")
+    print(f"  REAL vs SYNTHETIC COMPARISON")
+    print(f"{'='*w}")
+    print(f"  {'Date':>10}  {'Run':>4}  {'W':>2}  {'Center':>7}  "
+          f"{'Entry$':>7}  {'Peak$':>6}  {'Exit$':>6}  {'Exit Reason':<22}  {'PnL/ct':>8}")
+    print("  " + "─" * (w - 2))
+
+    real_total = 0.0
+    synth_total = 0.0
+
+    for row in day_rows:
+        d = row["data"]
+        r = row["result"]
+        sr = row["synth_result"]
+        date = d["date"]
+
+        for label, res in (("REAL", r), ("SYNT", sr)):
+            if res is None or not res.traded:
+                print(f"  {date!s:>10}  {label:>4}   -       -         -       -       -    "
+                      f"{'NO TRADE':<22}")
+            else:
+                pnl_ct = res.pnl * 100
+                if label == "REAL":
+                    real_total += pnl_ct
+                else:
+                    synth_total += pnl_ct
+                print(f"  {date!s:>10}  {label:>4}  {res.wing_width:>2}  {res.center_strike:>7.0f}  "
+                      f"${res.entry_price:>6.2f}  ${res.peak_value:>5.2f}  ${res.exit_price:>5.2f}  "
+                      f"{res.exit_reason:<22}  ${pnl_ct:>+7.2f}")
+
+    print(f"\n  Real total: ${real_total:+.2f}  /  Synth total: ${synth_total:+.2f}")
+    print(f"{'='*w}\n")
+
+
+# ---------------------------------------------------------------------------
 # Single-config mode
 # ---------------------------------------------------------------------------
 
@@ -771,9 +865,15 @@ async def run_single(args: argparse.Namespace) -> None:
             result = engine.simulate_day(d["day"], params)
             restore()
 
+            synth_result = None
+            if args.compare_synthetic:
+                restore_synth = _force_synthetic_for_date(date)
+                synth_result = engine.simulate_day(d["day"], params)
+                restore_synth()
+
             # Drop heavy chain/bar data before storing — only keep scalars needed for output
             d_slim = {k: d[k] for k in ("date", "vix", "entry_spot", "prev_close")}
-            day_rows.append({"data": d_slim, "chosen": chosen, "result": result})
+            day_rows.append({"data": d_slim, "chosen": chosen, "result": result, "synth_result": synth_result})
 
     finally:
         await conn.close()
@@ -832,6 +932,9 @@ async def run_single(args: argparse.Namespace) -> None:
     if args.thinkback:
         print_thinkback_checklist(day_rows, args.asset)
 
+    if args.compare_synthetic:
+        _print_comparison_table(day_rows)
+
 
 # ---------------------------------------------------------------------------
 # Sweep mode
@@ -851,13 +954,16 @@ async def run_sweep(args: argparse.Namespace) -> None:
         args.late_morning_dd,
         args.afternoon_dd,
         args.method,
+        args.entry_time,
     ))
     total_combos = len(param_grid)
 
+    entry_strs = [f"{t.hour:02d}:{t.minute:02d}" for t in args.entry_time]
     print(f"\n{'='*72}")
     print(f"  PARAMETER SWEEP  |  {args.asset}  |  {total_combos} combos")
     print(f"  Wings: {args.wing}  Directions: {args.direction}  rr_min: {args.rr_min}")
-    print(f"  Methods: {args.method}  morning_dd: {args.morning_dd}  late_morning_dd: {args.late_morning_dd}")
+    print(f"  Methods: {args.method}  Entry times (PST): {entry_strs}")
+    print(f"  morning_dd: {args.morning_dd}  late_morning_dd: {args.late_morning_dd}")
     print(f"  afternoon_dd: {args.afternoon_dd}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  slippage: {args.slippage}")
     print(f"{'='*72}\n")
 
@@ -889,20 +995,29 @@ async def run_sweep(args: argparse.Namespace) -> None:
             usable_dates.append(date)
 
             # Phase 1: run all combo selections using entry-window chains
-            entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
             per_combo: list[tuple] = []  # (resolved_direction, chosen | None, sim_params)
             needed_strikes: set[float] = set()
             needed_types: set[str] = set()
 
-            for wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method in param_grid:
+            for wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method, entry_pst in param_grid:
+                entry_et = _pst_to_et(entry_pst)
+                entry_target = dt.datetime(date.year, date.month, date.day,
+                                           entry_et.hour, entry_et.minute, tzinfo=EASTERN)
+                entry_bar_combo = _find_bar_at(d["bars"], entry_target)
+                if entry_bar_combo is None:
+                    per_combo.append((None, None, None))
+                    continue
+
+                entry_quotes = nearest_snapshot(d["chains"], entry_bar_combo.ts) or []
+                entry_spot = entry_bar_combo.close
                 resolved_direction = (
-                    ("CALL" if d["entry_spot"] >= d["prev_close"] else "PUT")
+                    ("CALL" if entry_spot >= d["prev_close"] else "PUT")
                     if direction == "auto"
                     else direction
                 )
                 chosen = select_for_width(
                     quotes=entry_quotes,
-                    spot=d["entry_spot"],
+                    spot=entry_spot,
                     direction=resolved_direction,
                     vix=d["vix"],
                     wing_width=wing,
@@ -915,6 +1030,8 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 if chosen is not None:
                     needed_strikes |= {chosen.lower_strike, chosen.center_strike, chosen.upper_strike}
                     needed_types.add(chosen.direction)
+                    et_end_total = entry_et.hour * 60 + entry_et.minute + 10
+                    entry_et_end = dt.time(et_end_total // 60, et_end_total % 60)
                     sim_params = SimulationParams(
                         wing_width=chosen.wing_width,
                         direction_override=resolved_direction,
@@ -927,6 +1044,8 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         selection_method=method,
                         max_cost_per_width=asset_cfg["max_cost"],
                         use_absolute_loss_stop=args.use_abs_stop,
+                        entry_start=entry_et,
+                        entry_end=entry_et_end,
                     )
                 else:
                     sim_params = None
@@ -960,7 +1079,8 @@ async def run_sweep(args: argparse.Namespace) -> None:
     print(f"\n  Summarizing {total_combos} combos across {len(usable_dates)} dates...\n")
 
     sweep_results: list[dict] = []
-    for i, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method) in enumerate(param_grid, 1):
+    for i, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method, entry_pst) in enumerate(param_grid, 1):
+        entry_pst_str = f"{entry_pst.hour:02d}:{entry_pst.minute:02d}"
         combo_label = dict(
             wing_width=wing,
             direction=direction,
@@ -969,13 +1089,14 @@ async def run_sweep(args: argparse.Namespace) -> None:
             late_morning_dd=late_morning_dd,
             afternoon_dd=afternoon_dd,
             method=method,
+            entry_time_pst=entry_pst_str,
         )
         row = _summarize_combo(combo_label, combo_day_results[i - 1])
         sweep_results.append(row)
 
         if i % 10 == 0 or i == total_combos:
             print(f"  [{i:>{len(str(total_combos))}}/{total_combos}]  "
-                  f"{wing}W {direction} method={method} rr={rr_min} dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
+                  f"{wing}W {direction} entry={entry_pst_str}PST method={method} rr={rr_min} dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
                   f"→ trades={row['trade_count']}  sharpe={row['sharpe']:.3f}  "
                   f"win={row['win_rate']*100:.0f}%")
 
@@ -987,17 +1108,18 @@ async def run_sweep(args: argparse.Namespace) -> None:
 
     # ── Console table ────────────────────────────────────────────────────────
     top_n = min(args.top, len(sweep_results))
-    print(f"\n{'='*120}")
+    print(f"\n{'='*127}")
     print(f"  TOP {top_n} COMBOS BY SHARPE  (of {total_combos})")
-    print(f"{'='*120}")
-    print(f"  {'W':>3}  {'Dir':>4}  {'Method':<11}  {'RR':>5}  {'Morn':>5}  {'LtMrn':>6}  {'Aftn':>5}  "
+    print(f"{'='*127}")
+    print(f"  {'W':>3}  {'Dir':>4}  {'Method':<11}  {'Entry':>5}  {'RR':>5}  {'Morn':>5}  {'LtMrn':>6}  {'Aftn':>5}  "
           f"{'Trd':>4}  {'Win%':>5}  {'TotPnL':>8}  {'AvgPnL':>8}  "
           f"{'Sharpe':>7}  {'PF':>5}  {'MaxDD':>7}  {'MaxCL':>6}")
-    print("  " + "-" * 118)
+    print("  " + "-" * 125)
 
     for row in sweep_results[:top_n]:
         print(f"  {row['wing_width']:>3}  {row['direction']:>4}  "
               f"{row['method']:<11}  "
+              f"{row['entry_time_pst']:>5}  "
               f"{row['rr_min']:>5.1f}  {row['morning_dd']:>5.2f}  "
               f"{row['late_morning_dd']:>6.2f}  {row['afternoon_dd']:>5.2f}  "
               f"{row['trade_count']:>4}  {row['win_rate']*100:>4.0f}%  "
@@ -1005,7 +1127,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
               f"{row['sharpe']:>7.3f}  {row['profit_factor']:>5.3f}  "
               f"${row['max_drawdown']*100:>6.2f}  {row['max_consec_losses']:>6}")
 
-    print(f"{'='*120}\n")
+    print(f"{'='*127}\n")
 
     # ── CSV output ────────────────────────────────────────────────────────────
     ts_str = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1016,7 +1138,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
     csv_path = args.csv or results_dir / f"sweep_{args.asset}_{start_str}_{end_str}_{ts_str}.csv"
 
     fieldnames = [
-        "wing_width", "direction", "method", "rr_min", "morning_dd", "late_morning_dd", "afternoon_dd",
+        "wing_width", "direction", "method", "entry_time_pst", "rr_min", "morning_dd", "late_morning_dd", "afternoon_dd",
         "trade_count", "win_rate", "total_pnl", "avg_pnl",
         "sharpe", "max_drawdown", "profit_factor", "max_consec_losses",
         "exit_morning_dd", "exit_late_morning_dd", "exit_afternoon_dd",
