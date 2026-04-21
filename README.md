@@ -1,6 +1,6 @@
 # 🦋 Butterfly Guy
 
-![Butterfly Guy Logo](butterflyguy_logo2.png)
+![Butterfly Guy Logo](data/images/butterflyguy_logo2.png)
 
 Automated options trading strategy and research platform for 0-DTE SPX, NDX, and XSP butterflies. Designed for high reward-to-risk (R/R) entries on Schwab.
 
@@ -96,6 +96,37 @@ uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --method VIX
 
 # Test specific wing widths and R/R filters
 uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --wing 30 --rr 10.0
+```
+
+---
+
+## 📈 Backtesting
+
+Butterfly Guy includes a full simulation engine that replays historical option chain data stored in TimescaleDB, using the same entry/exit logic as the live trader.
+
+### Running a DB Backtest
+
+```bash
+# Single day
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-15 2025-01-15 --asset SPX
+
+# Date range
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 --asset SPX
+
+# Sweep all available days across all parameter combinations
+uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
+```
+
+Sweep mode runs the `ParameterSweeper`, which tries every combination of wing widths, drawdown thresholds, and other strategy parameters, then ranks results by Sharpe ratio so you can compare configurations objectively.
+
+### Running Tests
+
+```bash
+# Full test suite
+uv run pytest
+
+# A specific module
+uv run pytest tests/test_strategy.py -v
 ```
 
 ---
