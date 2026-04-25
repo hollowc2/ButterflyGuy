@@ -63,7 +63,15 @@ def test_no_exit_when_not_in_profit_tent():
 
 def test_absolute_loss_stop_fires_without_profit_tent():
     """Absolute loss stop should fire even if position was never in profit tent."""
-    sm = ProfitStateMachine(make_settings())
+    from butterfly_guy.core.config import ProfitManagementSettings, TimeRegime
+    settings = make_settings()
+    settings = ProfitManagementSettings(
+        regimes=settings.regimes,
+        exit_before_close_minutes=settings.exit_before_close_minutes,
+        use_absolute_loss_stop=True,
+        max_loss_from_cost=0.50,
+    )
+    sm = ProfitStateMachine(settings)
     # 55% loss — exceeds absolute stop threshold (50%)
     pos = make_pos(entry=1.0, current=0.45, peak=1.0, pnl=-0.55, drawdown=0.55)
     signal = sm.evaluate(pos)

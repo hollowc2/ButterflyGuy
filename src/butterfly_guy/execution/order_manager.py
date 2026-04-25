@@ -195,14 +195,16 @@ class OrderManager:
                         ask=spread.ask if spread is not None else None,
                     )
 
-                    if spread is not None and limit_price >= spread.mark:
-                        fill_price = round(spread.mark + self.settings.paper_slippage_per_spread + self._commission(quantity), 2)
-                        log.info("paper_entry_filled", price=limit_price, fill_price=fill_price, step=i)
-                        return {
-                            "order_id": "PAPER",
-                            "fill_price": fill_price,
-                            "fill_time": now_utc(),
-                        }
+                    if spread is not None:
+                        fill_threshold = spread.ask + self.settings.paper_fill_buffer
+                        if limit_price >= fill_threshold:
+                            fill_price = round(limit_price + self.settings.paper_slippage_per_spread + self._commission(quantity), 2)
+                            log.info("paper_entry_filled", price=limit_price, fill_price=fill_price, step=i)
+                            return {
+                                "order_id": "PAPER",
+                                "fill_price": fill_price,
+                                "fill_time": now_utc(),
+                            }
 
                     await asyncio.sleep(retry_interval)
 
@@ -290,31 +292,60 @@ class OrderManager:
         timeout = self.settings.order_timeout_seconds
 
         if self.settings.paper_trading:
-            spread = await self._fetch_live_spread(candidate)
+            deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
+            bid_floor: float | None = None
 
-            if spread is not None and spread.mark > 0:
-                fill_price = round(
-                    max(0.05, spread.mark - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2
-                )
-                log.info("paper_exit_filled_at_mark", bid=spread.bid, mark=spread.mark, fill_price=fill_price)
-                return {
-                    "order_id": "PAPER",
-                    "fill_price": fill_price,
-                    "fill_time": now_utc(),
-                    "spread_bid": spread.bid,
-                    "spread_mark": spread.mark,
-                    "spread_ask": spread.ask,
-                }
+            while True:
+                if dt.datetime.now(dt.timezone.utc) >= deadline:
+                    fill_ref = bid_floor if bid_floor is not None else current_value
+                    fill_price = round(max(0.05, fill_ref - self.settings.paper_fill_buffer - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2)
+                    log.warning("paper_exit_forced_fill", fill_price=fill_price)
+                    return {
+                        "order_id": "PAPER",
+                        "fill_price": fill_price,
+                        "fill_time": now_utc(),
+                        "forced": True,
+                    }
 
-            # Fallback if chain unavailable
-            fill_price = round(max(0.05, current_value - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2)
-            log.warning("paper_exit_no_spread_fallback", current_value=current_value, fill_price=fill_price)
-            return {
-                "order_id": "PAPER",
-                "fill_price": fill_price,
-                "fill_time": now_utc(),
-                "forced": True,
-            }
+                for i in range(max_steps):
+                    spread = await self._fetch_live_spread(candidate)
+                    if spread is not None:
+                        bid_floor = spread.bid if bid_floor is None else min(bid_floor, spread.bid)
+
+                    if dt.datetime.now(dt.timezone.utc) >= deadline:
+                        fill_ref = bid_floor if bid_floor is not None else current_value
+                        fill_price = round(max(0.05, fill_ref - self.settings.paper_fill_buffer - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2)
+                        log.warning("paper_exit_forced_fill", fill_price=fill_price)
+                        return {
+                            "order_id": "PAPER",
+                            "fill_price": fill_price,
+                            "fill_time": now_utc(),
+                            "forced": True,
+                        }
+
+                    mid_price = bid_floor if bid_floor is not None else current_value
+                    limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
+                    log.debug("paper_exit_step", step=i, price=limit_price,
+                              bid=spread.bid if spread is not None else None,
+                              mark=spread.mark if spread is not None else None)
+
+                    if spread is not None:
+                        fill_threshold = spread.bid - self.settings.paper_fill_buffer
+                        if limit_price <= fill_threshold:
+                            fill_price = round(max(0.05, limit_price - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2)
+                            log.info("paper_exit_filled", price=limit_price, fill_price=fill_price, step=i)
+                            return {
+                                "order_id": "PAPER",
+                                "fill_price": fill_price,
+                                "fill_time": now_utc(),
+                                "spread_bid": spread.bid,
+                                "spread_mark": spread.mark,
+                                "spread_ask": spread.ask,
+                            }
+
+                    await asyncio.sleep(retry_interval)
+
+                log.debug("paper_exit_ladder_exhausted_repricing")
 
         deadline = now_utc() + dt.timedelta(seconds=timeout)
         bid_floor: float | None = None

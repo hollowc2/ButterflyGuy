@@ -24,6 +24,8 @@ def make_risk_engine(
     risk_queries.increment_trade_count = AsyncMock()
     risk_queries.update_pnl = AsyncMock()
     risk_queries.set_halted = AsyncMock()
+    risk_queries.get_weekly_pnl = AsyncMock(return_value=0.0)
+    risk_queries.get_recent_closed_pnls = AsyncMock(return_value=[])
     engine = RiskEngine(settings, risk_queries)
     return engine, risk_queries
 

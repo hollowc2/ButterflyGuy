@@ -14,7 +14,7 @@ def test_load_config_defaults():
     config = AppConfig()
     assert config.strategy.underlying == "SPX"
     assert config.risk.max_daily_loss == 500.0
-    assert config.risk.max_trades_per_day == 2
+    assert config.risk.max_trades_per_day == 1
     assert 10 in config.strategy.wing_widths
 
 
