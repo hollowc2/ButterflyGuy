@@ -322,6 +322,136 @@ class SimulationEngine:
         result.pnl = -result.entry_price
         return result
 
+    def simulate_day_from_entry(
+        self,
+        day: DayData,
+        params: SimulationParams,
+        entry_candidate: ButterflyCandidate,
+        entry_price: float,
+        entry_time: dt.datetime,
+    ) -> DayResult:
+        """Simulate intraday using BS pricing, pinned to a pre-selected real entry.
+
+        Skips entry selection entirely. Uses the passed candidate's strikes as the
+        position and entry_price as the PnL baseline. Intended for --compare-synthetic-
+        same-entry: caller patches load_chain_day to None before calling so all
+        intraday pricing falls through to self.synth.
+        """
+        result = DayResult(date=day.date)
+        result.traded = True
+        result.direction = entry_candidate.direction
+        result.entry_time = entry_time
+        result.entry_price = entry_price
+        result.center_strike = entry_candidate.center_strike
+        result.wing_width = entry_candidate.wing_width
+
+        expiration = day.date
+        real_chains = load_chain_day(day.date)  # None when caller patches it out
+        peak_value = entry_price
+        open_dt = dt.datetime(day.date.year, day.date.month, day.date.day, 9, 30, tzinfo=EASTERN)
+
+        for bar in day.bars:
+            bar_et = bar.ts.astimezone(EASTERN)
+            if bar.ts <= entry_time:
+                continue
+
+            mins_since_open = (bar_et - open_dt).total_seconds() / 60.0
+            regime = get_time_regime(mins_since_open)
+            drawdown_threshold = {
+                "morning": params.morning_drawdown,
+                "late_morning": params.late_morning_drawdown,
+                "afternoon": params.afternoon_drawdown,
+            }[regime]
+
+            real_quotes = nearest_snapshot(real_chains, bar.ts) if real_chains else None
+            quotes = real_quotes if real_quotes else self.synth.generate_chain(
+                spot=bar.close,
+                vix=day.vix,
+                expiration=expiration,
+                snapshot_time=bar.ts,
+                strike_min=entry_candidate.lower_strike - 5,
+                strike_max=entry_candidate.upper_strike + 5,
+            )
+            quote_map = {q.strike: q for q in quotes if q.option_type == entry_candidate.direction}
+            lower_q = quote_map.get(entry_candidate.lower_strike)
+            center_q = quote_map.get(entry_candidate.center_strike)
+            upper_q = quote_map.get(entry_candidate.upper_strike)
+
+            if lower_q and center_q and upper_q:
+                current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
+            else:
+                current_value = peak_value
+
+            peak_value = max(peak_value, current_value)
+
+            minutes_to_close = (
+                dt.datetime(day.date.year, day.date.month, day.date.day, 16, 0, tzinfo=EASTERN)
+                - bar_et
+            ).total_seconds() / 60.0
+
+            if minutes_to_close <= 5:
+                result.exit_time = bar.ts
+                result.exit_price = max(0.05, current_value - params.slippage)
+                result.exit_reason = "end_of_day"
+                result.peak_value = peak_value
+                result.pnl = result.exit_price - result.entry_price
+                return result
+
+            if not params.hold_to_expiry and params.use_absolute_loss_stop and result.entry_price > 0:
+                loss_from_cost = (result.entry_price - current_value) / result.entry_price
+                if loss_from_cost >= params.max_loss_from_cost:
+                    result.exit_time = bar.ts
+                    result.exit_price = max(0.05, current_value - params.slippage)
+                    result.exit_reason = "absolute_loss_stop"
+                    result.peak_value = peak_value
+                    result.pnl = result.exit_price - result.entry_price
+                    return result
+
+            skip_exit = params.hold_to_expiry or (params.skip_morning_exit and regime == "morning")
+            if not skip_exit and peak_value > result.entry_price and peak_value > 0:
+                drawdown = (peak_value - current_value) / peak_value
+                if drawdown >= drawdown_threshold:
+                    result.exit_time = bar.ts
+                    result.exit_price = max(0.05, current_value - params.slippage)
+                    result.exit_reason = f"drawdown_{regime}"
+                    result.peak_value = peak_value
+                    result.pnl = result.exit_price - result.entry_price
+                    return result
+
+        if day.bars:
+            last_bar = day.bars[-1]
+            last_bar_et = last_bar.ts.astimezone(EASTERN)
+            if last_bar_et.time() >= dt.time(10, 30):
+                real_quotes = nearest_snapshot(real_chains, last_bar.ts) if real_chains else None
+                quotes = real_quotes if real_quotes else self.synth.generate_chain(
+                    spot=last_bar.close,
+                    vix=day.vix,
+                    expiration=expiration,
+                    snapshot_time=last_bar.ts,
+                    strike_min=entry_candidate.lower_strike - 5,
+                    strike_max=entry_candidate.upper_strike + 5,
+                )
+                quote_map = {q.strike: q for q in quotes if q.option_type == entry_candidate.direction}
+                lower_q = quote_map.get(entry_candidate.lower_strike)
+                center_q = quote_map.get(entry_candidate.center_strike)
+                upper_q = quote_map.get(entry_candidate.upper_strike)
+                if lower_q and center_q and upper_q:
+                    current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
+                else:
+                    current_value = 0.0
+                result.exit_time = last_bar.ts
+                result.exit_price = max(0.05, current_value - params.slippage)
+                result.exit_reason = "end_of_day"
+                result.peak_value = peak_value
+                result.pnl = result.exit_price - result.entry_price
+                return result
+
+        result.exit_reason = "expired"
+        result.exit_price = 0.0
+        result.peak_value = peak_value
+        result.pnl = -result.entry_price
+        return result
+
     def simulate_day_adaptive(
         self, day: DayData, dispatch: RegimeDispatch
     ) -> tuple[DayResult, Regime]:

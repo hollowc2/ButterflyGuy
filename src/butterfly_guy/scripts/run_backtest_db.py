@@ -185,6 +185,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--compare-synthetic", action="store_true",
                    help="Run a second synthetic-only pass and print side-by-side comparison. "
                         "Single-config mode only; ignored with --sweep.")
+    p.add_argument("--compare-synthetic-same-entry", action="store_true",
+                   help="Run a BS-only intraday pass pinned to the real entry's center/width/price. "
+                        "Isolates intraday BS pricing error from entry selection. "
+                        "Single-config mode only; ignored with --sweep.")
 
     args = p.parse_args()
 
@@ -856,6 +860,121 @@ def _print_comparison_table(day_rows: list[dict]) -> None:
     print(f"{'='*sw}\n")
 
 
+def _print_same_entry_comparison_table(day_rows: list[dict]) -> None:
+    """Print real vs same-entry-synthetic comparison (pinned center/price, BS intraday only)."""
+    w = 92
+    sw = 60
+    print(f"\n{'='*w}")
+    print(f"  REAL vs SAME-ENTRY SYNTHETIC  (identical entry; BS intraday only)")
+    print(f"{'='*w}")
+    print(f"  {'Date':>10}  {'Run':>5}  {'W':>2}  {'Center':>7}  "
+          f"{'Entry$':>7}  {'Peak$':>6}  {'Exit$':>6}  {'Exit Reason':<22}  {'PnL/ct':>8}")
+    print("  " + "─" * (w - 2))
+
+    real_total = 0.0
+    se_total = 0.0
+    real_pnls: list[float] = []
+    se_pnls: list[float] = []
+    real_wins = real_trades = 0
+    se_wins = se_trades = 0
+    exit_matches = 0
+    peak_diffs: list[float] = []
+    exit_diffs: list[float] = []
+    matched_days = 0
+
+    for row in day_rows:
+        d = row["data"]
+        r = row["result"]
+        se = row.get("same_entry_result")
+        date = d["date"]
+
+        for label, res in (("REAL", r), ("SE-SY", se)):
+            if res is None or not res.traded:
+                print(f"  {date!s:>10}  {label:>5}   -       -         -       -       -    "
+                      f"{'NO TRADE':<22}")
+            else:
+                pnl_ct = res.pnl * 100
+                if label == "REAL":
+                    real_total += pnl_ct
+                else:
+                    se_total += pnl_ct
+                print(f"  {date!s:>10}  {label:>5}  {res.wing_width:>2}  {res.center_strike:>7.0f}  "
+                      f"${res.entry_price:>6.2f}  ${res.peak_value:>5.2f}  ${res.exit_price:>5.2f}  "
+                      f"{res.exit_reason:<22}  ${pnl_ct:>+7.2f}")
+
+        r_traded = r is not None and r.traded
+        s_traded = se is not None and se.traded
+        if r_traded:
+            real_trades += 1
+            real_pnls.append(r.pnl * 100)
+            if r.pnl > 0:
+                real_wins += 1
+        if s_traded:
+            se_trades += 1
+            se_pnls.append(se.pnl * 100)
+            if se.pnl > 0:
+                se_wins += 1
+        if r_traded and s_traded:
+            matched_days += 1
+            if r.exit_reason == se.exit_reason:
+                exit_matches += 1
+            peak_diffs.append(abs(r.peak_value - se.peak_value))
+            exit_diffs.append(r.exit_price - se.exit_price)
+
+    print(f"\n  Real total: ${real_total:+.2f}  /  SE-Synth total: ${se_total:+.2f}")
+    print(f"{'='*w}\n")
+
+    print(f"\n{'='*sw}")
+    print(f"  SAME-ENTRY AGGREGATE STATS")
+    print(f"{'='*sw}")
+    print(f"  {'':20}  {'REAL':>8}  {'SE-SY':>8}")
+    print(f"  {'─'*56}")
+    print(f"  {'Trades':20}  {real_trades:>8}  {se_trades:>8}")
+
+    real_wr = f"{real_wins/real_trades*100:.0f}%" if real_trades else "n/a"
+    se_wr = f"{se_wins/se_trades*100:.0f}%" if se_trades else "n/a"
+    print(f"  {'Win rate':20}  {real_wr:>8}  {se_wr:>8}")
+
+    real_tot = f"${real_total:+.2f}" if real_trades else "n/a"
+    se_tot = f"${se_total:+.2f}" if se_trades else "n/a"
+    print(f"  {'Total PnL/ct':20}  {real_tot:>8}  {se_tot:>8}")
+
+    real_avg = f"${real_total/real_trades:+.2f}" if real_trades else "n/a"
+    se_avg = f"${se_total/se_trades:+.2f}" if se_trades else "n/a"
+    print(f"  {'Avg PnL/ct':20}  {real_avg:>8}  {se_avg:>8}")
+
+    real_sh = f"{_sharpe([p/100 for p in real_pnls]):.3f}" if real_trades >= 2 else "n/a"
+    se_sh = f"{_sharpe([p/100 for p in se_pnls]):.3f}" if se_trades >= 2 else "n/a"
+    print(f"  {'Sharpe':20}  {real_sh:>8}  {se_sh:>8}")
+
+    print(f"  {'─'*56}")
+
+    if matched_days >= 2:
+        n = matched_days
+        mean_r = sum(real_pnls) / n
+        mean_s = sum(se_pnls) / n
+        cov = sum((a - mean_r) * (b - mean_s) for a, b in zip(real_pnls, se_pnls)) / n
+        std_r = (sum((a - mean_r) ** 2 for a in real_pnls) / n) ** 0.5
+        std_s = (sum((b - mean_s) ** 2 for b in se_pnls) / n) ** 0.5
+        corr = cov / (std_r * std_s) if std_r > 0 and std_s > 0 else 0.0
+        corr_str = f"{corr:.2f}"
+        avg_exit_div = sum(exit_diffs) / n
+        avg_peak_div = sum(peak_diffs) / n
+    else:
+        corr_str = avg_exit_div = avg_peak_div = "n/a"
+
+    exit_match_str = f"{exit_matches/matched_days*100:.0f}%" if matched_days else "n/a"
+    print(f"  {'PnL correlation':20}  {corr_str:>8}  (matched days: {matched_days})")
+    print(f"  {'Exit match %':20}  {exit_match_str:>8}  (same exit reason)")
+    if isinstance(avg_peak_div, float):
+        print(f"  {'Avg peak divergence':20}  ${avg_peak_div:>6.2f}   (abs diff real vs SE-synth)")
+        print(f"  {'Avg exit divergence':20}  ${avg_exit_div:>+6.2f}   (real exit$ − SE-synth exit$)")
+    else:
+        print(f"  {'Avg peak divergence':20}  {'n/a':>8}")
+        print(f"  {'Avg exit divergence':20}  {'n/a':>8}")
+    print(f"{'='*sw}\n")
+
+
 # ---------------------------------------------------------------------------
 # Single-config mode
 # ---------------------------------------------------------------------------
@@ -961,9 +1080,20 @@ async def run_single(args: argparse.Namespace) -> None:
                 synth_result = engine.simulate_day(d["day"], params)
                 restore_synth()
 
+            same_entry_result = None
+            if args.compare_synthetic_same_entry and result.traded:
+                restore_se = _force_synthetic_for_date(date)
+                same_entry_result = engine.simulate_day_from_entry(
+                    d["day"], params,
+                    entry_candidate=chosen,
+                    entry_price=result.entry_price,
+                    entry_time=result.entry_time,
+                )
+                restore_se()
+
             # Drop heavy chain/bar data before storing — only keep scalars needed for output
             d_slim = {k: d[k] for k in ("date", "vix", "entry_spot", "prev_close")}
-            day_rows.append({"data": d_slim, "chosen": chosen, "result": result, "synth_result": synth_result})
+            day_rows.append({"data": d_slim, "chosen": chosen, "result": result, "synth_result": synth_result, "same_entry_result": same_entry_result})
 
     finally:
         await conn.close()
@@ -1024,6 +1154,9 @@ async def run_single(args: argparse.Namespace) -> None:
 
     if args.compare_synthetic:
         _print_comparison_table(day_rows)
+
+    if args.compare_synthetic_same_entry:
+        _print_same_entry_comparison_table(day_rows)
 
 
 # ---------------------------------------------------------------------------
