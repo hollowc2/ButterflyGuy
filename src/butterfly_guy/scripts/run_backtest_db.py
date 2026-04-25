@@ -742,6 +742,17 @@ def _print_comparison_table(day_rows: list[dict]) -> None:
     real_total = 0.0
     synth_total = 0.0
 
+    # Collect data for stats
+    real_pnls: list[float] = []
+    synth_pnls: list[float] = []
+    real_wins = 0
+    synth_wins = 0
+    real_trades = 0
+    synth_trades = 0
+    trade_matches = 0      # same center strike
+    exit_matches = 0       # same exit reason
+    matched_days = 0       # days both sides traded
+
     for row in day_rows:
         d = row["data"]
         r = row["result"]
@@ -762,8 +773,88 @@ def _print_comparison_table(day_rows: list[dict]) -> None:
                       f"${res.entry_price:>6.2f}  ${res.peak_value:>5.2f}  ${res.exit_price:>5.2f}  "
                       f"{res.exit_reason:<22}  ${pnl_ct:>+7.2f}")
 
+        # Accumulate stats
+        r_traded = r is not None and r.traded
+        s_traded = sr is not None and sr.traded
+
+        if r_traded:
+            real_trades += 1
+            real_pnls.append(r.pnl * 100)
+            if r.pnl > 0:
+                real_wins += 1
+        if s_traded:
+            synth_trades += 1
+            synth_pnls.append(sr.pnl * 100)
+            if sr.pnl > 0:
+                synth_wins += 1
+        if r_traded and s_traded:
+            matched_days += 1
+            if abs(r.center_strike - sr.center_strike) < 0.5:
+                trade_matches += 1
+            if r.exit_reason == sr.exit_reason:
+                exit_matches += 1
+
     print(f"\n  Real total: ${real_total:+.2f}  /  Synth total: ${synth_total:+.2f}")
     print(f"{'='*w}\n")
+
+    # ── Aggregate stats block ────────────────────────────────────────────────
+    sw = 60
+    print(f"\n{'='*sw}")
+    print(f"  AGGREGATE COMPARISON STATS")
+    print(f"{'='*sw}")
+    print(f"  {'':20}  {'REAL':>8}  {'SYNTH':>8}")
+    print(f"  {'─'*56}")
+    print(f"  {'Trades':20}  {real_trades:>8}  {synth_trades:>8}")
+
+    real_wr = f"{real_wins/real_trades*100:.0f}%" if real_trades else "n/a"
+    synth_wr = f"{synth_wins/synth_trades*100:.0f}%" if synth_trades else "n/a"
+    print(f"  {'Win rate':20}  {real_wr:>8}  {synth_wr:>8}")
+
+    real_tot = f"${real_total:+.2f}" if real_trades else "n/a"
+    synth_tot = f"${synth_total:+.2f}" if synth_trades else "n/a"
+    print(f"  {'Total PnL/ct':20}  {real_tot:>8}  {synth_tot:>8}")
+
+    real_avg = f"${real_total/real_trades:+.2f}" if real_trades else "n/a"
+    synth_avg = f"${synth_total/synth_trades:+.2f}" if synth_trades else "n/a"
+    print(f"  {'Avg PnL/ct':20}  {real_avg:>8}  {synth_avg:>8}")
+
+    from butterfly_guy.backtest.metrics import sharpe as _sharpe
+    real_sh = f"{_sharpe([p/100 for p in real_pnls]):.3f}" if real_trades >= 2 else "n/a"
+    synth_sh = f"{_sharpe([p/100 for p in synth_pnls]):.3f}" if synth_trades >= 2 else "n/a"
+    print(f"  {'Sharpe':20}  {real_sh:>8}  {synth_sh:>8}")
+
+    print(f"  {'─'*56}")
+
+    # Pearson r on matched days
+    if matched_days >= 2:
+        r_series = [row["result"].pnl * 100 for row in day_rows
+                    if row["result"] and row["result"].traded
+                    and row["synth_result"] and row["synth_result"].traded]
+        s_series = [row["synth_result"].pnl * 100 for row in day_rows
+                    if row["result"] and row["result"].traded
+                    and row["synth_result"] and row["synth_result"].traded]
+        n = len(r_series)
+        mean_r = sum(r_series) / n
+        mean_s = sum(s_series) / n
+        cov = sum((a - mean_r) * (b - mean_s) for a, b in zip(r_series, s_series)) / n
+        std_r = (sum((a - mean_r) ** 2 for a in r_series) / n) ** 0.5
+        std_s = (sum((b - mean_s) ** 2 for b in s_series) / n) ** 0.5
+        corr = cov / (std_r * std_s) if std_r > 0 and std_s > 0 else 0.0
+        corr_str = f"{corr:.2f}"
+        avg_div = sum(a - b for a, b in zip(r_series, s_series)) / n
+        div_str = f"${avg_div:+.2f}/ct"
+    else:
+        corr_str = "n/a"
+        div_str = "n/a"
+
+    trade_match_str = f"{trade_matches/matched_days*100:.0f}%" if matched_days else "n/a"
+    exit_match_str = f"{exit_matches/matched_days*100:.0f}%" if matched_days else "n/a"
+
+    print(f"  {'PnL correlation':20}  {corr_str:>8}  (matched days: {matched_days})")
+    print(f"  {'Trade match %':20}  {trade_match_str:>8}  (same center strike)")
+    print(f"  {'Exit match %':20}  {exit_match_str:>8}  (same exit reason)")
+    print(f"  {'Avg divergence':20}  {div_str:>8}  (real − synth, matched)")
+    print(f"{'='*sw}\n")
 
 
 # ---------------------------------------------------------------------------
