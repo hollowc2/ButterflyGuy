@@ -752,6 +752,8 @@ def _print_comparison_table(day_rows: list[dict]) -> None:
     trade_matches = 0      # same center strike
     exit_matches = 0       # same exit reason
     matched_days = 0       # days both sides traded
+    matched_real_pnls: list[float] = []
+    matched_synth_pnls: list[float] = []
 
     for row in day_rows:
         d = row["data"]
@@ -789,6 +791,8 @@ def _print_comparison_table(day_rows: list[dict]) -> None:
                 synth_wins += 1
         if r_traded and s_traded:
             matched_days += 1
+            matched_real_pnls.append(r.pnl * 100)
+            matched_synth_pnls.append(sr.pnl * 100)
             if abs(r.center_strike - sr.center_strike) < 0.5:
                 trade_matches += 1
             if r.exit_reason == sr.exit_reason:
@@ -818,7 +822,6 @@ def _print_comparison_table(day_rows: list[dict]) -> None:
     synth_avg = f"${synth_total/synth_trades:+.2f}" if synth_trades else "n/a"
     print(f"  {'Avg PnL/ct':20}  {real_avg:>8}  {synth_avg:>8}")
 
-    from butterfly_guy.backtest.metrics import sharpe as _sharpe
     real_sh = f"{_sharpe([p/100 for p in real_pnls]):.3f}" if real_trades >= 2 else "n/a"
     synth_sh = f"{_sharpe([p/100 for p in synth_pnls]):.3f}" if synth_trades >= 2 else "n/a"
     print(f"  {'Sharpe':20}  {real_sh:>8}  {synth_sh:>8}")
@@ -827,12 +830,8 @@ def _print_comparison_table(day_rows: list[dict]) -> None:
 
     # Pearson r on matched days
     if matched_days >= 2:
-        r_series = [row["result"].pnl * 100 for row in day_rows
-                    if row["result"] and row["result"].traded
-                    and row["synth_result"] and row["synth_result"].traded]
-        s_series = [row["synth_result"].pnl * 100 for row in day_rows
-                    if row["result"] and row["result"].traded
-                    and row["synth_result"] and row["synth_result"].traded]
+        r_series = matched_real_pnls
+        s_series = matched_synth_pnls
         n = len(r_series)
         mean_r = sum(r_series) / n
         mean_s = sum(s_series) / n

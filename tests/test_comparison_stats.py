@@ -1,9 +1,7 @@
 """Tests for _print_comparison_table aggregate stats."""
-import math
 import io
 import sys
 import datetime as dt
-from unittest.mock import MagicMock
 from butterfly_guy.scripts.run_backtest_db import _print_comparison_table
 from butterfly_guy.backtest.simulation_engine import DayResult
 
@@ -60,7 +58,7 @@ def test_perfect_correlation():
          "synth_result": _make_result(True, -0.10, 5490.0, "drawdown_morning")},
     ]
     out = _capture(rows)
-    assert "1.00" in out  # perfect correlation
+    assert any("PnL correlation" in ln and "1.00" in ln for ln in out.splitlines())  # perfect correlation
 
 
 def test_no_trade_days_handled():
