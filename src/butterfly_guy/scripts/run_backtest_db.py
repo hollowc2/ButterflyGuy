@@ -27,6 +27,7 @@ import bisect
 import csv
 import datetime as dt
 import itertools
+import math
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -728,6 +729,55 @@ def _summarize_combo(
 
 
 # ---------------------------------------------------------------------------
+# Trade value histogram
+# ---------------------------------------------------------------------------
+
+def _print_pnl_histogram(pnls_ct: list[float]) -> None:
+    """ASCII histogram: loss buckets use ▒, win buckets use █, each row = 1 trade."""
+    if len(pnls_ct) < 2:
+        return
+
+    lo, hi = min(pnls_ct), max(pnls_ct)
+    span = max(hi - lo, 1.0)
+
+    # Round up to a nice bucket width that gives exactly 12 buckets
+    raw_w = span / 12
+    bucket_w = next(
+        float(n) for n in (1, 2, 5, 10, 25, 50, 100, 200, 500, 1000)
+        if n >= raw_w
+    )
+
+    start = math.floor(lo / bucket_w) * bucket_w
+    n_buckets = 12
+
+    counts = [0] * n_buckets
+    for p in pnls_ct:
+        idx = min(int((p - start) / bucket_w), n_buckets - 1)
+        counts[idx] += 1
+
+    max_h = max(counts)
+    COL = 6  # chars per column
+
+    print(f"\n  TRADE DISTRIBUTION  (▒▒▒▒ = loss  ████ = win,  each row = 1 trade)\n")
+
+    for h in range(max_h, 0, -1):
+        row = f"  {h:>2} │"
+        for i, cnt in enumerate(counts):
+            mid = start + (i + 0.5) * bucket_w
+            blk = " ▒▒▒▒ " if mid < 0 else " ████ "
+            row += blk if cnt >= h else " " * COL
+        print(row)
+
+    print("     └" + "──────" * n_buckets)
+
+    lbl = "      "
+    for i in range(n_buckets):
+        b = start + i * bucket_w
+        lbl += f"${b:.0f}".center(COL)
+    print(lbl)
+
+
+# ---------------------------------------------------------------------------
 # ThinkBack validation output
 # ---------------------------------------------------------------------------
 
@@ -1226,7 +1276,9 @@ async def run_single(args: argparse.Namespace) -> None:
     print(f"  Profit factor: {_profit_factor(pnls_ct):.3f}")
     print(f"  Exit reasons: "
           + "  ".join(f"{k}={v}" for k, v in sorted(exit_counts.items())))
-    print(f"{'='*90}\n")
+    print(f"{'='*90}")
+
+    _print_pnl_histogram(pnls_ct)
 
     if args.thinkback:
         print_thinkback_checklist(day_rows, args.asset)
