@@ -738,17 +738,14 @@ def _print_pnl_histogram(pnls_ct: list[float]) -> None:
         return
 
     lo, hi = min(pnls_ct), max(pnls_ct)
-    span = max(hi - lo, 1.0)
 
-    # Round up to a nice bucket width that gives exactly 12 buckets
-    raw_w = span / 12
-    bucket_w = next(
-        float(n) for n in (1, 2, 5, 10, 25, 50, 100, 200, 500, 1000)
-        if n >= raw_w
-    )
-
-    start = math.floor(lo / bucket_w) * bucket_w
-    n_buckets = 12
+    # Pick smallest fixed bucket width that covers the data in ≤14 buckets
+    bucket_w = 50
+    for bucket_w in (50, 100, 200, 250, 500, 1000):
+        start = math.floor(lo / bucket_w) * bucket_w
+        n_buckets = math.ceil((hi - start) / bucket_w)
+        if n_buckets <= 14:
+            break
 
     counts = [0] * n_buckets
     for p in pnls_ct:
