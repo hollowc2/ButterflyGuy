@@ -26,6 +26,8 @@ from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, vix_targe
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.strategy.direction_filter import DirectionFilter
+from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
+from butterfly_guy.strategy.regime_classifier import Regime
 
 log = get_logger(__name__)
 
@@ -47,6 +49,8 @@ class TradeService:
         candidate_queries: CandidateQueries,
         decision_queries: DecisionQueries,
         notifier: DiscordNotifier | None = None,
+        regime: Regime = Regime.UNKNOWN,
+        gap_regime_filter: GapRegimeFilter | None = None,
     ) -> None:
         self.config = config
         self.schwab = schwab
@@ -60,6 +64,8 @@ class TradeService:
         self.candidate_queries = candidate_queries
         self.decision_queries = decision_queries
         self.notifier = notifier
+        self.regime = regime
+        self.gap_regime_filter = gap_regime_filter
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
         """Full entry flow: time → balance → risk → direction (once) → retry loop (re-scan + fill)."""
@@ -132,15 +138,32 @@ class TradeService:
         except Exception:
             pass
 
-        # Determine direction once — bias filter or simple gap
-        if self.config.entry.use_bias_filter:
-            direction = await self._bias_direction(previous_close, spot_price)
-            if direction is None:
-                await self.decision_queries.log_event("bias_filter_no_signal", {"spot": spot_price}, underlying=underlying)
-                log.info("bias_filter_no_signal", spot=spot_price)
+        direction = None
+
+        if self.gap_regime_filter:
+            override, skip_reason = self.gap_regime_filter.apply(
+                spot_price, previous_close, self.regime
+            )
+            if skip_reason:
+                await self.decision_queries.log_event(
+                    "gap_regime_skip", {"reason": skip_reason, "spot": spot_price}, underlying=underlying
+                )
+                log.info("gap_regime_skip", reason=skip_reason)
                 return None
-        else:
-            direction = self.direction_filter.get_direction(spot_price, previous_close)
+            if override:
+                direction = override
+                log.info("gap_regime_override", direction=direction)
+
+        if direction is None:
+            # Determine direction once — bias filter or simple gap
+            if self.config.entry.use_bias_filter:
+                direction = await self._bias_direction(previous_close, spot_price)
+                if direction is None:
+                    await self.decision_queries.log_event("bias_filter_no_signal", {"spot": spot_price}, underlying=underlying)
+                    log.info("bias_filter_no_signal", spot=spot_price)
+                    return None
+            else:
+                direction = self.direction_filter.get_direction(spot_price, previous_close)
 
         # Fetch VIX for metrics or VIX selection method
         vix_price: float | None = None

@@ -39,6 +39,7 @@ from butterfly_guy.services.trade_service import TradeService
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
+from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import RegimeClassifier
 
 log = get_logger("run_live")
@@ -146,6 +147,22 @@ async def main() -> None:
     webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get("DISCORD_WEBHOOK_URL", "")
     notifier = DiscordNotifier(webhook) if (webhook and not config.execution.paper_trading) else None
 
+    # Classify today's market regime (must precede TradeService construction)
+    regime_classifier = RegimeClassifier()
+    lookback = regime_classifier.lookback_days
+    recent_spx = await daily_bar_q.get_recent_closes(
+        config.strategy.underlying, days=lookback + 5
+    )
+    vix_closes = await daily_bar_q.get_recent_closes("$VIX", days=1)
+    vix_level = vix_closes[0] if vix_closes else 0.0
+    regime = regime_classifier.classify(recent_spx, vix_level)
+    log.info("regime_classified", regime=regime.value, spx_bars=len(recent_spx), vix=vix_level)
+
+    gap_regime_filter = GapRegimeFilter(
+        bull_call_bias=config.entry.bull_call_bias,
+        min_gap_pct=config.entry.min_gap_pct,
+    )
+
     # Build service objects
     risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
     order_builder = ButterflyOrderBuilder()
@@ -164,6 +181,8 @@ async def main() -> None:
         candidate_queries=candidate_q,
         decision_queries=decision_q,
         notifier=notifier,
+        regime=regime,
+        gap_regime_filter=gap_regime_filter,
     )
 
     position_service = PositionService(
@@ -184,17 +203,6 @@ async def main() -> None:
         spot_queries=spot_q,
         daily_bar_queries=daily_bar_q,
     )
-
-    # Classify today's market regime from stored daily bars
-    regime_classifier = RegimeClassifier()
-    lookback = regime_classifier.lookback_days
-    recent_spx = await daily_bar_q.get_recent_closes(
-        config.strategy.underlying, days=lookback + 5
-    )
-    vix_closes = await daily_bar_q.get_recent_closes("$VIX", days=1)
-    vix_level = vix_closes[0] if vix_closes else 0.0
-    regime = regime_classifier.classify(recent_spx, vix_level)
-    log.info("regime_classified", regime=regime.value, spx_bars=len(recent_spx), vix=vix_level)
 
     if notifier:
         await notifier._post("🚀 Butterfly Guy starting up!")

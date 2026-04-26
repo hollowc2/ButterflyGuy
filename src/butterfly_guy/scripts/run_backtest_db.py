@@ -56,6 +56,10 @@ from butterfly_guy.strategy.butterfly_builder import (
     vix_target_center,
 )
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
+from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
+from butterfly_guy.strategy.regime_classifier import Regime, RegimeClassifier
+
+_regime_classifier = RegimeClassifier()
 
 setup_logging(log_level="ERROR", json_output=False)
 log = get_logger("run_backtest_db")
@@ -189,6 +193,19 @@ def parse_args() -> argparse.Namespace:
                    help="Run a BS-only intraday pass pinned to the real entry's center/width/price. "
                         "Isolates intraday BS pricing error from entry selection. "
                         "Single-config mode only; ignored with --sweep.")
+    p.add_argument("--gap-filter", type=float, default=None,
+                   metavar="MIN_PCT",
+                   help="Only enter CALL butterflies on days where the gap vs prior close is >= MIN_PCT "
+                        "(e.g. 0.0 = any gap up, 0.0025 = gap up >=0.25%%). "
+                        "Days below the threshold are skipped entirely.")
+    p.add_argument("--strategy-f", action="store_true",
+                   help="Strategy F: all three filters must pass to enter a CALL butterfly — "
+                        "(1) regime=BULL, (2) VIX at entry < VIX prev close, (3) SPX gap >=0.25%%.")
+    p.add_argument("--bull-call-bias", action="store_true",
+                   help="Override to CALL in BULL regime on gap-down days.")
+    p.add_argument("--min-gap-pct", type=float, default=None,
+                   metavar="PCT",
+                   help="Skip days where |gap vs prev close| < PCT (e.g. 0.0025 = 0.25%%).")
 
     args = p.parse_args()
 
@@ -447,6 +464,30 @@ async def get_prev_close(
     return 5500.0
 
 
+async def get_recent_closes(
+    conn: asyncpg.Connection, date: dt.date, underlying: str, n: int = 30
+) -> list[float]:
+    """Up to *n* daily closes strictly before *date*, chronological order."""
+    rows = await conn.fetch(
+        """
+        SELECT close FROM daily_bars
+        WHERE  underlying = $1 AND date < $2
+        ORDER  BY date DESC LIMIT $3
+        """,
+        underlying, date, n,
+    )
+    return [float(r["close"]) for r in reversed(rows)]
+
+
+async def get_vix_prev_close(conn: asyncpg.Connection, date: dt.date) -> float:
+    """Return VIX daily close strictly before *date* from daily_bars."""
+    val = await conn.fetchval(
+        "SELECT close FROM daily_bars WHERE underlying = '$VIX' AND date < $1 ORDER BY date DESC LIMIT 1",
+        date,
+    )
+    return float(val) if val is not None else 18.0
+
+
 async def get_vix_at(conn: asyncpg.Connection, at_time: dt.datetime) -> float:
     row = await conn.fetchval(
         "SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= $1 ORDER BY ts DESC LIMIT 1",
@@ -628,6 +669,8 @@ async def load_date_data(
         bars[0],
     )
     vix = await get_vix_at(conn, entry_bar.ts)
+    vix_prev_close = await get_vix_prev_close(conn, date)
+    recent_closes = await get_recent_closes(conn, date, underlying)
     return dict(
         date=date,
         chains=chains,
@@ -636,7 +679,8 @@ async def load_date_data(
         entry_bar=entry_bar,
         entry_spot=entry_bar.close,
         vix=vix,
-        day=DayData(date=date, bars=bars, vix=vix, prev_close=prev_close),
+        vix_prev_close=vix_prev_close,
+        day=DayData(date=date, bars=bars, vix=vix, prev_close=prev_close, recent_closes=recent_closes),
     )
 
 
@@ -1028,6 +1072,40 @@ async def run_single(args: argparse.Namespace) -> None:
             else:
                 direction = direction_arg
 
+            if args.gap_filter is not None:
+                gap_pct = (d["entry_spot"] - d["prev_close"]) / d["prev_close"]
+                if gap_pct < args.gap_filter:
+                    print(f" SKIPPED (gap {gap_pct:.3%} < {args.gap_filter:.3%})")
+                    continue
+                direction = "CALL"
+
+            if args.strategy_f:
+                gap_pct = (d["entry_spot"] - d["prev_close"]) / d["prev_close"]
+                regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
+                if gap_pct < 0.0025:
+                    print(f" SKIPPED [F] gap {gap_pct:.3%} < 0.250%")
+                    continue
+                if regime != Regime.BULL:
+                    print(f" SKIPPED [F] regime={regime.value}")
+                    continue
+                if d["vix"] >= d["vix_prev_close"]:
+                    print(f" SKIPPED [F] VIX not gap-down ({d['vix']:.1f} >= prev {d['vix_prev_close']:.1f})")
+                    continue
+                direction = "CALL"
+
+            if not args.gap_filter and not args.strategy_f:
+                gap_regime_filter = GapRegimeFilter(
+                    bull_call_bias=args.bull_call_bias,
+                    min_gap_pct=args.min_gap_pct,
+                )
+                regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
+                override, skip_reason = gap_regime_filter.apply(d["entry_spot"], d["prev_close"], regime)
+                if skip_reason:
+                    print(f" SKIPPED (gap_regime: {skip_reason})")
+                    continue
+                if override:
+                    direction = override
+
             entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
             chosen = select_live_width(
                 quotes=entry_quotes,
@@ -1238,6 +1316,37 @@ async def run_sweep(args: argparse.Namespace) -> None:
                     if direction == "auto"
                     else direction
                 )
+
+                if args.gap_filter is not None:
+                    gap_pct = (entry_spot - d["prev_close"]) / d["prev_close"]
+                    if gap_pct < args.gap_filter:
+                        per_combo.append((None, None, None))
+                        continue
+                    resolved_direction = "CALL"
+
+                if args.strategy_f:
+                    gap_pct = (entry_spot - d["prev_close"]) / d["prev_close"]
+                    regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
+                    if (gap_pct < 0.0025
+                            or regime != Regime.BULL
+                            or d["vix"] >= d["vix_prev_close"]):
+                        per_combo.append((None, None, None))
+                        continue
+                    resolved_direction = "CALL"
+
+                if not args.gap_filter and not args.strategy_f:
+                    gap_regime_filter = GapRegimeFilter(
+                        bull_call_bias=args.bull_call_bias,
+                        min_gap_pct=args.min_gap_pct,
+                    )
+                    regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
+                    override, skip_reason = gap_regime_filter.apply(entry_spot, d["prev_close"], regime)
+                    if skip_reason:
+                        per_combo.append((None, None, None))
+                        continue
+                    if override:
+                        resolved_direction = override
+
                 chosen = select_for_width(
                     quotes=entry_quotes,
                     spot=entry_spot,
