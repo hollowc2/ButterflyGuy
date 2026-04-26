@@ -14,6 +14,7 @@ Automated options trading strategy and research platform for 0-DTE SPX, NDX, and
   - `VIX`: Anchors the center strike to the VIX-implied 1-sigma move.
   - `TARGET_COST`: Pushes the fly as far OTM as possible until the cost matches your target debit.
   - `BEST_RR`: Selects the candidate with the Reward/Risk closest to your target (e.g., 10:1).
+- **Gap Regime Filter**: Two statistically validated signals applied before direction selection — flip to CALL on gap-down days in a BULL regime (`bull_call_bias`), and skip days where the gap is too small to have edge (`min_gap_pct`). Used identically in live trading and backtesting.
 - **Automated Data Collection**: Continuous snapshotting of option chains and spot prices into a TimescaleDB instance.
 - **Risk Management**: Layered capital protection including daily/weekly loss limits, consecutive loss circuit breaker, real-time PDT floor enforcement, and buying power validation via Schwab API.
 - **Research Tools**: Powerful scripts to inspect historical entries and simulate strategy changes.
@@ -63,6 +64,8 @@ entry:
   end_time: "07:45"                # PST
   strike_selection_method: "TARGET_COST" # VIX, TARGET_COST, or BEST_RR
   center_tolerance: 15.0           # (VIX mode only) pts tolerance around target
+  bull_call_bias: false            # If true, override to CALL on gap-down days in BULL regime
+  min_gap_pct: null                # Skip days where |gap vs prev close| < this (e.g. 0.0025 = 0.25%)
 ```
 
 ### Strategy Settings
@@ -118,6 +121,24 @@ uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
 ```
 
 Sweep mode runs the `ParameterSweeper`, which tries every combination of wing widths, drawdown thresholds, and other strategy parameters, then ranks results by Sharpe ratio so you can compare configurations objectively.
+
+### Gap Regime Filters (Backtest)
+
+Two flags apply the same `GapRegimeFilter` logic used in live trading:
+
+```bash
+# Skip days where the absolute gap is below 0.25%
+uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --min-gap-pct 0.0025
+
+# Override direction to CALL on gap-down days when regime is BULL
+uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --bull-call-bias
+
+# Legacy: only enter CALL on gap-up days above a threshold (unchanged)
+uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --gap-filter 0.0025
+
+# Legacy: Strategy F — BULL regime + VIX gap-down + SPX gap >=0.25% (unchanged)
+uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --strategy-f
+```
 
 ### Comparing Real vs Synthetic Chains
 
