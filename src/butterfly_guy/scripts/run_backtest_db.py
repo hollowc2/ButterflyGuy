@@ -215,6 +215,7 @@ def parse_args() -> argparse.Namespace:
         args.wing = list(asset_cfg["wing_widths"])
     if args.direction is None:
         args.direction = ["auto"]
+    args.direction = [d if d.upper() != "AUTO" else "auto" for d in args.direction]
     if args.rr_min is None:
         args.rr_min = [8.0]
     if args.morning_dd is None:
