@@ -22,7 +22,7 @@ from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.services.notifier import DiscordNotifier
-from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, vix_target_center
+from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, resolve_wing_widths_for_vix, vix_target_center
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.strategy.direction_filter import DirectionFilter
@@ -203,27 +203,41 @@ class TradeService:
             best: ButterflyCandidate | None = None
             selection_method = self.config.entry.strike_selection_method
             
-            if selection_method == "VIX" and vix_price:
-                per_width_bests = []
-                for width in self.config.strategy.wing_widths:
-                    target_center = vix_target_center(
-                        vix=vix_price, spot=spot_price,
-                        direction=direction, wing_width=width,
-                    )
-                    width_candidates = [c for c in candidates if c.wing_width == width]
-                    w_best = self.selector.select_best(
-                        width_candidates,
-                        target_center=target_center,
-                        center_tolerance=self.config.entry.center_tolerance,
-                    )
-                    if w_best:
-                        per_width_bests.append(w_best)
-                if per_width_bests:
-                    best = min(per_width_bests,
-                               key=lambda c: abs(c.reward_risk - self.config.strategy.rr_target))
-                    log.info("vix_center_selected", vix=round(vix_price, 2),
-                             width=best.wing_width, center=best.center_strike,
-                             rr=round(best.reward_risk, 2))
+            if selection_method == "VIX":
+                vix_buckets = self.config.strategy.vix_width_buckets
+                if vix_buckets:
+                    if not vix_price:
+                        log.warning("vix_width_buckets configured but VIX unavailable — skipping entry")
+                        return None
+                    effective_widths, sigmas = resolve_wing_widths_for_vix(vix_price, vix_buckets)
+                    log.info("vix_bucket_selected", vix=round(vix_price, 2), widths=effective_widths)
+                else:
+                    effective_widths = self.config.strategy.wing_widths
+                    sigmas = tuple(None for _ in effective_widths)
+
+                if vix_price:
+                    per_width_bests = []
+                    for i, width in enumerate(effective_widths):
+                        target_center = vix_target_center(
+                            vix=vix_price, spot=spot_price,
+                            direction=direction,
+                            wing_width=None if sigmas[i] is not None else width,
+                            sigma_fraction=sigmas[i],
+                        )
+                        width_candidates = [c for c in candidates if c.wing_width == width]
+                        w_best = self.selector.select_best(
+                            width_candidates,
+                            target_center=target_center,
+                            center_tolerance=self.config.entry.center_tolerance,
+                        )
+                        if w_best:
+                            per_width_bests.append(w_best)
+                    if per_width_bests:
+                        best = min(per_width_bests,
+                                   key=lambda c: abs(c.reward_risk - self.config.strategy.rr_target))
+                        log.info("vix_center_selected", vix=round(vix_price, 2),
+                                 width=best.wing_width, center=best.center_strike,
+                                 rr=round(best.reward_risk, 2))
             elif selection_method == "TARGET_COST":
                 best = self.selector.select_best_by_target_cost(candidates)
 

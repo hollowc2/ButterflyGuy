@@ -9,7 +9,7 @@ Automated options trading strategy and research platform for 0-DTE SPX, NDX, and
 ## 🚀 Features
 
 - **Multi-Asset Support**: Trade SPX, NDX, or XSP with tailored configurations for each.
-- **VIX-Aware Strategy**: Dynamically adjusts wing widths and entry anchors based on market volatility.
+- **VIX-Aware Strategy**: Uses VIX to both select which widths to trade (via configurable VIX regime buckets) and to anchor the center strike to the implied expected move.
 - **Flexible Entry Methods**:
   - `VIX`: Anchors the center strike to the VIX-implied 1-sigma move.
   - `TARGET_COST`: Pushes the fly as far OTM as possible until the cost matches your target debit.
@@ -74,13 +74,32 @@ Under the `strategy:` block:
 
 ```yaml
 strategy:
-  wing_widths: [10, 20, 30]        # Available butterfly widths
+  wing_widths: [10, 20, 30]        # Fallback widths; used for backtest sweeps and when vix_width_buckets is absent
   rr_target: 10.0                  # Ideal Reward/Risk ratio
-  max_cost_per_width:              # Cost targets for TARGET_COST mode
+  max_cost_per_width:              # Max debit allowed per width ($0.10/pt)
     10: 1.00
     20: 2.00
     30: 3.00
 ```
+
+#### VIX-Bucketed Width Selection
+
+When `vix_width_buckets` is configured, the live trader ignores `wing_widths` and instead selects the active width triplet based on the current VIX level. Each bucket is a narrow/mid/wide set; center placement uses 0.25σ/0.50σ/0.75σ respectively. If VIX data is unavailable and buckets are configured, entry is skipped rather than falling back to an arbitrary width.
+
+```yaml
+strategy:
+  vix_width_buckets:
+    - vix_max: 17.0
+      widths: [20, 25, 30]    # Zombieland — low vol, tight flies
+    - vix_max: 24.5
+      widths: [30, 35, 40]    # Goldilocks 1
+    - vix_max: 32.0
+      widths: [40, 45, 50]    # Goldilocks 2
+    - vix_max: 9999.0
+      widths: [50, 55, 65]    # Chaos — high vol, wide flies
+```
+
+Backtests are not affected — `--wing` still sweeps individual fixed widths as before.
 
 ---
 

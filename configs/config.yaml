@@ -4,13 +4,29 @@ schwab:
 
 strategy:
   underlying: "SPX"
-  wing_widths: [10, 20, 30]
+  wing_widths: [10, 20, 30]      # used for backtest sweeps; ignored at runtime when vix_width_buckets is set
+  vix_width_buckets:
+    - vix_max: 17.0
+      widths: [20, 25, 30]       # Zombieland
+    - vix_max: 24.5
+      widths: [30, 35, 40]       # Goldilocks 1
+    - vix_max: 32.0
+      widths: [40, 45, 50]       # Goldilocks 2
+    - vix_max: 9999.0
+      widths: [50, 55, 65]       # Chaos
   spot_range: 100
   rr_min: 8.0
   max_cost_per_width:
     10: 1.00
     20: 2.00
+    25: 2.50
     30: 3.00
+    35: 3.50
+    40: 4.00
+    45: 4.50
+    50: 5.00
+    55: 5.50
+    65: 6.50
 entry:
   start_time: "07:00"  # PST
   end_time: "07:45"    # PST

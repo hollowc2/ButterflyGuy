@@ -39,6 +39,20 @@ VIX_SIGMA_BY_WIDTH: dict[int, float] = {
     3: 0.75,   # XSP wide
 }
 _VIX_SIGMA_DEFAULT = 0.50  # fallback for unlisted widths
+_BUCKET_SIGMAS = (0.25, 0.50, 0.75)  # narrow / mid / wide within any VIX bucket
+
+
+def resolve_wing_widths_for_vix(vix: float, buckets: list) -> tuple[list[int], tuple[float, ...]]:
+    """Return (widths, sigma_fractions) for the active VIX bucket.
+
+    Buckets are processed in ascending vix_max order; first match wins.
+    Sigma fractions are positional so that a width like 30 can be "wide" (0.75) in a
+    low-VIX bucket and "narrow" (0.25) in a higher-VIX bucket without ambiguity.
+    """
+    for bucket in sorted(buckets, key=lambda b: b.vix_max):
+        if vix < bucket.vix_max:
+            return bucket.widths, _BUCKET_SIGMAS
+    return buckets[-1].widths, _BUCKET_SIGMAS
 
 
 def vix_expected_move(vix: float, spot: float) -> float:

@@ -20,9 +20,15 @@ class SchwabSettings(BaseModel):
     max_token_age: int = 518400
 
 
+class VixWidthBucket(BaseModel):
+    vix_max: float       # exclusive upper bound; use 9999.0 for the catch-all last bucket
+    widths: list[int]    # widths to scan in this regime (narrow → wide, typically 3 entries)
+
+
 class StrategySettings(BaseModel):
     underlying: str = "SPX"
     wing_widths: list[int] = Field(default_factory=lambda: [10, 20, 30])
+    vix_width_buckets: list[VixWidthBucket] | None = None
     spot_range: int = 100
     rr_min: float = 8.0
     rr_max: float = 12.0
