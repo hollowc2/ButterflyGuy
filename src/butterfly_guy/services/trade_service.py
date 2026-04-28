@@ -125,7 +125,7 @@ class TradeService:
         # Fetch previous close from DB (fallback to spot_price = neutral)
         previous_close = spot_price
         try:
-            latest_spot = await self.chain_queries.db.fetchval(
+            latest_spot = await self.chain_queries.db.pool.fetchval(
                 """
                 SELECT price FROM spot_prices
                 WHERE underlying = $1 AND ts < CURRENT_DATE
@@ -168,7 +168,7 @@ class TradeService:
         # Fetch VIX for metrics or VIX selection method
         vix_price: float | None = None
         try:
-            raw = await self.chain_queries.db.fetchval(
+            raw = await self.chain_queries.db.pool.fetchval(
                 "SELECT price FROM spot_prices WHERE underlying = '$VIX' ORDER BY ts DESC LIMIT 1"
             )
             if raw:

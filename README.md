@@ -101,6 +101,14 @@ strategy:
 
 Backtests are not affected — `--wing` still sweeps individual fixed widths as before.
 
+#### SPX vs NDX Width Selection
+
+| Asset | Method | Widths |
+|---|---|---|
+| SPX | VIX-bucketed (Ernie's system) | 4 regimes dynamically select a narrow/mid/wide triplet based on current VIX |
+| NDX | Fixed | Always scans `[25, 50, 75]` regardless of VIX — no bucket logic configured |
+| XSP | Fixed | Always scans `[1, 2, 3]` regardless of VIX — no bucket logic configured |
+
 ---
 
 ## 📊 Research and Inspection
