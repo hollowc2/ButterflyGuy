@@ -115,38 +115,65 @@ class TradeService:
         spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
         chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
 
-        # Get initial spot price for direction determination
+        # Get initial spot price for chain scanning and VIX anchoring
         try:
             spot_price = await self.schwab.get_spot_price(spot_symbol)
         except Exception as e:
             log.error("spot_fetch_failed", error=str(e))
             return None
 
-        # Fetch previous close from DB (fallback to spot_price = neutral)
+        # Previous close from daily_bars (official close, not last spot snapshot)
         previous_close = spot_price
         try:
-            latest_spot = await self.chain_queries.db.pool.fetchval(
+            row = await self.chain_queries.db.pool.fetchval(
                 """
-                SELECT price FROM spot_prices
-                WHERE underlying = $1 AND ts < CURRENT_DATE
-                ORDER BY ts DESC LIMIT 1
+                SELECT close FROM daily_bars
+                WHERE underlying = $1 AND date < CURRENT_DATE
+                ORDER BY date DESC LIMIT 1
                 """,
                 self.config.strategy.underlying,
             )
-            if latest_spot:
-                previous_close = float(latest_spot)
+            if row:
+                previous_close = float(row)
         except Exception:
             pass
+
+        # Opening price for gap direction — first snapshot on today's date.
+        # Using open vs prev_close captures the overnight gap; using live spot
+        # at entry time can give wrong direction when price retraces back through
+        # the previous close during the entry window.
+        open_price = spot_price
+        try:
+            row = await self.chain_queries.db.pool.fetchval(
+                """
+                SELECT price FROM spot_prices
+                WHERE underlying = $1 AND ts::date = CURRENT_DATE
+                ORDER BY ts ASC LIMIT 1
+                """,
+                self.config.strategy.underlying,
+            )
+            if row:
+                open_price = float(row)
+        except Exception:
+            pass
+
+        log.info(
+            "direction_inputs",
+            open_price=round(open_price, 2),
+            previous_close=round(previous_close, 2),
+            spot_price=round(spot_price, 2),
+            gap_pct=round((open_price - previous_close) / previous_close * 100, 3),
+        )
 
         direction = None
 
         if self.gap_regime_filter:
             override, skip_reason = self.gap_regime_filter.apply(
-                spot_price, previous_close, self.regime
+                open_price, previous_close, self.regime
             )
             if skip_reason:
                 await self.decision_queries.log_event(
-                    "gap_regime_skip", {"reason": skip_reason, "spot": spot_price}, underlying=underlying
+                    "gap_regime_skip", {"reason": skip_reason, "open": open_price}, underlying=underlying
                 )
                 log.info("gap_regime_skip", reason=skip_reason)
                 return None
@@ -163,7 +190,7 @@ class TradeService:
                     log.info("bias_filter_no_signal", spot=spot_price)
                     return None
             else:
-                direction = self.direction_filter.get_direction(spot_price, previous_close)
+                direction = self.direction_filter.get_direction(open_price, previous_close)
 
         # Fetch VIX for metrics or VIX selection method
         vix_price: float | None = None
