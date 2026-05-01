@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import argparse
 import datetime as dt
 import math
 import sys
@@ -34,6 +35,86 @@ from butterfly_guy.strategy.butterfly_builder import (
     vix_target_center,
 )
 
+VALID_ASSETS = ["SPX", "NDX", "XSP"]
+ALL_WING_WIDTHS = [10, 20, 30, 50, 75]
+
+ASSET_CONFIGS: dict[str, dict] = {
+    "SPX": {"wing_widths": [10, 20, 30], "spot_range": 100, "center_tolerance": 50, "yfinance_index": "^GSPC"},
+    "NDX": {"wing_widths": [25, 50, 75], "spot_range": 250, "center_tolerance": 100, "yfinance_index": "^NDX"},
+    "XSP": {"wing_widths": [10, 20, 30], "spot_range": 100, "center_tolerance": 50, "yfinance_index": "SPX"},
+}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Entry analysis backtest")
+    parser.add_argument(
+        "--asset", "-a",
+        nargs="+",
+        choices=VALID_ASSETS,
+        default=VALID_ASSETS,
+        help="Asset symbols to analyze (default: all)",
+    )
+    parser.add_argument(
+        "date",
+        nargs="?",
+        default=None,
+        metavar="DATE",
+        help="Single date (YYYY-MM-DD) or start of range",
+    )
+    parser.add_argument(
+        "date_end",
+        nargs="?",
+        default=None,
+        metavar="DATE_END",
+        help="End date for range (YYYY-MM-DD). If omitted and DATE is given, treats DATE as a single day.",
+    )
+    parser.add_argument(
+        "--width", "-w",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Wing width(s) to analyze. Defaults to the configured widths for each asset.",
+    )
+    parser.add_argument(
+        "--use-db-dates",
+        action="store_true",
+        help="Ignore date args and use FULL_DATA_DATES from the script.",
+    )
+    return parser.parse_args()
+
+
+def parse_date(s: str | None) -> dt.date | None:
+    if not s:
+        return None
+    return dt.datetime.strptime(s, "%Y-%m-%d").date()
+
+
+def resolve_dates(args: argparse.Namespace) -> list[dt.date]:
+    if args.use_db_dates:
+        return list(FULL_DATA_DATES)
+
+    if args.date is None:
+        return list(FULL_DATA_DATES)
+
+    start = parse_date(args.date)
+    end = parse_date(args.date_end) if args.date_end else start
+
+    if end < start:
+        start, end = end, start
+
+    result = []
+    current = start
+    while current <= end:
+        result.append(current)
+        current += dt.timedelta(days=1)
+    return result
+
+
+def resolve_widths(asset: str, cli_widths: list[int] | None) -> list[int]:
+    if cli_widths:
+        return cli_widths
+    return ASSET_CONFIGS[asset]["wing_widths"]
+
 setup_logging(log_level="WARNING", json_output=False)
 log = get_logger("run_entry_analysis")
 
@@ -49,12 +130,6 @@ FULL_DATA_DATES = [
     dt.date(2026, 3, 23),
     dt.date(2026, 3, 24),
 ]
-
-# Asset to test
-ASSET = "SPX"
-
-# Wing widths to test
-WING_WIDTHS = [10, 20, 30]
 
 # Strategies to run (label, params)
 STRATEGIES = [
@@ -75,7 +150,7 @@ BASE_PARAMS = dict(
 # ---------------------------------------------------------------------------
 
 async def load_chains_from_db(
-    conn: asyncpg.Connection, date: dt.date, asset: str = ASSET
+    conn: asyncpg.Connection, date: dt.date, asset: str
 ) -> dict[dt.datetime, list[OptionQuote]]:
     rows = await conn.fetch(
         """
@@ -118,7 +193,7 @@ async def load_chains_from_db(
 
 
 async def load_bars_from_db(
-    conn: asyncpg.Connection, date: dt.date, asset: str = ASSET
+    conn: asyncpg.Connection, date: dt.date, asset: str
 ) -> list[MinuteBar]:
     rows = await conn.fetch(
         """
@@ -142,10 +217,11 @@ async def load_bars_from_db(
     return bars
 
 
-def get_prev_close(date: dt.date) -> float:
+def get_prev_close(date: dt.date, index_symbol: str) -> float:
     start = date - dt.timedelta(days=7)
-    hist = yf.Ticker("^GSPC").history(start=start, end=date, interval="1d")
-    return float(hist["Close"].iloc[-1]) if not hist.empty else 5500.0
+    hist = yf.Ticker(index_symbol).history(start=start, end=date, interval="1d")
+    defaults = {"SPX": 5500.0, "NDX": 4000.0, "XSP": 550.0}
+    return float(hist["Close"].iloc[-1]) if not hist.empty else defaults.get(index_symbol, 5500.0)
 
 
 def get_vix(date: dt.date) -> float:
@@ -170,6 +246,8 @@ def scan_entry_window(
     chains: dict[dt.datetime, list[OptionQuote]],
     day: DayData,
     wing_widths: list[int],
+    asset: str,
+    cfg: dict,
 ) -> list[dict]:
     """Walk the 10:00-10:30 ET window and record every bar's entry signals."""
     from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
@@ -225,7 +303,7 @@ def scan_entry_window(
         }
 
         for w in wing_widths:
-            settings = StrategySettings(wing_widths=[w], rr_min=8.0, spot_range=100)
+            settings = StrategySettings(wing_widths=[w], rr_min=8.0, spot_range=cfg["spot_range"])
             builder = ButterflyBuilder(settings)
             selector = ButterflySelector(settings)
 
@@ -273,7 +351,7 @@ def fmt_candidate(c, direction: str = "") -> str:
     )
 
 
-def print_day_header(date: dt.date, vix: float, prev_close: float, bars: list[MinuteBar]) -> None:
+def print_day_header(date: dt.date, vix: float, prev_close: float, bars: list[MinuteBar], asset: str = "SPX") -> None:
     open_bar = next((b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(9, 30)), None)
     first_entry_bar = next((b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(10, 0)), None)
 
@@ -285,7 +363,7 @@ def print_day_header(date: dt.date, vix: float, prev_close: float, bars: list[Mi
     em = vix_expected_move(vix, entry_spx)
 
     print(f"\n{'='*72}")
-    print(f"  {date}  ({date.strftime('%A')})")
+    print(f"  {date}  {asset}  ({date.strftime('%A')})")
     print(f"{'='*72}")
     print(f"  VIX          : {vix:.2f}")
     print(f"  Prev close   : {prev_close:.2f}")
@@ -295,7 +373,7 @@ def print_day_header(date: dt.date, vix: float, prev_close: float, bars: list[Mi
     print()
 
 
-def print_entry_scan(records: list[dict], wing_widths: list[int]) -> None:
+def print_entry_scan(records: list[dict], wing_widths: list[int], asset: str = "SPX") -> None:
     if not records:
         print("  No bars in entry window (10:00–10:30 ET).")
         return
@@ -309,7 +387,7 @@ def print_entry_scan(records: list[dict], wing_widths: list[int]) -> None:
         bias_arrow = "▲" if bias_str == "CALL" else ("▼" if bias_str == "PUT" else " ")
         vwap_str = f"VWAP={rec['vwap']:.2f}  {'ABOVE' if rec['above_vwap'] else 'BELOW'}"
 
-        print(f"  ── {rec['time_et']} ET  SPX={rec['spx']:.2f}  gap={rec['gap_pct']:+.3f}% {gap_arrow}  "
+        print(f"  ── {rec['time_et']} ET  {asset}={rec['spx']:.2f}  gap={rec['gap_pct']:+.3f}% {gap_arrow}  "
               f"bias={bias_str} {bias_arrow}  {vwap_str}")
 
         for w in wing_widths:
@@ -369,65 +447,72 @@ def print_results_table(results_by_strat: dict, wing_widths: list[int]) -> None:
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
+    args = parse_args()
+    dates = resolve_dates(args)
+
     print(f"\n{'#'*72}")
-    print(f"  {ASSET} DB BACKTEST — ALL FULL-DATA DAYS")
-    print(f"  Dates: {FULL_DATA_DATES[0]} to {FULL_DATA_DATES[-1]}  ({len(FULL_DATA_DATES)} days)")
-    print(f"  Wings: {WING_WIDTHS}    Strategies: {[s[0] for s in STRATEGIES]}")
+    print(f"  ENTRY ANALYSIS BACKTEST")
+    print(f"  Assets: {args.asset}")
+    print(f"  Dates: {dates[0]} to {dates[-1]}  ({len(dates)} days)")
+    print(f"  Width override: {args.width if args.width else '(per-asset defaults)'}")
+    print(f"  Strategies: {[s[0] for s in STRATEGIES]}")
     print(f"{'#'*72}")
 
     conn = await asyncpg.connect(DB_DSN)
 
     # Aggregate tracking
-    all_trade_results = []  # (date, strat_label, width, DayResult)
+    all_trade_results = []
 
-    for date in FULL_DATA_DATES:
-        # Load DB data
-        chains = await load_chains_from_db(conn, date)
-        bars = await load_bars_from_db(conn, date)
+    for asset in args.asset:
+        cfg = ASSET_CONFIGS[asset]
+        widths = resolve_widths(asset, args.width)
 
-        if not chains or not bars:
-            print(f"\n  {date}: No data, skipping.")
-            continue
+        for date in dates:
+            chains = await load_chains_from_db(conn, date, asset)
+            bars = await load_bars_from_db(conn, date, asset)
 
-        # Fetch VIX + prev_close
-        prev_close = await asyncio.to_thread(get_prev_close, date)
-        vix = await asyncio.to_thread(get_vix, date)
+            if not chains or not bars:
+                print(f"\n  {date} {asset}: No data, skipping.")
+                continue
 
-        day = DayData(date=date, bars=bars, vix=vix, prev_close=prev_close)
+            prev_close = await asyncio.to_thread(get_prev_close, date, cfg["yfinance_index"])
+            vix = await asyncio.to_thread(get_vix, date)
 
-        print_day_header(date, vix, prev_close, bars)
+            day = DayData(date=date, bars=bars, vix=vix, prev_close=prev_close)
 
-        # Detailed entry window scan
-        entry_records = scan_entry_window(bars, chains, day, WING_WIDTHS)
-        print_entry_scan(entry_records, WING_WIDTHS)
+            print_day_header(date, vix, prev_close, bars, asset)
 
-        # Patch chain cache for simulation
-        import butterfly_guy.backtest.chain_cache as _cc
-        _cc._DB_CHAINS = chains  # type: ignore[attr-defined]
-        _original_load = _cc.load_chain_day
+            # Detailed entry window scan
+            entry_records = scan_entry_window(bars, chains, day, widths, asset, cfg)
+            print_entry_scan(entry_records, widths, asset)
 
-        def _patched(d, cache_dir=None, _date=date, _chains=chains):
-            if d == _date:
-                return _chains
-            return _original_load(d, cache_dir) if cache_dir else _original_load(d)
+            # Patch chain cache for simulation
+            import butterfly_guy.backtest.chain_cache as _cc
+            _cc._DB_CHAINS = chains  # type: ignore[attr-defined]
+            _original_load = _cc.load_chain_day
 
-        _cc.load_chain_day = _patched  # type: ignore[assignment]
+            def _patched(d, cache_dir=None, _date=date, _chains=chains):
+                if d == _date:
+                    return _chains
+                return _original_load(d, cache_dir) if cache_dir else _original_load(d)
 
-        engine = SimulationEngine()
-        results_by_strat: dict[str, dict] = {}
+            _cc.load_chain_day = _patched  # type: ignore[assignment]
 
-        for strat_label, strat_kw in STRATEGIES:
-            results_by_strat[strat_label] = {}
-            for w in WING_WIDTHS:
-                params = SimulationParams(wing_width=w, **BASE_PARAMS, **strat_kw)
-                result = engine.simulate_day(day, params)
-                results_by_strat[strat_label][w] = result
-                if result.traded:
-                    all_trade_results.append((date, strat_label, w, result))
+            engine = SimulationEngine()
+            results_by_strat: dict[str, dict] = {}
 
-        _cc.load_chain_day = _original_load  # type: ignore[assignment]
+            for strat_label, strat_kw in STRATEGIES:
+                results_by_strat[strat_label] = {}
+                for w in widths:
+                    params = SimulationParams(wing_width=w, **BASE_PARAMS, **strat_kw)
+                    result = engine.simulate_day(day, params)
+                    results_by_strat[strat_label][w] = result
+                    if result.traded:
+                        all_trade_results.append((date, strat_label, w, asset, result))
 
-        print_results_table(results_by_strat, WING_WIDTHS)
+            _cc.load_chain_day = _original_load  # type: ignore[assignment]
+
+            print_results_table(results_by_strat, widths)
 
     await conn.close()
 
@@ -435,65 +520,63 @@ async def main() -> None:
     # Grand summary across all days
     # ---------------------------------------------------------------------------
     print(f"\n\n{'#'*72}")
-    print(f"  AGGREGATE SUMMARY — ALL DAYS × ALL STRATEGIES × ALL WIDTHS")
+    print(f"  AGGREGATE SUMMARY — ALL DAYS × ALL ASSETS × ALL STRATEGIES × ALL WIDTHS")
     print(f"{'#'*72}")
 
-    # Group by (strat, width)
     from collections import defaultdict as ddict
     grouped: dict[tuple, list] = ddict(list)
-    for date, strat, w, r in all_trade_results:
-        grouped[(strat, w)].append((date, r))
+    for date, strat, w, asst, r in all_trade_results:
+        grouped[(asst, strat, w)].append((date, r))
 
-    print(f"\n  {'Strategy':<12}  {'W':>3}  {'Trades':>6}  {'WinRate':>8}  "
+    print(f"\n  {'Asset':<5} {'Strategy':<12}  {'W':>3}  {'Trades':>6}  {'WinRate':>8}  "
           f"{'TotalPnL':>10}  {'AvgPnL':>8}  {'PF':>6}  {'MaxDD':>8}")
-    print(f"  {'─'*12}  {'─'*3}  {'─'*6}  {'─'*8}  {'─'*10}  {'─'*8}  {'─'*6}  {'─'*8}")
+    print(f"  {'─'*5} {'─'*12}  {'─'*3}  {'─'*6}  {'─'*8}  {'─'*10}  {'─'*8}  {'─'*6}  {'─'*8}")
 
-    for strat_label, _ in STRATEGIES:
-        for w in WING_WIDTHS:
-            trades = grouped.get((strat_label, w), [])
-            if not trades:
-                print(f"  {strat_label:<12}  {w:>3}  {'0':>6}")
-                continue
-            pnls = [r.pnl for _, r in trades]
-            wins = [p for p in pnls if p > 0]
-            losses = [p for p in pnls if p <= 0]
-            total = sum(pnls)
-            wr = len(wins) / len(pnls) * 100
-            avg = total / len(pnls)
-            pf = sum(wins) / abs(sum(losses)) if losses and sum(losses) != 0 else float("inf")
+    for asset in args.asset:
+        cfg = ASSET_CONFIGS[asset]
+        widths = resolve_widths(asset, args.width)
+        for strat_label, _ in STRATEGIES:
+            for w in widths:
+                trades = grouped.get((asset, strat_label, w), [])
+                if not trades:
+                    print(f"  {asset:<5} {strat_label:<12}  {w:>3}  {'0':>6}")
+                    continue
+                pnls = [r.pnl for _, r in trades]
+                wins = [p for p in pnls if p > 0]
+                losses = [p for p in pnls if p <= 0]
+                total = sum(pnls)
+                wr = len(wins) / len(pnls) * 100
+                avg = total / len(pnls)
+                pf = sum(wins) / abs(sum(losses)) if losses and sum(losses) != 0 else float("inf")
 
-            # max drawdown
-            eq = peak = dd = 0.0
-            for p in pnls:
-                eq += p
-                peak = max(peak, eq)
-                dd = max(dd, peak - eq)
+                eq = peak = dd = 0.0
+                for p in pnls:
+                    eq += p
+                    peak = max(peak, eq)
+                    dd = max(dd, peak - eq)
 
-            print(
-                f"  {strat_label:<12}  {w:>3}  {len(pnls):>6}  {wr:>7.0f}%  "
-                f"{total*100:>+9.2f}$  {avg*100:>+7.2f}$  {pf:>6.2f}  {dd*100:>7.2f}$"
-            )
+                print(
+                    f"  {asset:<5} {strat_label:<12}  {w:>3}  {len(pnls):>6}  {wr:>7.0f}%  "
+                    f"{total*100:>+9.2f}$  {avg*100:>+7.2f}$  {pf:>6.2f}  {dd*100:>7.2f}$"
+                )
 
     # Exit reason breakdown
     print(f"\n  Exit reasons across all trades:")
     from collections import Counter
     reason_counts: Counter = Counter()
-    for _, _, _, r in all_trade_results:
+    for _, _, _, _, r in all_trade_results:
         reason_counts[r.exit_reason] += 1
     for reason, cnt in reason_counts.most_common():
         print(f"    {reason:<28} {cnt:>3}  ({cnt/len(all_trade_results)*100:.0f}%)")
 
     # Per-day direction summary
-    print(f"\n  Per-day direction and entry time (gap-auto, 10w):")
-    print(f"  {'Date':>12}  {'VIX':>5}  {'Gap%':>7}  {'Dir':>4}  {'Entry':>5}  {'Struct':>18}  {'PnL':>8}")
-    print(f"  {'─'*12}  {'─'*5}  {'─'*7}  {'─'*4}  {'─'*5}  {'─'*18}  {'─'*8}")
-    for date, strat, w, r in all_trade_results:
-        if strat != "gap-auto" or w != 10:
-            continue
+    print(f"\n  Per-day direction and entry time:")
+    print(f"  {'Asset':<5} {'Date':>12}  {'VIX':>5}  {'Gap%':>7}  {'Dir':>4}  {'Entry':>5}  {'Struct':>18}  {'PnL':>8}")
+    print(f"  {'─'*5} {'─'*12}  {'─'*5}  {'─'*7}  {'─'*4}  {'─'*5}  {'─'*18}  {'─'*8}")
+    for date, strat, w, asst, r in all_trade_results:
         et = r.entry_time.astimezone(EASTERN).strftime("%H:%M") if r.entry_time else "--"
         struct = f"{r.center_strike-w:.0f}/{r.center_strike:.0f}/{r.center_strike+w:.0f}"
-        # find vix for this date
-        print(f"  {str(date):>12}  {'?':>5}  {'?':>7}  {r.direction:>4}  {et:>5}  {struct:>18}  {r.pnl*100:>+7.2f}$")
+        print(f"  {asst:<5} {str(date):>12}  {'?':>5}  {'?':>7}  {r.direction:>4}  {et:>5}  {struct:>18}  {r.pnl*100:>+7.2f}$")
 
     print()
 
