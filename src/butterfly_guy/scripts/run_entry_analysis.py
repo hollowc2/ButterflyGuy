@@ -15,6 +15,7 @@ import asyncio
 import argparse
 import datetime as dt
 import math
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -119,7 +120,7 @@ setup_logging(log_level="WARNING", json_output=False)
 log = get_logger("run_entry_analysis")
 
 EASTERN = ZoneInfo("America/New_York")
-DB_DSN = "postgresql://butterfly:butterfly_dev@localhost:5432/butterfly_guy"
+DB_DSN = os.getenv("DATABASE_URL", "postgresql://butterfly@localhost:5432/butterfly_guy")
 
 # Days confirmed to have full data covering the 10:00-10:30 ET entry window
 FULL_DATA_DATES = [

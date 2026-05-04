@@ -18,7 +18,14 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
-      DATABASE__PASSWORD: butterfly_dev
+      DATABASE__PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - monitoring_net
     ports:
@@ -42,7 +49,14 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
-      DATABASE__PASSWORD: butterfly_dev
+      DATABASE__PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - monitoring_net
     ports:
@@ -66,7 +80,14 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
-      DATABASE__PASSWORD: butterfly_dev
+      DATABASE__PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - monitoring_net
     ports:

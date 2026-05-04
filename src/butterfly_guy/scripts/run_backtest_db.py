@@ -28,6 +28,7 @@ import csv
 import datetime as dt
 import itertools
 import math
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -66,7 +67,7 @@ setup_logging(log_level="ERROR", json_output=False)
 log = get_logger("run_backtest_db")
 
 EASTERN = ZoneInfo("America/New_York")
-DB_DSN = "postgresql://butterfly:butterfly_dev@localhost:5432/butterfly_guy"
+DB_DSN = os.getenv("DATABASE_URL", "postgresql://butterfly@localhost:5432/butterfly_guy")
 
 YFINANCE_TICKER = {"SPX": "^GSPC", "NDX": "^NDX"}
 

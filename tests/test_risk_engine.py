@@ -65,6 +65,18 @@ async def test_can_trade_max_loss():
 
 
 @pytest.mark.asyncio
+async def test_can_trade_blocks_quantity_above_max_position_size():
+    engine, _ = make_risk_engine()
+    engine.settings.max_position_size = 1
+    from unittest.mock import patch
+    with patch("butterfly_guy.risk.risk_engine.is_market_open", return_value=True), \
+         patch("butterfly_guy.risk.risk_engine.is_trading_day", return_value=True):
+        allowed, reason = await engine.can_trade(quantity=2)
+    assert not allowed
+    assert "max_position_size" in reason
+
+
+@pytest.mark.asyncio
 async def test_can_trade_halted():
     engine, _ = make_risk_engine(halted=True)
     from unittest.mock import patch

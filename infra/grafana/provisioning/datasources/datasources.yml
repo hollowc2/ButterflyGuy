@@ -17,7 +17,7 @@ datasources:
     database: butterfly_guy
     user: butterfly
     secureJsonData:
-      password: butterfly_dev
+      password: ${DATABASE_PASSWORD}
     jsonData:
       sslmode: disable
       postgresVersion: 1600

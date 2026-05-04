@@ -227,7 +227,7 @@ class OrderManager:
                 return None
         except Exception as e:
             log.warning("open_orders_check_failed", error=str(e))
-            # Degrade gracefully — DB-level max_trades_per_day remains the backstop
+            return None
 
         deadline = now_utc() + dt.timedelta(seconds=timeout)
         mid_price = candidate.cost

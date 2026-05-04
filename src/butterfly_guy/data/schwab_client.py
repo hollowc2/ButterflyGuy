@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -51,13 +50,18 @@ class SchwabClientWrapper:
 
         accounts = resp.json()
         target_id = self.settings.account_id
+        if not target_id:
+            raise RuntimeError(
+                "SCHWAB_ACCOUNT_ID must be configured; refusing to select a default account"
+            )
+
         for acct in accounts:
             if acct.get("accountNumber") == target_id:
                 self._account_hash = acct["hashValue"]
                 break
 
-        if not self._account_hash and accounts:
-            self._account_hash = accounts[0]["hashValue"]
+        if not self._account_hash:
+            raise RuntimeError("Configured SCHWAB_ACCOUNT_ID was not found in Schwab account list")
 
         log.info(
             "schwab_client_initialized",

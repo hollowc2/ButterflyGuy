@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import math
+import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -47,7 +48,7 @@ setup_logging(log_level="WARNING", json_output=False)
 log = get_logger("run_paper_replay")
 
 EASTERN = ZoneInfo("America/New_York")
-DB_DSN = "postgresql://butterfly:butterfly_dev@localhost:5432/butterfly_guy"
+DB_DSN = os.getenv("DATABASE_URL", "postgresql://butterfly@localhost:5432/butterfly_guy")
 
 # ─────────────────────────────────────────────────────────────────────────── #
 #  Config — edit these to change the replay                                   #

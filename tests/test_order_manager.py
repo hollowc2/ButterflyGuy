@@ -79,6 +79,7 @@ def make_order_manager(settings: ExecutionSettings, underlying: str = "SPX"):
     schwab.place_order = AsyncMock(return_value="ORD1")
     schwab.cancel_order = AsyncMock()
     schwab.get_order_status = AsyncMock(return_value={"status": "WORKING"})
+    schwab.get_todays_orders = AsyncMock(return_value=[])
 
     builder = MagicMock()
     builder.build_butterfly_open = MagicMock(return_value={})
@@ -185,6 +186,19 @@ async def test_fetch_live_spread_returns_none_on_exception():
     result = await om._fetch_live_spread(candidate)
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_live_entry_blocks_when_open_orders_check_fails():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    schwab.get_todays_orders = AsyncMock(side_effect=RuntimeError("orders unavailable"))
+
+    result = await om.execute_entry(candidate, quantity=1)
+
+    assert result is None
+    schwab.place_order.assert_not_called()
 
 
 @pytest.mark.asyncio

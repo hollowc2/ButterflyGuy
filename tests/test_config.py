@@ -1,9 +1,5 @@
 """Tests for configuration loading."""
 
-import os
-import tempfile
-
-import pytest
 import yaml
 
 from butterfly_guy.core.config import AppConfig, load_config
@@ -33,6 +29,21 @@ def test_load_config_from_yaml(tmp_path):
     assert config.risk.max_daily_loss == 1000.0
 
 
+def test_allow_live_trading_requires_explicit_env(tmp_path, monkeypatch):
+    config_data = {"execution": {"paper_trading": False}}
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump(config_data))
+
+    monkeypatch.delenv("ALLOW_LIVE_TRADING", raising=False)
+    config = load_config(config_path=config_file, env_file=str(tmp_path / ".env"))
+    assert config.execution.paper_trading is False
+    assert config.execution.allow_live_trading is False
+
+    monkeypatch.setenv("ALLOW_LIVE_TRADING", "true")
+    config = load_config(config_path=config_file, env_file=str(tmp_path / ".env"))
+    assert config.execution.allow_live_trading is True
+
+
 def test_database_dsn():
     config = AppConfig()
     dsn = config.database.dsn
@@ -41,7 +52,6 @@ def test_database_dsn():
 
 
 def test_profit_management_regimes():
-    config = AppConfig()
     # Regimes come from YAML, so test defaults directly
     from butterfly_guy.core.config import ProfitManagementSettings, TimeRegime
     settings = ProfitManagementSettings(

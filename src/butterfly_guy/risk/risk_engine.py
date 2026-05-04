@@ -25,6 +25,7 @@ class RiskEngine:
         trade_date: dt.date | None = None,
         account_value: float | None = None,
         buying_power: float | None = None,
+        quantity: int = 1,
     ) -> tuple[bool, str]:
         """
         Check all risk conditions. Returns (allowed, reason).
@@ -47,6 +48,12 @@ class RiskEngine:
 
         if state["trade_count"] >= self.settings.max_trades_per_day:
             return False, f"max_trades_reached ({state['trade_count']})"
+
+        if quantity < 1:
+            return False, f"invalid_quantity ({quantity})"
+
+        if quantity > self.settings.max_position_size:
+            return False, f"max_position_size ({quantity}>{self.settings.max_position_size})"
 
         if state["realized_pnl"] <= -self.settings.max_daily_loss:
             log.warning("max_daily_loss_hit", pnl=state["realized_pnl"])

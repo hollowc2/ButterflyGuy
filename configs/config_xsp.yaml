@@ -22,7 +22,7 @@ execution:
   price_ladder_steps: 4
   retry_interval_seconds: 20
   order_timeout_seconds: 300
-  paper_trading: false
+  paper_trading: true
   paper_fill_buffer: 0.00
 profit_management:
   regimes:

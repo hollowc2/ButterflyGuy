@@ -119,6 +119,11 @@ async def main() -> None:
     config = load_config(args.config)
     setup_logging(config.monitoring.log_level, json_output=True)
 
+    if not config.execution.paper_trading and not config.execution.allow_live_trading:
+        raise RuntimeError(
+            "Live trading requires execution.allow_live_trading=true or ALLOW_LIVE_TRADING=true"
+        )
+
     log.info("live_trading_starting")
     start_metrics_server(config.monitoring.metrics_port)
 

@@ -59,6 +59,8 @@ class ExecutionSettings(BaseModel):
     paper_slippage_per_spread: float = 0.05  # additional cost/credit lost on fill_price
     paper_commission_per_contract: float = 0.65  # per option contract (4 per butterfly)
     paper_min_oi_per_leg: int = 0            # 0 = disabled; minimum open interest per leg
+    # Must be true, or ALLOW_LIVE_TRADING=true, to place live orders.
+    allow_live_trading: bool = False
 
 
 class TimeRegime(BaseModel):
@@ -94,7 +96,7 @@ class DatabaseSettings(BaseModel):
     port: int = 5432
     name: str = "butterfly_guy"
     user: str = "butterfly"
-    password: str = "butterfly_dev"
+    password: str = ""
 
     @property
     def dsn(self) -> str:
@@ -142,9 +144,15 @@ def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env")
     schwab_data.setdefault("api_key", os.getenv("SCHWAB_API_KEY", ""))
     schwab_data.setdefault("secret_key", os.getenv("SCHWAB_SECRET_KEY", ""))
     schwab_data.setdefault("account_id", os.getenv("SCHWAB_ACCOUNT_ID", ""))
-    
+
     if os.getenv("SCHWAB_TOKEN_PATH"):
         schwab_data.setdefault("token_path", os.getenv("SCHWAB_TOKEN_PATH"))
     yaml_data["schwab"] = schwab_data
+
+    execution_data = yaml_data.get("execution", {})
+    allow_live = os.getenv("ALLOW_LIVE_TRADING", "").lower() in {"1", "true", "yes"}
+    if allow_live:
+        execution_data["allow_live_trading"] = True
+    yaml_data["execution"] = execution_data
 
     return AppConfig(**yaml_data)

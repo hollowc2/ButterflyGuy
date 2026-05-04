@@ -47,9 +47,9 @@ class BacktestDataLoader:
         url = (
             f"{POLYGON_BASE}/v2/aggs/ticker/I:SPX/range/1/minute"
             f"/{date}/{date}"
-            f"?adjusted=true&sort=asc&limit=1000&apiKey={self.api_key}"
+            "?adjusted=true&sort=asc&limit=1000"
         )
-        resp = await self._client.get(url)
+        resp = await self._client.get(url, params={"apiKey": self.api_key})
         resp.raise_for_status()
         data = resp.json()
 
@@ -73,9 +73,9 @@ class BacktestDataLoader:
         url = (
             f"{POLYGON_BASE}/v2/aggs/ticker/I:VIX/range/1/day"
             f"/{date}/{date}"
-            f"?adjusted=true&sort=asc&limit=1&apiKey={self.api_key}"
+            "?adjusted=true&sort=asc&limit=1"
         )
-        resp = await self._client.get(url)
+        resp = await self._client.get(url, params={"apiKey": self.api_key})
         resp.raise_for_status()
         data = resp.json()
         results = data.get("results", [])
@@ -91,9 +91,9 @@ class BacktestDataLoader:
         url = (
             f"{POLYGON_BASE}/v2/aggs/ticker/I:SPX/range/1/day"
             f"/{look_back_start}/{look_back_end}"
-            f"?adjusted=true&sort=asc&limit=10&apiKey={self.api_key}"
+            "?adjusted=true&sort=asc&limit=10"
         )
-        resp = await self._client.get(url)
+        resp = await self._client.get(url, params={"apiKey": self.api_key})
         resp.raise_for_status()
         data = resp.json()
         results = data.get("results", [])
