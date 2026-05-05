@@ -5,9 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from butterfly_guy.core.config import AppConfig, CollectorSettings, StrategySettings
+from butterfly_guy.core.config import AppConfig
 from butterfly_guy.data.collector import OptionChainCollector
-
 
 SAMPLE_CHAIN_RESPONSE = {
     "callExpDateMap": {
@@ -76,7 +75,7 @@ async def test_collect_snapshot_parses_chain():
     with patch(
         "butterfly_guy.data.collector.get_0dte_expiration",
         return_value=dt.date(2026, 3, 10),
-    ):
+    ), patch("butterfly_guy.data.collector.save_snapshot"):
         count = await collector.collect_snapshot()
 
     assert count == 2
@@ -112,7 +111,7 @@ async def test_collect_snapshot_row_fields():
     with patch(
         "butterfly_guy.data.collector.get_0dte_expiration",
         return_value=dt.date(2026, 3, 10),
-    ):
+    ), patch("butterfly_guy.data.collector.save_snapshot"):
         await collector.collect_snapshot()
 
     assert len(inserted_rows) == 2
@@ -121,3 +120,36 @@ async def test_collect_snapshot_row_fields():
     assert call_row["bid"] == 1.50
     assert call_row["spot_price"] == 5501.0
     assert call_row["symbol"] == "SPXW  260310C05500000"
+
+
+@pytest.mark.asyncio
+async def test_collect_snapshot_succeeds_when_chain_cache_write_fails():
+    """A local JSON cache failure should not fail a DB-backed snapshot."""
+    config = AppConfig()
+    schwab = MagicMock()
+    schwab.get_spot_price = AsyncMock(return_value=5500.0)
+    schwab.get_option_chain = AsyncMock(return_value=SAMPLE_CHAIN_RESPONSE)
+
+    chain_queries = MagicMock()
+    chain_queries.bulk_insert_snapshot = AsyncMock(return_value=2)
+    spot_queries = MagicMock()
+    spot_queries.insert = AsyncMock()
+
+    collector = OptionChainCollector(
+        config=config,
+        schwab=schwab,
+        chain_queries=chain_queries,
+        spot_queries=spot_queries,
+    )
+
+    with patch(
+        "butterfly_guy.data.collector.get_0dte_expiration",
+        return_value=dt.date(2026, 3, 10),
+    ), patch(
+        "butterfly_guy.data.collector.save_snapshot",
+        side_effect=OSError(30, "Read-only file system", "data"),
+    ):
+        count = await collector.collect_snapshot()
+
+    assert count == 2
+    chain_queries.bulk_insert_snapshot.assert_called_once()

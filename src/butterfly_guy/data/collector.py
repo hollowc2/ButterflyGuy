@@ -6,9 +6,11 @@ import asyncio
 import datetime as dt
 from typing import Any
 
+from notify import send as notify
+
+from butterfly_guy.backtest.chain_cache import save_snapshot
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
-from notify import send as notify
 from butterfly_guy.core.metrics import (
     chain_snapshot_duration,
     chain_snapshot_rows,
@@ -19,8 +21,11 @@ from butterfly_guy.core.time_utils import (
     is_market_open,
     now_eastern,
 )
-from butterfly_guy.backtest.chain_cache import save_snapshot
-from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS, SchwabClientWrapper
+from butterfly_guy.data.schwab_client import (
+    SCHWAB_CHAIN_SYMBOLS,
+    SCHWAB_SPOT_SYMBOLS,
+    SchwabClientWrapper,
+)
 from butterfly_guy.db.queries import ChainQueries, DailyBarQueries, SpotQueries
 
 log = get_logger(__name__)
@@ -114,7 +119,10 @@ class OptionChainCollector:
                 candles = await self.schwab.get_daily_bars(symbol)
                 rows = [
                     {
-                        "date": dt.datetime.fromtimestamp(c["datetime"] / 1000, tz=dt.timezone.utc).date(),
+                        "date": dt.datetime.fromtimestamp(
+                            c["datetime"] / 1000,
+                            tz=dt.timezone.utc,
+                        ).date(),
                         "underlying": label,
                         "open": c.get("open"),
                         "high": c.get("high"),
@@ -162,7 +170,10 @@ class OptionChainCollector:
                 count = await self.chain_queries.bulk_insert_snapshot(rows)
                 chain_snapshots_total.labels(underlying=underlying).inc()
                 chain_snapshot_rows.labels(underlying=underlying).set(count)
-                save_snapshot(expiration, snapshot_time, spot_price, rows)
+                try:
+                    save_snapshot(expiration, snapshot_time, spot_price, rows)
+                except OSError as e:
+                    log.warning("chain_cache_write_failed", error=str(e))
                 log.info("snapshot_collected", rows=count, spot=spot_price)
                 return count
 
@@ -195,7 +206,10 @@ class OptionChainCollector:
                 log.error("snapshot_failed", error=str(e))
                 consecutive_failures += 1
                 if consecutive_failures >= 3 and not alert_sent:
-                    notify(f"⚠️ {underlying} data collection has failed {consecutive_failures} times in a row. Last error: {e}")
+                    notify(
+                        f"⚠️ {underlying} data collection has failed "
+                        f"{consecutive_failures} times in a row. Last error: {e}"
+                    )
                     alert_sent = True
 
             await asyncio.sleep(interval)

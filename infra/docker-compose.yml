@@ -13,6 +13,7 @@ services:
       - ../.env
     volumes:
       - ../tokens.json:/app/tokens.json
+      - ../data/chains:/app/data/chains
     environment:
       DATABASE__HOST: timescaledb
       DATABASE__PORT: 5432
@@ -44,6 +45,7 @@ services:
     volumes:
       - ../tokens.json:/app/tokens.json
       - ../configs/config_ndx.yaml:/app/configs/config_ndx.yaml
+      - ../data/chains:/app/data/chains
     environment:
       DATABASE__HOST: timescaledb
       DATABASE__PORT: 5432
@@ -75,6 +77,7 @@ services:
     volumes:
       - ../tokens.json:/app/tokens.json
       - ../configs/config_xsp.yaml:/app/configs/config_xsp.yaml
+      - ../data/chains:/app/data/chains
     environment:
       DATABASE__HOST: timescaledb
       DATABASE__PORT: 5432
