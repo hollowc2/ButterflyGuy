@@ -9,10 +9,10 @@ Automated options trading strategy and research platform for 0-DTE SPX, NDX, and
 ## 🚀 Features
 
 - **Multi-Asset Support**: Trade SPX, NDX, or XSP with tailored configurations for each.
-- **VIX-Aware Strategy**: Uses VIX to both select which widths to trade (via configurable VIX regime buckets) and to anchor the center strike to the implied expected move.
+- **VIX-Aware Strategy**: Uses VIX to anchor the center strike, and for SPX can also select which width triplet to scan via configurable VIX regime buckets.
 - **Flexible Entry Methods**:
-  - `VIX`: Anchors the center strike to the VIX-implied 1-sigma move.
-  - `TARGET_COST`: Pushes the fly as far OTM as possible until the cost matches your target debit.
+  - `VIX`: Anchors the center strike to the VIX-implied 1-sigma move, then picks the best candidate near that target.
+  - `TARGET_COST`: Selects the candidate whose debit is closest to the configured max cost for its width.
   - `BEST_RR`: Selects the candidate with the Reward/Risk closest to your target (e.g., 10:1).
 - **Gap Regime Filter**: Two statistically validated signals applied before direction selection — flip to CALL on gap-down days in a BULL regime (`bull_call_bias`), and skip days where the gap is too small to have edge (`min_gap_pct`). Used identically in live trading and backtesting.
 - **Automated Data Collection**: Continuous snapshotting of option chains and spot prices into a TimescaleDB instance.
@@ -74,7 +74,7 @@ Under the `strategy:` block:
 
 ```yaml
 strategy:
-  wing_widths: [10, 20, 30]        # Fallback widths; used for backtest sweeps and when vix_width_buckets is absent
+  wing_widths: [10, 20, 30]        # Fixed scan widths; used by NDX/XSP and by backtests
   rr_target: 10.0                  # Ideal Reward/Risk ratio
   max_cost_per_width:              # Max debit allowed per width ($0.10/pt)
     10: 1.00
@@ -82,9 +82,16 @@ strategy:
     30: 3.00
 ```
 
-#### VIX-Bucketed Width Selection
+#### Width Selection
 
-When `vix_width_buckets` is configured, the live trader ignores `wing_widths` and instead selects the active width triplet based on the current VIX level. Each bucket is a narrow/mid/wide set; center placement uses 0.25σ/0.50σ/0.75σ respectively. If VIX data is unavailable and buckets are configured, entry is skipped rather than falling back to an arbitrary width.
+Live width selection is configured in two layers:
+
+1. The builder scans every width in the active width set.
+2. The selector chooses the best candidate using one of the entry methods below.
+
+For SPX, `vix_width_buckets` can replace the fixed width list at runtime. Each bucket supplies a narrow/mid/wide triplet, and the live trader uses the active triplet based on the current VIX level. If buckets are configured and VIX data is unavailable, entry is skipped rather than falling back to an arbitrary width.
+
+Center placement in `VIX` mode uses 0.25σ/0.50σ/0.75σ fractions depending on whether the width is treated as narrow, mid, or wide in the active set.
 
 ```yaml
 strategy:
@@ -101,13 +108,13 @@ strategy:
 
 Backtests are not affected — `--wing` still sweeps individual fixed widths as before.
 
-#### SPX vs NDX Width Selection
+#### SPX vs NDX vs XSP
 
 | Asset | Method | Widths |
 |---|---|---|
-| SPX | VIX-bucketed (Ernie's system) | 4 regimes dynamically select a narrow/mid/wide triplet based on current VIX |
-| NDX | Fixed | Always scans `[25, 50, 75]` regardless of VIX — no bucket logic configured |
-| XSP | Fixed | Always scans `[1, 2, 3]` regardless of VIX — no bucket logic configured |
+| SPX | VIX-bucketed by default in `configs/config.yaml` | Uses `vix_width_buckets` when present; otherwise scans the fixed `wing_widths` list |
+| NDX | Fixed | Always scans `[25, 50, 75]` |
+| XSP | Fixed | Always scans `[1, 2, 3]` |
 
 ---
 
