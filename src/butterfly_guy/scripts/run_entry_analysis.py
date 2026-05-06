@@ -15,7 +15,6 @@ import asyncio
 import argparse
 import datetime as dt
 import math
-import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -28,6 +27,7 @@ import yfinance as yf
 
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
+from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.data.schemas import OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
@@ -120,7 +120,10 @@ setup_logging(log_level="WARNING", json_output=False)
 log = get_logger("run_entry_analysis")
 
 EASTERN = ZoneInfo("America/New_York")
-DB_DSN = os.getenv("DATABASE_URL", "postgresql://butterfly@localhost:5432/butterfly_guy")
+
+
+def resolve_db_dsn() -> str:
+    return load_config().database.dsn
 
 # Days confirmed to have full data covering the 10:00-10:30 ET entry window
 FULL_DATA_DATES = [
@@ -459,7 +462,7 @@ async def main() -> None:
     print(f"  Strategies: {[s[0] for s in STRATEGIES]}")
     print(f"{'#'*72}")
 
-    conn = await asyncpg.connect(DB_DSN)
+    conn = await asyncpg.connect(resolve_db_dsn())
 
     # Aggregate tracking
     all_trade_results = []

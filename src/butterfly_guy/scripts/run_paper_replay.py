@@ -18,7 +18,6 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import math
-import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -32,7 +31,7 @@ import asyncpg
 import yfinance as yf
 
 from butterfly_guy.backtest.data_loader import MinuteBar
-from butterfly_guy.core.config import StrategySettings
+from butterfly_guy.core.config import StrategySettings, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
@@ -48,7 +47,10 @@ setup_logging(log_level="WARNING", json_output=False)
 log = get_logger("run_paper_replay")
 
 EASTERN = ZoneInfo("America/New_York")
-DB_DSN = os.getenv("DATABASE_URL", "postgresql://butterfly@localhost:5432/butterfly_guy")
+
+
+def resolve_db_dsn() -> str:
+    return load_config().database.dsn
 
 # ─────────────────────────────────────────────────────────────────────────── #
 #  Config — edit these to change the replay                                   #
@@ -861,7 +863,7 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
 # ─── Main ────────────────────────────────────────────────────────────────── #
 
 async def main() -> None:
-    conn = await asyncpg.connect(DB_DSN)
+    conn = await asyncpg.connect(resolve_db_dsn())
     try:
         dates = DATES if DATES else await detect_complete_days(conn)
         if not dates:

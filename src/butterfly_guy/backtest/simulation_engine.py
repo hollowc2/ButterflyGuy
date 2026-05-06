@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any, Literal
 from dataclasses import dataclass, field
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from butterfly_guy.backtest.chain_cache import load_chain_day, nearest_snapshot
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.core.config import StrategySettings
 from butterfly_guy.core.time_utils import get_time_regime
-from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, fly_mark_value
+from butterfly_guy.data.schemas import ButterflyCandidate, fly_mark_value
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, vix_target_center
@@ -26,6 +26,14 @@ PACIFIC = ZoneInfo("America/Los_Angeles")
 ENTRY_START = dt.time(10, 0)   # PST 7:00 = EST 10:00
 ENTRY_END = dt.time(10, 30)    # PST 7:30 = EST 10:30
 MONITOR_INTERVAL_MINUTES = 10
+
+
+@dataclass
+class DrawdownWindow:
+    start_min: float
+    end_min: float
+    threshold: float
+    label: str
 
 
 @dataclass
@@ -49,6 +57,7 @@ class SimulationParams:
     vix_center_sigma: float = 0.0  # override per-width sigma (0.0 = use VIX_SIGMA_BY_WIDTH lookup)
     max_loss_from_cost: float = 0.50  # exit if position loses this fraction of cost (no profit required)
     use_absolute_loss_stop: bool = True  # set False to disable the absolute loss stop entirely
+    drawdown_schedule: tuple[DrawdownWindow, ...] | None = None
 
 
 @dataclass
@@ -101,6 +110,22 @@ class SimulationEngine:
         self.direction_filter = DirectionFilter()
         self.bias_filter = BiasScoreFilter()
         self._regime_filter_cache: dict[float, RegimeFilter] = {}
+
+    @staticmethod
+    def _drawdown_rule(
+        params: SimulationParams,
+        mins_since_open: float,
+    ) -> tuple[float, str, str]:
+        regime = get_time_regime(mins_since_open)
+        if params.drawdown_schedule:
+            for window in params.drawdown_schedule:
+                if window.start_min <= mins_since_open < window.end_min:
+                    return window.threshold, window.label, regime
+        return {
+            "morning": params.morning_drawdown,
+            "late_morning": params.late_morning_drawdown,
+            "afternoon": params.afternoon_drawdown,
+        }[regime], regime, regime
 
     def simulate_day(self, day: DayData, params: SimulationParams) -> DayResult:
         """Simulate one trading day."""
@@ -212,13 +237,11 @@ class SimulationEngine:
             )
             mins_since_open = (bar_et - open_dt).total_seconds() / 60.0
 
-            # Determine regime
-            regime = get_time_regime(mins_since_open)
-            drawdown_threshold = {
-                "morning": params.morning_drawdown,
-                "late_morning": params.late_morning_drawdown,
-                "afternoon": params.afternoon_drawdown,
-            }[regime]
+            # Determine drawdown rule
+            drawdown_threshold, drawdown_label, regime = self._drawdown_rule(
+                params,
+                mins_since_open,
+            )
 
             # Calculate current butterfly value
             real_quotes = nearest_snapshot(real_chains, bar.ts) if real_chains else None
@@ -275,7 +298,7 @@ class SimulationEngine:
                 if drawdown >= drawdown_threshold:
                     result.exit_time = bar.ts
                     result.exit_price = max(0.05, current_value - params.slippage)
-                    result.exit_reason = f"drawdown_{regime}"
+                    result.exit_reason = f"drawdown_{drawdown_label}"
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
                     return result
@@ -356,12 +379,10 @@ class SimulationEngine:
                 continue
 
             mins_since_open = (bar_et - open_dt).total_seconds() / 60.0
-            regime = get_time_regime(mins_since_open)
-            drawdown_threshold = {
-                "morning": params.morning_drawdown,
-                "late_morning": params.late_morning_drawdown,
-                "afternoon": params.afternoon_drawdown,
-            }[regime]
+            drawdown_threshold, drawdown_label, regime = self._drawdown_rule(
+                params,
+                mins_since_open,
+            )
 
             real_quotes = nearest_snapshot(real_chains, bar.ts) if real_chains else None
             quotes = real_quotes if real_quotes else self.synth.generate_chain(
@@ -413,7 +434,7 @@ class SimulationEngine:
                 if drawdown >= drawdown_threshold:
                     result.exit_time = bar.ts
                     result.exit_price = max(0.05, current_value - params.slippage)
-                    result.exit_reason = f"drawdown_{regime}"
+                    result.exit_reason = f"drawdown_{drawdown_label}"
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
                     return result

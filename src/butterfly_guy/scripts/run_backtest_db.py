@@ -47,8 +47,12 @@ from butterfly_guy.backtest.metrics import (
     profit_factor as _profit_factor,
     sharpe as _sharpe,
 )
-from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
-from butterfly_guy.core.config import StrategySettings
+from butterfly_guy.backtest.simulation_engine import (
+    DrawdownWindow,
+    SimulationEngine,
+    SimulationParams,
+)
+from butterfly_guy.core.config import StrategySettings, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
@@ -67,7 +71,6 @@ setup_logging(log_level="ERROR", json_output=False)
 log = get_logger("run_backtest_db")
 
 EASTERN = ZoneInfo("America/New_York")
-DB_DSN = os.getenv("DATABASE_URL", "postgresql://butterfly@localhost:5432/butterfly_guy")
 
 YFINANCE_TICKER = {"SPX": "^GSPC", "NDX": "^NDX"}
 
@@ -91,6 +94,15 @@ ASSET_DEFAULTS: dict[str, dict] = {
         max_cost={1: 0.10, 2: 0.20, 3: 0.30},
     ),
 }
+
+
+def resolve_db_dsn() -> str:
+    """Resolve the DB connection string for local backtests.
+
+    Backtests follow the repo's normal config loading so `.env` works without
+    manual shell exporting and stale `DATABASE_URL` values cannot override it.
+    """
+    return load_config().database.dsn
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +141,47 @@ def _find_bar_at(bars: list[MinuteBar], target_et: dt.datetime) -> MinuteBar | N
     return None
 
 
+def _parse_dd_schedule(value: str) -> tuple[DrawdownWindow, ...] | None:
+    if value.lower() in {"default", "baseline", "current"}:
+        return None
+    windows: list[DrawdownWindow] = []
+    for raw_part in value.split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+        pieces = part.split(":")
+        if len(pieces) not in (2, 3):
+            raise argparse.ArgumentTypeError(
+                "drawdown schedule windows must be START-END:THRESHOLD[:LABEL]"
+            )
+        range_part, threshold_part = pieces[0], pieces[1]
+        try:
+            start_s, end_s = range_part.split("-", 1)
+            start_min = float(start_s)
+            end_min = float(end_s)
+            threshold = float(threshold_part)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(
+                "drawdown schedule windows must use numeric START-END:THRESHOLD[:LABEL]"
+            ) from exc
+        if start_min < 0 or end_min <= start_min:
+            raise argparse.ArgumentTypeError("drawdown schedule windows must have 0 <= START < END")
+        if threshold <= 0 or threshold > 1:
+            raise argparse.ArgumentTypeError("drawdown schedule thresholds must be in (0, 1]")
+        label = pieces[2] if len(pieces) == 3 else f"{int(start_min)}_{int(end_min)}"
+        windows.append(DrawdownWindow(start_min, end_min, threshold, label))
+    if not windows:
+        raise argparse.ArgumentTypeError("drawdown schedule cannot be empty")
+    windows.sort(key=lambda w: w.start_min)
+    return tuple(windows)
+
+
+def _dd_schedule_label(schedule: tuple[DrawdownWindow, ...] | None) -> str:
+    if not schedule:
+        return "default"
+    return ",".join(f"{w.start_min:g}-{w.end_min:g}:{w.threshold:g}:{w.label}" for w in schedule)
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Unified SPX/NDX/XSP DB backtest — single-config or parameter sweep",
@@ -165,6 +218,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--afternoon-dd", type=_floatlist, default=None,
                    metavar="DD[,DD]",
                    help="Afternoon drawdown threshold(s). Default: 0.40.")
+    p.add_argument("--dd-schedule", type=_parse_dd_schedule, action="append", default=None,
+                   metavar="START-END:DD[:LABEL],...",
+                   help="Optional minutes-since-open drawdown schedule. Can be passed multiple "
+                        "times in --sweep mode to compare named policies. Use 'default' to include "
+                        "the legacy morning/late-morning/afternoon thresholds. Example: "
+                        "0-150:0.60:early,150-300:0.90:mid,300-330:0.75:noon,330-390:0.50:late")
     p.add_argument("--method", type=_strlist, default=None,
                    metavar="M[,M]",
                    help="Selection method(s): VIX, TARGET_COST, BEST_RR. Default: VIX.")
@@ -230,6 +289,8 @@ def parse_args() -> argparse.Namespace:
         args.method = ["VIX"]
     if args.entry_time is None:
         args.entry_time = [dt.time(7, 0)]
+    if args.dd_schedule is None:
+        args.dd_schedule = [None]
 
     return args
 
@@ -709,7 +770,7 @@ def _summarize_combo(
             "max_consec_losses": 0,
             "exit_morning_dd": 0, "exit_late_morning_dd": 0,
             "exit_afternoon_dd": 0, "exit_eod": 0, "exit_expired": 0,
-            "exit_abs_stop": 0,
+            "exit_drawdown": 0, "exit_abs_stop": 0,
         }
     return {
         **base,
@@ -723,6 +784,7 @@ def _summarize_combo(
         "exit_morning_dd": exit_reasons.count("drawdown_morning"),
         "exit_late_morning_dd": exit_reasons.count("drawdown_late_morning"),
         "exit_afternoon_dd": exit_reasons.count("drawdown_afternoon"),
+        "exit_drawdown": sum(1 for reason in exit_reasons if reason.startswith("drawdown_")),
         "exit_eod": exit_reasons.count("end_of_day"),
         "exit_expired": exit_reasons.count("expired"),
         "exit_abs_stop": exit_reasons.count("absolute_loss_stop"),
@@ -1080,6 +1142,7 @@ async def run_single(args: argparse.Namespace) -> None:
     morning_dd = args.morning_dd[0]
     late_morning_dd = args.late_morning_dd[0]
     afternoon_dd = args.afternoon_dd[0]
+    dd_schedule = args.dd_schedule[0]
     method = args.method[0]
     center_tolerance = asset_cfg["center_tolerance"]
     spot_range = asset_cfg["spot_range"]
@@ -1087,11 +1150,12 @@ async def run_single(args: argparse.Namespace) -> None:
     print(f"\n{'='*72}")
     print(f"  DB BACKTEST  |  {args.asset}  {direction_arg} butterfly")
     print(f"  Widths: {wing_widths}  rr_min: {rr_min}  DD: {morning_dd}/{late_morning_dd}/{afternoon_dd}")
+    print(f"  DD schedule: {_dd_schedule_label(dd_schedule)}")
     print(f"  Method: {method}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  "
           f"slippage: {args.slippage}  vix_max: {args.vix_max or 'none'}")
     print(f"{'='*72}\n")
 
-    conn = await asyncpg.connect(DB_DSN)
+    conn = await asyncpg.connect(resolve_db_dsn())
     try:
         dates = await discover_dates(conn, args.asset, args.start, args.end)
 
@@ -1195,6 +1259,7 @@ async def run_single(args: argparse.Namespace) -> None:
                 selection_method=method,
                 max_cost_per_width=asset_cfg["max_cost"],
                 use_absolute_loss_stop=args.use_abs_stop,
+                drawdown_schedule=dd_schedule,
             )
 
             restore = _patch_chain_cache(full_chains, date)
@@ -1305,6 +1370,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
         args.morning_dd,
         args.late_morning_dd,
         args.afternoon_dd,
+        args.dd_schedule,
         args.method,
         args.entry_time,
     ))
@@ -1316,10 +1382,15 @@ async def run_sweep(args: argparse.Namespace) -> None:
     print(f"  Wings: {args.wing}  Directions: {args.direction}  rr_min: {args.rr_min}")
     print(f"  Methods: {args.method}  Entry times (PST): {entry_strs}")
     print(f"  morning_dd: {args.morning_dd}  late_morning_dd: {args.late_morning_dd}")
-    print(f"  afternoon_dd: {args.afternoon_dd}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  slippage: {args.slippage}")
+    print(
+        f"  afternoon_dd: {args.afternoon_dd}  "
+        f"abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  "
+        f"slippage: {args.slippage}"
+    )
+    print(f"  dd_schedules: {[_dd_schedule_label(s) for s in args.dd_schedule]}")
     print(f"{'='*72}\n")
 
-    conn = await asyncpg.connect(DB_DSN)
+    conn = await asyncpg.connect(resolve_db_dsn())
     try:
         dates = await discover_dates(conn, args.asset, args.start, args.end)
 
@@ -1351,7 +1422,17 @@ async def run_sweep(args: argparse.Namespace) -> None:
             needed_strikes: set[float] = set()
             needed_types: set[str] = set()
 
-            for wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method, entry_pst in param_grid:
+            for (
+                wing,
+                direction,
+                rr_min,
+                morning_dd,
+                late_morning_dd,
+                afternoon_dd,
+                dd_schedule,
+                method,
+                entry_pst,
+            ) in param_grid:
                 entry_et = _pst_to_et(entry_pst)
                 entry_target = dt.datetime(date.year, date.month, date.day,
                                            entry_et.hour, entry_et.minute, tzinfo=EASTERN)
@@ -1429,6 +1510,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         use_absolute_loss_stop=args.use_abs_stop,
                         entry_start=entry_et,
                         entry_end=entry_et_end,
+                        drawdown_schedule=dd_schedule,
                     )
                 else:
                     sim_params = None
@@ -1462,8 +1544,19 @@ async def run_sweep(args: argparse.Namespace) -> None:
     print(f"\n  Summarizing {total_combos} combos across {len(usable_dates)} dates...\n")
 
     sweep_results: list[dict] = []
-    for i, (wing, direction, rr_min, morning_dd, late_morning_dd, afternoon_dd, method, entry_pst) in enumerate(param_grid, 1):
+    for i, (
+        wing,
+        direction,
+        rr_min,
+        morning_dd,
+        late_morning_dd,
+        afternoon_dd,
+        dd_schedule,
+        method,
+        entry_pst,
+    ) in enumerate(param_grid, 1):
         entry_pst_str = f"{entry_pst.hour:02d}:{entry_pst.minute:02d}"
+        dd_schedule_label = _dd_schedule_label(dd_schedule)
         combo_label = dict(
             wing_width=wing,
             direction=direction,
@@ -1471,6 +1564,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
             morning_dd=morning_dd,
             late_morning_dd=late_morning_dd,
             afternoon_dd=afternoon_dd,
+            dd_schedule=dd_schedule_label,
             method=method,
             entry_time_pst=entry_pst_str,
         )
@@ -1479,7 +1573,10 @@ async def run_sweep(args: argparse.Namespace) -> None:
 
         if i % 10 == 0 or i == total_combos:
             print(f"  [{i:>{len(str(total_combos))}}/{total_combos}]  "
-                  f"{wing}W {direction} entry={entry_pst_str}PST method={method} rr={rr_min} dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
+                  f"{wing}W {direction} entry={entry_pst_str}PST "
+                  f"method={method} rr={rr_min} "
+                  f"dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
+                  f"schedule={dd_schedule_label}  "
                   f"→ trades={row['trade_count']}  sharpe={row['sharpe']:.3f}  "
                   f"win={row['win_rate']*100:.0f}%")
 
@@ -1521,11 +1618,13 @@ async def run_sweep(args: argparse.Namespace) -> None:
     csv_path = args.csv or results_dir / f"sweep_{args.asset}_{start_str}_{end_str}_{ts_str}.csv"
 
     fieldnames = [
-        "wing_width", "direction", "method", "entry_time_pst", "rr_min", "morning_dd", "late_morning_dd", "afternoon_dd",
+        "wing_width", "direction", "method", "entry_time_pst", "rr_min",
+        "morning_dd", "late_morning_dd", "afternoon_dd",
+        "dd_schedule",
         "trade_count", "win_rate", "total_pnl", "avg_pnl",
         "sharpe", "max_drawdown", "profit_factor", "max_consec_losses",
         "exit_morning_dd", "exit_late_morning_dd", "exit_afternoon_dd",
-        "exit_eod", "exit_expired", "exit_abs_stop",
+        "exit_drawdown", "exit_eod", "exit_expired", "exit_abs_stop",
     ]
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
