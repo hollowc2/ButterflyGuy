@@ -120,16 +120,20 @@ class TradeQueries:
 
     async def close_trade(
         self, trade_id: int, exit_price: float, exit_time: dt.datetime,
-        exit_reason: str, pnl: float, peak_value: float
+        exit_reason: str, pnl: float, peak_value: float,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         await self.db.pool.execute(
             """
             UPDATE butterfly_trades SET
                 exit_price = $2, exit_time = $3, exit_reason = $4,
-                pnl = $5, peak_value = $6, status = 'CLOSED'
+                pnl = $5, peak_value = $6,
+                metadata = metadata || COALESCE($7::jsonb, '{}'::jsonb),
+                status = 'CLOSED'
             WHERE id = $1
             """,
             trade_id, exit_price, exit_time, exit_reason, pnl, peak_value,
+            json.dumps(metadata or {}),
         )
 
     async def update_peak_value(self, trade_id: int, peak_value: float) -> None:

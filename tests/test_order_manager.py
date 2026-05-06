@@ -450,6 +450,27 @@ async def test_paper_exit_sleeps_between_steps():
 
 
 @pytest.mark.asyncio
+async def test_paper_exit_returns_ladder_trace():
+    settings = make_settings(
+        paper_trading=True,
+        price_ladder_steps=4,
+        price_ladder_step=0.05,
+    )
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.05, mark=3.00, ask=3.60)
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_exit(candidate, current_value=3.00, quantity=1)
+
+    assert result is not None
+    assert "ladder_steps" in result
+    assert len(result["ladder_steps"]) == 4
+    assert result["ladder_steps"][-1]["filled"] is True
+
+
+@pytest.mark.asyncio
 async def test_paper_exit_respects_timeout():
     """When the exit ladder times out, it should force-fill at bid (not return None)."""
     settings = make_settings(paper_trading=True, order_timeout_seconds=0)

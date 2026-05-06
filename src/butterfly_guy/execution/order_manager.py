@@ -294,6 +294,7 @@ class OrderManager:
         if self.settings.paper_trading:
             deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
             bid_floor: float | None = None
+            step_trace: list[dict[str, float | int | bool | None]] = []
 
             while True:
                 if dt.datetime.now(dt.timezone.utc) >= deadline:
@@ -305,6 +306,7 @@ class OrderManager:
                         "fill_price": fill_price,
                         "fill_time": now_utc(),
                         "forced": True,
+                        "ladder_steps": step_trace,
                     }
 
                 for i in range(max_steps):
@@ -321,6 +323,7 @@ class OrderManager:
                             "fill_price": fill_price,
                             "fill_time": now_utc(),
                             "forced": True,
+                            "ladder_steps": step_trace,
                         }
 
                     mid_price = bid_floor if bid_floor is not None else current_value
@@ -328,12 +331,21 @@ class OrderManager:
                     log.debug("paper_exit_step", step=i, price=limit_price,
                               bid=spread.bid if spread is not None else None,
                               mark=spread.mark if spread is not None else None)
+                    step_trace.append({
+                        "step": i,
+                        "limit": limit_price,
+                        "bid": spread.bid if spread is not None else None,
+                        "mark": spread.mark if spread is not None else None,
+                        "ask": spread.ask if spread is not None else None,
+                        "filled": False,
+                    })
 
                     if spread is not None:
                         fill_threshold = spread.bid - self.settings.paper_fill_buffer
                         if limit_price <= fill_threshold:
                             fill_price = round(max(0.05, limit_price - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2)
                             log.info("paper_exit_filled", price=limit_price, fill_price=fill_price, step=i)
+                            step_trace[-1]["filled"] = True
                             return {
                                 "order_id": "PAPER",
                                 "fill_price": fill_price,
@@ -341,6 +353,7 @@ class OrderManager:
                                 "spread_bid": spread.bid,
                                 "spread_mark": spread.mark,
                                 "spread_ask": spread.ask,
+                                "ladder_steps": step_trace,
                             }
 
                     await asyncio.sleep(retry_interval)
@@ -349,6 +362,7 @@ class OrderManager:
 
         deadline = now_utc() + dt.timedelta(seconds=timeout)
         bid_floor: float | None = None
+        step_trace: list[dict[str, float | int | bool | None]] = []
 
         while True:
             if now_utc() >= deadline:
@@ -367,6 +381,14 @@ class OrderManager:
 
                 limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
                 log.debug("exit_ladder_step", step=i, price=limit_price, mid_price=mid_price)
+                step_trace.append({
+                    "step": i,
+                    "limit": limit_price,
+                    "bid": spread.bid if spread is not None else None,
+                    "mark": spread.mark if spread is not None else None,
+                    "ask": spread.ask if spread is not None else None,
+                    "filled": False,
+                })
 
                 order_spec = self.builder.build_butterfly_close(candidate, limit_price, quantity)
                 orders_placed.labels(underlying=self.underlying, order_type="exit").inc()
@@ -388,6 +410,17 @@ class OrderManager:
                             "spread_bid": spread.bid if spread is not None else None,
                             "spread_mark": spread.mark if spread is not None else None,
                             "spread_ask": spread.ask if spread is not None else None,
+                            "ladder_steps": [
+                                *step_trace[:-1],
+                                {**step_trace[-1], "filled": True},
+                            ] if step_trace else [{
+                                "step": i,
+                                "limit": limit_price,
+                                "bid": None,
+                                "mark": None,
+                                "ask": None,
+                                "filled": True,
+                            }],
                         }
 
                     await self.schwab.cancel_order(order_id)

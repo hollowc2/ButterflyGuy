@@ -209,6 +209,7 @@ class TradeService:
         max_steps = self.config.execution.price_ladder_steps
         price_step = self.config.execution.price_ladder_step
         candidates_logged = False
+        entry_attempts: list[dict[str, object]] = []
 
         for step in range(max_steps):
             # Re-fetch chain + spot each attempt — market may have moved
@@ -312,6 +313,17 @@ class TradeService:
 
             # Price at fly's composite ask + per-step increment to sweeten the offer
             limit_price = round(best.ask + step * price_step, 2)
+            attempt_record = {
+                "step": step,
+                "limit": limit_price,
+                "bid": getattr(best, "bid", None),
+                "mark": best.cost,
+                "ask": best.ask,
+                "center": best.center_strike,
+                "width": best.wing_width,
+                "reward_risk": best.reward_risk,
+            }
+            entry_attempts.append(attempt_record)
             log.debug("entry_attempt", step=step, center=best.center_strike,
                       width=best.wing_width, ask=best.ask, limit=limit_price)
 
@@ -330,6 +342,13 @@ class TradeService:
                     "lower_symbol": best.lower_symbol,
                     "center_symbol": best.center_symbol,
                     "upper_symbol": best.upper_symbol,
+                    "metadata": {
+                        "selection_method": selection_method,
+                        "entry_spot": spot_price,
+                        "prev_close": previous_close,
+                        "vix": vix_price,
+                        "entry_attempts": entry_attempts,
+                    },
                 }
                 trade_id = await self.trade_queries.insert_trade(trade_data)
                 await self.risk_engine.record_trade()
@@ -371,6 +390,17 @@ class TradeService:
                     "direction": direction,
                     "entry_step": step,
                 }, underlying=underlying)
+                await self.decision_queries.log_event("entry_ladder_trace", {
+                    "trade_id": trade_id,
+                    "selection_method": selection_method,
+                    "direction": direction,
+                    "entry_spot": spot_price,
+                    "prev_close": previous_close,
+                    "vix": vix_price,
+                    "selected_center": best.center_strike,
+                    "selected_width": best.wing_width,
+                    "entry_attempts": entry_attempts,
+                }, underlying=underlying)
 
                 if self.notifier:
                     try:
@@ -399,7 +429,10 @@ class TradeService:
             }, underlying=underlying)
             log.debug("entry_step_unfilled", step=step, limit=limit_price, ask=best.ask, center=best.center_strike)
 
-        await self.decision_queries.log_event("entry_exhausted", {"direction": direction}, underlying=underlying)
+        await self.decision_queries.log_event("entry_exhausted", {
+            "direction": direction,
+            "entry_attempts": entry_attempts,
+        }, underlying=underlying)
         log.warning("entry_exhausted", direction=direction)
         return None
 

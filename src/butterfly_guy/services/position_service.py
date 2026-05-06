@@ -154,6 +154,7 @@ class PositionService:
                         exit_price = fill["fill_price"]
                         exit_time = fill["fill_time"]
                         pnl = exit_price - trade.entry_price
+                        exit_ladder_steps = fill.get("ladder_steps", [])
 
                         await self.trade_queries.close_trade(
                             trade.trade_id,
@@ -162,6 +163,11 @@ class PositionService:
                             signal.reason,
                             pnl,
                             pos_state.peak_value,
+                            metadata={
+                                "exit_ladder_steps": exit_ladder_steps,
+                                "exit_signal_reason": signal.reason,
+                                "exit_mark_at_signal": pos_state.current_value,
+                            },
                         )
 
                         await self._record_exit_metrics(pnl, trade)
@@ -183,6 +189,15 @@ class PositionService:
                             "peak_value": pos_state.peak_value,
                             "peak_bid": pos_state.peak_bid,
                             "bid_to_mark_at_exit": pos_state.bid_to_mark_ratio,
+                            "forced": fill.get("forced", False),
+                        }, underlying=self.config.strategy.underlying)
+                        await self.decision_queries.log_event("exit_ladder_trace", {
+                            "trade_id": trade.trade_id,
+                            "exit_reason": signal.reason,
+                            "entry_price": trade.entry_price,
+                            "fill_price": exit_price,
+                            "peak_value": pos_state.peak_value,
+                            "exit_ladder_steps": exit_ladder_steps,
                             "forced": fill.get("forced", False),
                         }, underlying=self.config.strategy.underlying)
 
@@ -239,6 +254,11 @@ class PositionService:
             "cash_settled",
             pnl,
             peak,
+            metadata={
+                "exit_ladder_steps": [],
+                "exit_signal_reason": "cash_settled",
+                "exit_mark_at_signal": settlement_value,
+            },
         )
         await self._record_exit_metrics(pnl, trade)
 
