@@ -149,6 +149,31 @@ uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
 
 Sweep mode runs the `ParameterSweeper`, which tries every combination of wing widths, drawdown thresholds, and other strategy parameters, then ranks results by Sharpe ratio so you can compare configurations objectively.
 
+### Smoke Test in Docker
+
+If the app containers have already been built and started, you can smoke-test the backtest from inside the SPX container:
+
+```bash
+docker exec butterfly_spx_app python -m butterfly_guy.scripts.run_backtest_db 2026-05-05 2026-05-05 --asset SPX
+```
+
+From the host, the equivalent backtest command is:
+
+```bash
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-05-05 2026-05-05 --asset SPX
+```
+
+To rebuild and restart the app containers after code changes, source `.env` first so
+`docker compose` can resolve `DATABASE_PASSWORD`, then run:
+
+```bash
+set -a
+. ./.env
+set +a
+docker compose -f infra/docker-compose.yml build app_spx app_ndx app_xsp
+docker compose -f infra/docker-compose.yml up -d app_spx app_ndx app_xsp
+```
+
 ### Gap Regime Filters (Backtest)
 
 Two flags apply the same `GapRegimeFilter` logic used in live trading:
