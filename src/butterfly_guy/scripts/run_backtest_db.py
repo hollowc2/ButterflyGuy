@@ -795,8 +795,42 @@ def _summarize_combo(
 # Trade value histogram
 # ---------------------------------------------------------------------------
 
+def _fitted_density_counts(
+    pnls_ct: list[float],
+    *,
+    start: float,
+    bucket_w: int,
+    n_buckets: int,
+) -> list[float]:
+    """Return bucket-height estimates from a Gaussian KDE fit."""
+    n = len(pnls_ct)
+    if n < 3 or n_buckets <= 0:
+        return []
+
+    mean = sum(pnls_ct) / n
+    variance = sum((p - mean) ** 2 for p in pnls_ct) / (n - 1)
+    stdev = math.sqrt(variance)
+    if stdev <= 0:
+        return []
+
+    bandwidth = 1.06 * stdev * (n ** -0.2)
+    if bandwidth <= 0:
+        return []
+
+    inv_norm = 1 / math.sqrt(2 * math.pi)
+    fitted: list[float] = []
+    for i in range(n_buckets):
+        mid = start + (i + 0.5) * bucket_w
+        density = sum(
+            inv_norm * math.exp(-0.5 * ((mid - p) / bandwidth) ** 2) / bandwidth
+            for p in pnls_ct
+        ) / n
+        fitted.append(density * n * bucket_w)
+    return fitted
+
+
 def _print_pnl_histogram(pnls_ct: list[float]) -> None:
-    """ASCII histogram: loss buckets use ▒, win buckets use █, each row = 1 trade."""
+    """ASCII histogram with a fitted density curve overlaid on the trade buckets."""
     if len(pnls_ct) < 2:
         return
 
@@ -809,23 +843,42 @@ def _print_pnl_histogram(pnls_ct: list[float]) -> None:
         n_buckets = math.ceil((hi - start) / bucket_w)
         if n_buckets <= 14:
             break
+    if n_buckets <= 0:
+        return
 
     counts = [0] * n_buckets
     for p in pnls_ct:
         idx = min(int((p - start) / bucket_w), n_buckets - 1)
         counts[idx] += 1
 
-    max_h = max(counts)
-    COL = 6  # chars per column
+    fitted = _fitted_density_counts(
+        pnls_ct,
+        start=start,
+        bucket_w=bucket_w,
+        n_buckets=n_buckets,
+    )
+    curve_rows = [max(1, round(v)) if v >= 0.35 else 0 for v in fitted]
+    if not curve_rows:
+        curve_rows = [0] * n_buckets
+    max_h = max(max(counts), max(curve_rows, default=0))
+    col_w = 6  # chars per column
 
-    print(f"\n  TRADE DISTRIBUTION  (▒▒▒▒ = loss  ████ = win,  each row = 1 trade)\n")
+    print(
+        "\n  TRADE DISTRIBUTION  "
+        "(▒▒▒▒ = loss  ████ = win  ╳╳╳╳ = fitted density,  each row = 1 trade)\n"
+    )
 
     for h in range(max_h, 0, -1):
         row = f"  {h:>2} │"
         for i, cnt in enumerate(counts):
             mid = start + (i + 0.5) * bucket_w
-            blk = " ▒▒▒▒ " if mid < 0 else " ████ "
-            row += blk if cnt >= h else " " * COL
+            if curve_rows[i] == h:
+                blk = " ╳╳╳╳ "
+            elif cnt >= h:
+                blk = " ▒▒▒▒ " if mid < 0 else " ████ "
+            else:
+                blk = " " * col_w
+            row += blk
         print(row)
 
     print("     └" + "──────" * n_buckets)
@@ -833,7 +886,7 @@ def _print_pnl_histogram(pnls_ct: list[float]) -> None:
     lbl = "      "
     for i in range(n_buckets):
         b = start + i * bucket_w
-        lbl += f"${b:.0f}".center(COL)
+        lbl += f"${b:.0f}".center(col_w)
     print(lbl)
 
 
