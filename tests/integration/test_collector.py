@@ -1,6 +1,7 @@
 """Integration tests for the option chain collector (requires live Schwab token)."""
 
 import datetime as dt
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -149,6 +150,37 @@ async def test_collect_snapshot_succeeds_when_chain_cache_write_fails():
         "butterfly_guy.data.collector.save_snapshot",
         side_effect=OSError(30, "Read-only file system", "data"),
     ):
+        count = await collector.collect_snapshot()
+
+    assert count == 2
+    chain_queries.bulk_insert_snapshot.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_collect_snapshot_succeeds_when_chain_cache_is_corrupt():
+    """A corrupt optional chain cache should not fail a DB-backed snapshot."""
+    config = AppConfig()
+    schwab = MagicMock()
+    schwab.get_spot_price = AsyncMock(return_value=5500.0)
+    schwab.get_option_chain = AsyncMock(return_value=SAMPLE_CHAIN_RESPONSE)
+
+    chain_queries = MagicMock()
+    chain_queries.bulk_insert_snapshot = AsyncMock(return_value=2)
+    spot_queries = MagicMock()
+    spot_queries.insert = AsyncMock()
+
+    collector = OptionChainCollector(
+        config=config,
+        schwab=schwab,
+        chain_queries=chain_queries,
+        spot_queries=spot_queries,
+    )
+
+    error = json.JSONDecodeError("Extra data", "{}", 2)
+    with patch(
+        "butterfly_guy.data.collector.get_0dte_expiration",
+        return_value=dt.date(2026, 3, 10),
+    ), patch("butterfly_guy.data.collector.save_snapshot", side_effect=error):
         count = await collector.collect_snapshot()
 
     assert count == 2

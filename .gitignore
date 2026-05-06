@@ -45,6 +45,7 @@ data/schwab/*.json
 
 # Real option chain cache
 data/chains/*.json
+data/chains/*/*.json
 
 # Logs
 *.log

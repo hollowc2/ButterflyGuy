@@ -42,7 +42,13 @@ class ChainDay(dict):
         self._sorted_keys = sorted(self.keys())
 
 
-def chain_cache_path(date: dt.date, cache_dir: Path = CHAIN_CACHE_DIR) -> Path:
+def chain_cache_path(
+    date: dt.date,
+    cache_dir: Path = CHAIN_CACHE_DIR,
+    underlying: str | None = None,
+) -> Path:
+    if underlying:
+        return cache_dir / underlying.upper() / f"{date.isoformat()}.json"
     return cache_dir / f"{date.isoformat()}.json"
 
 
@@ -52,13 +58,16 @@ def save_snapshot(
     spot: float,
     rows: list[dict],
     cache_dir: Path = CHAIN_CACHE_DIR,
+    underlying: str | None = None,
 ) -> None:
     """Append one chain snapshot to the day's cache file.
 
     Called by the collector after each successful chain fetch.
     rows is the list of parsed option rows (same format as bulk_insert_snapshot).
     """
-    path = chain_cache_path(date, cache_dir)
+    if underlying is None and rows:
+        underlying = rows[0].get("underlying")
+    path = chain_cache_path(date, cache_dir, underlying)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     if path.exists():
@@ -89,6 +98,7 @@ def save_snapshot(
 def load_chain_day(
     date: dt.date,
     cache_dir: Path = CHAIN_CACHE_DIR,
+    underlying: str | None = None,
 ) -> dict[dt.datetime, list[OptionQuote]] | None:
     """Load all chain snapshots for a day.
 
@@ -96,11 +106,23 @@ def load_chain_day(
     The simulation engine calls this once per day and uses nearest-prior snapshot
     at each bar instead of generating a synthetic chain.
     """
-    path = chain_cache_path(date, cache_dir)
-    if not path.exists():
-        return None
+    paths = [chain_cache_path(date, cache_dir, underlying)]
+    if underlying is None:
+        paths.append(chain_cache_path(date, cache_dir, "SPX"))
 
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = None
+    for path in paths:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            break
+        except json.JSONDecodeError:
+            if underlying is not None:
+                return None
+            continue
+    if data is None:
+        return None
     result: dict[dt.datetime, list[OptionQuote]] = {}
 
     for ts_str, snap in data["snapshots"].items():

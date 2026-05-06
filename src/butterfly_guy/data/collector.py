@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
 from typing import Any
 
 from notify import send as notify
@@ -171,8 +172,14 @@ class OptionChainCollector:
                 chain_snapshots_total.labels(underlying=underlying).inc()
                 chain_snapshot_rows.labels(underlying=underlying).set(count)
                 try:
-                    save_snapshot(expiration, snapshot_time, spot_price, rows)
-                except OSError as e:
+                    save_snapshot(
+                        expiration,
+                        snapshot_time,
+                        spot_price,
+                        rows,
+                        underlying=underlying,
+                    )
+                except (OSError, json.JSONDecodeError) as e:
                     log.warning("chain_cache_write_failed", error=str(e))
                 log.info("snapshot_collected", rows=count, spot=spot_price)
                 return count
