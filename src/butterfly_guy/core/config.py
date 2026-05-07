@@ -67,6 +67,14 @@ class TimeRegime(BaseModel):
     start_minutes_after_open: int
     end_minutes_after_open: int
     drawdown_threshold: float
+    confirmation_polls: int = 1
+    min_peak_profit_ratio: float = 1.0
+
+
+class QuoteQualitySettings(BaseModel):
+    enabled: bool = False
+    min_bid_to_mark_ratio: float = 0.0
+    max_spread_width_ratio: float | None = None
 
 
 class ProfitManagementSettings(BaseModel):
@@ -74,6 +82,7 @@ class ProfitManagementSettings(BaseModel):
     exit_before_close_minutes: int = 5
     max_loss_from_cost: float = 0.50
     use_absolute_loss_stop: bool = False
+    quote_quality: QuoteQualitySettings = Field(default_factory=QuoteQualitySettings)
 
 
 class RiskSettings(BaseModel):

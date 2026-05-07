@@ -39,6 +39,8 @@ class ProfitStateMachine:
         self.settings = settings
         self._state = ProfitState.LOSS
         self._ever_in_profit: bool = False
+        self._pending_drawdown_reason: str | None = None
+        self._pending_drawdown_count: int = 0
 
     @property
     def state(self) -> ProfitState:
@@ -82,14 +84,49 @@ class ProfitStateMachine:
             return None
 
         threshold = regime_config.drawdown_threshold
+        confirmation_polls = max(1, regime_config.confirmation_polls)
+        min_peak_value = pos.entry_price * regime_config.min_peak_profit_ratio
 
         # Only exit on drawdown if position has ever been above entry
-        if self._ever_in_profit:
+        if self._ever_in_profit and pos.peak_value >= min_peak_value:
             if pos.drawdown_from_peak >= threshold:
+                reason = f"drawdown_{pos.time_regime}"
+                if not self._quote_quality_ok(pos):
+                    log.info(
+                        "drawdown_exit_blocked_quote_quality",
+                        drawdown=pos.drawdown_from_peak,
+                        threshold=threshold,
+                        regime=pos.time_regime,
+                        spread_bid=pos.spread_bid,
+                        spread_ask=pos.spread_ask,
+                        bid_to_mark_ratio=pos.bid_to_mark_ratio,
+                    )
+                    self._reset_pending_drawdown()
+                    return None
+
+                if self._pending_drawdown_reason == reason:
+                    self._pending_drawdown_count += 1
+                else:
+                    self._pending_drawdown_reason = reason
+                    self._pending_drawdown_count = 1
+
+                if self._pending_drawdown_count < confirmation_polls:
+                    log.info(
+                        "drawdown_exit_pending_confirmation",
+                        drawdown=pos.drawdown_from_peak,
+                        threshold=threshold,
+                        regime=pos.time_regime,
+                        confirmation_count=self._pending_drawdown_count,
+                        confirmation_required=confirmation_polls,
+                    )
+                    return None
+
                 log.info(
                     "drawdown_exit_triggered",
                     drawdown=pos.drawdown_from_peak,
                     threshold=threshold,
+                    confirmation_count=self._pending_drawdown_count,
+                    confirmation_required=confirmation_polls,
                     regime=pos.time_regime,
                     peak=pos.peak_value,
                     current=pos.current_value,
@@ -98,12 +135,44 @@ class ProfitStateMachine:
                     bid_to_mark_ratio=pos.bid_to_mark_ratio,
                 )
                 return ExitSignal(
-                    reason=f"drawdown_{pos.time_regime}",
+                    reason=reason,
                     target_credit=pos.current_value,
                     urgency="high",
                 )
+            self._reset_pending_drawdown()
+        else:
+            self._reset_pending_drawdown()
 
         return None
+
+    def _quote_quality_ok(self, pos: PositionState) -> bool:
+        settings = self.settings.quote_quality
+        if not settings.enabled:
+            return True
+
+        if (
+            pos.spread_bid is None
+            or pos.spread_ask is None
+            or pos.bid_to_mark_ratio is None
+        ):
+            return False
+
+        if pos.spread_bid <= 0:
+            return False
+
+        if pos.bid_to_mark_ratio < settings.min_bid_to_mark_ratio:
+            return False
+
+        if settings.max_spread_width_ratio is not None and pos.current_value > 0:
+            spread_width_ratio = (pos.spread_ask - pos.spread_bid) / pos.current_value
+            if spread_width_ratio > settings.max_spread_width_ratio:
+                return False
+
+        return True
+
+    def _reset_pending_drawdown(self) -> None:
+        self._pending_drawdown_reason = None
+        self._pending_drawdown_count = 0
 
     def _update_state(self, pos: PositionState) -> None:
         """Transition between profit states."""
@@ -117,7 +186,12 @@ class ProfitStateMachine:
             new_state = ProfitState.PROFIT_TENT
 
         if new_state != self._state:
-            log.info("state_transition", old=self._state.name, new=new_state.name, pnl_ratio=pnl_ratio)
+            log.info(
+                "state_transition",
+                old=self._state.name,
+                new=new_state.name,
+                pnl_ratio=pnl_ratio,
+            )
             self._state = new_state
         if self._state != ProfitState.LOSS:
             self._ever_in_profit = True
@@ -126,3 +200,4 @@ class ProfitStateMachine:
         """Reset state machine for a new position."""
         self._state = ProfitState.LOSS
         self._ever_in_profit = False
+        self._reset_pending_drawdown()

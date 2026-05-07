@@ -1,8 +1,6 @@
 """Tests for the profit management state machine."""
 
-import pytest
-
-from butterfly_guy.core.config import ProfitManagementSettings, TimeRegime
+from butterfly_guy.core.config import ProfitManagementSettings, QuoteQualitySettings, TimeRegime
 from butterfly_guy.position.position_manager import PositionState
 from butterfly_guy.position.state_machine import ProfitState, ProfitStateMachine
 
@@ -39,6 +37,9 @@ def make_pos(
     regime="morning",
     mins_to_close=120.0,
     mins_since_open=30.0,
+    spread_bid=None,
+    spread_ask=None,
+    bid_to_mark_ratio=None,
 ) -> PositionState:
     return PositionState(
         entry_price=entry,
@@ -49,6 +50,9 @@ def make_pos(
         time_regime=regime,
         minutes_to_close=mins_to_close,
         minutes_since_open=mins_since_open,
+        spread_bid=spread_bid,
+        spread_ask=spread_ask,
+        bid_to_mark_ratio=bid_to_mark_ratio,
     )
 
 
@@ -63,7 +67,7 @@ def test_no_exit_when_not_in_profit_tent():
 
 def test_absolute_loss_stop_fires_without_profit_tent():
     """Absolute loss stop should fire even if position was never in profit tent."""
-    from butterfly_guy.core.config import ProfitManagementSettings, TimeRegime
+    from butterfly_guy.core.config import ProfitManagementSettings
     settings = make_settings()
     settings = ProfitManagementSettings(
         regimes=settings.regimes,
@@ -119,6 +123,119 @@ def test_exit_on_morning_drawdown():
     signal = sm.evaluate(pos)
     assert signal is not None
     assert "morning" in signal.reason
+
+
+def test_default_drawdown_confirmation_is_immediate():
+    """Default confirmation_polls=1 preserves existing behavior."""
+    sm = ProfitStateMachine(make_settings())
+    sm.evaluate(make_pos(entry=1.0, current=3.0, peak=3.0, pnl=2.0, drawdown=0.0))
+
+    signal = sm.evaluate(
+        make_pos(entry=1.0, current=1.35, peak=3.0, pnl=0.35, drawdown=0.55)
+    )
+
+    assert signal is not None
+    assert signal.reason == "drawdown_morning"
+
+
+def test_drawdown_requires_configured_confirmation_polls():
+    settings = make_settings()
+    settings.regimes["morning"].confirmation_polls = 2
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(make_pos(entry=1.0, current=3.0, peak=3.0, pnl=2.0, drawdown=0.0))
+
+    first = sm.evaluate(make_pos(entry=1.0, current=1.35, peak=3.0, pnl=0.35, drawdown=0.55))
+    second = sm.evaluate(make_pos(entry=1.0, current=1.35, peak=3.0, pnl=0.35, drawdown=0.55))
+
+    assert first is None
+    assert second is not None
+    assert second.reason == "drawdown_morning"
+
+
+def test_drawdown_requires_min_peak_profit_ratio():
+    settings = make_settings()
+    settings.regimes["morning"].min_peak_profit_ratio = 1.5
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(make_pos(entry=1.0, current=1.1, peak=1.1, pnl=0.1, drawdown=0.0))
+
+    signal = sm.evaluate(make_pos(entry=1.0, current=0.5, peak=1.1, pnl=-0.5, drawdown=0.55))
+
+    assert signal is None
+
+
+def test_quote_quality_guard_blocks_bad_drawdown_exit():
+    settings = make_settings()
+    settings.quote_quality = QuoteQualitySettings(
+        enabled=True,
+        min_bid_to_mark_ratio=0.35,
+        max_spread_width_ratio=1.5,
+    )
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(
+        make_pos(
+            entry=1.0,
+            current=3.0,
+            peak=3.0,
+            pnl=2.0,
+            drawdown=0.0,
+            spread_bid=2.7,
+            spread_ask=3.3,
+            bid_to_mark_ratio=0.9,
+        )
+    )
+
+    signal = sm.evaluate(
+        make_pos(
+            entry=1.0,
+            current=1.35,
+            peak=3.0,
+            pnl=0.35,
+            drawdown=0.55,
+            spread_bid=0.1,
+            spread_ask=4.0,
+            bid_to_mark_ratio=0.07,
+        )
+    )
+
+    assert signal is None
+
+
+def test_quote_quality_guard_allows_good_drawdown_exit():
+    settings = make_settings()
+    settings.quote_quality = QuoteQualitySettings(
+        enabled=True,
+        min_bid_to_mark_ratio=0.35,
+        max_spread_width_ratio=1.5,
+    )
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(
+        make_pos(
+            entry=1.0,
+            current=3.0,
+            peak=3.0,
+            pnl=2.0,
+            drawdown=0.0,
+            spread_bid=2.7,
+            spread_ask=3.3,
+            bid_to_mark_ratio=0.9,
+        )
+    )
+
+    signal = sm.evaluate(
+        make_pos(
+            entry=1.0,
+            current=1.35,
+            peak=3.0,
+            pnl=0.35,
+            drawdown=0.55,
+            spread_bid=1.1,
+            spread_ask=1.8,
+            bid_to_mark_ratio=0.81,
+        )
+    )
+
+    assert signal is not None
+    assert signal.reason == "drawdown_morning"
 
 
 def test_exit_on_afternoon_drawdown_lower_threshold():

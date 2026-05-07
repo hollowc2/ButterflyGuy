@@ -29,18 +29,28 @@ profit_management:
     morning:
       start_minutes_after_open: 0
       end_minutes_after_open: 120
-      drawdown_threshold: 0.60
+      drawdown_threshold: 1.00
+      confirmation_polls: 3
+      min_peak_profit_ratio: 1.5
     late_morning:
       start_minutes_after_open: 120
       end_minutes_after_open: 240
-      drawdown_threshold: 0.90
+      drawdown_threshold: 0.95
+      confirmation_polls: 2
+      min_peak_profit_ratio: 1.5
     afternoon:
       start_minutes_after_open: 240
       end_minutes_after_open: 390
-      drawdown_threshold: 0.75
+      drawdown_threshold: 0.90
+      confirmation_polls: 2
+      min_peak_profit_ratio: 1.5
   exit_before_close_minutes: 0
   max_loss_from_cost: 0.50
   use_absolute_loss_stop: false
+  quote_quality:
+    enabled: true
+    min_bid_to_mark_ratio: 0.35
+    max_spread_width_ratio: 1.5
 risk:
   max_daily_loss: 500.0
   max_trades_per_day: 1
