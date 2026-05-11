@@ -11,10 +11,14 @@ from butterfly_guy.core.metrics import daily_pnl, trades_active, trades_total
 from butterfly_guy.core.time_utils import get_0dte_expiration, is_market_open, now_eastern
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
-from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
+from butterfly_guy.data.schwab_client import (
+    SCHWAB_CHAIN_SYMBOLS,
+    SCHWAB_SPOT_SYMBOLS,
+    SchwabClientWrapper,
+)
 from butterfly_guy.db.queries import DecisionQueries, TentQueries, TradeQueries
 from butterfly_guy.execution.order_manager import OrderManager
-from butterfly_guy.position.position_manager import PositionManager
+from butterfly_guy.position.position_manager import PositionManager, fly_settlement_value
 from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
@@ -57,7 +61,9 @@ class PositionService:
     ) -> None:
         """Monitor position every 10s, evaluate state machine, trigger exit if needed."""
         self.position_manager.reset(trade.entry_price, peak_value=recovered_peak)
-        self._last_persisted_peak = recovered_peak if (recovered_peak and recovered_peak > 0) else trade.entry_price
+        self._last_persisted_peak = (
+            recovered_peak if (recovered_peak and recovered_peak > 0) else trade.entry_price
+        )
         self.state_machine.reset()
         self._last_profit_state = None
         poll_interval = 2
@@ -70,7 +76,10 @@ class PositionService:
                 # Fetch latest chain for position valuation
                 expiration = get_0dte_expiration()
                 chain_data = await self.schwab.get_option_chain(
-                        SCHWAB_CHAIN_SYMBOLS.get(self.config.strategy.underlying, self.config.strategy.underlying),
+                        SCHWAB_CHAIN_SYMBOLS.get(
+                            self.config.strategy.underlying,
+                            self.config.strategy.underlying,
+                        ),
                         expiration,
                     )
                 quotes = self._extract_quotes(chain_data, expiration, candidate)
@@ -229,22 +238,36 @@ class PositionService:
             return
 
         # Market closed — XSP/SPX/NDX are cash-settled; no exit order needed.
-        # Record the final mark price as the settlement value.
+        # Use the underlying index close to compute the actual cash-settlement value.
         log.info("market_closed_cash_settle", trade_id=trade.trade_id)
         settlement_value = 0.0
-        peak = 0.0
+        peak = max(self._last_persisted_peak, trade.peak_value or 0.0)
         try:
-            expiration = get_0dte_expiration()
-            chain_data = await self.schwab.get_option_chain(
-                        SCHWAB_CHAIN_SYMBOLS.get(self.config.strategy.underlying, self.config.strategy.underlying),
-                        expiration,
-                    )
-            quotes = self._extract_quotes(chain_data, expiration, candidate)
-            pos_state = self.position_manager.update_position_value(candidate, quotes)
-            settlement_value = pos_state.current_value
-            peak = pos_state.peak_value
+            spot_symbol = SCHWAB_SPOT_SYMBOLS.get(
+                self.config.strategy.underlying,
+                f"${self.config.strategy.underlying}",
+            )
+            spot_price = await self.schwab.get_spot_price(spot_symbol)
+            if spot_price is None:
+                raise ValueError(f"missing_spot_price_for_{self.config.strategy.underlying}")
+            settlement_value = fly_settlement_value(candidate, spot_price)
         except Exception as e:
-            log.error("eod_valuation_failed", error=str(e))
+            log.error("eod_settlement_valuation_failed", error=str(e))
+            try:
+                expiration = get_0dte_expiration()
+                chain_data = await self.schwab.get_option_chain(
+                    SCHWAB_CHAIN_SYMBOLS.get(
+                        self.config.strategy.underlying,
+                        self.config.strategy.underlying,
+                    ),
+                    expiration,
+                )
+                quotes = self._extract_quotes(chain_data, expiration, candidate)
+                pos_state = self.position_manager.update_position_value(candidate, quotes)
+                settlement_value = pos_state.current_value
+                peak = pos_state.peak_value
+            except Exception as fallback_error:
+                log.error("eod_valuation_failed", error=str(fallback_error))
 
         pnl = settlement_value - trade.entry_price
         await self.trade_queries.close_trade(
@@ -278,7 +301,12 @@ class PositionService:
             except Exception as e:
                 log.warning("notify_exit_failed", error=str(e))
 
-        log.info("cash_settle_complete", trade_id=trade.trade_id, settlement_value=settlement_value, pnl=pnl)
+        log.info(
+            "cash_settle_complete",
+            trade_id=trade.trade_id,
+            settlement_value=settlement_value,
+            pnl=pnl,
+        )
 
     async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:
         """Record trade exit metrics and update risk engine."""
@@ -317,6 +345,8 @@ class PositionService:
                 # treat as 0 here and let compute_tent_boundaries impute via BS inverse
                 iv=float(opt.get("volatility") or 0.0),
             )
-            for strike, _, opt in iter_chain_options(chain_data, expiration, direction=candidate.direction)
+            for strike, _, opt in iter_chain_options(
+                chain_data, expiration, direction=candidate.direction
+            )
             if strike in target_strikes
         }

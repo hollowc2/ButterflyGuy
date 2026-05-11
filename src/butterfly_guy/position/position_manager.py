@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import datetime as dt
+import math
 from dataclasses import dataclass
 
 from scipy.optimize import brentq
@@ -10,8 +10,7 @@ from scipy.optimize import brentq
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import position_peak_value, position_pnl, position_value
 from butterfly_guy.core.time_utils import get_time_regime, minutes_since_open, minutes_to_close
-from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord, fly_mark_value
-import math
+from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, fly_mark_value
 
 from butterfly_guy.quant_engine.black_scholes import bs_call_price, bs_put_price, implied_vol
 
@@ -21,6 +20,21 @@ log = get_logger(__name__)
 def fly_bid_value(lower: OptionQuote, center: OptionQuote, upper: OptionQuote) -> float:
     """Butterfly value at market bid (what a MM pays to buy it from you)."""
     return lower.bid + upper.bid - 2 * center.ask
+
+
+def fly_settlement_value(candidate: ButterflyCandidate, spot_price: float) -> float:
+    """Butterfly cash-settlement value from the underlying index close."""
+    def leg_value(strike: float) -> float:
+        if candidate.direction == "PUT":
+            return max(0.0, strike - spot_price)
+        return max(0.0, spot_price - strike)
+
+    value = (
+        leg_value(candidate.lower_strike)
+        - 2 * leg_value(candidate.center_strike)
+        + leg_value(candidate.upper_strike)
+    )
+    return max(0.0, round(value, 4))
 
 
 @dataclass
@@ -197,4 +211,3 @@ class PositionManager:
             peak_bid=round(self._peak_bid, 4) if self._peak_bid > 0 else None,
             bid_to_mark_ratio=bid_to_mark_ratio,
         )
-
