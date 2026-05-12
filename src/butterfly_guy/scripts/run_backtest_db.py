@@ -80,18 +80,21 @@ ASSET_DEFAULTS: dict[str, dict] = {
         spot_range=100,
         center_tolerance=15.0,
         max_cost={10: 1.00, 20: 2.00, 30: 3.00},
+        drawdowns=(0.60, 0.90, 0.75),
     ),
     "NDX": dict(
         wing_widths=[25, 50, 75],
         spot_range=250,
         center_tolerance=100.0,
         max_cost={25: 2.00, 50: 4.00, 75: 6.00},
+        drawdowns=(1.00, 0.95, 0.90),
     ),
     "XSP": dict(
         wing_widths=[1, 2, 3],
         spot_range=10,
         center_tolerance=1.5,
         max_cost={1: 0.10, 2: 0.20, 3: 0.30},
+        drawdowns=(0.60, 0.90, 0.75),
     ),
 }
 
@@ -211,13 +214,13 @@ def parse_args() -> argparse.Namespace:
                    help="Min reward/risk ratio(s). Default: 8.0.")
     p.add_argument("--morning-dd", type=_floatlist, default=None,
                    metavar="DD[,DD]",
-                   help="Morning drawdown threshold(s). Default: 0.60.")
+                   help="Morning drawdown threshold(s). Default: asset live config.")
     p.add_argument("--late-morning-dd", type=_floatlist, default=None,
                    metavar="DD[,DD]",
-                   help="Late-morning drawdown threshold(s). Default: 0.60.")
+                   help="Late-morning drawdown threshold(s). Default: asset live config.")
     p.add_argument("--afternoon-dd", type=_floatlist, default=None,
                    metavar="DD[,DD]",
-                   help="Afternoon drawdown threshold(s). Default: 0.40.")
+                   help="Afternoon drawdown threshold(s). Default: asset live config.")
     p.add_argument("--dd-schedule", type=_parse_dd_schedule, action="append", default=None,
                    metavar="START-END:DD[:LABEL],...",
                    help="Optional minutes-since-open drawdown schedule. Can be passed multiple "
@@ -279,12 +282,13 @@ def parse_args() -> argparse.Namespace:
     args.direction = [d if d.upper() != "AUTO" else "auto" for d in args.direction]
     if args.rr_min is None:
         args.rr_min = [8.0]
+    morning_dd, late_morning_dd, afternoon_dd = asset_cfg["drawdowns"]
     if args.morning_dd is None:
-        args.morning_dd = [0.60]
+        args.morning_dd = [morning_dd]
     if args.late_morning_dd is None:
-        args.late_morning_dd = [0.60]
+        args.late_morning_dd = [late_morning_dd]
     if args.afternoon_dd is None:
-        args.afternoon_dd = [0.40]
+        args.afternoon_dd = [afternoon_dd]
     if args.method is None:
         args.method = ["VIX"]
     if args.entry_time is None:
@@ -728,6 +732,12 @@ async def load_date_data(
     if not chains or not bars:
         return None
     prev_close = await get_prev_close(conn, date, underlying)
+    # The first stored 09:30 snapshot can carry a stale prior-close quote.
+    # Use the first post-open bar for historical direction/gap decisions.
+    direction_bar = next(
+        (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(9, 31)),
+        bars[0],
+    )
     entry_bar = next(
         (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(10, 0)),
         bars[0],
@@ -740,6 +750,8 @@ async def load_date_data(
         chains=chains,
         bars=bars,
         prev_close=prev_close,
+        direction_bar=direction_bar,
+        open_spot=direction_bar.open,
         entry_bar=entry_bar,
         entry_spot=entry_bar.close,
         vix=vix,
@@ -1234,19 +1246,19 @@ async def run_single(args: argparse.Namespace) -> None:
                 continue
 
             if direction_arg == "auto":
-                direction = "CALL" if d["entry_spot"] >= d["prev_close"] else "PUT"
+                direction = "CALL" if d["open_spot"] >= d["prev_close"] else "PUT"
             else:
                 direction = direction_arg
 
             if args.gap_filter is not None:
-                gap_pct = (d["entry_spot"] - d["prev_close"]) / d["prev_close"]
+                gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
                 if gap_pct < args.gap_filter:
                     print(f" SKIPPED (gap {gap_pct:.3%} < {args.gap_filter:.3%})")
                     continue
                 direction = "CALL"
 
             if args.strategy_f:
-                gap_pct = (d["entry_spot"] - d["prev_close"]) / d["prev_close"]
+                gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
                 regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
                 if gap_pct < 0.0025:
                     print(f" SKIPPED [F] gap {gap_pct:.3%} < 0.250%")
@@ -1265,7 +1277,11 @@ async def run_single(args: argparse.Namespace) -> None:
                     min_gap_pct=args.min_gap_pct,
                 )
                 regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
-                override, skip_reason = gap_regime_filter.apply(d["entry_spot"], d["prev_close"], regime)
+                override, skip_reason = gap_regime_filter.apply(
+                    d["open_spot"],
+                    d["prev_close"],
+                    regime,
+                )
                 if skip_reason:
                     print(f" SKIPPED (gap_regime: {skip_reason})")
                     continue
@@ -1497,20 +1513,20 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 entry_quotes = nearest_snapshot(d["chains"], entry_bar_combo.ts) or []
                 entry_spot = entry_bar_combo.close
                 resolved_direction = (
-                    ("CALL" if entry_spot >= d["prev_close"] else "PUT")
+                    ("CALL" if d["open_spot"] >= d["prev_close"] else "PUT")
                     if direction == "auto"
                     else direction
                 )
 
                 if args.gap_filter is not None:
-                    gap_pct = (entry_spot - d["prev_close"]) / d["prev_close"]
+                    gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
                     if gap_pct < args.gap_filter:
                         per_combo.append((None, None, None))
                         continue
                     resolved_direction = "CALL"
 
                 if args.strategy_f:
-                    gap_pct = (entry_spot - d["prev_close"]) / d["prev_close"]
+                    gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
                     regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
                     if (gap_pct < 0.0025
                             or regime != Regime.BULL
@@ -1525,7 +1541,11 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         min_gap_pct=args.min_gap_pct,
                     )
                     regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
-                    override, skip_reason = gap_regime_filter.apply(entry_spot, d["prev_close"], regime)
+                    override, skip_reason = gap_regime_filter.apply(
+                        d["open_spot"],
+                        d["prev_close"],
+                        regime,
+                    )
                     if skip_reason:
                         per_combo.append((None, None, None))
                         continue

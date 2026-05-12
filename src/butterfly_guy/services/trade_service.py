@@ -3,33 +3,81 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 
+from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import (
-    daily_pnl, daily_trade_count, trades_active, trades_total,
-    entry_vix, entry_expected_move, entry_center_strike, entry_wing_width,
-    entry_cost, entry_max_profit, entry_lower_be, entry_upper_be,
-    butterfly_candidates_found, butterfly_scans_total,
+    butterfly_candidates_found,
+    butterfly_scans_total,
+    daily_trade_count,
+    entry_center_strike,
+    entry_cost,
+    entry_expected_move,
+    entry_lower_be,
+    entry_max_profit,
+    entry_upper_be,
+    entry_vix,
+    entry_wing_width,
+    trades_active,
 )
-from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_expected_move
-from butterfly_guy.core.time_utils import get_0dte_expiration, now_eastern, time_in_window
+from butterfly_guy.core.time_utils import (
+    EASTERN,
+    MARKET_OPEN,
+    get_0dte_expiration,
+    now_eastern,
+    time_in_window,
+)
+from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
-from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS, SchwabClientWrapper
+from butterfly_guy.data.schwab_client import (
+    SCHWAB_CHAIN_SYMBOLS,
+    SCHWAB_SPOT_SYMBOLS,
+    SchwabClientWrapper,
+)
 from butterfly_guy.db.queries import CandidateQueries, ChainQueries, DecisionQueries, TradeQueries
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.risk.risk_engine import RiskEngine
-from butterfly_guy.backtest.data_loader import MinuteBar
-from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.services.notifier import DiscordNotifier
-from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, resolve_wing_widths_for_vix, vix_target_center
+from butterfly_guy.strategy.bias_filter import BiasScoreFilter
+from butterfly_guy.strategy.butterfly_builder import (
+    ButterflyBuilder,
+    resolve_wing_widths_for_vix,
+    vix_target_center,
+)
+from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_expected_move
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
-from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.strategy.direction_filter import DirectionFilter
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime
 
 log = get_logger(__name__)
+
+
+def _session_open_from_intraday_candles(
+    candles: list[dict],
+    session_date: dt.date,
+) -> float | None:
+    """Return the first regular-session open for the requested Eastern date."""
+    regular_session: list[tuple[dt.datetime, float]] = []
+    for candle in candles:
+        open_price = candle.get("open")
+        ts_ms = candle.get("datetime")
+        if open_price is None or ts_ms is None:
+            continue
+
+        ts = dt.datetime.fromtimestamp(ts_ms / 1000, tz=dt.timezone.utc)
+        ts_et = ts.astimezone(EASTERN)
+        if ts_et.date() != session_date or ts_et.time() < MARKET_OPEN:
+            continue
+
+        regular_session.append((ts, float(open_price)))
+
+    if not regular_session:
+        return None
+    regular_session.sort(key=lambda item: item[0])
+    return regular_session[0][1]
 
 
 class TradeService:
@@ -68,7 +116,7 @@ class TradeService:
         self.gap_regime_filter = gap_regime_filter
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
-        """Full entry flow: time → balance → risk → direction (once) → retry loop (re-scan + fill)."""
+        """Full entry flow from eligibility checks through entry fill."""
         # Time window check first — cheapest guard, avoids unnecessary API calls outside window
         if not time_in_window(
             self.config.entry.start_time,
@@ -106,7 +154,11 @@ class TradeService:
             buying_power=buying_power,
         )
         if not allowed:
-            await self.decision_queries.log_event("entry_blocked", {"reason": reason}, underlying=self.config.strategy.underlying)
+            await self.decision_queries.log_event(
+                "entry_blocked",
+                {"reason": reason},
+                underlying=self.config.strategy.underlying,
+            )
             log.info("entry_blocked", reason=reason)
             return None
 
@@ -138,24 +190,19 @@ class TradeService:
         except Exception:
             pass
 
-        # Opening price for gap direction — first snapshot on today's date.
-        # Using open vs prev_close captures the overnight gap; using live spot
-        # at entry time can give wrong direction when price retraces back through
-        # the previous close during the entry window.
-        open_price = spot_price
-        try:
-            row = await self.chain_queries.db.pool.fetchval(
-                """
-                SELECT price FROM spot_prices
-                WHERE underlying = $1 AND ts::date = CURRENT_DATE
-                ORDER BY ts ASC LIMIT 1
-                """,
-                self.config.strategy.underlying,
+        # Opening price for gap direction — first regular-session 1-min bar.
+        # Stored spot snapshots can be stale at 09:30, so do not guess if
+        # Schwab's intraday open is unavailable.
+        session_open = await self._session_open_price()
+        if session_open is None:
+            await self.decision_queries.log_event(
+                "entry_blocked",
+                {"reason": "session_open_unavailable"},
+                underlying=underlying,
             )
-            if row:
-                open_price = float(row)
-        except Exception:
-            pass
+            log.info("entry_blocked", reason="session_open_unavailable")
+            return None
+        open_price = session_open
 
         log.info(
             "direction_inputs",
@@ -173,7 +220,9 @@ class TradeService:
             )
             if skip_reason:
                 await self.decision_queries.log_event(
-                    "gap_regime_skip", {"reason": skip_reason, "open": open_price}, underlying=underlying
+                    "gap_regime_skip",
+                    {"reason": skip_reason, "open": open_price},
+                    underlying=underlying,
                 )
                 log.info("gap_regime_skip", reason=skip_reason)
                 return None
@@ -186,7 +235,11 @@ class TradeService:
             if self.config.entry.use_bias_filter:
                 direction = await self._bias_direction(previous_close, spot_price)
                 if direction is None:
-                    await self.decision_queries.log_event("bias_filter_no_signal", {"spot": spot_price}, underlying=underlying)
+                    await self.decision_queries.log_event(
+                        "bias_filter_no_signal",
+                        {"spot": spot_price},
+                        underlying=underlying,
+                    )
                     log.info("bias_filter_no_signal", spot=spot_price)
                     return None
             else:
@@ -230,15 +283,24 @@ class TradeService:
             # Select best candidate based on configured method
             best: ButterflyCandidate | None = None
             selection_method = self.config.entry.strike_selection_method
-            
+
             if selection_method == "VIX":
                 vix_buckets = self.config.strategy.vix_width_buckets
                 if vix_buckets:
                     if not vix_price:
-                        log.warning("vix_width_buckets configured but VIX unavailable — skipping entry")
+                        log.warning(
+                            "vix_width_buckets configured but VIX unavailable — skipping entry"
+                        )
                         return None
-                    effective_widths, sigmas = resolve_wing_widths_for_vix(vix_price, vix_buckets)
-                    log.info("vix_bucket_selected", vix=round(vix_price, 2), widths=effective_widths)
+                    effective_widths, sigmas = resolve_wing_widths_for_vix(
+                        vix_price,
+                        vix_buckets,
+                    )
+                    log.info(
+                        "vix_bucket_selected",
+                        vix=round(vix_price, 2),
+                        widths=effective_widths,
+                    )
                 else:
                     effective_widths = self.config.strategy.wing_widths
                     sigmas = tuple(None for _ in effective_widths)
@@ -247,7 +309,8 @@ class TradeService:
                     per_width_bests = []
                     for i, width in enumerate(effective_widths):
                         target_center = vix_target_center(
-                            vix=vix_price, spot=spot_price,
+                            vix=vix_price,
+                            spot=spot_price,
                             direction=direction,
                             wing_width=None if sigmas[i] is not None else width,
                             sigma_fraction=sigmas[i],
@@ -261,11 +324,19 @@ class TradeService:
                         if w_best:
                             per_width_bests.append(w_best)
                     if per_width_bests:
-                        best = min(per_width_bests,
-                                   key=lambda c: abs(c.reward_risk - self.config.strategy.rr_target))
-                        log.info("vix_center_selected", vix=round(vix_price, 2),
-                                 width=best.wing_width, center=best.center_strike,
-                                 rr=round(best.reward_risk, 2))
+                        best = min(
+                            per_width_bests,
+                            key=lambda c: abs(
+                                c.reward_risk - self.config.strategy.rr_target
+                            ),
+                        )
+                        log.info(
+                            "vix_center_selected",
+                            vix=round(vix_price, 2),
+                            width=best.wing_width,
+                            center=best.center_strike,
+                            rr=round(best.reward_risk, 2),
+                        )
             elif selection_method == "TARGET_COST":
                 best = self.selector.select_best_by_target_cost(candidates)
 
@@ -301,13 +372,20 @@ class TradeService:
                 ]
                 if best:
                     for row in candidate_rows:
-                        if row["center_strike"] == best.center_strike and row["wing_width"] == best.wing_width:
+                        if (
+                            row["center_strike"] == best.center_strike
+                            and row["wing_width"] == best.wing_width
+                        ):
                             row["selected"] = True
                 if candidate_rows:
                     await self.candidate_queries.bulk_insert(candidate_rows)
 
             if not best:
-                await self.decision_queries.log_event("no_candidates", {"direction": direction, "spot": spot_price, "step": step}, underlying=underlying)
+                await self.decision_queries.log_event(
+                    "no_candidates",
+                    {"direction": direction, "spot": spot_price, "step": step},
+                    underlying=underlying,
+                )
                 log.info("no_candidates", step=step, direction=direction)
                 break
 
@@ -324,8 +402,14 @@ class TradeService:
                 "reward_risk": best.reward_risk,
             }
             entry_attempts.append(attempt_record)
-            log.debug("entry_attempt", step=step, center=best.center_strike,
-                      width=best.wing_width, ask=best.ask, limit=limit_price)
+            log.debug(
+                "entry_attempt",
+                step=step,
+                center=best.center_strike,
+                width=best.wing_width,
+                ask=best.ask,
+                limit=limit_price,
+            )
 
             fill = await self.order_manager.execute_single_attempt(best, limit_price)
             if fill:
@@ -365,7 +449,9 @@ class TradeService:
                 entry_upper_be.labels(underlying=underlying).set(best.upper_be)
                 if vix_price:
                     entry_vix.labels(underlying=underlying).set(vix_price)
-                    entry_expected_move.labels(underlying=underlying).set(_vix_expected_move(vix_price, spot_price))
+                    entry_expected_move.labels(underlying=underlying).set(
+                        _vix_expected_move(vix_price, spot_price)
+                    )
 
                 record = TradeRecord(
                     trade_id=trade_id,
@@ -382,25 +468,33 @@ class TradeService:
                     upper_symbol=best.upper_symbol,
                 )
 
-                await self.decision_queries.log_event("trade_entered", {
-                    "trade_id": trade_id,
-                    "center": best.center_strike,
-                    "width": best.wing_width,
-                    "cost": fill["fill_price"],
-                    "direction": direction,
-                    "entry_step": step,
-                }, underlying=underlying)
-                await self.decision_queries.log_event("entry_ladder_trace", {
-                    "trade_id": trade_id,
-                    "selection_method": selection_method,
-                    "direction": direction,
-                    "entry_spot": spot_price,
-                    "prev_close": previous_close,
-                    "vix": vix_price,
-                    "selected_center": best.center_strike,
-                    "selected_width": best.wing_width,
-                    "entry_attempts": entry_attempts,
-                }, underlying=underlying)
+                await self.decision_queries.log_event(
+                    "trade_entered",
+                    {
+                        "trade_id": trade_id,
+                        "center": best.center_strike,
+                        "width": best.wing_width,
+                        "cost": fill["fill_price"],
+                        "direction": direction,
+                        "entry_step": step,
+                    },
+                    underlying=underlying,
+                )
+                await self.decision_queries.log_event(
+                    "entry_ladder_trace",
+                    {
+                        "trade_id": trade_id,
+                        "selection_method": selection_method,
+                        "direction": direction,
+                        "entry_spot": spot_price,
+                        "prev_close": previous_close,
+                        "vix": vix_price,
+                        "selected_center": best.center_strike,
+                        "selected_width": best.wing_width,
+                        "entry_attempts": entry_attempts,
+                    },
+                    underlying=underlying,
+                )
 
                 if self.notifier:
                     try:
@@ -420,27 +514,49 @@ class TradeService:
                     except Exception as e:
                         log.warning("notify_entry_failed", error=str(e))
 
-                log.info("trade_entered", trade_id=trade_id, center=best.center_strike, step=step)
+                log.info(
+                    "trade_entered",
+                    trade_id=trade_id,
+                    center=best.center_strike,
+                    step=step,
+                )
                 return record, best
 
-            await self.decision_queries.log_event("entry_step_unfilled", {
-                "step": step, "limit": limit_price, "mark": best.cost, "ask": best.ask,
-                "center": best.center_strike, "width": best.wing_width,
-            }, underlying=underlying)
-            log.debug("entry_step_unfilled", step=step, limit=limit_price, ask=best.ask, center=best.center_strike)
+            await self.decision_queries.log_event(
+                "entry_step_unfilled",
+                {
+                    "step": step,
+                    "limit": limit_price,
+                    "mark": best.cost,
+                    "ask": best.ask,
+                    "center": best.center_strike,
+                    "width": best.wing_width,
+                },
+                underlying=underlying,
+            )
+            log.debug(
+                "entry_step_unfilled",
+                step=step,
+                limit=limit_price,
+                ask=best.ask,
+                center=best.center_strike,
+            )
 
-        await self.decision_queries.log_event("entry_exhausted", {
-            "direction": direction,
-            "entry_attempts": entry_attempts,
-        }, underlying=underlying)
+        await self.decision_queries.log_event(
+            "entry_exhausted",
+            {
+                "direction": direction,
+                "entry_attempts": entry_attempts,
+            },
+            underlying=underlying,
+        )
         log.warning("entry_exhausted", direction=direction)
         return None
 
     async def _bias_direction(
         self, prev_close: float, entry_close: float
-    ) -> "Literal['CALL', 'PUT'] | None":
+    ) -> Literal["CALL", "PUT"] | None:
         """Fetch today's 1-min bars from Schwab and run BiasScoreFilter."""
-        from typing import Literal
 
         try:
             underlying = self.config.strategy.underlying
@@ -464,6 +580,17 @@ class TradeService:
         except Exception as e:
             log.warning("bias_filter_fallback", error=str(e))
             return self.direction_filter.get_direction(entry_close, prev_close)
+
+    async def _session_open_price(self) -> float | None:
+        """Fetch today's first regular-session open from Schwab intraday bars."""
+        try:
+            underlying = self.config.strategy.underlying
+            spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+            candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
+            return _session_open_from_intraday_candles(candles, now_eastern().date())
+        except Exception as e:
+            log.warning("session_open_fetch_failed", error=str(e))
+            return None
 
     def _parse_chain_to_quotes(
         self, chain_data: dict, expiration: dt.date
