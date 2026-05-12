@@ -16,12 +16,12 @@
     "hash": "abd221253c1a34a7994d76c0102dd4bb"
   },
   "/opt/butterflyguy/tests/test_backtest_drawdown_schedule.py": {
-    "mtime": 1778034805.4206529,
-    "hash": "1b3d509cc69975ea460d2969d153a381"
+    "mtime": 1778618512.5878658,
+    "hash": "72fd4296a4d7a6b20aca491a3ac5478f"
   },
   "/opt/butterflyguy/tests/test_config.py": {
-    "mtime": 1777928460.8243985,
-    "hash": "ee337863e6d10c8bab8c51f02f9b6866"
+    "mtime": 1778618501.5198116,
+    "hash": "e1e66f25e51603970b9253fe8a974fa9"
   },
   "/opt/butterflyguy/tests/test_butterfly_builder.py": {
     "mtime": 1773186977.9160578,
@@ -72,8 +72,8 @@
     "hash": "c0abab433f59114c3366366d60f889b6"
   },
   "/opt/butterflyguy/tests/test_state_machine.py": {
-    "mtime": 1778172634.2078457,
-    "hash": "61c8fd38b05dc0e83d7379e996b859e0"
+    "mtime": 1778618511.8838623,
+    "hash": "82ab6d1346a46d79f22c12def1c9e940"
   },
   "/opt/butterflyguy/tests/test_gap_regime_filter.py": {
     "mtime": 1777222299.3805828,
@@ -172,8 +172,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/src/butterfly_guy/core/config.py": {
-    "mtime": 1778172555.4844935,
-    "hash": "fb1b5aebb57e43c0a8e6ef343ea94385"
+    "mtime": 1778618399.4593108,
+    "hash": "dfbb3d2a1a103152d141ae46b5f8db62"
   },
   "/opt/butterflyguy/src/butterfly_guy/core/time_utils.py": {
     "mtime": 1776718898.2168171,
@@ -196,8 +196,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/src/butterfly_guy/backtest/simulation_engine.py": {
-    "mtime": 1778034830.1677718,
-    "hash": "4807f308f96ed15f987b7a17e8027f81"
+    "mtime": 1778618551.2010546,
+    "hash": "847c9e9541080bd445a65643a12c6de5"
   },
   "/opt/butterflyguy/src/butterfly_guy/backtest/parameter_sweeper.py": {
     "mtime": 1776718898.2168171,
@@ -236,8 +236,8 @@
     "hash": "0d564ed06d67ce93f64f85f4bcebf8d3"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_backtest_db.py": {
-    "mtime": 1778617393.1841183,
-    "hash": "c9c67ceb7c1e7c73f7aaf20c3310a0c1"
+    "mtime": 1778618554.2520695,
+    "hash": "d60c9c6d9506128d238018954a4ce5ac"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/report_trade_ladders.py": {
     "mtime": 1778088865.3089764,
@@ -343,6 +343,10 @@
     "mtime": 1773186977.914058,
     "hash": "f8833a57a5e7a5546015ced0000f3e4a"
   },
+  "/opt/butterflyguy/src/butterfly_guy/position/profit_policy.py": {
+    "mtime": 1778618400.2243145,
+    "hash": "24773a9cfa56eda90677e30e9372bc46"
+  },
   "/opt/butterflyguy/src/butterfly_guy/position/__init__.py": {
     "mtime": 1773186977.914058,
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
@@ -352,8 +356,8 @@
     "hash": "6d63361b9af8fa6d0125c4aa3712b202"
   },
   "/opt/butterflyguy/src/butterfly_guy/position/state_machine.py": {
-    "mtime": 1778172634.4628468,
-    "hash": "9fb08632ab6a712c38506bce6b864096"
+    "mtime": 1778618554.2460694,
+    "hash": "4fc84a1b83da0d6824d34b4f78e1156d"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/butterfly_builder.py": {
     "mtime": 1777347447.5038943,
@@ -388,8 +392,8 @@
     "hash": "20f3a99e2e72cb99b1a80102f748c9d9"
   },
   "/opt/butterflyguy/README.md": {
-    "mtime": 1778086633.5879924,
-    "hash": "942a6f57046c670916ff6673a56f3e67"
+    "mtime": 1778618751.7750323,
+    "hash": "20f9332b55ba423895b275a2d837eb78"
   },
   "/opt/butterflyguy/AGENTS.md": {
     "mtime": 1778185901.821144,
@@ -444,16 +448,16 @@
     "hash": "ad8b83396aa1edb9a96814c6cba93212"
   },
   "/opt/butterflyguy/configs/config_xsp.yaml": {
-    "mtime": 1778172618.484775,
-    "hash": "98e6b0604468789d45b8cb2e581ccb08"
+    "mtime": 1778618404.3553348,
+    "hash": "cc87fe8f03f4fa598866ad9d6cf39a53"
   },
   "/opt/butterflyguy/configs/config.yaml": {
-    "mtime": 1778172618.252774,
-    "hash": "2059ca0dc1d2c63848184ba636bb24fc"
+    "mtime": 1778618402.3133247,
+    "hash": "fd37025988e121669baca4b21eb95aac"
   },
   "/opt/butterflyguy/configs/config_ndx.yaml": {
-    "mtime": 1778172618.7347763,
-    "hash": "0d8f786ea5622b776b8540afc91cacf2"
+    "mtime": 1778618403.4883306,
+    "hash": "ea7fdc850a2318471b3326d94386c707"
   },
   "/opt/butterflyguy/data/ToS_examples/20wide_fly_chain_at_entrywinow.png": {
     "mtime": 1775064604.7338266,

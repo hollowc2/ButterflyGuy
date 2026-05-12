@@ -70,3 +70,10 @@ def test_profit_management_regimes():
     )
     assert settings.regimes["morning"].drawdown_threshold == 0.50
     assert settings.regimes["afternoon"].drawdown_threshold == 0.30
+
+
+def test_profit_management_strategy_defaults_to_peak_value_trailer():
+    config = AppConfig()
+
+    assert config.profit_management.strategy == "peakvaluetrailer"
+    assert config.profit_management.profitprotector.profit_lock_floor_profit == 0.75

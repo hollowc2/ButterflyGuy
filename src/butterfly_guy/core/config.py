@@ -77,12 +77,23 @@ class QuoteQualitySettings(BaseModel):
     max_spread_width_ratio: float | None = None
 
 
+class ProfitProtectorSettings(BaseModel):
+    breakeven_activation_profit: float = 1.00
+    breakeven_floor_profit: float = 0.00
+    profit_lock_activation_profit: float = 2.00
+    profit_lock_floor_profit: float = 0.75
+    large_peak_profit_ratio: float = 2.00
+    large_peak_drawdown_threshold: float = 0.50
+
+
 class ProfitManagementSettings(BaseModel):
+    strategy: Literal["peakvaluetrailer", "profitprotector"] = "peakvaluetrailer"
     regimes: dict[str, TimeRegime] = Field(default_factory=dict)
     exit_before_close_minutes: int = 5
     max_loss_from_cost: float = 0.50
     use_absolute_loss_stop: bool = False
     quote_quality: QuoteQualitySettings = Field(default_factory=QuoteQualitySettings)
+    profitprotector: ProfitProtectorSettings = Field(default_factory=ProfitProtectorSettings)
 
 
 class RiskSettings(BaseModel):

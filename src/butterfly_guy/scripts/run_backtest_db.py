@@ -28,7 +28,6 @@ import csv
 import datetime as dt
 import itertools
 import math
-import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -43,8 +42,14 @@ from butterfly_guy.backtest.chain_cache import ChainDay
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.backtest.metrics import (
     max_consecutive_losses as _max_consecutive_losses,
+)
+from butterfly_guy.backtest.metrics import (
     max_drawdown as _max_drawdown,
+)
+from butterfly_guy.backtest.metrics import (
     profit_factor as _profit_factor,
+)
+from butterfly_guy.backtest.metrics import (
     sharpe as _sharpe,
 )
 from butterfly_guy.backtest.simulation_engine import (
@@ -56,9 +61,7 @@ from butterfly_guy.core.config import StrategySettings, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
-    VIX_SIGMA_BY_WIDTH,
     ButterflyBuilder,
-    vix_expected_move,
     vix_target_center,
 )
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
@@ -227,6 +230,10 @@ def parse_args() -> argparse.Namespace:
                         "times in --sweep mode to compare named policies. Use 'default' to include "
                         "the legacy morning/late-morning/afternoon thresholds. Example: "
                         "0-150:0.60:early,150-300:0.90:mid,300-330:0.75:noon,330-390:0.50:late")
+    p.add_argument("--profit-strategy", type=_strlist, default=None,
+                   metavar="peakvaluetrailer|profitprotector[,..]",
+                   help="Profit-management strategy for live/backtest parity. "
+                        "Use comma-separated values with --sweep to compare policies.")
     p.add_argument("--method", type=_strlist, default=None,
                    metavar="M[,M]",
                    help="Selection method(s): VIX, TARGET_COST, BEST_RR. Default: VIX.")
@@ -295,6 +302,18 @@ def parse_args() -> argparse.Namespace:
         args.entry_time = [dt.time(7, 0)]
     if args.dd_schedule is None:
         args.dd_schedule = [None]
+    if args.profit_strategy is None:
+        args.profit_strategy = ["peakvaluetrailer"]
+    valid_profit_strategies = {"peakvaluetrailer", "profitprotector"}
+    args.profit_strategy = [s.lower() for s in args.profit_strategy]
+    invalid_profit_strategies = [
+        s for s in args.profit_strategy if s not in valid_profit_strategies
+    ]
+    if invalid_profit_strategies:
+        p.error(
+            "--profit-strategy must be one of: "
+            + ", ".join(sorted(valid_profit_strategies))
+        )
 
     return args
 
@@ -783,6 +802,7 @@ def _summarize_combo(
             "exit_morning_dd": 0, "exit_late_morning_dd": 0,
             "exit_afternoon_dd": 0, "exit_eod": 0, "exit_expired": 0,
             "exit_drawdown": 0, "exit_abs_stop": 0,
+            "exit_profit_floor": 0, "exit_breakeven_floor": 0,
         }
     return {
         **base,
@@ -800,6 +820,8 @@ def _summarize_combo(
         "exit_eod": exit_reasons.count("end_of_day"),
         "exit_expired": exit_reasons.count("expired"),
         "exit_abs_stop": exit_reasons.count("absolute_loss_stop"),
+        "exit_profit_floor": exit_reasons.count("profitprotector_profit_floor"),
+        "exit_breakeven_floor": exit_reasons.count("profitprotector_breakeven_floor"),
     }
 
 
@@ -1208,6 +1230,7 @@ async def run_single(args: argparse.Namespace) -> None:
     late_morning_dd = args.late_morning_dd[0]
     afternoon_dd = args.afternoon_dd[0]
     dd_schedule = args.dd_schedule[0]
+    profit_strategy = args.profit_strategy[0]
     method = args.method[0]
     center_tolerance = asset_cfg["center_tolerance"]
     spot_range = asset_cfg["spot_range"]
@@ -1216,6 +1239,7 @@ async def run_single(args: argparse.Namespace) -> None:
     print(f"  DB BACKTEST  |  {args.asset}  {direction_arg} butterfly")
     print(f"  Widths: {wing_widths}  rr_min: {rr_min}  DD: {morning_dd}/{late_morning_dd}/{afternoon_dd}")
     print(f"  DD schedule: {_dd_schedule_label(dd_schedule)}")
+    print(f"  Profit strategy: {profit_strategy}")
     print(f"  Method: {method}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  "
           f"slippage: {args.slippage}  vix_max: {args.vix_max or 'none'}")
     print(f"{'='*72}\n")
@@ -1329,6 +1353,7 @@ async def run_single(args: argparse.Namespace) -> None:
                 max_cost_per_width=asset_cfg["max_cost"],
                 use_absolute_loss_stop=args.use_abs_stop,
                 drawdown_schedule=dd_schedule,
+                profit_management_strategy=profit_strategy,
             )
 
             restore = _patch_chain_cache(full_chains, date)
@@ -1440,6 +1465,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
         args.late_morning_dd,
         args.afternoon_dd,
         args.dd_schedule,
+        args.profit_strategy,
         args.method,
         args.entry_time,
     ))
@@ -1457,6 +1483,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
         f"slippage: {args.slippage}"
     )
     print(f"  dd_schedules: {[_dd_schedule_label(s) for s in args.dd_schedule]}")
+    print(f"  profit_strategies: {args.profit_strategy}")
     print(f"{'='*72}\n")
 
     conn = await asyncpg.connect(resolve_db_dsn())
@@ -1499,6 +1526,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 late_morning_dd,
                 afternoon_dd,
                 dd_schedule,
+                profit_strategy,
                 method,
                 entry_pst,
             ) in param_grid:
@@ -1584,6 +1612,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         entry_start=entry_et,
                         entry_end=entry_et_end,
                         drawdown_schedule=dd_schedule,
+                        profit_management_strategy=profit_strategy,
                     )
                 else:
                     sim_params = None
@@ -1625,6 +1654,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
         late_morning_dd,
         afternoon_dd,
         dd_schedule,
+        profit_strategy,
         method,
         entry_pst,
     ) in enumerate(param_grid, 1):
@@ -1638,6 +1668,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
             late_morning_dd=late_morning_dd,
             afternoon_dd=afternoon_dd,
             dd_schedule=dd_schedule_label,
+            profit_strategy=profit_strategy,
             method=method,
             entry_time_pst=entry_pst_str,
         )
@@ -1648,6 +1679,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
             print(f"  [{i:>{len(str(total_combos))}}/{total_combos}]  "
                   f"{wing}W {direction} entry={entry_pst_str}PST "
                   f"method={method} rr={rr_min} "
+                  f"profit={profit_strategy} "
                   f"dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
                   f"schedule={dd_schedule_label}  "
                   f"→ trades={row['trade_count']}  sharpe={row['sharpe']:.3f}  "
@@ -1664,7 +1696,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
     print(f"\n{'='*127}")
     print(f"  TOP {top_n} COMBOS BY SHARPE  (of {total_combos})")
     print(f"{'='*127}")
-    print(f"  {'W':>3}  {'Dir':>4}  {'Method':<11}  {'Entry':>5}  {'RR':>5}  {'Morn':>5}  {'LtMrn':>6}  {'Aftn':>5}  "
+    print(f"  {'W':>3}  {'Dir':>4}  {'Method':<11}  {'Profit':<16}  {'Entry':>5}  {'RR':>5}  {'Morn':>5}  {'LtMrn':>6}  {'Aftn':>5}  "
           f"{'Trd':>4}  {'Win%':>5}  {'TotPnL':>8}  {'AvgPnL':>8}  "
           f"{'Sharpe':>7}  {'PF':>5}  {'MaxDD':>7}  {'MaxCL':>6}")
     print("  " + "-" * 125)
@@ -1672,6 +1704,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
     for row in sweep_results[:top_n]:
         print(f"  {row['wing_width']:>3}  {row['direction']:>4}  "
               f"{row['method']:<11}  "
+              f"{row['profit_strategy']:<16}  "
               f"{row['entry_time_pst']:>5}  "
               f"{row['rr_min']:>5.1f}  {row['morning_dd']:>5.2f}  "
               f"{row['late_morning_dd']:>6.2f}  {row['afternoon_dd']:>5.2f}  "
@@ -1691,13 +1724,14 @@ async def run_sweep(args: argparse.Namespace) -> None:
     csv_path = args.csv or results_dir / f"sweep_{args.asset}_{start_str}_{end_str}_{ts_str}.csv"
 
     fieldnames = [
-        "wing_width", "direction", "method", "entry_time_pst", "rr_min",
+        "wing_width", "direction", "method", "profit_strategy", "entry_time_pst", "rr_min",
         "morning_dd", "late_morning_dd", "afternoon_dd",
         "dd_schedule",
         "trade_count", "win_rate", "total_pnl", "avg_pnl",
         "sharpe", "max_drawdown", "profit_factor", "max_consec_losses",
         "exit_morning_dd", "exit_late_morning_dd", "exit_afternoon_dd",
         "exit_drawdown", "exit_eod", "exit_expired", "exit_abs_stop",
+        "exit_profit_floor", "exit_breakeven_floor",
     ]
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)

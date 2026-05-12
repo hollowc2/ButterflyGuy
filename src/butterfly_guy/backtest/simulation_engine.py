@@ -9,9 +9,14 @@ from zoneinfo import ZoneInfo
 
 from butterfly_guy.backtest.chain_cache import load_chain_day, nearest_snapshot
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
-from butterfly_guy.core.config import StrategySettings
+from butterfly_guy.core.config import ProfitProtectorSettings, StrategySettings, TimeRegime
 from butterfly_guy.core.time_utils import get_time_regime
 from butterfly_guy.data.schemas import ButterflyCandidate, fly_mark_value
+from butterfly_guy.position.profit_policy import (
+    ProfitManagementStrategy,
+    effective_drawdown_threshold,
+    profitprotector_floor_decision,
+)
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder, vix_target_center
@@ -58,6 +63,8 @@ class SimulationParams:
     max_loss_from_cost: float = 0.50  # exit if position loses this fraction of cost (no profit required)
     use_absolute_loss_stop: bool = True  # set False to disable the absolute loss stop entirely
     drawdown_schedule: tuple[DrawdownWindow, ...] | None = None
+    profit_management_strategy: ProfitManagementStrategy = "peakvaluetrailer"
+    profitprotector: ProfitProtectorSettings = field(default_factory=ProfitProtectorSettings)
 
 
 @dataclass
@@ -126,6 +133,43 @@ class SimulationEngine:
             "late_morning": params.late_morning_drawdown,
             "afternoon": params.afternoon_drawdown,
         }[regime], regime, regime
+
+    @staticmethod
+    def _profit_exit_reason(
+        params: SimulationParams,
+        *,
+        entry_price: float,
+        current_value: float,
+        peak_value: float,
+        drawdown: float,
+        drawdown_threshold: float,
+        drawdown_label: str,
+    ) -> str | None:
+        if params.profit_management_strategy == "profitprotector":
+            floor_decision = profitprotector_floor_decision(
+                entry_price=entry_price,
+                current_value=current_value,
+                peak_value=peak_value,
+                settings=params.profitprotector,
+            )
+            if floor_decision is not None:
+                return floor_decision.reason
+
+        regime_config = TimeRegime(
+            start_minutes_after_open=0,
+            end_minutes_after_open=0,
+            drawdown_threshold=drawdown_threshold,
+        )
+        threshold = effective_drawdown_threshold(
+            strategy=params.profit_management_strategy,
+            entry_price=entry_price,
+            peak_value=peak_value,
+            regime_config=regime_config,
+            protector_settings=params.profitprotector,
+        )
+        if drawdown >= threshold:
+            return f"drawdown_{drawdown_label}"
+        return None
 
     def simulate_day(self, day: DayData, params: SimulationParams) -> DayResult:
         """Simulate one trading day."""
@@ -224,7 +268,6 @@ class SimulationEngine:
 
         # Monitor position until exit
         peak_value = result.entry_price
-        minutes_since_open = 0.0
 
         for bar in day.bars:
             bar_et = bar.ts.astimezone(EASTERN)
@@ -295,10 +338,19 @@ class SimulationEngine:
             skip_exit = params.hold_to_expiry or (params.skip_morning_exit and regime == "morning")
             if not skip_exit and peak_value > result.entry_price and peak_value > 0:
                 drawdown = (peak_value - current_value) / peak_value
-                if drawdown >= drawdown_threshold:
+                exit_reason = self._profit_exit_reason(
+                    params,
+                    entry_price=result.entry_price,
+                    current_value=current_value,
+                    peak_value=peak_value,
+                    drawdown=drawdown,
+                    drawdown_threshold=drawdown_threshold,
+                    drawdown_label=drawdown_label,
+                )
+                if exit_reason:
                     result.exit_time = bar.ts
                     result.exit_price = max(0.05, current_value - params.slippage)
-                    result.exit_reason = f"drawdown_{drawdown_label}"
+                    result.exit_reason = exit_reason
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
                     return result
@@ -431,10 +483,19 @@ class SimulationEngine:
             skip_exit = params.hold_to_expiry or (params.skip_morning_exit and regime == "morning")
             if not skip_exit and peak_value > result.entry_price and peak_value > 0:
                 drawdown = (peak_value - current_value) / peak_value
-                if drawdown >= drawdown_threshold:
+                exit_reason = self._profit_exit_reason(
+                    params,
+                    entry_price=result.entry_price,
+                    current_value=current_value,
+                    peak_value=peak_value,
+                    drawdown=drawdown,
+                    drawdown_threshold=drawdown_threshold,
+                    drawdown_label=drawdown_label,
+                )
+                if exit_reason:
                     result.exit_time = bar.ts
                     result.exit_price = max(0.05, current_value - params.slippage)
-                    result.exit_reason = f"drawdown_{drawdown_label}"
+                    result.exit_reason = exit_reason
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
                     return result

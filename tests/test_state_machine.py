@@ -125,6 +125,87 @@ def test_exit_on_morning_drawdown():
     assert "morning" in signal.reason
 
 
+def test_peakvaluetrailer_allows_large_peak_to_retrace_to_loss():
+    settings = make_settings()
+    settings.regimes["afternoon"].drawdown_threshold = 0.75
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(make_pos(entry=2.8, current=7.51, peak=7.51, pnl=4.71, drawdown=0.0))
+
+    signal = sm.evaluate(
+        make_pos(
+            entry=2.8,
+            current=2.78,
+            peak=7.51,
+            pnl=-0.02,
+            drawdown=(7.51 - 2.78) / 7.51,
+            regime="afternoon",
+            mins_since_open=300.0,
+        )
+    )
+
+    assert signal is None
+
+
+def test_profitprotector_exits_at_profit_floor():
+    settings = make_settings()
+    settings.strategy = "profitprotector"
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(make_pos(entry=2.8, current=7.51, peak=7.51, pnl=4.71, drawdown=0.0))
+
+    signal = sm.evaluate(
+        make_pos(
+            entry=2.8,
+            current=3.50,
+            peak=7.51,
+            pnl=0.70,
+            drawdown=(7.51 - 3.50) / 7.51,
+            regime="afternoon",
+            mins_since_open=300.0,
+        )
+    )
+
+    assert signal is not None
+    assert signal.reason == "profitprotector_profit_floor"
+
+
+def test_profitprotector_tightens_large_peak_drawdown():
+    settings = make_settings()
+    settings.strategy = "profitprotector"
+    settings.regimes["afternoon"].drawdown_threshold = 0.75
+    settings.profitprotector.profit_lock_activation_profit = 10.0
+    settings.profitprotector.breakeven_activation_profit = 10.0
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(make_pos(entry=2.8, current=6.0, peak=6.0, pnl=3.2, drawdown=0.0))
+
+    signal = sm.evaluate(
+        make_pos(
+            entry=2.8,
+            current=3.7,
+            peak=6.0,
+            pnl=0.9,
+            drawdown=(6.0 - 3.7) / 6.0,
+            regime="afternoon",
+            mins_since_open=300.0,
+        )
+    )
+    assert signal is None
+
+    signal = sm.evaluate(
+        make_pos(
+            entry=2.8,
+            current=2.9,
+            peak=6.0,
+            pnl=0.1,
+            drawdown=(6.0 - 2.9) / 6.0,
+            regime="afternoon",
+            mins_since_open=300.0,
+        )
+    )
+
+    assert signal is not None
+    assert signal.reason == "drawdown_afternoon"
+
+
 def test_default_drawdown_confirmation_is_immediate():
     """Default confirmation_polls=1 preserves existing behavior."""
     sm = ProfitStateMachine(make_settings())

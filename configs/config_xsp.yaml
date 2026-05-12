@@ -25,6 +25,14 @@ execution:
   paper_trading: true
   paper_fill_buffer: 0.00
 profit_management:
+  strategy: "peakvaluetrailer"
+  profitprotector:
+    breakeven_activation_profit: 1.00
+    breakeven_floor_profit: 0.00
+    profit_lock_activation_profit: 2.00
+    profit_lock_floor_profit: 0.75
+    large_peak_profit_ratio: 2.00
+    large_peak_drawdown_threshold: 0.50
   regimes:
     morning:
       start_minutes_after_open: 0

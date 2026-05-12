@@ -8,6 +8,10 @@ from enum import Enum, auto
 from butterfly_guy.core.config import ProfitManagementSettings
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.position.position_manager import PositionState
+from butterfly_guy.position.profit_policy import (
+    effective_drawdown_threshold,
+    profitprotector_floor_decision,
+)
 
 log = get_logger(__name__)
 
@@ -83,12 +87,39 @@ class ProfitStateMachine:
         if not regime_config:
             return None
 
-        threshold = regime_config.drawdown_threshold
+        threshold = effective_drawdown_threshold(
+            strategy=self.settings.strategy,
+            entry_price=pos.entry_price,
+            peak_value=pos.peak_value,
+            regime_config=regime_config,
+            protector_settings=self.settings.profitprotector,
+        )
         confirmation_polls = max(1, regime_config.confirmation_polls)
         min_peak_value = pos.entry_price * regime_config.min_peak_profit_ratio
 
         # Only exit on drawdown if position has ever been above entry
         if self._ever_in_profit and pos.peak_value >= min_peak_value:
+            if self.settings.strategy == "profitprotector":
+                floor_decision = profitprotector_floor_decision(
+                    entry_price=pos.entry_price,
+                    current_value=pos.current_value,
+                    peak_value=pos.peak_value,
+                    settings=self.settings.profitprotector,
+                )
+                if floor_decision is not None:
+                    log.info(
+                        "profitprotector_floor_triggered",
+                        reason=floor_decision.reason,
+                        peak=pos.peak_value,
+                        current=pos.current_value,
+                        entry=pos.entry_price,
+                    )
+                    return ExitSignal(
+                        reason=floor_decision.reason,
+                        target_credit=pos.current_value,
+                        urgency=floor_decision.urgency,
+                    )
+
             if pos.drawdown_from_peak >= threshold:
                 reason = f"drawdown_{pos.time_regime}"
                 if not self._quote_quality_ok(pos):

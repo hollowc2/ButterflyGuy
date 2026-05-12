@@ -152,6 +152,10 @@ uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31
 
 # Sweep all available days across all parameter combinations
 uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
+
+# Compare profit-management policies over the same parameter set
+uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep \
+  --profit-strategy peakvaluetrailer,profitprotector
 ```
 
 Sweep mode runs the `ParameterSweeper`, which tries every combination of wing widths, drawdown thresholds, and other strategy parameters, then ranks results by Sharpe ratio so you can compare configurations objectively.
