@@ -174,13 +174,9 @@ From the host, the equivalent backtest command is:
 uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-05-05 2026-05-05 --asset SPX
 ```
 
-To rebuild and restart the app containers after code changes, source `.env` first so
-`docker compose` can resolve `DATABASE_PASSWORD`, then run:
+To rebuild and restart the app containers after code changes, run:
 
 ```bash
-set -a
-. ./.env
-set +a
 docker compose -f infra/docker-compose.yml build app_spx app_ndx app_xsp
 docker compose -f infra/docker-compose.yml up -d app_spx app_ndx app_xsp
 ```

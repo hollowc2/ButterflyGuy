@@ -19,7 +19,6 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
-      DATABASE__PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
     read_only: true
     tmpfs:
       - /tmp
@@ -51,7 +50,6 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
-      DATABASE__PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
     read_only: true
     tmpfs:
       - /tmp
@@ -83,7 +81,6 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
-      DATABASE__PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in .env}
     read_only: true
     tmpfs:
       - /tmp
