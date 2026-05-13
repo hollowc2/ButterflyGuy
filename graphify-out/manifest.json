@@ -396,8 +396,8 @@
     "hash": "20f3a99e2e72cb99b1a80102f748c9d9"
   },
   "/opt/butterflyguy/README.md": {
-    "mtime": 1778700007.4213498,
-    "hash": "c09e38e2414f2edca532bcdf3d61db3f"
+    "mtime": 1778704237.1394656,
+    "hash": "05b6988c146a0c8e4c62a1d6422fa0ef"
   },
   "/opt/butterflyguy/AGENTS.md": {
     "mtime": 1778185901.821144,
@@ -420,8 +420,8 @@
     "hash": "e778956441470a41af7ba678d8891ed7"
   },
   "/opt/butterflyguy/infra/docker-compose.yml": {
-    "mtime": 1778020141.7063394,
-    "hash": "7f9f0c7d5d2ec905ea30ffdaad90bd7b"
+    "mtime": 1778704229.7354288,
+    "hash": "d55df3e7293708cddadd86cbfaaec051"
   },
   "/opt/butterflyguy/infra/grafana/provisioning/datasources/datasources.yml": {
     "mtime": 1777928795.0788002,

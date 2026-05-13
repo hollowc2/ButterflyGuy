@@ -1,16 +1,16 @@
 # Graph Report - butterflyguy  (2026-05-13)
 
 ## Corpus Check
-- 108 files · ~281,819 words
+- 108 files · ~281,788 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1488 nodes · 2546 edges · 108 communities (93 shown, 15 thin omitted)
+- 1488 nodes · 2546 edges · 109 communities (94 shown, 15 thin omitted)
 - Extraction: 71% EXTRACTED · 29% INFERRED · 0% AMBIGUOUS · INFERRED: 726 edges (avg confidence: 0.7)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0ec1e34d`
+- Built from commit: `c78eb8ad`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -92,21 +92,22 @@
 - [[_COMMUNITY_Community 75|Community 75]]
 - [[_COMMUNITY_Community 76|Community 76]]
 - [[_COMMUNITY_Community 77|Community 77]]
-- [[_COMMUNITY_Community 79|Community 79]]
+- [[_COMMUNITY_Community 78|Community 78]]
 - [[_COMMUNITY_Community 80|Community 80]]
 - [[_COMMUNITY_Community 81|Community 81]]
 - [[_COMMUNITY_Community 82|Community 82]]
 - [[_COMMUNITY_Community 83|Community 83]]
 - [[_COMMUNITY_Community 84|Community 84]]
 - [[_COMMUNITY_Community 85|Community 85]]
-- [[_COMMUNITY_Community 93|Community 93]]
+- [[_COMMUNITY_Community 86|Community 86]]
 - [[_COMMUNITY_Community 94|Community 94]]
 - [[_COMMUNITY_Community 95|Community 95]]
 - [[_COMMUNITY_Community 96|Community 96]]
-- [[_COMMUNITY_Community 104|Community 104]]
+- [[_COMMUNITY_Community 97|Community 97]]
 - [[_COMMUNITY_Community 105|Community 105]]
 - [[_COMMUNITY_Community 106|Community 106]]
 - [[_COMMUNITY_Community 107|Community 107]]
+- [[_COMMUNITY_Community 108|Community 108]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `make_settings()` - 42 edges
@@ -156,7 +157,7 @@
 - **hyperedge:logo_composition** — visual:geometric_butterfly_icon, brand:ButterflyGuy, visual:neon_green_accent, visual:dark_navy_background [EXTRACTED 1.00]
 - **hyperedge:brand_visual_identity_inference** — brand:ButterflyGuy, visual:geometric_butterfly_icon, visual:polygon_linework, visual:futuristic_uppercase_wordmark, concept:technology_or_trading_brand_signal [INFERRED 0.62]
 
-## Communities (108 total, 15 thin omitted)
+## Communities (109 total, 15 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
@@ -256,7 +257,7 @@ Nodes (15): DayResult, DrawdownWindow, Simulate one trading day., Simulate one t
 
 ### Community 24 - "Community 24"
 Cohesion: 0.16
-Nodes (16): _dd_schedule_label(), discover_dates(), _find_bar_at(), main(), nearest_snapshot(), parse_args(), _parse_dd_schedule(), _print_comparison_table() (+8 more)
+Nodes (16): _dd_schedule_label(), _find_bar_at(), main(), nearest_snapshot(), parse_args(), _parse_dd_schedule(), _print_comparison_table(), _pst_to_et() (+8 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.1
@@ -271,8 +272,8 @@ Cohesion: 0.11
 Nodes (20): Bid and ask quote columns, Butterfly chain rows expose bid/ask values usable for mid-price marking, Butterfly spread mode, Highlighted active trade region, Calls side, Option Chain panel, Puts side, POS marker (+12 more)
 
 ### Community 28 - "Community 28"
-Cohesion: 0.12
-Nodes (17): main(), parse_args(), print_help(), Inspect what the strategy saw at entry for a given date.  Replicates the synthet, Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Cross-width selection. (+9 more)
+Cohesion: 0.14
+Nodes (15): main(), parse_args(), print_help(), Inspect what the strategy saw at entry for a given date.  Replicates the synthet, EntryDecision, find_entry_candidate(), Find best candidate in the 10:00–10:30 ET window, returning full decision contex, Derive the ideal center strike from VIX.      Places the center at `sigma_fracti (+7 more)
 
 ### Community 29 - "Community 29"
 Cohesion: 0.11
@@ -287,12 +288,12 @@ Cohesion: 0.14
 Nodes (11): ButterflySelector, Butterfly selector — picks the best candidate from a list., Selects the best butterfly candidate., Select the candidate whose cost is closest to its max_cost_per_width., Select the best butterfly candidate.          When `target_center` is provided (, Select the candidate whose cost is closest to its max_cost_per_width., Select the farthest OTM candidate from the already-valid candidate set., make_candidate() (+3 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.13
-Nodes (6): ChainQueries, Queries for option_chain_snapshots table., Bulk insert option chain snapshot rows using COPY., Queries for trades table., TradeQueries, dict
-
-### Community 33 - "Community 33"
 Cohesion: 0.12
 Nodes (8): DatabasePool, Async database connection pool using asyncpg., Manages an asyncpg connection pool for TimescaleDB., Create the connection pool., DailyBarQueries, Queries for daily_bars table., Upsert daily OHLCV rows. Updates close/open/high/low/volume on conflict., Return the last `days` daily closes in chronological order (oldest first).
+
+### Community 33 - "Community 33"
+Cohesion: 0.14
+Nodes (6): ChainQueries, Queries for option_chain_snapshots table., Bulk insert option chain snapshot rows using COPY., Queries for trades table., TradeQueries, dict
 
 ### Community 34 - "Community 34"
 Cohesion: 0.12
@@ -300,79 +301,79 @@ Nodes (16): get_prev_close(), get_vix_at(), get_vix_prev_close(), load_bars_from
 
 ### Community 35 - "Community 35"
 Cohesion: 0.12
-Nodes (15): ChainDay, dict of {UTC datetime: OptionQuote list} with a pre-sorted key index for O(log n, load_chains_from_db(), load_entry_chains(), load_monitoring_chains(), merge_chains(), Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection. (+7 more)
-
-### Community 36 - "Community 36"
-Cohesion: 0.12
 Nodes (14): Architecture Map, code:bash (uv sync), code:bash (uv run pytest), code:bash (uv run ruff check .), code:bash (uv run python src/butterfly_guy/scripts/run_backtest_db.py 2), code:bash (uv run python src/butterfly_guy/scripts/inspect_entry.py 202), code:bash (docker compose -f infra/docker-compose.yml --profile spx up ), Common Commands (+6 more)
 
-### Community 37 - "Community 37"
+### Community 36 - "Community 36"
 Cohesion: 0.17
 Nodes (16): 20 Wide Butterfly Candidate Rows, At The Money Strike Region, Bid And Ask Columns, Calls Side Option Chain Table, Entry Window Selection Context, Highlighted Candidate Band Near Underlying Price, 20 Wide Fly Chain At Entry Window Screenshot, 20 Mar 2026 Weekly Expiration (+8 more)
 
-### Community 38 - "Community 38"
+### Community 37 - "Community 37"
 Cohesion: 0.13
 Nodes (15): Butterfly strike triplets, Calls side, Call butterfly rows in entry window, Entry-window highlighted rows, Put butterfly rows in entry window, 20 MAR 26 weekly expiration, Near-money butterfly candidates, Option chain spread: Butterfly (+7 more)
 
-### Community 39 - "Community 39"
+### Community 38 - "Community 38"
 Cohesion: 0.2
 Nodes (8): BiasScoreFilter, Scores market direction using 4 signals; returns CALL, PUT, or None., Bars that produce strong bullish score: rising price, above OR high., Bars that produce strong bearish score: falling price, below OR low., OR signal is ±2 — alone it meets the ±2 threshold., Gap signal only contributes +1, below the ±2 threshold., Conflicting signals that cancel out → None., TestBiasScore
 
-### Community 40 - "Community 40"
+### Community 39 - "Community 39"
 Cohesion: 0.13
 Nodes (13): 1. `SimulationEngine.simulate_day_from_entry()`, 2. `run_backtest_db.py` changes, 3. Output, Architecture, code:block2 (--compare-synthetic-same-entry   Run a BS-only intraday pass), code:python (same_entry_result = None), code:block4 (.venv/bin/python -m butterfly_guy.scripts.run_backtest_db --), Design: --compare-synthetic-same-entry Mode (+5 more)
 
-### Community 41 - "Community 41"
+### Community 40 - "Community 40"
 Cohesion: 0.13
 Nodes (14): 1. New CLI flag, 2. New helper function, 3. Modified `run_single` per-date loop, 4. Output, Approach, Changes, code:block1 (--compare-synthetic   Run a second synthetic-only pass and p), code:python (def _force_synthetic_for_date(date: dt.date):) (+6 more)
 
-### Community 42 - "Community 42"
+### Community 41 - "Community 41"
 Cohesion: 0.18
 Nodes (7): BacktestDataLoader, Backtest data loader — fetches SPX 1-min bars and VIX from Polygon.io., Load all data needed for a single backtest day., Loads historical data from Polygon.io for backtesting., Fetch SPX 1-minute bars for a given date from Polygon., Fetch VIX close for a given date from Polygon., Fetch the actual previous trading day's SPX close for a given date.
 
-### Community 43 - "Community 43"
+### Community 42 - "Community 42"
 Cohesion: 0.14
 Nodes (14): _fitted_density_counts(), _print_pnl_histogram(), Return bucket-height estimates from a Gaussian KDE fit., Return bucket-height estimates from a Gaussian KDE fit., Return bucket-height estimates from a Gaussian KDE fit., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., Return bucket-height estimates from a Gaussian KDE fit. (+6 more)
 
-### Community 44 - "Community 44"
+### Community 43 - "Community 43"
 Cohesion: 0.22
 Nodes (12): chain_cache_path(), load_chain_day(), nearest_snapshot(), Real option chain cache — per-day JSON snapshots from the live collector.  Forma, Load all chain snapshots for a day.      Returns dict of UTC datetime -> list[Op, Return quotes from the most recent snapshot at or before bar_ts., Append one chain snapshot to the day's cache file.      Called by the collector, save_snapshot() (+4 more)
 
-### Community 45 - "Community 45"
+### Community 44 - "Community 44"
 Cohesion: 0.23
 Nodes (6): make_bar(), make_pre_entry_bars(), Unit tests for BiasScoreFilter., Build n bars starting at 09:30 ET, incrementing by 1 minute each., TestComputeOr, TestComputeVwap
 
-### Community 46 - "Community 46"
+### Community 45 - "Community 45"
 Cohesion: 0.21
 Nodes (12): load_config(), Load configuration from YAML file and environment variables., Load configuration from YAML file and environment variables., Tests for configuration loading., Config values from YAML should override defaults., Loading config with no files should return sensible defaults., test_allow_live_trading_requires_explicit_env(), test_database_password_falls_back_to_compose_env() (+4 more)
 
-### Community 47 - "Community 47"
+### Community 46 - "Community 46"
 Cohesion: 0.28
 Nodes (12): _coerce_json(), _docker_postgres_password(), _load_trace_event(), _load_trade_rows(), main(), parse_args(), _pretty(), _print_trace_block() (+4 more)
 
-### Community 48 - "Community 48"
+### Community 47 - "Community 47"
 Cohesion: 0.21
 Nodes (13): 15-wide fly chain at entry window screenshot, 15-wide butterfly strike rows, Bid/ask color coding, Butterfly spread mode, Calls side, Entry-window candidate region, 20 MAR 26 weekly expiration, Liquidity metrics (+5 more)
 
-### Community 49 - "Community 49"
+### Community 48 - "Community 48"
 Cohesion: 0.29
 Nodes (8): DayData, Runs full strategy on a single day using synthetic options., Runs full strategy on a single day using synthetic options., SimulationEngine, use_bias_filter=True should produce a trade result (direction set by bias)., direction_override takes precedence over use_bias_filter., When bias filter always returns None, day should be untraded., TestEngineIntegration
 
-### Community 50 - "Community 50"
+### Community 49 - "Community 49"
 Cohesion: 0.21
 Nodes (3): Backtest data loader using yfinance (free, no API key required).  Uses hourly ba, Loads historical SPX + VIX data via yfinance. No API key required., YFinanceDataLoader
 
+### Community 50 - "Community 50"
+Cohesion: 0.17
+Nodes (11): ChainDay, dict of {UTC datetime: OptionQuote list} with a pre-sorted key index for O(log n, load_chains_from_db(), load_entry_chains(), load_monitoring_chains(), Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection. (+3 more)
+
 ### Community 51 - "Community 51"
+Cohesion: 0.18
+Nodes (4): Queries for daily_risk_state table., Sum of realized PnL for the rolling 7-day window (closed trades only)., PnL of the last N closed trades (most recent first), for consecutive loss detect, RiskQueries
+
+### Community 52 - "Community 52"
 Cohesion: 0.18
 Nodes (11): _force_synthetic_for_date(), _patch_chain_cache(), Inject DB chains into the chain cache for `date`. Returns restore callable., Inject DB chains into the chain cache for `date`. Returns restore callable., Inject DB chains into the chain cache for `date`. Returns restore callable., Patch load_chain_day to return None for `date`, forcing BS synthetic fallback., Inject DB chains into the chain cache for `date`. Returns restore callable., Inject DB chains into the chain cache for `date`. Returns restore callable. (+3 more)
 
-### Community 52 - "Community 52"
-Cohesion: 0.2
-Nodes (10): BUTTERFLYGUY, connectivity visual association, precision visual association, technology visual association, butterfly mark, central cyan glow, cyan-to-purple neon palette, dark navy background (+2 more)
-
 ### Community 53 - "Community 53"
 Cohesion: 0.2
-Nodes (4): Queries for daily_risk_state table., Sum of realized PnL for the rolling 7-day window (closed trades only)., PnL of the last N closed trades (most recent first), for consecutive loss detect, RiskQueries
+Nodes (10): BUTTERFLYGUY, connectivity visual association, precision visual association, technology visual association, butterfly mark, central cyan glow, cyan-to-purple neon palette, dark navy background (+2 more)
 
 ### Community 54 - "Community 54"
 Cohesion: 0.29
@@ -383,12 +384,12 @@ Cohesion: 0.2
 Nodes (9): code:python ("""Tests for _print_comparison_table aggregate stats."""), code:bash (cd /opt/butterflyguy && .venv/bin/python -m pytest tests/tes), code:python (def _print_comparison_table(day_rows: list[dict]) -> None:), code:bash (cd /opt/butterflyguy && .venv/bin/python -m pytest tests/tes), code:bash (cd /opt/butterflyguy && git add tests/test_comparison_stats.), code:bash (cd /opt/butterflyguy && .venv/bin/python -m butterfly_guy.sc), Real vs Synthetic Comparison Stats Implementation Plan, Task 1: Add stats block to `_print_comparison_table` (+1 more)
 
 ### Community 56 - "Community 56"
-Cohesion: 0.25
-Nodes (7): ButterflyCandidate, fly_mark_value(), Pydantic models for option data and trade records., Butterfly value at mark: lower.mark - 2*center.mark + upper.mark., A butterfly spread candidate identified by the scanner., O(N*W) scan: for each center strike within spot_range, for each wing_width,, O(N*W) scan: for each center strike within spot_range, for each wing_width,
+Cohesion: 0.22
+Nodes (9): Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Cross-width selection., Cross-width selection., Cross-width selection., Cross-width selection., select_for_width() (+1 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.28
-Nodes (7): EntryDecision, find_entry_candidate(), Find best candidate in the 10:00–10:30 ET window, returning full decision contex, determine_direction(), DirectionFilter, Direction filter — determines CALL or PUT based on open vs previous close., CALL if price >= previous close (bullish gap), PUT otherwise.
+Cohesion: 0.25
+Nodes (7): ButterflyCandidate, fly_mark_value(), Pydantic models for option data and trade records., Butterfly value at mark: lower.mark - 2*center.mark + upper.mark., A butterfly spread candidate identified by the scanner., O(N*W) scan: for each center strike within spot_range, for each wing_width,, O(N*W) scan: for each center strike within spot_range, for each wing_width,
 
 ### Community 58 - "Community 58"
 Cohesion: 0.36
@@ -410,7 +411,7 @@ Nodes (9): Bid Ask Quote, Bottom Time Axis, Candlestick Price Chart, Right Side 
 Cohesion: 0.25
 Nodes (8): BUTTERFLYGUY, Butterfly options motif, Technology or trading brand signal, Dark navy background, Futuristic uppercase wordmark, Geometric butterfly icon, Neon green accent color, Polygonal connected linework
 
-### Community 63 - "Community 63"
+### Community 64 - "Community 64"
 Cohesion: 0.38
 Nodes (5): _compute_or(), _compute_vwap(), _ema(), Multi-signal directional bias filter for 0-DTE butterfly entries., Compute bias score from 4 signals:           gap          : +1 if entry_close >
 
@@ -448,21 +449,25 @@ Nodes (3): Lightweight Telegram notifier — project-agnostic.  Usage:     from 
 
 ### Community 74 - "Community 74"
 Cohesion: 0.5
-Nodes (4): Resolve the DB connection string for local backtests.      Backtests follow the, Resolve the DB connection string for local backtests.      Backtests follow the, Resolve the DB connection string for local backtests.      Backtests follow the, resolve_db_dsn()
+Nodes (4): discover_dates(), All dates in [start, end] with >= 50 snapshots for `underlying`., All dates in [start, end] with >= 50 snapshots for `underlying`., All dates in [start, end] with >= 50 snapshots for `underlying`.
 
 ### Community 75 - "Community 75"
 Cohesion: 0.5
-Nodes (4): get_recent_closes(), Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order.
+Nodes (4): merge_chains(), Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains.
 
 ### Community 76 - "Community 76"
 Cohesion: 0.5
-Nodes (4): D: 3/19/26 10:30 AM, Selected Bar OHLC Values, Vertical Crosshair at 10:30, Visible OHLC Metrics
+Nodes (4): get_recent_closes(), Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order.
 
 ### Community 77 - "Community 77"
 Cohesion: 0.5
+Nodes (4): D: 3/19/26 10:30 AM, Selected Bar OHLC Values, Vertical Crosshair at 10:30, Visible OHLC Metrics
+
+### Community 78 - "Community 78"
+Cohesion: 0.5
 Nodes (4): Right-Side Future Expansion Area, Horizontal Price Line 6625.96, Post Breakout Pullback, Sharp Upside Breakout Around Noon
 
-### Community 79 - "Community 79"
+### Community 80 - "Community 80"
 Cohesion: 0.67
 Nodes (3): Current SPX Quote 6577.69, Daily Change -28.80 (-0.44%), Last Visible Red Candle
 
@@ -484,11 +489,11 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: appears_to_contextualize) - confidence is low._
 - **What is the exact relationship between `central cyan glow` and `technology visual association`?**
   _Edge tagged AMBIGUOUS (relation: suggests) - confidence is low._
-- **Why does `OptionQuote` connect `Community 4` to `Community 0`, `Community 1`, `Community 2`, `Community 35`, `Community 5`, `Community 9`, `Community 11`, `Community 44`, `Community 15`, `Community 16`, `Community 21`, `Community 56`, `Community 57`, `Community 26`?**
+- **Why does `OptionQuote` connect `Community 4` to `Community 0`, `Community 1`, `Community 2`, `Community 5`, `Community 9`, `Community 43`, `Community 11`, `Community 15`, `Community 16`, `Community 50`, `Community 21`, `Community 57`, `Community 26`, `Community 28`?**
   _High betweenness centrality (0.078) - this node is a cross-community bridge._
-- **Why does `ButterflyCandidate` connect `Community 56` to `Community 0`, `Community 2`, `Community 4`, `Community 9`, `Community 14`, `Community 16`, `Community 49`, `Community 17`, `Community 23`, `Community 57`, `Community 26`, `Community 30`, `Community 31`?**
+- **Why does `ButterflyCandidate` connect `Community 57` to `Community 0`, `Community 2`, `Community 4`, `Community 9`, `Community 14`, `Community 48`, `Community 17`, `Community 16`, `Community 23`, `Community 26`, `Community 28`, `Community 30`, `Community 31`?**
   _High betweenness centrality (0.073) - this node is a cross-community bridge._
-- **Why does `main()` connect `Community 9` to `Community 32`, `Community 33`, `Community 56`, `Community 8`, `Community 46`, `Community 14`, `Community 17`, `Community 18`, `Community 19`, `Community 20`, `Community 53`, `Community 54`, `Community 23`, `Community 22`, `Community 57`, `Community 26`, `Community 31`?**
+- **Why does `main()` connect `Community 9` to `Community 32`, `Community 33`, `Community 8`, `Community 45`, `Community 14`, `Community 17`, `Community 18`, `Community 51`, `Community 20`, `Community 19`, `Community 54`, `Community 23`, `Community 22`, `Community 57`, `Community 26`, `Community 28`, `Community 31`?**
   _High betweenness centrality (0.068) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `make_settings()` (e.g. with `dict` and `ExecutionSettings`) actually correct?**
   _`make_settings()` has 2 INFERRED edges - model-reasoned connections that need verification._

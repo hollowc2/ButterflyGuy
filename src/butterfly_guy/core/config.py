@@ -169,6 +169,11 @@ def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env")
         schwab_data.setdefault("token_path", os.getenv("SCHWAB_TOKEN_PATH"))
     yaml_data["schwab"] = schwab_data
 
+    database_data = yaml_data.get("database", {})
+    if os.getenv("DATABASE_PASSWORD") and not os.getenv("DATABASE__PASSWORD"):
+        database_data.setdefault("password", os.getenv("DATABASE_PASSWORD"))
+    yaml_data["database"] = database_data
+
     execution_data = yaml_data.get("execution", {})
     allow_live = os.getenv("ALLOW_LIVE_TRADING", "").lower() in {"1", "true", "yes"}
     if allow_live:

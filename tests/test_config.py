@@ -51,6 +51,30 @@ def test_database_dsn():
     assert "butterfly_guy" in dsn
 
 
+def test_database_password_falls_back_to_compose_env(tmp_path, monkeypatch):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("")
+
+    monkeypatch.delenv("DATABASE__PASSWORD", raising=False)
+    monkeypatch.setenv("DATABASE_PASSWORD", "compose-secret")
+
+    config = load_config(config_path=config_file, env_file=str(tmp_path / ".env"))
+
+    assert config.database.password == "compose-secret"
+
+
+def test_nested_database_password_overrides_compose_env(tmp_path, monkeypatch):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("")
+
+    monkeypatch.setenv("DATABASE_PASSWORD", "compose-secret")
+    monkeypatch.setenv("DATABASE__PASSWORD", "nested-secret")
+
+    config = load_config(config_path=config_file, env_file=str(tmp_path / ".env"))
+
+    assert config.database.password == "nested-secret"
+
+
 def test_profit_management_regimes():
     # Regimes come from YAML, so test defaults directly
     from butterfly_guy.core.config import ProfitManagementSettings, TimeRegime
