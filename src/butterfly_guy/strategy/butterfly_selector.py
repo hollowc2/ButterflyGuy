@@ -82,6 +82,57 @@ class ButterflySelector:
         )
         return best
 
+    def select_farthest_otm(
+        self,
+        candidates: list[ButterflyCandidate],
+        target_center: float | None = None,
+        center_tolerance: float = 15.0,
+    ) -> ButterflyCandidate | None:
+        """Select the farthest OTM candidate from the already-valid candidate set."""
+        if not candidates:
+            log.warning("no_candidates_to_select_farthest_otm")
+            return None
+
+        pool = candidates
+
+        if target_center is not None:
+            near_center = [
+                c for c in candidates
+                if abs(c.center_strike - target_center) <= center_tolerance
+            ]
+            if near_center:
+                pool = near_center
+                log.debug(
+                    "center_filter_applied",
+                    target_center=target_center,
+                    tolerance=center_tolerance,
+                    before=len(candidates),
+                    after=len(pool),
+                )
+            else:
+                log.warning(
+                    "no_candidates_near_target_center",
+                    target_center=target_center,
+                    tolerance=center_tolerance,
+                    falling_back_to="all candidates",
+                )
+
+        best = max(
+            pool,
+            key=lambda c: (c.distance_from_spot, c.wing_width, c.reward_risk),
+        )
+
+        log.info(
+            "farthest_otm_candidate_selected",
+            center=best.center_strike,
+            width=best.wing_width,
+            rr=best.reward_risk,
+            cost=best.cost,
+            distance=best.distance_from_spot,
+            target_center=target_center,
+        )
+        return best
+
     def select_best_by_target_cost(
         self,
         candidates: list[ButterflyCandidate],
@@ -94,7 +145,7 @@ class ButterflySelector:
         # Try to find the closest to max cost for each width
         per_width_bests = []
         widths = {c.wing_width for c in candidates}
-        
+
         for width in widths:
             max_cost = self.settings.max_cost_per_width.get(width, 3.0)
             width_candidates = [c for c in candidates if c.wing_width == width]

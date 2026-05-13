@@ -373,7 +373,10 @@ def find_entry_candidate(
         vix=vix, spot=spot, direction=direction, wing_width=WING_WIDTH
     )
 
-    best = ButterflySelector(settings).select_best(all_candidates, target_center=target_center)
+    best = ButterflySelector(settings).select_farthest_otm(
+        all_candidates,
+        target_center=target_center,
+    )
     if not best:
         return None
 
@@ -767,10 +770,9 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
         for c in shown:
             delta_ctr = abs(c.center_strike - tc)
             in_win = delta_ctr <= tol
-            rr_target = 10.0  # StrategySettings default
             note = ""
             if c is best:
-                note = "← SELECTED (closest RR to target 10x within VIX window)"
+                note = "← SELECTED (farthest OTM valid candidate in VIX window)"
             elif not in_win:
                 note = f"outside ±{tol:.0f}pt VIX window"
             print(

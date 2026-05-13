@@ -248,7 +248,10 @@ class SimulationEngine:
                 elif params.selection_method == "BEST_RR":
                     best = selector.select_best(candidates, target_center=None)
                 else:  # VIX (default)
-                    best = selector.select_best(candidates, target_center=target_center)
+                    best = selector.select_farthest_otm(
+                        candidates,
+                        target_center=target_center,
+                    )
 
                 if best:
                     entry_candidate = best

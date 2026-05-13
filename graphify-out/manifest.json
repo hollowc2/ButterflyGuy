@@ -20,16 +20,20 @@
     "hash": "72fd4296a4d7a6b20aca491a3ac5478f"
   },
   "/opt/butterflyguy/tests/test_config.py": {
-    "mtime": 1778618501.5198116,
-    "hash": "e1e66f25e51603970b9253fe8a974fa9"
+    "mtime": 1778696864.555605,
+    "hash": "325bf029e4256acea14764809a2f1542"
   },
   "/opt/butterflyguy/tests/test_butterfly_builder.py": {
-    "mtime": 1773186977.9160578,
-    "hash": "c155d68503f1c89beff15f9316356398"
+    "mtime": 1778695512.8637753,
+    "hash": "d601bd8b9634d1e2d36dd9bd7031f93c"
   },
   "/opt/butterflyguy/tests/__init__.py": {
     "mtime": 1773186977.9160578,
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/opt/butterflyguy/tests/test_butterfly_selector.py": {
+    "mtime": 1778699730.8541257,
+    "hash": "d1b73e6255c45a8305dc72a2f6cd1e0c"
   },
   "/opt/butterflyguy/tests/test_position_manager.py": {
     "mtime": 1778530313.1634445,
@@ -124,8 +128,8 @@
     "hash": "58fa23047213502f74ab28f3211756c2"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/trade_service.py": {
-    "mtime": 1778616910.5901668,
-    "hash": "461e6ccaa346e74c0f5fa6fcadabe02c"
+    "mtime": 1778699726.8481085,
+    "hash": "0de92a050a45811a6c428f0b9c6a7781"
   },
   "/opt/butterflyguy/src/butterfly_guy/quant_engine/__init__.py": {
     "mtime": 1773186977.914058,
@@ -172,8 +176,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/src/butterfly_guy/core/config.py": {
-    "mtime": 1778618399.4593108,
-    "hash": "dfbb3d2a1a103152d141ae46b5f8db62"
+    "mtime": 1778642588.6460345,
+    "hash": "4d6ad923f13211739224d9cc01e7cc48"
   },
   "/opt/butterflyguy/src/butterfly_guy/core/time_utils.py": {
     "mtime": 1776718898.2168171,
@@ -196,8 +200,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/src/butterfly_guy/backtest/simulation_engine.py": {
-    "mtime": 1778618551.2010546,
-    "hash": "847c9e9541080bd445a65643a12c6de5"
+    "mtime": 1778699727.5271113,
+    "hash": "25082f0d06eb7b8a2d48a7d15362444d"
   },
   "/opt/butterflyguy/src/butterfly_guy/backtest/parameter_sweeper.py": {
     "mtime": 1776718898.2168171,
@@ -236,20 +240,20 @@
     "hash": "0d564ed06d67ce93f64f85f4bcebf8d3"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_backtest_db.py": {
-    "mtime": 1778618554.2520695,
-    "hash": "d60c9c6d9506128d238018954a4ce5ac"
+    "mtime": 1778699803.2504408,
+    "hash": "663ebb1f7afd34e9a6033dc453f428c2"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/report_trade_ladders.py": {
     "mtime": 1778088865.3089764,
     "hash": "9dca57b12a8c7f9adb095e2be2116fc7"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/inspect_entry.py": {
-    "mtime": 1775108506.2781634,
-    "hash": "4ac543c199f3badd876ea81cb1dc58b0"
+    "mtime": 1778700008.111353,
+    "hash": "1d9911c7a1bacb5e80e2856a5dd05ef5"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_paper_replay.py": {
-    "mtime": 1778047161.609935,
-    "hash": "bfe6cb0b7a1f7c13f373f1f3a390c801"
+    "mtime": 1778700008.8413563,
+    "hash": "2b9bd2b29ea98716f69605bc643536ee"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/__init__.py": {
     "mtime": 1773186977.915058,
@@ -264,8 +268,8 @@
     "hash": "8f768c5752bff01717932a7aeb6eb9ff"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_entry_analysis.py": {
-    "mtime": 1778047157.1519105,
-    "hash": "0801399eba486ac77175791dadc226d1"
+    "mtime": 1778699728.8791173,
+    "hash": "87473509d7430e3ce459583b7cfd3539"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_live.py": {
     "mtime": 1777928027.5516794,
@@ -360,8 +364,8 @@
     "hash": "4fc84a1b83da0d6824d34b4f78e1156d"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/butterfly_builder.py": {
-    "mtime": 1777347447.5038943,
-    "hash": "3feff8bef8a9ffc02d8d3e198f727733"
+    "mtime": 1778695525.5418391,
+    "hash": "7c95ae53bc00e8c790ff9c28f27df959"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/gap_regime_filter.py": {
     "mtime": 1777222299.3805828,
@@ -380,8 +384,8 @@
     "hash": "37df214e3ed45752c8a5946fcf0b39b1"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/butterfly_selector.py": {
-    "mtime": 1776718898.2188172,
-    "hash": "0d5f5ecfd1451255402f376e482a808f"
+    "mtime": 1778699762.7762642,
+    "hash": "bd7e7a315302cca1fe246dbc4b930412"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/regime_filter.py": {
     "mtime": 1773512698.5321512,
@@ -392,8 +396,8 @@
     "hash": "20f3a99e2e72cb99b1a80102f748c9d9"
   },
   "/opt/butterflyguy/README.md": {
-    "mtime": 1778618751.7750323,
-    "hash": "20f9332b55ba423895b275a2d837eb78"
+    "mtime": 1778700007.4213498,
+    "hash": "c09e38e2414f2edca532bcdf3d61db3f"
   },
   "/opt/butterflyguy/AGENTS.md": {
     "mtime": 1778185901.821144,
@@ -448,8 +452,8 @@
     "hash": "ad8b83396aa1edb9a96814c6cba93212"
   },
   "/opt/butterflyguy/configs/config_xsp.yaml": {
-    "mtime": 1778618404.3553348,
-    "hash": "cc87fe8f03f4fa598866ad9d6cf39a53"
+    "mtime": 1778696860.6315827,
+    "hash": "649c1866de619b4a077db175b4a65703"
   },
   "/opt/butterflyguy/configs/config.yaml": {
     "mtime": 1778618402.3133247,

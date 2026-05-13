@@ -11,7 +11,7 @@ Automated options trading strategy and research platform for 0-DTE SPX, NDX, and
 - **Multi-Asset Support**: Trade SPX, NDX, or XSP with tailored configurations for each.
 - **VIX-Aware Strategy**: Uses VIX to anchor the center strike, and for SPX can also select which width triplet to scan via configurable VIX regime buckets.
 - **Flexible Entry Methods**:
-  - `VIX`: Anchors the center strike to the VIX-implied 1-sigma move, then picks the best candidate near that target.
+  - `VIX`: Anchors the center strike to the VIX-implied 1-sigma move, then picks the farthest OTM valid candidate near that target.
   - `TARGET_COST`: Selects the candidate whose debit is closest to the configured max cost for its width.
   - `BEST_RR`: Selects the candidate with the Reward/Risk closest to your target (e.g., 10:1).
 - **Gap Regime Filter**: Two statistically validated signals applied before direction selection — flip to CALL on gap-down days in a BULL regime (`bull_call_bias`), and skip days where the gap is too small to have edge (`min_gap_pct`). Used identically in live trading and backtesting.

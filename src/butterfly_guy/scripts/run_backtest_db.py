@@ -629,15 +629,24 @@ def select_for_width(
     selector = ButterflySelector(settings)
     candidates = builder.build_candidates(quotes, spot, direction)
     width_candidates = [c for c in candidates if c.wing_width == wing_width]
-    
+
     if method == "TARGET_COST":
         return selector.select_best_by_target_cost(width_candidates)
-    
+
     target_center = None
     if method == "VIX":
-        target_center = vix_target_center(vix=vix, spot=spot, direction=direction, wing_width=wing_width)
-    
-    return selector.select_best(width_candidates, target_center=target_center, center_tolerance=center_tolerance)
+        target_center = vix_target_center(
+            vix=vix,
+            spot=spot,
+            direction=direction,
+            wing_width=wing_width,
+        )
+
+    return selector.select_farthest_otm(
+        width_candidates,
+        target_center=target_center,
+        center_tolerance=center_tolerance,
+    )
 
 
 def select_live_width(
@@ -669,14 +678,26 @@ def select_live_width(
     per_width_bests: list[ButterflyCandidate] = []
     for width in wing_widths:
         best = select_for_width(
-            quotes, spot, direction, vix, width, rr_min, spot_range, center_tolerance, rr_target,
-            method=method, max_cost_per_width=max_cost_per_width,
+            quotes,
+            spot,
+            direction,
+            vix,
+            width,
+            rr_min,
+            spot_range,
+            center_tolerance,
+            rr_target,
+            method=method,
+            max_cost_per_width=max_cost_per_width,
         )
         if best:
             per_width_bests.append(best)
     if not per_width_bests:
         return None
-    return min(per_width_bests, key=lambda c: abs(c.reward_risk - rr_target))
+    return max(
+        per_width_bests,
+        key=lambda c: (c.distance_from_spot, c.wing_width, c.reward_risk),
+    )
 
 
 # ---------------------------------------------------------------------------
