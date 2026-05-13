@@ -278,11 +278,11 @@ class TradeService:
                 log.warning("empty_chain", step=step)
                 break
 
-            candidates = self.builder.build_candidates(quotes, spot_price, direction)
-
             # Select best candidate based on configured method
             best: ButterflyCandidate | None = None
             selection_method = self.config.entry.strike_selection_method
+            effective_widths = self.config.strategy.wing_widths
+            sigmas: tuple[float | None, ...] = tuple(None for _ in effective_widths)
 
             if selection_method == "VIX":
                 vix_buckets = self.config.strategy.vix_width_buckets
@@ -301,19 +301,31 @@ class TradeService:
                         vix=round(vix_price, 2),
                         widths=effective_widths,
                     )
-                else:
-                    effective_widths = self.config.strategy.wing_widths
-                    sigmas = tuple(None for _ in effective_widths)
+
+            if effective_widths != self.config.strategy.wing_widths:
+                build_settings = self.config.strategy.model_copy(
+                    update={"wing_widths": effective_widths}
+                )
+                candidates = ButterflyBuilder(build_settings).build_candidates(
+                    quotes,
+                    spot_price,
+                    direction,
+                )
+            else:
+                candidates = self.builder.build_candidates(quotes, spot_price, direction)
+
+            if selection_method == "VIX":
 
                 if vix_price:
                     per_width_bests = []
                     for i, width in enumerate(effective_widths):
+                        sigma = sigmas[i] if i < len(sigmas) else None
                         target_center = vix_target_center(
                             vix=vix_price,
                             spot=spot_price,
                             direction=direction,
-                            wing_width=None if sigmas[i] is not None else width,
-                            sigma_fraction=sigmas[i],
+                            wing_width=width,
+                            sigma_fraction=sigma,
                         )
                         width_candidates = [c for c in candidates if c.wing_width == width]
                         w_best = self.selector.select_best(

@@ -93,10 +93,10 @@ ASSET_DEFAULTS: dict[str, dict] = {
         drawdowns=(1.00, 0.95, 0.90),
     ),
     "XSP": dict(
-        wing_widths=[1, 2, 3],
+        wing_widths=[2, 3, 4, 5, 6, 7],
         spot_range=10,
         center_tolerance=1.5,
-        max_cost={1: 0.10, 2: 0.20, 3: 0.30},
+        max_cost={2: 0.20, 3: 0.30, 4: 0.40, 5: 0.50, 6: 0.60, 7: 0.70},
         drawdowns=(0.60, 0.90, 0.75),
     ),
 }

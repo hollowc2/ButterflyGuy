@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import math
 from typing import Literal
 
@@ -42,6 +41,21 @@ _VIX_SIGMA_DEFAULT = 0.50  # fallback for unlisted widths
 _BUCKET_SIGMAS = (0.25, 0.50, 0.75)  # narrow / mid / wide within any VIX bucket
 
 
+def _bucket_sigmas(width_count: int) -> tuple[float, ...]:
+    """Return sigma anchors spanning narrow to wide for the bucket size."""
+    if width_count <= 0:
+        return ()
+    if width_count == 1:
+        return (_VIX_SIGMA_DEFAULT,)
+    if width_count == len(_BUCKET_SIGMAS):
+        return _BUCKET_SIGMAS
+
+    first = _BUCKET_SIGMAS[0]
+    last = _BUCKET_SIGMAS[-1]
+    step = (last - first) / (width_count - 1)
+    return tuple(first + step * i for i in range(width_count))
+
+
 def resolve_wing_widths_for_vix(vix: float, buckets: list) -> tuple[list[int], tuple[float, ...]]:
     """Return (widths, sigma_fractions) for the active VIX bucket.
 
@@ -51,8 +65,8 @@ def resolve_wing_widths_for_vix(vix: float, buckets: list) -> tuple[list[int], t
     """
     for bucket in sorted(buckets, key=lambda b: b.vix_max):
         if vix < bucket.vix_max:
-            return bucket.widths, _BUCKET_SIGMAS
-    return buckets[-1].widths, _BUCKET_SIGMAS
+            return bucket.widths, _bucket_sigmas(len(bucket.widths))
+    return buckets[-1].widths, _bucket_sigmas(len(buckets[-1].widths))
 
 
 def vix_expected_move(vix: float, spot: float) -> float:
@@ -152,7 +166,7 @@ class ButterflyBuilder:
 
                 # Butterfly cost: buy lower + buy upper - 2 * sell center (using mark)
                 cost = fly_mark_value(lower_q, center_q, upper_q)
-                # Fly ask: real market cost hitting the spread (buy wings at ask, sell center at bid)
+                # Fly ask: real market cost hitting the spread.
                 fly_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
 
                 if cost < 0.05:  # minimum practical butterfly debit; filters fp-epsilon zeros

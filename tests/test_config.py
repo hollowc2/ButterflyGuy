@@ -77,3 +77,15 @@ def test_profit_management_strategy_defaults_to_peak_value_trailer():
 
     assert config.profit_management.strategy == "peakvaluetrailer"
     assert config.profit_management.profitprotector.profit_lock_floor_profit == 0.75
+
+
+def test_xsp_config_tracks_spx_proxy_widths():
+    config = load_config(config_path="configs/config_xsp.yaml")
+
+    assert config.strategy.underlying == "XSP"
+    assert 1 not in config.strategy.wing_widths
+    assert config.strategy.wing_widths == [2, 3, 4, 5, 6, 7]
+    assert config.strategy.vix_width_buckets is not None
+    assert config.strategy.vix_width_buckets[1].widths == [3, 4]
+    assert config.execution.paper_slippage_per_spread == 0.005
+    assert config.execution.paper_commission_per_contract == 0.65

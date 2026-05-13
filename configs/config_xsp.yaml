@@ -4,13 +4,27 @@ schwab:
 
 strategy:
   underlying: "XSP"
-  wing_widths: [1, 2, 3]
+  # XSP is run as a 1/10th-size SPX proxy. Width buckets mirror SPX
+  # buckets as closely as integer XSP strikes allow.
+  wing_widths: [2, 3, 4, 5, 6, 7]
+  vix_width_buckets:
+    - vix_max: 17.0
+      widths: [2, 3]
+    - vix_max: 24.5
+      widths: [3, 4]
+    - vix_max: 32.0
+      widths: [4, 5]
+    - vix_max: 9999.0
+      widths: [5, 6, 7]
   spot_range: 10
   rr_min: 8.0
   max_cost_per_width:
-    1: 0.10
     2: 0.20
     3: 0.30
+    4: 0.40
+    5: 0.50
+    6: 0.60
+    7: 0.70
 entry:
   start_time: "07:00"  # PST
   end_time: "07:45"    # PST
@@ -24,6 +38,7 @@ execution:
   order_timeout_seconds: 300
   paper_trading: true
   paper_fill_buffer: 0.00
+  paper_slippage_per_spread: 0.005  # 1/10th of SPX paper slippage
 profit_management:
   strategy: "peakvaluetrailer"
   profitprotector:

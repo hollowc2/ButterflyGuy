@@ -2,11 +2,13 @@
 
 import datetime as dt
 
-import pytest
-
-from butterfly_guy.core.config import StrategySettings
+from butterfly_guy.core.config import StrategySettings, VixWidthBucket
 from butterfly_guy.data.schemas import OptionQuote
-from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
+from butterfly_guy.strategy.butterfly_builder import (
+    ButterflyBuilder,
+    resolve_wing_widths_for_vix,
+    vix_target_center,
+)
 
 
 def make_quote(strike: float, option_type: str, mark: float) -> OptionQuote:
@@ -138,3 +140,28 @@ def test_builder_breakevens_valid():
         assert c.upper_be < c.upper_strike
         assert c.lower_be < c.center_strike
         assert c.upper_be > c.center_strike
+
+
+def test_vix_target_uses_width_for_strike_step_when_sigma_is_explicit():
+    target = vix_target_center(
+        vix=18.0,
+        spot=739.2,
+        direction="CALL",
+        wing_width=3,
+        sigma_fraction=0.25,
+    )
+
+    assert target == 741
+
+
+def test_two_width_vix_bucket_spans_narrow_and_wide_sigmas():
+    widths, sigmas = resolve_wing_widths_for_vix(
+        18.0,
+        [
+            VixWidthBucket(vix_max=17.0, widths=[2, 3]),
+            VixWidthBucket(vix_max=24.5, widths=[3, 4]),
+        ],
+    )
+
+    assert widths == [3, 4]
+    assert sigmas == (0.25, 0.75)
