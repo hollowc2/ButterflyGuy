@@ -113,3 +113,11 @@ def test_xsp_config_tracks_spx_proxy_widths():
     assert config.strategy.vix_width_buckets[1].widths == [3, 4]
     assert config.execution.paper_slippage_per_spread == 0.005
     assert config.execution.paper_commission_per_contract == 0.65
+
+
+def test_spx_goldilocks_width_bucket_uses_20_30_40():
+    config = load_config(config_path="configs/config.yaml")
+
+    assert config.strategy.vix_width_buckets is not None
+    assert config.strategy.vix_width_buckets[1].vix_max == 24.5
+    assert config.strategy.vix_width_buckets[1].widths == [20, 30, 40]

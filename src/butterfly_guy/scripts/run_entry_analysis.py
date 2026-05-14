@@ -317,7 +317,7 @@ def scan_entry_window(
 
             # --- VIX-centered gap direction ---
             vix_center = vix_target_center(day.vix, bar.close, gap_dir, wing_width=w)
-            best_vix = selector.select_farthest_otm(cands, target_center=vix_center)
+            best_vix = selector.select_best(cands, target_center=vix_center)
 
             # --- bias direction (if signal) ---
             best_bias = None

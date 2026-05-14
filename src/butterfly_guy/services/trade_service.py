@@ -328,7 +328,7 @@ class TradeService:
                             sigma_fraction=sigma,
                         )
                         width_candidates = [c for c in candidates if c.wing_width == width]
-                        w_best = self.selector.select_farthest_otm(
+                        w_best = self.selector.select_best(
                             width_candidates,
                             target_center=target_center,
                             center_tolerance=self.config.entry.center_tolerance,
@@ -336,10 +336,7 @@ class TradeService:
                         if w_best:
                             per_width_bests.append(w_best)
                     if per_width_bests:
-                        best = max(
-                            per_width_bests,
-                            key=lambda c: (c.distance_from_spot, c.wing_width, c.reward_risk),
-                        )
+                        best = self.selector.select_best(per_width_bests)
                         log.info(
                             "vix_center_selected",
                             vix=round(vix_price, 2),

@@ -373,7 +373,7 @@ def find_entry_candidate(
         vix=vix, spot=spot, direction=direction, wing_width=WING_WIDTH
     )
 
-    best = ButterflySelector(settings).select_farthest_otm(
+    best = ButterflySelector(settings).select_best(
         all_candidates,
         target_center=target_center,
     )

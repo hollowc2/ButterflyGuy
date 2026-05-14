@@ -232,7 +232,7 @@ def main() -> None:
             vix=day.vix, spot=entry_bar.close,
             direction=direction, wing_width=wing_width,
         )
-        best = selector.select_farthest_otm(valid_candidates, target_center=target_center)
+        best = selector.select_best(valid_candidates, target_center=target_center)
     else:
         # Default / BEST_RR
         best = selector.select_best(valid_candidates)

@@ -20,8 +20,8 @@
     "hash": "72fd4296a4d7a6b20aca491a3ac5478f"
   },
   "/opt/butterflyguy/tests/test_config.py": {
-    "mtime": 1778696864.555605,
-    "hash": "325bf029e4256acea14764809a2f1542"
+    "mtime": 1778731385.8962111,
+    "hash": "847abe33811e5766c80c79426daf9d5c"
   },
   "/opt/butterflyguy/tests/test_butterfly_builder.py": {
     "mtime": 1778695512.8637753,
@@ -32,8 +32,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/tests/test_butterfly_selector.py": {
-    "mtime": 1778699730.8541257,
-    "hash": "d1b73e6255c45a8305dc72a2f6cd1e0c"
+    "mtime": 1778731848.9346576,
+    "hash": "494f22ee76c037cc0400af40a002d1b6"
   },
   "/opt/butterflyguy/tests/test_position_manager.py": {
     "mtime": 1778530313.1634445,
@@ -44,8 +44,8 @@
     "hash": "4e8adebce8ed592c1b977d64970674c0"
   },
   "/opt/butterflyguy/tests/test_run_backtest_db_defaults.py": {
-    "mtime": 1778617107.4384341,
-    "hash": "9173b20335140d4760ffaef1fa6ded49"
+    "mtime": 1778729801.5025668,
+    "hash": "bc2bc70133ae3f8718545788fbf66274"
   },
   "/opt/butterflyguy/tests/test_trade_service.py": {
     "mtime": 1778616782.922592,
@@ -128,8 +128,8 @@
     "hash": "58fa23047213502f74ab28f3211756c2"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/trade_service.py": {
-    "mtime": 1778699726.8481085,
-    "hash": "0de92a050a45811a6c428f0b9c6a7781"
+    "mtime": 1778731819.1184893,
+    "hash": "54138d0ca2b183ac6433c0a559253342"
   },
   "/opt/butterflyguy/src/butterfly_guy/quant_engine/__init__.py": {
     "mtime": 1773186977.914058,
@@ -200,8 +200,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/src/butterfly_guy/backtest/simulation_engine.py": {
-    "mtime": 1778699727.5271113,
-    "hash": "25082f0d06eb7b8a2d48a7d15362444d"
+    "mtime": 1778731829.7315493,
+    "hash": "b9ca54ee8f30542268af49f87b345f59"
   },
   "/opt/butterflyguy/src/butterfly_guy/backtest/parameter_sweeper.py": {
     "mtime": 1776718898.2168171,
@@ -240,20 +240,20 @@
     "hash": "0d564ed06d67ce93f64f85f4bcebf8d3"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_backtest_db.py": {
-    "mtime": 1778699803.2504408,
-    "hash": "663ebb1f7afd34e9a6033dc453f428c2"
+    "mtime": 1778731823.9145164,
+    "hash": "be03bc1c9e190f3b224d9e2898aa167a"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/report_trade_ladders.py": {
     "mtime": 1778088865.3089764,
     "hash": "9dca57b12a8c7f9adb095e2be2116fc7"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/inspect_entry.py": {
-    "mtime": 1778700008.111353,
-    "hash": "1d9911c7a1bacb5e80e2856a5dd05ef5"
+    "mtime": 1778731842.1636193,
+    "hash": "0f1538c6da43e62917584d2e3b9e1537"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_paper_replay.py": {
-    "mtime": 1778700008.8413563,
-    "hash": "2b9bd2b29ea98716f69605bc643536ee"
+    "mtime": 1778731838.5795991,
+    "hash": "60f218f63499fdf82be71201161fe0b9"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/__init__.py": {
     "mtime": 1773186977.915058,
@@ -268,8 +268,8 @@
     "hash": "8f768c5752bff01717932a7aeb6eb9ff"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_entry_analysis.py": {
-    "mtime": 1778699728.8791173,
-    "hash": "87473509d7430e3ce459583b7cfd3539"
+    "mtime": 1778731834.837578,
+    "hash": "0801399eba486ac77175791dadc226d1"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_live.py": {
     "mtime": 1777928027.5516794,
@@ -384,8 +384,8 @@
     "hash": "37df214e3ed45752c8a5946fcf0b39b1"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/butterfly_selector.py": {
-    "mtime": 1778699762.7762642,
-    "hash": "bd7e7a315302cca1fe246dbc4b930412"
+    "mtime": 1778731813.6464584,
+    "hash": "e550cc710a1e11d6e13358c62d20beb6"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/regime_filter.py": {
     "mtime": 1773512698.5321512,
@@ -456,8 +456,8 @@
     "hash": "649c1866de619b4a077db175b4a65703"
   },
   "/opt/butterflyguy/configs/config.yaml": {
-    "mtime": 1778618402.3133247,
-    "hash": "fd37025988e121669baca4b21eb95aac"
+    "mtime": 1778731380.198184,
+    "hash": "be49262ca87d50d6fdc9f0f5eb691e33"
   },
   "/opt/butterflyguy/configs/config_ndx.yaml": {
     "mtime": 1778618403.4883306,

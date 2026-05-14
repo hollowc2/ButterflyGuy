@@ -57,11 +57,12 @@ from butterfly_guy.backtest.simulation_engine import (
     SimulationEngine,
     SimulationParams,
 )
-from butterfly_guy.core.config import StrategySettings, load_config
+from butterfly_guy.core.config import AppConfig, StrategySettings, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
     ButterflyBuilder,
+    resolve_wing_widths_for_vix,
     vix_target_center,
 )
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
@@ -100,6 +101,52 @@ ASSET_DEFAULTS: dict[str, dict] = {
         drawdowns=(0.60, 0.90, 0.75),
     ),
 }
+
+ASSET_CONFIG_PATHS = {
+    "SPX": "configs/config.yaml",
+    "NDX": "configs/config_ndx.yaml",
+    "XSP": "configs/config_xsp.yaml",
+}
+
+
+def load_asset_config(asset: str) -> AppConfig:
+    """Load the live config for an asset so DB replays share runtime defaults."""
+    return load_config(config_path=ASSET_CONFIG_PATHS[asset])
+
+
+def _asset_drawdowns(
+    config: AppConfig,
+    fallback: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    """Return live morning/late/afternoon drawdown thresholds."""
+    regimes = config.profit_management.regimes
+    return (
+        regimes.get("morning").drawdown_threshold if regimes.get("morning") else fallback[0],
+        (
+            regimes.get("late_morning").drawdown_threshold
+            if regimes.get("late_morning")
+            else fallback[1]
+        ),
+        regimes.get("afternoon").drawdown_threshold if regimes.get("afternoon") else fallback[2],
+    )
+
+
+def _parse_config_time(value: str) -> dt.time:
+    """Parse an HH:MM config time."""
+    hour, minute = value.split(":", 1)
+    return dt.time(int(hour), int(minute))
+
+
+def _live_width_label(
+    *,
+    wing_provided: bool,
+    method: str,
+    config: AppConfig,
+    wing_widths: list[int] | None,
+) -> str:
+    if not wing_provided and method == "VIX" and config.strategy.vix_width_buckets:
+        return "live VIX bucket"
+    return str(wing_widths or config.strategy.wing_widths)
 
 
 def resolve_db_dsn() -> str:
@@ -210,7 +257,7 @@ def parse_args() -> argparse.Namespace:
 
     p.add_argument("--wing", type=_intlist, default=None,
                    metavar="W[,W]",
-                   help="Wing width(s). Default: asset widths (SPX:10,20,30  NDX:25,50,75). "
+                   help="Wing width(s). Default: asset live config. "
                         "Sweep mode tests each width independently.")
     p.add_argument("--rr-min", type=_floatlist, default=None,
                    metavar="RR[,RR]",
@@ -236,18 +283,24 @@ def parse_args() -> argparse.Namespace:
                         "Use comma-separated values with --sweep to compare policies.")
     p.add_argument("--method", type=_strlist, default=None,
                    metavar="M[,M]",
-                   help="Selection method(s): VIX, TARGET_COST, BEST_RR. Default: VIX.")
+                   help=(
+                       "Selection method(s): VIX, TARGET_COST, BEST_RR. "
+                       "Default: asset live config."
+                   ))
     p.add_argument("--entry-time", type=_timelist_pst, default=None,
                    metavar="T[,T]",
                    help="Entry window start time(s) in PST, e.g. 7:00,7:10,7:30. "
                         "Each defines a 10-minute entry window. Default: 7:00.")
 
-    p.add_argument("--slippage", type=float, default=0.05,
-                   help="Per-spread slippage applied to entry and exit.")
+    p.add_argument("--slippage", type=float, default=None,
+                   help=(
+                       "Per-spread slippage applied to entry and exit. "
+                       "Default: asset live config."
+                   ))
     p.add_argument("--vix-max", type=float, default=None,
                    help="Skip days where VIX at entry exceeds this threshold.")
-    p.add_argument("--use-abs-stop", action="store_true", default=False,
-                   help="Enable absolute loss stop (default: off, matching live config).")
+    p.add_argument("--use-abs-stop", action=argparse.BooleanOptionalAction, default=None,
+                   help="Enable absolute loss stop. Default: asset live config.")
 
     p.add_argument("--sweep", action="store_true",
                    help="Run grid search over all comma-separated param combos.")
@@ -282,14 +335,19 @@ def parse_args() -> argparse.Namespace:
 
     # Apply defaults that depend on asset (must be done after parsing)
     asset_cfg = ASSET_DEFAULTS[args.asset]
+    live_config = load_asset_config(args.asset)
+    args.wing_provided = args.wing is not None
     if args.wing is None:
-        args.wing = list(asset_cfg["wing_widths"])
+        args.wing = list(live_config.strategy.wing_widths)
     if args.direction is None:
         args.direction = ["auto"]
     args.direction = [d if d.upper() != "AUTO" else "auto" for d in args.direction]
     if args.rr_min is None:
-        args.rr_min = [8.0]
-    morning_dd, late_morning_dd, afternoon_dd = asset_cfg["drawdowns"]
+        args.rr_min = [live_config.strategy.rr_min]
+    morning_dd, late_morning_dd, afternoon_dd = _asset_drawdowns(
+        live_config,
+        asset_cfg["drawdowns"],
+    )
     if args.morning_dd is None:
         args.morning_dd = [morning_dd]
     if args.late_morning_dd is None:
@@ -297,13 +355,17 @@ def parse_args() -> argparse.Namespace:
     if args.afternoon_dd is None:
         args.afternoon_dd = [afternoon_dd]
     if args.method is None:
-        args.method = ["VIX"]
+        args.method = [live_config.entry.strike_selection_method]
     if args.entry_time is None:
-        args.entry_time = [dt.time(7, 0)]
+        args.entry_time = [_parse_config_time(live_config.entry.start_time)]
     if args.dd_schedule is None:
         args.dd_schedule = [None]
     if args.profit_strategy is None:
-        args.profit_strategy = ["peakvaluetrailer"]
+        args.profit_strategy = [live_config.profit_management.strategy]
+    if args.use_abs_stop is None:
+        args.use_abs_stop = live_config.profit_management.use_absolute_loss_stop
+    if args.slippage is None:
+        args.slippage = live_config.execution.paper_slippage_per_spread
     valid_profit_strategies = {"peakvaluetrailer", "profitprotector"}
     args.profit_strategy = [s.lower() for s in args.profit_strategy]
     invalid_profit_strategies = [
@@ -617,6 +679,7 @@ def select_for_width(
     rr_target: float = 10.0,
     method: str = "VIX",
     max_cost_per_width: dict[int, float] | None = None,
+    sigma_fraction: float | None = None,
 ) -> ButterflyCandidate | None:
     """Select the best butterfly candidate for a single wing width."""
     settings = StrategySettings(
@@ -632,6 +695,8 @@ def select_for_width(
 
     if method == "TARGET_COST":
         return selector.select_best_by_target_cost(width_candidates)
+    if method == "BEST_RR":
+        return selector.select_best(width_candidates, target_center=None)
 
     target_center = None
     if method == "VIX":
@@ -640,9 +705,10 @@ def select_for_width(
             spot=spot,
             direction=direction,
             wing_width=wing_width,
+            sigma_fraction=sigma_fraction,
         )
 
-    return selector.select_farthest_otm(
+    return selector.select_best(
         width_candidates,
         target_center=target_center,
         center_tolerance=center_tolerance,
@@ -661,6 +727,7 @@ def select_live_width(
     rr_target: float = 10.0,
     method: str = "VIX",
     max_cost_per_width: dict[int, float] | None = None,
+    sigma_fractions: tuple[float, ...] | None = None,
 ) -> ButterflyCandidate | None:
     """Cross-width selection."""
     if method == "TARGET_COST":
@@ -675,8 +742,23 @@ def select_live_width(
         candidates = builder.build_candidates(quotes, spot, direction)
         return selector.select_best_by_target_cost(candidates)
 
+    if method == "BEST_RR":
+        settings = StrategySettings(
+            wing_widths=wing_widths,
+            rr_min=rr_min,
+            spot_range=spot_range,
+            max_cost_per_width=max_cost_per_width or {},
+        )
+        builder = ButterflyBuilder(settings)
+        selector = ButterflySelector(settings)
+        candidates = builder.build_candidates(quotes, spot, direction)
+        return selector.select_best(candidates, target_center=None)
+
     per_width_bests: list[ButterflyCandidate] = []
-    for width in wing_widths:
+    for i, width in enumerate(wing_widths):
+        sigma_fraction = (
+            sigma_fractions[i] if sigma_fractions and i < len(sigma_fractions) else None
+        )
         best = select_for_width(
             quotes,
             spot,
@@ -689,15 +771,13 @@ def select_live_width(
             rr_target,
             method=method,
             max_cost_per_width=max_cost_per_width,
+            sigma_fraction=sigma_fraction,
         )
         if best:
             per_width_bests.append(best)
     if not per_width_bests:
         return None
-    return max(
-        per_width_bests,
-        key=lambda c: (c.distance_from_spot, c.wing_width, c.reward_risk),
-    )
+    return ButterflySelector().select_best(per_width_bests)
 
 
 # ---------------------------------------------------------------------------
@@ -761,6 +841,14 @@ def _force_synthetic_for_date(date: dt.date):
 # Per-date data loading (shared between single and sweep modes)
 # ---------------------------------------------------------------------------
 
+def select_direction_bar(bars: list[MinuteBar]) -> MinuteBar:
+    """Use the first regular-session snapshot for gap direction."""
+    return next(
+        (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(9, 30)),
+        bars[0],
+    )
+
+
 async def load_date_data(
     conn: asyncpg.Connection,
     date: dt.date,
@@ -772,12 +860,7 @@ async def load_date_data(
     if not chains or not bars:
         return None
     prev_close = await get_prev_close(conn, date, underlying)
-    # The first stored 09:30 snapshot can carry a stale prior-close quote.
-    # Use the first post-open bar for historical direction/gap decisions.
-    direction_bar = next(
-        (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(9, 31)),
-        bars[0],
-    )
+    direction_bar = select_direction_bar(bars)
     entry_bar = next(
         (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(10, 0)),
         bars[0],
@@ -1243,7 +1326,7 @@ def _print_same_entry_comparison_table(day_rows: list[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 async def run_single(args: argparse.Namespace) -> None:
-    asset_cfg = ASSET_DEFAULTS[args.asset]
+    live_config = load_asset_config(args.asset)
     direction_arg = args.direction[0]
     wing_widths = args.wing
     rr_min = args.rr_min[0]
@@ -1253,12 +1336,23 @@ async def run_single(args: argparse.Namespace) -> None:
     dd_schedule = args.dd_schedule[0]
     profit_strategy = args.profit_strategy[0]
     method = args.method[0]
-    center_tolerance = asset_cfg["center_tolerance"]
-    spot_range = asset_cfg["spot_range"]
+    center_tolerance = live_config.entry.center_tolerance
+    spot_range = live_config.strategy.spot_range
+    max_cost_per_width = live_config.strategy.max_cost_per_width
+    width_label = _live_width_label(
+        wing_provided=args.wing_provided,
+        method=method,
+        config=live_config,
+        wing_widths=wing_widths,
+    )
 
     print(f"\n{'='*72}")
     print(f"  DB BACKTEST  |  {args.asset}  {direction_arg} butterfly")
-    print(f"  Widths: {wing_widths}  rr_min: {rr_min}  DD: {morning_dd}/{late_morning_dd}/{afternoon_dd}")
+    print(f"  Live config: {ASSET_CONFIG_PATHS[args.asset]}")
+    print(
+        f"  Widths: {width_label}  rr_min: {rr_min}  "
+        f"DD: {morning_dd}/{late_morning_dd}/{afternoon_dd}"
+    )
     print(f"  DD schedule: {_dd_schedule_label(dd_schedule)}")
     print(f"  Profit strategy: {profit_strategy}")
     print(f"  Method: {method}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  "
@@ -1330,25 +1424,54 @@ async def run_single(args: argparse.Namespace) -> None:
                 if skip_reason:
                     print(f" SKIPPED (gap_regime: {skip_reason})")
                     continue
-                if override:
-                    direction = override
+            if override:
+                direction = override
 
-            entry_quotes = nearest_snapshot(d["chains"], d["entry_bar"].ts) or []
+            entry_pst = args.entry_time[0]
+            entry_et = _pst_to_et(entry_pst)
+            entry_target = dt.datetime(
+                date.year,
+                date.month,
+                date.day,
+                entry_et.hour,
+                entry_et.minute,
+                tzinfo=EASTERN,
+            )
+            entry_bar = _find_bar_at(d["bars"], entry_target)
+            if entry_bar is None:
+                print(f" SKIPPED (no entry bar at/after {entry_et:%H:%M} ET)")
+                continue
+            entry_spot = entry_bar.close
+
+            day_wing_widths = wing_widths
+            sigma_fractions: tuple[float, ...] | None = None
+            if (
+                not args.wing_provided
+                and method == "VIX"
+                and live_config.strategy.vix_width_buckets
+            ):
+                day_wing_widths, sigma_fractions = resolve_wing_widths_for_vix(
+                    d["vix"],
+                    live_config.strategy.vix_width_buckets,
+                )
+
+            entry_quotes = nearest_snapshot(d["chains"], entry_bar.ts) or []
             chosen = select_live_width(
                 quotes=entry_quotes,
-                spot=d["entry_spot"],
+                spot=entry_spot,
                 direction=direction,
                 vix=d["vix"],
-                wing_widths=wing_widths,
+                wing_widths=day_wing_widths,
                 rr_min=rr_min,
                 spot_range=spot_range,
                 center_tolerance=center_tolerance,
                 method=method,
-                max_cost_per_width=asset_cfg["max_cost"],
+                max_cost_per_width=max_cost_per_width,
+                sigma_fractions=sigma_fractions,
             )
 
             if not chosen:
-                print(f" SKIPPED (no qualifying butterfly)")
+                print(" SKIPPED (no qualifying butterfly)")
                 continue
 
             print(f" {chosen.wing_width}W {direction} center={chosen.center_strike:.0f}  "
@@ -1371,14 +1494,22 @@ async def run_single(args: argparse.Namespace) -> None:
                 slippage=args.slippage,
                 use_vix_center=(method == "VIX"),
                 selection_method=method,
-                max_cost_per_width=asset_cfg["max_cost"],
+                max_cost_per_width=max_cost_per_width,
+                max_loss_from_cost=live_config.profit_management.max_loss_from_cost,
                 use_absolute_loss_stop=args.use_abs_stop,
                 drawdown_schedule=dd_schedule,
                 profit_management_strategy=profit_strategy,
+                profitprotector=live_config.profit_management.profitprotector,
             )
 
             restore = _patch_chain_cache(full_chains, date)
-            result = engine.simulate_day(d["day"], params)
+            result = engine.simulate_day_from_entry(
+                d["day"],
+                params,
+                entry_candidate=chosen,
+                entry_price=chosen.cost + args.slippage,
+                entry_time=entry_bar.ts,
+            )
             restore()
 
             synth_result = None
@@ -1473,13 +1604,15 @@ async def run_single(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 async def run_sweep(args: argparse.Namespace) -> None:
-    asset_cfg = ASSET_DEFAULTS[args.asset]
-    center_tolerance = asset_cfg["center_tolerance"]
-    spot_range = asset_cfg["spot_range"]
+    live_config = load_asset_config(args.asset)
+    center_tolerance = live_config.entry.center_tolerance
+    spot_range = live_config.strategy.spot_range
+    max_cost_per_width = live_config.strategy.max_cost_per_width
+    wing_values = args.wing if args.wing_provided else [None]
 
     # Build combo grid
     param_grid = list(itertools.product(
-        args.wing,
+        wing_values,
         args.direction,
         args.rr_min,
         args.morning_dd,
@@ -1495,7 +1628,14 @@ async def run_sweep(args: argparse.Namespace) -> None:
     entry_strs = [f"{t.hour:02d}:{t.minute:02d}" for t in args.entry_time]
     print(f"\n{'='*72}")
     print(f"  PARAMETER SWEEP  |  {args.asset}  |  {total_combos} combos")
-    print(f"  Wings: {args.wing}  Directions: {args.direction}  rr_min: {args.rr_min}")
+    print(f"  Live config: {ASSET_CONFIG_PATHS[args.asset]}")
+    width_label = _live_width_label(
+        wing_provided=args.wing_provided,
+        method=args.method[0],
+        config=live_config,
+        wing_widths=args.wing,
+    )
+    print(f"  Wings: {width_label}  Directions: {args.direction}  rr_min: {args.rr_min}")
     print(f"  Methods: {args.method}  Entry times (PST): {entry_strs}")
     print(f"  morning_dd: {args.morning_dd}  late_morning_dd: {args.late_morning_dd}")
     print(
@@ -1535,7 +1675,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
             usable_dates.append(date)
 
             # Phase 1: run all combo selections using entry-window chains
-            per_combo: list[tuple] = []  # (resolved_direction, chosen | None, sim_params)
+            per_combo: list[tuple] = []
             needed_strikes: set[float] = set()
             needed_types: set[str] = set()
 
@@ -1556,7 +1696,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                                            entry_et.hour, entry_et.minute, tzinfo=EASTERN)
                 entry_bar_combo = _find_bar_at(d["bars"], entry_target)
                 if entry_bar_combo is None:
-                    per_combo.append((None, None, None))
+                    per_combo.append((None, None, None, None))
                     continue
 
                 entry_quotes = nearest_snapshot(d["chains"], entry_bar_combo.ts) or []
@@ -1570,7 +1710,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 if args.gap_filter is not None:
                     gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
                     if gap_pct < args.gap_filter:
-                        per_combo.append((None, None, None))
+                        per_combo.append((None, None, None, None))
                         continue
                     resolved_direction = "CALL"
 
@@ -1580,7 +1720,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                     if (gap_pct < 0.0025
                             or regime != Regime.BULL
                             or d["vix"] >= d["vix_prev_close"]):
-                        per_combo.append((None, None, None))
+                        per_combo.append((None, None, None, None))
                         continue
                     resolved_direction = "CALL"
 
@@ -1596,25 +1736,51 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         regime,
                     )
                     if skip_reason:
-                        per_combo.append((None, None, None))
+                        per_combo.append((None, None, None, None))
                         continue
                     if override:
                         resolved_direction = override
 
-                chosen = select_for_width(
-                    quotes=entry_quotes,
-                    spot=entry_spot,
-                    direction=resolved_direction,
-                    vix=d["vix"],
-                    wing_width=wing,
-                    rr_min=rr_min,
-                    spot_range=spot_range,
-                    center_tolerance=center_tolerance,
-                    method=method,
-                    max_cost_per_width=asset_cfg["max_cost"],
-                )
+                sigma_fractions: tuple[float, ...] | None = None
+                if wing is None:
+                    combo_widths = list(live_config.strategy.wing_widths)
+                    if method == "VIX" and live_config.strategy.vix_width_buckets:
+                        combo_widths, sigma_fractions = resolve_wing_widths_for_vix(
+                            d["vix"],
+                            live_config.strategy.vix_width_buckets,
+                        )
+                    chosen = select_live_width(
+                        quotes=entry_quotes,
+                        spot=entry_spot,
+                        direction=resolved_direction,
+                        vix=d["vix"],
+                        wing_widths=combo_widths,
+                        rr_min=rr_min,
+                        spot_range=spot_range,
+                        center_tolerance=center_tolerance,
+                        method=method,
+                        max_cost_per_width=max_cost_per_width,
+                        sigma_fractions=sigma_fractions,
+                    )
+                else:
+                    chosen = select_for_width(
+                        quotes=entry_quotes,
+                        spot=entry_spot,
+                        direction=resolved_direction,
+                        vix=d["vix"],
+                        wing_width=wing,
+                        rr_min=rr_min,
+                        spot_range=spot_range,
+                        center_tolerance=center_tolerance,
+                        method=method,
+                        max_cost_per_width=max_cost_per_width,
+                    )
                 if chosen is not None:
-                    needed_strikes |= {chosen.lower_strike, chosen.center_strike, chosen.upper_strike}
+                    needed_strikes |= {
+                        chosen.lower_strike,
+                        chosen.center_strike,
+                        chosen.upper_strike,
+                    }
                     needed_types.add(chosen.direction)
                     et_end_total = entry_et.hour * 60 + entry_et.minute + 10
                     entry_et_end = dt.time(et_end_total // 60, et_end_total % 60)
@@ -1628,16 +1794,18 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         slippage=args.slippage,
                         use_vix_center=(method == "VIX"),
                         selection_method=method,
-                        max_cost_per_width=asset_cfg["max_cost"],
+                        max_cost_per_width=max_cost_per_width,
+                        max_loss_from_cost=live_config.profit_management.max_loss_from_cost,
                         use_absolute_loss_stop=args.use_abs_stop,
                         entry_start=entry_et,
                         entry_end=entry_et_end,
                         drawdown_schedule=dd_schedule,
                         profit_management_strategy=profit_strategy,
+                        profitprotector=live_config.profit_management.profitprotector,
                     )
                 else:
                     sim_params = None
-                per_combo.append((resolved_direction, chosen, sim_params))
+                per_combo.append((resolved_direction, chosen, sim_params, entry_bar_combo.ts))
 
             # Phase 2: load monitoring chains for all needed strikes, patch once
             if needed_strikes:
@@ -1649,11 +1817,17 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 full_chains = d["chains"]
 
             restore = _patch_chain_cache(full_chains, date)
-            for ci, (resolved_direction, chosen, sim_params) in enumerate(per_combo):
-                if chosen is None:
+            for ci, (resolved_direction, chosen, sim_params, entry_time) in enumerate(per_combo):
+                if chosen is None or sim_params is None or entry_time is None:
                     combo_day_results[ci].append((date, None))
                     continue
-                result = engine.simulate_day(d["day"], sim_params)
+                result = engine.simulate_day_from_entry(
+                    d["day"],
+                    sim_params,
+                    entry_candidate=chosen,
+                    entry_price=chosen.cost + args.slippage,
+                    entry_time=entry_time,
+                )
                 combo_day_results[ci].append((date, result))
             restore()
 
@@ -1681,8 +1855,9 @@ async def run_sweep(args: argparse.Namespace) -> None:
     ) in enumerate(param_grid, 1):
         entry_pst_str = f"{entry_pst.hour:02d}:{entry_pst.minute:02d}"
         dd_schedule_label = _dd_schedule_label(dd_schedule)
+        wing_label = "live" if wing is None else wing
         combo_label = dict(
-            wing_width=wing,
+            wing_width=wing_label,
             direction=direction,
             rr_min=rr_min,
             morning_dd=morning_dd,
@@ -1698,7 +1873,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
 
         if i % 10 == 0 or i == total_combos:
             print(f"  [{i:>{len(str(total_combos))}}/{total_combos}]  "
-                  f"{wing}W {direction} entry={entry_pst_str}PST "
+                  f"{wing_label}W {direction} entry={entry_pst_str}PST "
                   f"method={method} rr={rr_min} "
                   f"profit={profit_strategy} "
                   f"dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
