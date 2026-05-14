@@ -32,8 +32,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/tests/test_butterfly_selector.py": {
-    "mtime": 1778731848.9346576,
-    "hash": "494f22ee76c037cc0400af40a002d1b6"
+    "mtime": 1778778584.9101913,
+    "hash": "a64649a3d8d7eb413f75a1265c65d085"
   },
   "/opt/butterflyguy/tests/test_position_manager.py": {
     "mtime": 1778530313.1634445,
@@ -272,8 +272,8 @@
     "hash": "0801399eba486ac77175791dadc226d1"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1777928027.5516794,
-    "hash": "55cd0738ea06d94fd3060602e4ef7b7d"
+    "mtime": 1778778629.4394104,
+    "hash": "30622a4ccf3501f1efc2bb69a52036b0"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/download_schwab_cache.py": {
     "mtime": 1773353569.7177627,
@@ -420,8 +420,8 @@
     "hash": "e778956441470a41af7ba678d8891ed7"
   },
   "/opt/butterflyguy/infra/docker-compose.yml": {
-    "mtime": 1778704229.7354288,
-    "hash": "d55df3e7293708cddadd86cbfaaec051"
+    "mtime": 1778778583.442184,
+    "hash": "f647ed104da393e52aa3fe05c2274890"
   },
   "/opt/butterflyguy/infra/grafana/provisioning/datasources/datasources.yml": {
     "mtime": 1777928795.0788002,

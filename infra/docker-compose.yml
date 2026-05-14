@@ -13,6 +13,7 @@ services:
       - ../.env
     volumes:
       - ../tokens.json:/app/tokens.json
+      - ../configs/config.yaml:/app/configs/config.yaml
       - ../data/chains:/app/data/chains
     environment:
       DATABASE__HOST: timescaledb

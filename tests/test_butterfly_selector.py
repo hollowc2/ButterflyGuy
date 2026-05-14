@@ -61,3 +61,33 @@ def test_regular_best_rr_selection_still_uses_rr_target():
 
     assert best is not None
     assert best.center_strike == 29220
+
+
+def test_vix_selection_rejects_cheap_extreme_rr_tail_candidate():
+    selector = ButterflySelector(StrategySettings(rr_target=10.0, rr_max=12.0))
+    candidates = [
+        make_candidate(
+            center=7530,
+            distance=64.55,
+            reward_risk=11.0968,
+            cost=2.48,
+            wing_width=30,
+        ),
+        make_candidate(
+            center=7565,
+            distance=99.55,
+            reward_risk=108.375,
+            cost=0.32,
+            wing_width=35,
+        ),
+    ]
+
+    best = selector.select_best(
+        candidates,
+        target_center=7565,
+        center_tolerance=40,
+    )
+
+    assert best is not None
+    assert best.center_strike == 7530
+    assert best.wing_width == 30

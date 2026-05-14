@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import datetime as dt
+import os
 import sys
 from pathlib import Path
+
+from dotenv import dotenv_values
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
-from butterfly_guy.core.metrics import butterfly_candidates_found, daily_pnl, daily_trade_count, start_metrics_server, trades_active
+from butterfly_guy.core.metrics import (
+    butterfly_candidates_found,
+    daily_pnl,
+    daily_trade_count,
+    start_metrics_server,
+    trades_active,
+)
 from butterfly_guy.core.time_utils import is_market_open, now_eastern
 from butterfly_guy.data.collector import OptionChainCollector
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
@@ -30,8 +40,6 @@ from butterfly_guy.db.queries import (
 )
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 from butterfly_guy.execution.order_manager import OrderManager
-from butterfly_guy.position.position_manager import PositionManager
-from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.position_service import PositionService
@@ -59,7 +67,11 @@ async def entry_loop(
     if recovered_trade is not None and recovered_candidate is not None:
         log.info("resuming_monitor_for_recovered_trade", trade_id=recovered_trade.trade_id)
         monitor_task = asyncio.create_task(
-            position_service.monitor_loop(recovered_trade, recovered_candidate, recovered_peak=recovered_peak),
+            position_service.monitor_loop(
+                recovered_trade,
+                recovered_candidate,
+                recovered_peak=recovered_peak,
+            ),
             name=f"monitor_{recovered_trade.trade_id}",
         )
 
@@ -112,7 +124,6 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
 
 
 async def main() -> None:
-    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/config.yaml", help="Path to config YAML file")
     args = parser.parse_args()
@@ -124,7 +135,21 @@ async def main() -> None:
             "Live trading requires execution.allow_live_trading=true or ALLOW_LIVE_TRADING=true"
         )
 
-    log.info("live_trading_starting")
+    log.info(
+        "live_trading_starting",
+        underlying=config.strategy.underlying,
+        config_path=args.config,
+        strike_selection_method=config.entry.strike_selection_method,
+        wing_widths=config.strategy.wing_widths,
+        vix_width_buckets=[
+            {"vix_max": bucket.vix_max, "widths": bucket.widths}
+            for bucket in (config.strategy.vix_width_buckets or [])
+        ],
+        rr_min=config.strategy.rr_min,
+        rr_max=config.strategy.rr_max,
+        rr_target=config.strategy.rr_target,
+        center_tolerance=config.entry.center_tolerance,
+    )
     start_metrics_server(config.monitoring.metrics_port)
 
     # Init DB
@@ -147,10 +172,15 @@ async def main() -> None:
     tent_q = TentQueries(db)
 
     # Discord notifier — only for live trading, not paper
-    import os
-    from dotenv import dotenv_values
-    webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get("DISCORD_WEBHOOK_URL", "")
-    notifier = DiscordNotifier(webhook) if (webhook and not config.execution.paper_trading) else None
+    webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get(
+        "DISCORD_WEBHOOK_URL",
+        "",
+    )
+    notifier = (
+        DiscordNotifier(webhook)
+        if (webhook and not config.execution.paper_trading)
+        else None
+    )
 
     # Classify today's market regime (must precede TradeService construction)
     regime_classifier = RegimeClassifier()
@@ -161,7 +191,12 @@ async def main() -> None:
     vix_closes = await daily_bar_q.get_recent_closes("$VIX", days=1)
     vix_level = vix_closes[0] if vix_closes else 0.0
     regime = regime_classifier.classify(recent_spx, vix_level)
-    log.info("regime_classified", regime=regime.value, spx_bars=len(recent_spx), vix=vix_level)
+    log.info(
+        "regime_classified",
+        regime=regime.value,
+        spx_bars=len(recent_spx),
+        vix=vix_level,
+    )
 
     gap_regime_filter = GapRegimeFilter(
         bull_call_bias=config.entry.bull_call_bias,
@@ -171,7 +206,12 @@ async def main() -> None:
     # Build service objects
     risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
     order_builder = ButterflyOrderBuilder()
-    order_manager = OrderManager(config.execution, schwab, order_builder, config.strategy.underlying)
+    order_manager = OrderManager(
+        config.execution,
+        schwab,
+        order_builder,
+        config.strategy.underlying,
+    )
 
     trade_service = TradeService(
         config=config,
@@ -310,7 +350,13 @@ async def main() -> None:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(collector.run_loop(), name="collector")
             tg.create_task(
-                entry_loop(trade_service, position_service, recovered_trade, recovered_candidate, recovered_peak),
+                entry_loop(
+                    trade_service,
+                    position_service,
+                    recovered_trade,
+                    recovered_candidate,
+                    recovered_peak,
+                ),
                 name="entry_loop",
             )
             tg.create_task(daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset")
