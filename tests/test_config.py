@@ -110,9 +110,14 @@ def test_xsp_config_tracks_spx_proxy_widths():
     assert 1 not in config.strategy.wing_widths
     assert config.strategy.wing_widths == [2, 3, 4, 5, 6, 7]
     assert config.strategy.vix_width_buckets is not None
-    assert config.strategy.vix_width_buckets[1].widths == [3, 4]
+    assert config.strategy.vix_width_buckets[1].widths == [2, 3, 4]
     assert config.execution.paper_slippage_per_spread == 0.005
     assert config.execution.paper_commission_per_contract == 0.65
+    assert config.profit_management.regimes["morning"].confirmation_polls == 1
+    assert config.profit_management.regimes["morning"].min_peak_profit_ratio == 1.10
+    assert config.profit_management.quote_quality.enabled is True
+    assert config.profit_management.quote_quality.min_bid_to_mark_ratio == 0.75
+    assert config.profit_management.quote_quality.max_spread_width_ratio == 0.50
 
 
 def test_spx_goldilocks_width_bucket_uses_20_30_40():
