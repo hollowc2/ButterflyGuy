@@ -68,6 +68,7 @@ from butterfly_guy.strategy.butterfly_builder import (
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime, RegimeClassifier
+from butterfly_guy.strategy.width_selection import select_cross_width_candidate
 
 _regime_classifier = RegimeClassifier()
 
@@ -728,6 +729,7 @@ def select_live_width(
     method: str = "VIX",
     max_cost_per_width: dict[int, float] | None = None,
     sigma_fractions: tuple[float, ...] | None = None,
+    prefer_first_width: bool = False,
 ) -> ButterflyCandidate | None:
     """Cross-width selection."""
     if method == "TARGET_COST":
@@ -777,7 +779,10 @@ def select_live_width(
             per_width_bests.append(best)
     if not per_width_bests:
         return None
-    return ButterflySelector().select_best(per_width_bests)
+    return select_cross_width_candidate(
+        per_width_bests,
+        prefer_first_width=prefer_first_width,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1468,6 +1473,7 @@ async def run_single(args: argparse.Namespace) -> None:
                 method=method,
                 max_cost_per_width=max_cost_per_width,
                 sigma_fractions=sigma_fractions,
+                prefer_first_width=(args.asset == "XSP"),
             )
 
             if not chosen:
@@ -1761,6 +1767,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         method=method,
                         max_cost_per_width=max_cost_per_width,
                         sigma_fractions=sigma_fractions,
+                        prefer_first_width=(args.asset == "XSP"),
                     )
                 else:
                     chosen = select_for_width(

@@ -51,6 +51,7 @@ from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime
+from butterfly_guy.strategy.width_selection import select_cross_width_candidate
 
 log = get_logger(__name__)
 
@@ -336,7 +337,10 @@ class TradeService:
                         if w_best:
                             per_width_bests.append(w_best)
                     if per_width_bests:
-                        best = self.selector.select_best(per_width_bests)
+                        best = select_cross_width_candidate(
+                            per_width_bests,
+                            prefer_first_width=self.config.strategy.underlying == "XSP",
+                        )
                         log.info(
                             "vix_center_selected",
                             vix=round(vix_price, 2),
