@@ -126,3 +126,11 @@ def test_spx_goldilocks_width_bucket_uses_20_30_40():
     assert config.strategy.vix_width_buckets is not None
     assert config.strategy.vix_width_buckets[1].vix_max == 24.5
     assert config.strategy.vix_width_buckets[1].widths == [20, 30, 40]
+
+
+def test_ndx_config_keeps_spx_style_rr_target_with_default_50_wide_ceiling():
+    config = load_config(config_path="configs/config_ndx.yaml")
+
+    assert config.strategy.underlying == "NDX"
+    assert config.strategy.rr_target == 10.0
+    assert config.strategy.max_cost_per_width[50] == 4.0
