@@ -113,7 +113,7 @@ def test_xsp_config_tracks_spx_proxy_widths():
     assert config.strategy.vix_width_buckets[1].widths == [2, 3, 4]
     assert config.execution.paper_slippage_per_spread == 0.005
     assert config.execution.paper_commission_per_contract == 0.65
-    assert config.profit_management.regimes["morning"].confirmation_polls == 1
+    assert config.profit_management.regimes["morning"].confirmation_polls == 22
     assert config.profit_management.regimes["morning"].min_peak_profit_ratio == 1.10
     assert config.profit_management.quote_quality.enabled is True
     assert config.profit_management.quote_quality.min_bid_to_mark_ratio == 0.75
