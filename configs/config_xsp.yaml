@@ -53,19 +53,19 @@ profit_management:
       start_minutes_after_open: 0
       end_minutes_after_open: 120
       drawdown_threshold: 0.60
-      confirmation_polls: 22
+      confirmation_polls: 2
       min_peak_profit_ratio: 1.10
     late_morning:
       start_minutes_after_open: 120
       end_minutes_after_open: 240
       drawdown_threshold: 0.90
-      confirmation_polls: 22
+      confirmation_polls: 2
       min_peak_profit_ratio: 1.10
     afternoon:
       start_minutes_after_open: 240
       end_minutes_after_open: 390
       drawdown_threshold: 0.75
-      confirmation_polls: 22
+      confirmation_polls: 2
       min_peak_profit_ratio: 1.10
   exit_before_close_minutes: 0
   max_loss_from_cost: 0.50
