@@ -1200,7 +1200,7 @@
             "uid": "timescaledb"
           },
           "rawQuery": true,
-          "rawSql": "SELECT\n  ts AT TIME ZONE 'America/Los_Angeles' AS \"Time\",\n  event_type AS \"Event\",\n  CASE event_type\n    WHEN 'trade_entered' THEN\n      'fill=' || (data->>'cost') || '  width=' || (data->>'width') || '  center=' || (data->>'center') || '  dir=' || (data->>'direction') || '  step=' || (data->>'entry_step')\n    WHEN 'entry_step_unfilled' THEN\n      'step=' || (data->>'step') || '  center=' || (data->>'center') || '  width=' || (data->>'width') || '  mark=' || (data->>'mark') || '  ask=' || (data->>'ask') || '  limit=' || (data->>'limit')\n    WHEN 'entry_exhausted' THEN\n      'direction=' || (data->>'direction') || '  \u2014 no fill after all steps'\n    WHEN 'exit_signal_fired' THEN\n      'reason=' || (data->>'reason') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  drawdown=' || (data->>'drawdown_pct') || '%  regime=' || (data->>'regime')\n    WHEN 'trade_exited' THEN\n      'reason=' || (data->>'exit_reason') || '  entry=' || (data->>'entry_price') || '  mark_signal=' || (data->>'mark_at_signal') || '  bid=' || COALESCE(data->>'spread_bid','?') || '  mark=' || COALESCE(data->>'spread_mark','?') || '  fill=' || (data->>'fill_price') || '  pnl=' || (data->>'pnl') || CASE WHEN (data->>'forced')::boolean THEN '  [FORCED]' ELSE '' END\n    WHEN 'profit_state_transition' THEN\n      (data->>'from') || ' \u2192 ' || (data->>'to') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  regime=' || (data->>'regime')\n    WHEN 'entry_failed' THEN\n      'center=' || (data->>'center')\n    ELSE data::text\n  END AS \"Details\"\nFROM decision_log\nWHERE ts::date = CURRENT_DATE\n  AND underlying = '$underlying'\nORDER BY ts ASC\nLIMIT 200",
+          "rawSql": "SELECT\n  ts AT TIME ZONE 'America/Los_Angeles' AS \"Time\",\n  data->>'trade_id' AS trade_id,\n  event_type AS \"Event\",\n  CASE event_type\n    WHEN 'trade_entered' THEN\n      'fill=' || (data->>'cost') || '  width=' || (data->>'width') || '  center=' || (data->>'center') || '  dir=' || (data->>'direction') || '  step=' || (data->>'entry_step')\n    WHEN 'entry_step_unfilled' THEN\n      'step=' || (data->>'step') || '  center=' || (data->>'center') || '  width=' || (data->>'width') || '  mark=' || (data->>'mark') || '  ask=' || (data->>'ask') || '  limit=' || (data->>'limit')\n    WHEN 'entry_exhausted' THEN\n      'direction=' || (data->>'direction') || '  \u2014 no fill after all steps'\n    WHEN 'exit_signal_fired' THEN\n      'reason=' || (data->>'reason') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  drawdown=' || (data->>'drawdown_pct') || '%  regime=' || (data->>'regime')\n    WHEN 'trade_exited' THEN\n      'reason=' || (data->>'exit_reason') || '  entry=' || (data->>'entry_price') || '  mark_signal=' || (data->>'mark_at_signal') || '  bid=' || COALESCE(data->>'spread_bid','?') || '  mark=' || COALESCE(data->>'spread_mark','?') || '  fill=' || (data->>'fill_price') || '  pnl=' || (data->>'pnl') || CASE WHEN (data->>'forced')::boolean THEN '  [FORCED]' ELSE '' END\n    WHEN 'profit_state_transition' THEN\n      (data->>'from') || ' \u2192 ' || (data->>'to') || '  mark=' || (data->>'mark_value') || '  peak=' || (data->>'peak_value') || '  regime=' || (data->>'regime')\n    WHEN 'entry_failed' THEN\n      'center=' || (data->>'center')\n    ELSE data::text\n  END AS \"Details\"\nFROM decision_log\nWHERE ts::date = CURRENT_DATE\n  AND underlying = '$underlying'\nORDER BY ts ASC\nLIMIT 200",
           "format": "table"
         }
       ],
@@ -1220,6 +1220,27 @@
               {
                 "id": "custom.width",
                 "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trade_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open trade detail",
+                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-underlying=$underlying&var-trade_id=${__value.raw}"
+                  }
+                ]
+              },
+              {
+                "id": "custom.width",
+                "value": 90
               }
             ]
           },

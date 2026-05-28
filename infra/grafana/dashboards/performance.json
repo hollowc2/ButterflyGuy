@@ -596,6 +596,20 @@
               { "id": "decimals", "value": 0 },
               { "id": "displayName", "value": "hold time" }
             ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "trade_id" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open trade detail",
+                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-underlying=${__data.fields.underlying}&var-trade_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
@@ -603,7 +617,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT entry_time, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 60.0)::float AS duration_min FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY entry_time DESC",
+          "rawSql": "SELECT id AS trade_id, entry_time, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 60.0)::float AS duration_min FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY entry_time DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1632,6 +1646,20 @@
               { "id": "decimals", "value": 1 },
               { "id": "displayName", "value": "duration" }
             ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "trade_id" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open trade detail",
+                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-underlying=${__data.fields.underlying}&var-trade_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
@@ -1639,7 +1667,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT trade_date, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 3600.0, 1)::float AS duration_hrs FROM butterfly_trades WHERE status='CLOSED' AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY trade_date DESC, entry_time DESC",
+          "rawSql": "SELECT id AS trade_id, trade_date, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 3600.0, 1)::float AS duration_hrs FROM butterfly_trades WHERE status='CLOSED' AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY trade_date DESC, entry_time DESC",
           "format": "table",
           "refId": "A"
         }
