@@ -44,8 +44,12 @@
     "hash": "4e8adebce8ed592c1b977d64970674c0"
   },
   "/opt/butterflyguy/tests/test_run_backtest_db_defaults.py": {
-    "mtime": 1778729801.5025668,
-    "hash": "bc2bc70133ae3f8718545788fbf66274"
+    "mtime": 1780008774.5288858,
+    "hash": "5b5eccad9857469b5edb3f49932d1ff7"
+  },
+  "/opt/butterflyguy/tests/test_entry_selection.py": {
+    "mtime": 1780071373.6324074,
+    "hash": "defcc8af1824eceaad5cdb14e9ab371b"
   },
   "/opt/butterflyguy/tests/test_trade_service.py": {
     "mtime": 1778616782.922592,
@@ -132,8 +136,8 @@
     "hash": "58fa23047213502f74ab28f3211756c2"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/trade_service.py": {
-    "mtime": 1778877209.515647,
-    "hash": "ba5832df3c086172e6449605a5c07e8d"
+    "mtime": 1780071384.7944634,
+    "hash": "907d57df55d5687d5b6fbd6440dd4d2b"
   },
   "/opt/butterflyguy/src/butterfly_guy/quant_engine/__init__.py": {
     "mtime": 1773186977.914058,
@@ -244,8 +248,8 @@
     "hash": "0d564ed06d67ce93f64f85f4bcebf8d3"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_backtest_db.py": {
-    "mtime": 1778877226.3717208,
-    "hash": "5a7035bdf6ae214eaf5c55d15f816540"
+    "mtime": 1780071398.3985317,
+    "hash": "44de8dcbd45770cbdd23c80ba785b969"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/report_trade_ladders.py": {
     "mtime": 1778088865.3089764,
@@ -395,6 +399,10 @@
     "mtime": 1778731813.6464584,
     "hash": "e550cc710a1e11d6e13358c62d20beb6"
   },
+  "/opt/butterflyguy/src/butterfly_guy/strategy/entry_selection.py": {
+    "mtime": 1780071281.6219456,
+    "hash": "8b8a67cb51a03d0a3db0edee05bc0587"
+  },
   "/opt/butterflyguy/src/butterfly_guy/strategy/regime_filter.py": {
     "mtime": 1773512698.5321512,
     "hash": "93fc54df6f4be9ede0216a4440081d1c"
@@ -438,6 +446,10 @@
   "/opt/butterflyguy/infra/grafana/provisioning/dashboards/dashboards.yml": {
     "mtime": 1774649365.6204538,
     "hash": "632f3a8dc156b353f947aac5b55e8ea5"
+  },
+  "/opt/butterflyguy/reports/spx_all_available_backtest.html": {
+    "mtime": 1779902095.1782928,
+    "hash": "8faa1c887d9da0cf53dd0239284e0ef7"
   },
   "/opt/butterflyguy/docs/superpowers/specs/2026-04-25-real-vs-synthetic-backtest-comparison-design.md": {
     "mtime": 1777089147.967322,

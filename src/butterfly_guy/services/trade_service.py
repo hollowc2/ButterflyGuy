@@ -41,17 +41,13 @@ from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
-from butterfly_guy.strategy.butterfly_builder import (
-    ButterflyBuilder,
-    resolve_wing_widths_for_vix,
-    vix_target_center,
-)
+from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_expected_move
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
+from butterfly_guy.strategy.entry_selection import select_entry_candidate
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime
-from butterfly_guy.strategy.width_selection import select_cross_width_candidate
 
 log = get_logger(__name__)
 
@@ -248,12 +244,20 @@ class TradeService:
 
         # Fetch VIX for metrics or VIX selection method
         vix_price: float | None = None
+        vix_ts: dt.datetime | None = None
         try:
-            raw = await self.chain_queries.db.pool.fetchval(
-                "SELECT price FROM spot_prices WHERE underlying = '$VIX' ORDER BY ts DESC LIMIT 1"
+            row = await self.chain_queries.db.pool.fetchrow(
+                """
+                SELECT ts, price
+                FROM spot_prices
+                WHERE underlying = '$VIX'
+                ORDER BY ts DESC
+                LIMIT 1
+                """
             )
-            if raw:
-                vix_price = float(raw)
+            if row:
+                vix_ts = row["ts"]
+                vix_price = float(row["price"])
                 log.debug("vix_fetched", vix=round(vix_price, 2))
         except Exception as e:
             log.warning("vix_fetch_failed", error=str(e))
@@ -269,7 +273,9 @@ class TradeService:
             # Re-fetch chain + spot each attempt — market may have moved
             try:
                 chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
+                chain_fetched_at = now_eastern()
                 spot_price = await self.schwab.get_spot_price(spot_symbol)
+                spot_fetched_at = now_eastern()
             except Exception as e:
                 log.error("chain_fetch_failed", step=step, error=str(e))
                 break
@@ -279,81 +285,39 @@ class TradeService:
                 log.warning("empty_chain", step=step)
                 break
 
-            # Select best candidate based on configured method
-            best: ButterflyCandidate | None = None
             selection_method = self.config.entry.strike_selection_method
-            effective_widths = self.config.strategy.wing_widths
-            sigmas: tuple[float | None, ...] = tuple(None for _ in effective_widths)
-
-            if selection_method == "VIX":
-                vix_buckets = self.config.strategy.vix_width_buckets
-                if vix_buckets:
-                    if not vix_price:
-                        log.warning(
-                            "vix_width_buckets configured but VIX unavailable — skipping entry"
-                        )
-                        return None
-                    effective_widths, sigmas = resolve_wing_widths_for_vix(
-                        vix_price,
-                        vix_buckets,
-                    )
-                    log.info(
-                        "vix_bucket_selected",
-                        vix=round(vix_price, 2),
-                        widths=effective_widths,
-                    )
-
-            if effective_widths != self.config.strategy.wing_widths:
-                build_settings = self.config.strategy.model_copy(
-                    update={"wing_widths": effective_widths}
+            if (
+                selection_method == "VIX"
+                and self.config.strategy.vix_width_buckets
+                and not vix_price
+            ):
+                log.warning(
+                    "vix_width_buckets configured but VIX unavailable — skipping entry"
                 )
-                candidates = ButterflyBuilder(build_settings).build_candidates(
-                    quotes,
-                    spot_price,
-                    direction,
+                return None
+
+            selection = select_entry_candidate(
+                quotes=quotes,
+                spot=spot_price,
+                direction=direction,
+                vix=vix_price,
+                config=self.config,
+                asset=underlying,
+            )
+            candidates = list(selection.candidates)
+            per_width_bests = list(selection.per_width_bests)
+            best = selection.candidate
+            effective_widths = list(selection.active_widths)
+            sigmas = selection.active_sigmas
+
+            if selection_method == "VIX" and best is not None and vix_price is not None:
+                log.info(
+                    "vix_center_selected",
+                    vix=round(vix_price, 2),
+                    width=best.wing_width,
+                    center=best.center_strike,
+                    rr=round(best.reward_risk, 2),
                 )
-            else:
-                candidates = self.builder.build_candidates(quotes, spot_price, direction)
-
-            if selection_method == "VIX":
-
-                if vix_price:
-                    per_width_bests = []
-                    for i, width in enumerate(effective_widths):
-                        sigma = sigmas[i] if i < len(sigmas) else None
-                        target_center = vix_target_center(
-                            vix=vix_price,
-                            spot=spot_price,
-                            direction=direction,
-                            wing_width=width,
-                            sigma_fraction=sigma,
-                        )
-                        width_candidates = [c for c in candidates if c.wing_width == width]
-                        w_best = self.selector.select_best(
-                            width_candidates,
-                            target_center=target_center,
-                            center_tolerance=self.config.entry.center_tolerance,
-                        )
-                        if w_best:
-                            per_width_bests.append(w_best)
-                    if per_width_bests:
-                        best = select_cross_width_candidate(
-                            per_width_bests,
-                            prefer_first_width=self.config.strategy.underlying == "XSP",
-                        )
-                        log.info(
-                            "vix_center_selected",
-                            vix=round(vix_price, 2),
-                            width=best.wing_width,
-                            center=best.center_strike,
-                            rr=round(best.reward_risk, 2),
-                        )
-            elif selection_method == "TARGET_COST":
-                best = self.selector.select_best_by_target_cost(candidates)
-
-            if best is None:
-                # Fallback or BEST_RR method
-                best = self.selector.select_best(candidates)
 
             # Log candidates to DB on first scan only (avoid noise from retries)
             if not candidates_logged:
@@ -411,6 +375,22 @@ class TradeService:
                 "center": best.center_strike,
                 "width": best.wing_width,
                 "reward_risk": best.reward_risk,
+                "chain_fetched_at": chain_fetched_at.isoformat(),
+                "spot_fetched_at": spot_fetched_at.isoformat(),
+                "spot": spot_price,
+                "vix_timestamp": vix_ts.isoformat() if vix_ts else None,
+                "vix": vix_price,
+                "active_widths": effective_widths,
+                "active_sigmas": list(sigmas),
+                "per_width_bests": [
+                    {
+                        "width": c.wing_width,
+                        "center": c.center_strike,
+                        "cost": c.cost,
+                        "reward_risk": c.reward_risk,
+                    }
+                    for c in per_width_bests
+                ],
             }
             entry_attempts.append(attempt_record)
             log.debug(
@@ -440,8 +420,22 @@ class TradeService:
                     "metadata": {
                         "selection_method": selection_method,
                         "entry_spot": spot_price,
+                        "entry_spot_timestamp": spot_fetched_at.isoformat(),
                         "prev_close": previous_close,
                         "vix": vix_price,
+                        "vix_timestamp": vix_ts.isoformat() if vix_ts else None,
+                        "selected_chain_snapshot_time": chain_fetched_at.isoformat(),
+                        "active_widths": effective_widths,
+                        "active_sigmas": list(sigmas),
+                        "per_width_bests": [
+                            {
+                                "width": c.wing_width,
+                                "center": c.center_strike,
+                                "cost": c.cost,
+                                "reward_risk": c.reward_risk,
+                            }
+                            for c in per_width_bests
+                        ],
                         "entry_attempts": entry_attempts,
                     },
                 }
