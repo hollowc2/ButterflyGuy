@@ -14,6 +14,8 @@ from butterfly_guy.strategy.butterfly_builder import (
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.width_selection import select_cross_width_candidate
 
+ENTRY_STRATEGY_VERSION = "live-entry-selection-v1"
+
 
 @dataclass(frozen=True)
 class EntrySelectionResult:
@@ -25,6 +27,36 @@ class EntrySelectionResult:
     active_sigmas: tuple[float | None, ...]
     per_width_bests: tuple[ButterflyCandidate, ...]
     selection_method: str
+
+
+def entry_strategy_snapshot(config: AppConfig) -> dict[str, object]:
+    """Serializable live strategy profile used for entry selection."""
+    return {
+        "version": ENTRY_STRATEGY_VERSION,
+        "underlying": config.strategy.underlying,
+        "selection_method": config.entry.strike_selection_method,
+        "center_tolerance": config.entry.center_tolerance,
+        "strategy": config.strategy.model_dump(mode="json"),
+    }
+
+
+def entry_selection_config(
+    config: AppConfig,
+    *,
+    selection_method: str | None = None,
+    rr_min: float | None = None,
+) -> AppConfig:
+    """Return a config for selection with explicit overrides applied."""
+    updates: dict[str, object] = {}
+    if selection_method is not None:
+        updates["entry"] = config.entry.model_copy(
+            update={"strike_selection_method": selection_method}
+        )
+    if rr_min is not None:
+        updates["strategy"] = config.strategy.model_copy(update={"rr_min": rr_min})
+    if not updates:
+        return config
+    return config.model_copy(update=updates)
 
 
 def _active_widths_and_sigmas(

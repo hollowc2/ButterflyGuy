@@ -4,7 +4,12 @@ import datetime as dt
 
 from butterfly_guy.core.config import AppConfig, EntrySettings, StrategySettings, VixWidthBucket
 from butterfly_guy.data.schemas import OptionQuote
-from butterfly_guy.strategy.entry_selection import select_entry_candidate
+from butterfly_guy.strategy.entry_selection import (
+    ENTRY_STRATEGY_VERSION,
+    entry_selection_config,
+    entry_strategy_snapshot,
+    select_entry_candidate,
+)
 
 
 def _quote(strike: float, price: float) -> OptionQuote:
@@ -60,3 +65,44 @@ def test_vix_entry_selection_prefers_first_width_for_xsp() -> None:
     assert result.candidate.wing_width == 10
     assert result.active_widths == (10, 20)
     assert [c.wing_width for c in result.per_width_bests] == [10, 20]
+
+
+def test_entry_selection_config_applies_only_explicit_overrides() -> None:
+    config = AppConfig(
+        strategy=StrategySettings(rr_min=8.0),
+        entry=EntrySettings(strike_selection_method="VIX"),
+    )
+
+    resolved = entry_selection_config(
+        config,
+        selection_method="BEST_RR",
+        rr_min=6.5,
+    )
+
+    assert config.entry.strike_selection_method == "VIX"
+    assert config.strategy.rr_min == 8.0
+    assert resolved.entry.strike_selection_method == "BEST_RR"
+    assert resolved.strategy.rr_min == 6.5
+
+
+def test_entry_strategy_snapshot_records_live_selection_profile() -> None:
+    config = AppConfig(
+        strategy=StrategySettings(
+            underlying="SPX",
+            wing_widths=[20, 30, 40],
+            rr_min=7.5,
+        ),
+        entry=EntrySettings(
+            strike_selection_method="VIX",
+            center_tolerance=12.0,
+        ),
+    )
+
+    snapshot = entry_strategy_snapshot(config)
+
+    assert snapshot["version"] == ENTRY_STRATEGY_VERSION
+    assert snapshot["underlying"] == "SPX"
+    assert snapshot["selection_method"] == "VIX"
+    assert snapshot["center_tolerance"] == 12.0
+    assert snapshot["strategy"]["wing_widths"] == [20, 30, 40]
+    assert snapshot["strategy"]["rr_min"] == 7.5

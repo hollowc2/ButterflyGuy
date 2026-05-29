@@ -61,7 +61,10 @@ from butterfly_guy.backtest.simulation_engine import (
 from butterfly_guy.core.config import AppConfig, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
-from butterfly_guy.strategy.entry_selection import select_entry_candidate
+from butterfly_guy.strategy.entry_selection import (
+    entry_selection_config,
+    select_entry_candidate,
+)
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime, RegimeClassifier
 
@@ -365,6 +368,8 @@ def parse_args() -> argparse.Namespace:
     asset_cfg = ASSET_DEFAULTS[args.asset]
     live_config = load_asset_config(args.asset)
     args.wing_provided = args.wing is not None
+    args.rr_min_provided = args.rr_min is not None
+    args.method_provided = args.method is not None
     if args.wing is None:
         args.wing = list(live_config.strategy.wing_widths)
     if args.direction is None:
@@ -1788,6 +1793,11 @@ async def run_live_pinned_replay(args: argparse.Namespace) -> None:
 
 async def run_selection_parity_report(args: argparse.Namespace) -> None:
     live_config = load_asset_config(args.asset)
+    selection_config = entry_selection_config(
+        live_config,
+        selection_method=args.method[0] if args.method_provided else None,
+        rr_min=args.rr_min[0] if args.rr_min_provided else None,
+    )
 
     print(f"\n{'='*118}")
     print(f"  SELECTION PARITY REPORT  |  {args.asset}")
@@ -1829,7 +1839,7 @@ async def run_selection_parity_report(args: argparse.Namespace) -> None:
                 spot=entry_bar.close,
                 direction=trade["direction"],
                 vix=vix_at_entry,
-                config=live_config,
+                config=selection_config,
                 asset=args.asset,
                 wing_widths=list(args.wing) if args.wing_provided else None,
             )
@@ -1874,6 +1884,11 @@ async def run_single(args: argparse.Namespace) -> None:
     dd_schedule = args.dd_schedule[0]
     profit_strategy = args.profit_strategy[0]
     method = args.method[0]
+    selection_config = entry_selection_config(
+        live_config,
+        selection_method=method if args.method_provided else None,
+        rr_min=rr_min if args.rr_min_provided else None,
+    )
     max_cost_per_width = live_config.strategy.max_cost_per_width
     width_label = _live_width_label(
         wing_provided=args.wing_provided,
@@ -1992,7 +2007,7 @@ async def run_single(args: argparse.Namespace) -> None:
                 spot=entry_spot,
                 direction=direction,
                 vix=d["vix"],
-                config=live_config,
+                config=selection_config,
                 asset=args.asset,
                 wing_widths=wing_widths if args.wing_provided else None,
             )
@@ -2290,12 +2305,17 @@ async def run_sweep(args: argparse.Namespace) -> None:
                     if override:
                         resolved_direction = override
 
+                selection_config = entry_selection_config(
+                    live_config,
+                    selection_method=method if args.method_provided else None,
+                    rr_min=rr_min if args.rr_min_provided else None,
+                )
                 selection = select_entry_candidate(
                     quotes=entry_quotes,
                     spot=entry_spot,
                     direction=resolved_direction,
                     vix=d["vix"],
-                    config=live_config,
+                    config=selection_config,
                     asset=args.asset,
                     wing_widths=[wing] if wing is not None else None,
                 )

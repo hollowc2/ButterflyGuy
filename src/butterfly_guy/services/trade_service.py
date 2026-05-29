@@ -45,7 +45,10 @@ from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_expected_move
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
-from butterfly_guy.strategy.entry_selection import select_entry_candidate
+from butterfly_guy.strategy.entry_selection import (
+    entry_strategy_snapshot,
+    select_entry_candidate,
+)
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime
 
@@ -419,6 +422,7 @@ class TradeService:
                     "upper_symbol": best.upper_symbol,
                     "metadata": {
                         "selection_method": selection_method,
+                        "entry_strategy": entry_strategy_snapshot(self.config),
                         "entry_spot": spot_price,
                         "entry_spot_timestamp": spot_fetched_at.isoformat(),
                         "prev_close": previous_close,

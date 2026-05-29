@@ -35,6 +35,23 @@ def test_spx_backtest_drawdown_defaults_match_live_config(monkeypatch):
     assert args.wing_provided is False
     assert args.entry_time == [dt.time(7, 0)]
     assert args.use_abs_stop is False
+    assert args.method_provided is False
+    assert args.rr_min_provided is False
+
+
+def test_backtest_tracks_explicit_selection_overrides(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_backtest_db.py", "--asset", "SPX", "--method", "BEST_RR", "--rr-min", "6.5"],
+    )
+
+    args = parse_args()
+
+    assert args.method == ["BEST_RR"]
+    assert args.rr_min == [6.5]
+    assert args.method_provided is True
+    assert args.rr_min_provided is True
 
 
 def test_xsp_backtest_drawdown_defaults_match_live_config(monkeypatch):
