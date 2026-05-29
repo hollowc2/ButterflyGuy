@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a71a2cd3`
+- Built from commit: `6d33e248`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -139,13 +139,13 @@
 ## Surprising Connections (you probably didn't know these)
 - `Compare Synthetic Same Entry Design` --semantically_similar_to--> `Compare Real vs Synthetic Chains`  [INFERRED] [semantically similar]
   docs/superpowers/specs/2026-04-25-compare-synthetic-same-entry-design.md → README.md
+- `make_bar()` --calls--> `MinuteBar`  [INFERRED]
+  tests/test_bias_filter.py → src/butterfly_guy/backtest/data_loader.py
 - `TestEma` --uses--> `DayData`  [INFERRED]
   tests/test_bias_filter.py → src/butterfly_guy/backtest/data_loader.py
 - `TestEma` --uses--> `MinuteBar`  [INFERRED]
   tests/test_bias_filter.py → src/butterfly_guy/backtest/data_loader.py
 - `TestEma` --uses--> `SimulationEngine`  [INFERRED]
-  tests/test_bias_filter.py → src/butterfly_guy/backtest/simulation_engine.py
-- `TestEma` --uses--> `SimulationParams`  [INFERRED]
   tests/test_bias_filter.py → src/butterfly_guy/backtest/simulation_engine.py
 
 ## Hyperedges (group relationships)
@@ -195,36 +195,36 @@ Cohesion: 0.08
 Nodes (37): bs_call_price(), bs_delta(), bs_gamma(), bs_put_price(), bs_theta(), bs_vega(), _d1(), _d2() (+29 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.07
-Nodes (21): day_cache_path(), load_day(), JSON cache helpers for DayData — shared across Schwab and future loaders., save_day(), Backtest data loader using Schwab (1-min SPY bars) + yfinance (daily data).  Sch, Fetch VIX daily close from yfinance., Fetch previous trading day's SPX close from yfinance., Load all data needed for a single backtest day. (+13 more)
+Cohesion: 0.08
+Nodes (29): DayResult, _drawdown_rule(), DrawdownWindow, _profit_exit_reason(), Single-day simulation engine using synthetic option chains., Simulate one trading day., Simulate one trading day., Simulate intraday using BS pricing, pinned to a pre-selected real entry. (+21 more)
 
 ### Community 6 - "Community 6"
 Cohesion: 0.07
-Nodes (32): SPX weekly puts option chain, Bid, ask, volume, and open interest columns, Calls side, Puts side, 20 MAR 26 weekly expiration, Buy 1 SPX 6485 put, Buy 1 SPX 6525 put, Sell 2 SPX 6505 puts (+24 more)
+Nodes (21): day_cache_path(), load_day(), JSON cache helpers for DayData — shared across Schwab and future loaders., save_day(), Backtest data loader using Schwab (1-min SPY bars) + yfinance (daily data).  Sch, Fetch VIX daily close from yfinance., Fetch previous trading day's SPX close from yfinance., Load all data needed for a single backtest day. (+13 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.08
-Nodes (16): Async Schwab API client wrapper with retry logic., Fetch option chain for a specific symbol and expiration., Get current spot price for SPX., Place an order and return the order ID., Get the status of an order., Cancel an existing order., Fetch 1-minute bars for today (and optionally prior days) from Schwab., Fetch daily OHLCV bars for the given symbol. (+8 more)
+Cohesion: 0.07
+Nodes (32): SPX weekly puts option chain, Bid, ask, volume, and open interest columns, Calls side, Puts side, 20 MAR 26 weekly expiration, Buy 1 SPX 6485 put, Buy 1 SPX 6525 put, Sell 2 SPX 6505 puts (+24 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.12
-Nodes (27): _dd_schedule_label(), _duration_min(), _find_bar_at(), _find_entry_bar_at(), _format_et(), get_vix_at(), _live_width_label(), nearest_snapshot() (+19 more)
+Cohesion: 0.08
+Nodes (16): Async Schwab API client wrapper with retry logic., Fetch option chain for a specific symbol and expiration., Get current spot price for SPX., Place an order and return the order ID., Get the status of an order., Cancel an existing order., Fetch 1-minute bars for today (and optionally prior days) from Schwab., Fetch daily OHLCV bars for the given symbol. (+8 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.06
 Nodes (31): 📈 Backtesting, 🦋 Butterfly Guy, code:yaml (risk:), code:bash (# Skip days where the absolute gap is below 0.25%), code:bash (uv run python src/butterfly_guy/scripts/run_backtest_db.py 2), code:bash (# Full test suite), code:bash (# Start the SPX stack), code:yaml (entry:) (+23 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.13
-Nodes (15): MinuteBar, BiasScoreFilter, Scores market direction using 4 signals; returns CALL, PUT, or None., make_bar(), make_pre_entry_bars(), Unit tests for BiasScoreFilter., Bars that produce strong bullish score: rising price, above OR high., Bars that produce strong bearish score: falling price, below OR low. (+7 more)
-
-### Community 11 - "Community 11"
 Cohesion: 0.1
 Nodes (29): Gap Regime Filter Design, High-Impact Trading Changes, Repository Agent Instructions, Profit State Machine, run_live.py Entry Point, Strategy Entry Pipeline, TimescaleDB Trading Tables, Butterfly Guy (+21 more)
 
-### Community 12 - "Community 12"
+### Community 11 - "Community 11"
 Cohesion: 0.07
 Nodes (28): _force_synthetic_for_date(), _patch_chain_cache(), Inject DB chains into the chain cache for `date`. Returns restore callable., Inject DB chains into the chain cache for `date`. Returns restore callable., Inject DB chains into the chain cache for `date`. Returns restore callable., Patch load_chain_day to return None for `date`, forcing BS synthetic fallback., Inject DB chains into the chain cache for `date`. Returns restore callable., Inject DB chains into the chain cache for `date`. Returns restore callable. (+20 more)
+
+### Community 12 - "Community 12"
+Cohesion: 0.11
+Nodes (27): _dd_schedule_label(), _find_bar_at(), _find_entry_bar_at(), get_vix_at(), _live_width_label(), nearest_snapshot(), _print_comparison_table(), _pst_to_et() (+19 more)
 
 ### Community 13 - "Community 13"
 Cohesion: 0.08
@@ -259,216 +259,216 @@ Cohesion: 0.09
 Nodes (24): _fitted_density_counts(), Use the first regular-session snapshot for gap direction., Return bucket-height estimates from a Gaussian KDE fit., Use the first regular-session snapshot for gap direction., Return bucket-height estimates from a Gaussian KDE fit., Return bucket-height estimates from a Gaussian KDE fit., Return bucket-height estimates from a Gaussian KDE fit., Use the first regular-session snapshot for gap direction. (+16 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.14
-Nodes (18): _date_range(), ParameterSweeper, Parameter sweep engine for backtesting across date ranges., Runs grid search over simulation parameters across a date range., Run full parameter sweep. Returns a polars DataFrame., SweepConfig, DayResult, DrawdownWindow (+10 more)
-
-### Community 22 - "Community 22"
 Cohesion: 0.11
 Nodes (18): BaseSettings, AppConfig, OptionChainCollector, Option chain collector — fetches and stores SPX chain snapshots., Fetch and store daily OHLCV bars for SPX and VIX. Runs once per calendar day., Collects option chain snapshots at regular intervals., Parse Schwab callExpDateMap/putExpDateMap into flat rows., Integration tests for the option chain collector (requires live Schwab token). (+10 more)
 
-### Community 23 - "Community 23"
+### Community 22 - "Community 22"
 Cohesion: 0.19
 Nodes (19): StrategySettings, per_width_selection_winners(), Return the selected candidate inside each width before cross-width selection., ButterflyBuilder, Builds and scores butterfly spreads from an option chain snapshot., Builds and scores butterfly spreads from an option chain snapshot., make_chain(), make_quote() (+11 more)
 
-### Community 24 - "Community 24"
+### Community 23 - "Community 23"
 Cohesion: 0.12
 Nodes (11): DbDataLoader, DB-backed data loader for historical SPX + VIX data.  Reads from the live Timesc, VIX close for *date*: daily_bars first, then last spot_prices tick., Last close from daily_bars strictly before *date*., Up to *n* daily closes before *date*, chronological order., Query option_chain_snapshots for the nearest snapshot_time <= *at*., Loads SPX + VIX data from TimescaleDB and serves DayData objects.      Connects, Return DayData for *date*, or None if no bars found. (+3 more)
 
-### Community 25 - "Community 25"
+### Community 24 - "Community 24"
 Cohesion: 0.16
 Nodes (9): GapRegimeFilter, Market regime classifier for 0-DTE butterfly parameter dispatch.  Classifies eac, Regime, Unit tests for GapRegimeFilter.apply()., min_gap_pct check runs before bull_call_bias, so tiny gap-down is skipped., TestBullCallBias, TestDefaultsAreNoop, TestMinGapPct (+1 more)
 
+### Community 25 - "Community 25"
+Cohesion: 0.1
+Nodes (20): Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width. (+12 more)
+
 ### Community 26 - "Community 26"
-Cohesion: 0.12
-Nodes (18): nearest_snapshot(), Walk the 10:00-10:30 ET window and record every bar's entry signals., scan_entry_window(), EntryDecision, find_entry_candidate(), Find best candidate in the 10:00–10:30 ET window, returning full decision contex, O(N*W) butterfly construction and scoring engine., Return the expected 1-sigma daily SPX move implied by VIX. (+10 more)
-
-### Community 27 - "Community 27"
-Cohesion: 0.18
-Nodes (19): is_market_open(), is_trading_day(), Check if the market is currently open., Check if a given date is a trading day (weekday, not a holiday)., Check all risk conditions. Returns (allowed, reason).          account_value and, et(), Tests for market time utilities., test_get_0dte_expiration() (+11 more)
-
-### Community 28 - "Community 28"
 Cohesion: 0.1
 Nodes (21): get_prev_close(), load_monitoring_chains(), Load full-day snapshots for specific strikes only (3 legs of a butterfly)., Load full-day snapshots for specific strikes only (3 legs of a butterfly)., Load full-day snapshots for specific strikes only (3 legs of a butterfly)., Load full-day snapshots for specific strikes only (3 legs of a butterfly)., Load full-day snapshots for specific strikes only (3 legs of a butterfly)., Load full-day snapshots for specific strikes only (3 legs of a butterfly). (+13 more)
 
-### Community 29 - "Community 29"
+### Community 27 - "Community 27"
 Cohesion: 0.1
 Nodes (19): 1. Think Before Coding, 2. Simplicity First, 3. Surgical Changes, 4. Goal-Driven Execution, Architecture, Behavioral Guidelines, code:bash (# Start SPX live trader), code:bash (# Install dependencies) (+11 more)
 
-### Community 30 - "Community 30"
-Cohesion: 0.13
-Nodes (16): _drawdown_rule(), _profit_exit_reason(), Single-day simulation engine using synthetic option chains., Simulate one trading day., Simulate one trading day., Simulate intraday using BS pricing, pinned to a pre-selected real entry., Simulate intraday using BS pricing, pinned to a pre-selected real entry., Simulate intraday using BS pricing, pinned to a pre-selected real entry. (+8 more)
-
-### Community 31 - "Community 31"
+### Community 28 - "Community 28"
 Cohesion: 0.11
 Nodes (12): CandidateQueries, DecisionQueries, Database query helpers for all tables., Queries for decision_log table., Queries for tent_boundaries table., Queries for butterfly_candidates table., TentQueries, Orchestrates the full entry/exit trading flow. (+4 more)
 
-### Community 32 - "Community 32"
+### Community 29 - "Community 29"
 Cohesion: 0.11
 Nodes (20): Bid and ask quote columns, Butterfly chain rows expose bid/ask values usable for mid-price marking, Butterfly spread mode, Highlighted active trade region, Calls side, Option Chain panel, Puts side, POS marker (+12 more)
 
-### Community 33 - "Community 33"
+### Community 30 - "Community 30"
 Cohesion: 0.15
 Nodes (13): ButterflySelector, Butterfly selector — picks the best candidate from a list., Selects the best butterfly candidate., Select the candidate whose cost is closest to its max_cost_per_width., Select the best butterfly candidate.          When `target_center` is provided (, Select the candidate whose cost is closest to its max_cost_per_width., Select the farthest OTM candidate from the already-valid candidate set., make_candidate() (+5 more)
 
-### Community 34 - "Community 34"
+### Community 31 - "Community 31"
 Cohesion: 0.11
 Nodes (12): get_logger(), Structured logging setup with structlog., Configure structlog with JSON output and correlation IDs., Get a structlog logger with optional name., setup_logging(), Queries for spot_prices table., SpotQueries, Execute SQL migration files in order. (+4 more)
 
-### Community 35 - "Community 35"
+### Community 32 - "Community 32"
 Cohesion: 0.11
 Nodes (16): 1. `strategy/gap_regime_filter.py` (new file), 2. `core/config.py` — `EntrySettings`, 3. Live path, 4. Backtest path (`run_backtest_db.py`), code:python (@dataclass), code:python (bull_call_bias: bool = False   # Override to CALL in BULL re), code:python (if self.gap_regime_filter:), code:block5 (--bull-call-bias      Override to CALL in BULL regime on gap) (+8 more)
 
-### Community 36 - "Community 36"
+### Community 33 - "Community 33"
 Cohesion: 0.13
 Nodes (15): Cross-width selection., Cross-width selection., Cross-width selection., Cross-width selection., Cross-width selection., Cross-width selection., Cross-width selection., Cross-width selection. (+7 more)
 
-### Community 37 - "Community 37"
-Cohesion: 0.17
-Nodes (16): load_config(), Load configuration from YAML file and environment variables., Load configuration from YAML file and environment variables., Tests for configuration loading., Config values from YAML should override defaults., Loading config with no files should return sensible defaults., test_allow_live_trading_requires_explicit_env(), test_database_password_falls_back_to_compose_env() (+8 more)
+### Community 34 - "Community 34"
+Cohesion: 0.23
+Nodes (16): is_market_open(), Check if the market is currently open., Check if current time is within the given window (HH:MM strings)., time_in_window(), et(), Tests for market time utilities., test_get_0dte_expiration(), test_market_closed_after_close() (+8 more)
 
-### Community 38 - "Community 38"
+### Community 35 - "Community 35"
 Cohesion: 0.13
 Nodes (6): ChainQueries, Queries for option_chain_snapshots table., Bulk insert option chain snapshot rows using COPY., Queries for trades table., TradeQueries, dict
 
-### Community 39 - "Community 39"
-Cohesion: 0.12
-Nodes (17): _asset_drawdowns(), Resolve the DB connection string for local backtests.      Backtests follow the, Resolve the DB connection string for local backtests.      Backtests follow the, Resolve the DB connection string for local backtests.      Backtests follow the, Return live morning/late/afternoon drawdown thresholds., Return live morning/late/afternoon drawdown thresholds., Return live morning/late/afternoon drawdown thresholds., Return live morning/late/afternoon drawdown thresholds. (+9 more)
+### Community 36 - "Community 36"
+Cohesion: 0.17
+Nodes (16): load_config(), Load configuration from YAML file and environment variables., Load configuration from YAML file and environment variables., Tests for configuration loading., Config values from YAML should override defaults., Loading config with no files should return sensible defaults., test_allow_live_trading_requires_explicit_env(), test_database_password_falls_back_to_compose_env() (+8 more)
 
-### Community 40 - "Community 40"
+### Community 37 - "Community 37"
 Cohesion: 0.12
 Nodes (17): load_asset_config(), load_live_trades(), main(), parse_args(), _parse_config_time(), Load the live config for an asset so DB replays share runtime defaults., Load the live config for an asset so DB replays share runtime defaults., Load the live config for an asset so DB replays share runtime defaults. (+9 more)
 
-### Community 41 - "Community 41"
+### Community 38 - "Community 38"
+Cohesion: 0.12
+Nodes (17): _asset_drawdowns(), Resolve the DB connection string for local backtests.      Backtests follow the, Resolve the DB connection string for local backtests.      Backtests follow the, Resolve the DB connection string for local backtests.      Backtests follow the, Return live morning/late/afternoon drawdown thresholds., Return live morning/late/afternoon drawdown thresholds., Return live morning/late/afternoon drawdown thresholds., Return live morning/late/afternoon drawdown thresholds. (+9 more)
+
+### Community 39 - "Community 39"
+Cohesion: 0.16
+Nodes (13): get_0dte_expiration(), minutes_since_open(), minutes_to_close(), now_eastern(), now_pacific(), Market timezone helpers for 0-DTE trading., Current time in US/Eastern., Current time in US/Pacific. (+5 more)
+
+### Community 40 - "Community 40"
 Cohesion: 0.12
 Nodes (8): DatabasePool, Async database connection pool using asyncpg., Manages an asyncpg connection pool for TimescaleDB., Create the connection pool., DailyBarQueries, Queries for daily_bars table., Upsert daily OHLCV rows. Updates close/open/high/low/volume on conflict., Return the last `days` daily closes in chronological order (oldest first).
 
-### Community 42 - "Community 42"
+### Community 41 - "Community 41"
 Cohesion: 0.12
 Nodes (16): _print_same_entry_comparison_table(), Print real vs same-entry-synthetic comparison (pinned center/price, BS intraday, Print real vs same-entry-synthetic comparison (pinned center/price, BS intraday, Print real vs same-entry-synthetic comparison (pinned center/price, BS intraday, Print real vs same-entry-synthetic comparison (pinned center/price, BS intraday, Print real vs same-entry-synthetic comparison (pinned center/price, BS intraday, Print real vs same-entry-synthetic comparison (pinned center/price, BS intraday, Print real vs same-entry-synthetic comparison (pinned center/price, BS intraday (+8 more)
 
-### Community 43 - "Community 43"
+### Community 42 - "Community 42"
 Cohesion: 0.12
 Nodes (16): print_thinkback_checklist(), Print a per-trade ToS ThinkBack validation checklist., Print a per-trade ToS ThinkBack validation checklist., Print a per-trade ToS ThinkBack validation checklist., Print a per-trade ToS ThinkBack validation checklist., Print a per-trade ToS ThinkBack validation checklist., Print a per-trade ToS ThinkBack validation checklist., Print a per-trade ToS ThinkBack validation checklist. (+8 more)
 
-### Community 44 - "Community 44"
+### Community 43 - "Community 43"
 Cohesion: 0.22
 Nodes (13): fmt_candidate(), load_bars_from_db(), load_chains_from_db(), main(), parse_args(), parse_date(), print_day_header(), print_entry_scan() (+5 more)
 
-### Community 45 - "Community 45"
+### Community 44 - "Community 44"
 Cohesion: 0.12
 Nodes (14): Architecture Map, code:bash (uv sync), code:bash (uv run pytest), code:bash (uv run ruff check .), code:bash (uv run python src/butterfly_guy/scripts/run_backtest_db.py 2), code:bash (uv run python src/butterfly_guy/scripts/inspect_entry.py 202), code:bash (docker compose -f infra/docker-compose.yml --profile spx up ), Common Commands (+6 more)
 
-### Community 46 - "Community 46"
+### Community 45 - "Community 45"
 Cohesion: 0.17
 Nodes (16): 20 Wide Butterfly Candidate Rows, At The Money Strike Region, Bid And Ask Columns, Calls Side Option Chain Table, Entry Window Selection Context, Highlighted Candidate Band Near Underlying Price, 20 Wide Fly Chain At Entry Window Screenshot, 20 Mar 2026 Weekly Expiration (+8 more)
 
-### Community 47 - "Community 47"
+### Community 46 - "Community 46"
 Cohesion: 0.13
 Nodes (15): Butterfly strike triplets, Calls side, Call butterfly rows in entry window, Entry-window highlighted rows, Put butterfly rows in entry window, 20 MAR 26 weekly expiration, Near-money butterfly candidates, Option chain spread: Butterfly (+7 more)
 
+### Community 47 - "Community 47"
+Cohesion: 0.19
+Nodes (11): _date_range(), ParameterSweeper, Parameter sweep engine for backtesting across date ranges., Runs grid search over simulation parameters across a date range., Run full parameter sweep. Returns a polars DataFrame., SweepConfig, SimulationParams, test_drawdown_rule_prefers_explicit_schedule_when_present() (+3 more)
+
 ### Community 48 - "Community 48"
-Cohesion: 0.13
-Nodes (15): _print_pnl_histogram(), ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets. (+7 more)
+Cohesion: 0.2
+Nodes (8): BiasScoreFilter, Scores market direction using 4 signals; returns CALL, PUT, or None., Bars that produce strong bullish score: rising price, above OR high., Bars that produce strong bearish score: falling price, below OR low., OR signal is ±2 — alone it meets the ±2 threshold., Gap signal only contributes +1, below the ±2 threshold., Conflicting signals that cancel out → None., TestBiasScore
 
 ### Community 49 - "Community 49"
 Cohesion: 0.13
-Nodes (13): 1. `SimulationEngine.simulate_day_from_entry()`, 2. `run_backtest_db.py` changes, 3. Output, Architecture, code:block2 (--compare-synthetic-same-entry   Run a BS-only intraday pass), code:python (same_entry_result = None), code:block4 (.venv/bin/python -m butterfly_guy.scripts.run_backtest_db --), Design: --compare-synthetic-same-entry Mode (+5 more)
+Nodes (13): Full entry flow from eligibility checks through entry fill., Full entry flow from eligibility checks through entry fill., Full entry flow from eligibility checks through entry fill., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars. (+5 more)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.13
-Nodes (14): 1. New CLI flag, 2. New helper function, 3. Modified `run_single` per-date loop, 4. Output, Approach, Changes, code:block1 (--compare-synthetic   Run a second synthetic-only pass and p), code:python (def _force_synthetic_for_date(date: dt.date):) (+6 more)
+Nodes (15): _print_pnl_histogram(), ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets., ASCII histogram with a fitted density curve overlaid on the trade buckets. (+7 more)
 
 ### Community 51 - "Community 51"
+Cohesion: 0.13
+Nodes (13): 1. `SimulationEngine.simulate_day_from_entry()`, 2. `run_backtest_db.py` changes, 3. Output, Architecture, code:block2 (--compare-synthetic-same-entry   Run a BS-only intraday pass), code:python (same_entry_result = None), code:block4 (.venv/bin/python -m butterfly_guy.scripts.run_backtest_db --), Design: --compare-synthetic-same-entry Mode (+5 more)
+
+### Community 52 - "Community 52"
+Cohesion: 0.13
+Nodes (14): 1. New CLI flag, 2. New helper function, 3. Modified `run_single` per-date loop, 4. Output, Approach, Changes, code:block1 (--compare-synthetic   Run a second synthetic-only pass and p), code:python (def _force_synthetic_for_date(date: dt.date):) (+6 more)
+
+### Community 53 - "Community 53"
 Cohesion: 0.18
 Nodes (7): BacktestDataLoader, Backtest data loader — fetches SPX 1-min bars and VIX from Polygon.io., Load all data needed for a single backtest day., Loads historical data from Polygon.io for backtesting., Fetch SPX 1-minute bars for a given date from Polygon., Fetch VIX close for a given date from Polygon., Fetch the actual previous trading day's SPX close for a given date.
 
-### Community 52 - "Community 52"
+### Community 54 - "Community 54"
+Cohesion: 0.19
+Nodes (4): MinuteBar, Backtest data loader using yfinance (free, no API key required).  Uses hourly ba, Loads historical SPX + VIX data via yfinance. No API key required., YFinanceDataLoader
+
+### Community 55 - "Community 55"
 Cohesion: 0.22
 Nodes (12): chain_cache_path(), load_chain_day(), nearest_snapshot(), Real option chain cache — per-day JSON snapshots from the live collector.  Forma, Load all chain snapshots for a day.      Returns dict of UTC datetime -> list[Op, Return quotes from the most recent snapshot at or before bar_ts., Append one chain snapshot to the day's cache file.      Called by the collector, save_snapshot() (+4 more)
 
-### Community 53 - "Community 53"
+### Community 56 - "Community 56"
 Cohesion: 0.14
 Nodes (14): load_bars_from_db(), load_date_data(), Load all data for one date. Returns None if insufficient data., Load all data for one date. Returns None if insufficient data., Load all data for one date. Returns None if insufficient data., Load all data for one date. Returns None if insufficient data., Load all data for one date. Returns None if insufficient data., Load all data for one date. Returns None if insufficient data. (+6 more)
 
-### Community 54 - "Community 54"
-Cohesion: 0.26
-Nodes (8): DayData, Runs full strategy on a single day using synthetic options., Runs full strategy on a single day using synthetic options., SimulationEngine, use_bias_filter=True should produce a trade result (direction set by bias)., direction_override takes precedence over use_bias_filter., When bias filter always returns None, day should be untraded., TestEngineIntegration
-
-### Community 55 - "Community 55"
-Cohesion: 0.18
-Nodes (10): get_0dte_expiration(), now_eastern(), Current time in US/Eastern., Get today's date as the 0-DTE expiration (SPX has daily expirations)., Fetch current chain and store snapshot. Returns row count., Main collector loop — runs while market is open., Full entry flow from eligibility checks through entry fill., Full entry flow from eligibility checks through entry fill. (+2 more)
-
-### Community 56 - "Community 56"
-Cohesion: 0.17
-Nodes (11): minutes_since_open(), Minutes elapsed since market open., compute_tent_boundaries(), fly_bid_value(), Position value tracking and management., Calculate current butterfly value from latest chain quotes.         Value = lowe, Calculate current butterfly value from latest chain quotes.         Value = lowe, Butterfly value at market bid (what a MM pays to buy it from you). (+3 more)
-
 ### Community 57 - "Community 57"
+Cohesion: 0.23
+Nodes (6): make_bar(), make_pre_entry_bars(), Unit tests for BiasScoreFilter., Build n bars starting at 09:30 ET, incrementing by 1 minute each., TestComputeOr, TestComputeVwap
+
+### Community 58 - "Community 58"
+Cohesion: 0.17
+Nodes (11): get_time_regime(), Classify minutes since open into a named time regime., compute_tent_boundaries(), fly_bid_value(), Position value tracking and management., Calculate current butterfly value from latest chain quotes.         Value = lowe, Calculate current butterfly value from latest chain quotes.         Value = lowe, Butterfly value at market bid (what a MM pays to buy it from you). (+3 more)
+
+### Community 59 - "Community 59"
 Cohesion: 0.18
 Nodes (11): Prometheus metrics for monitoring., Start the Prometheus metrics HTTP server., start_metrics_server(), daily_reset_loop(), entry_loop(), main(), Main orchestrator: runs collector + trading + position monitor concurrently., Reset daily risk state at market open. (+3 more)
 
-### Community 58 - "Community 58"
+### Community 60 - "Community 60"
+Cohesion: 0.22
+Nodes (8): _duration_min(), _format_et(), _parse_dd_schedule(), Unified DB backtest for SPX and NDX butterflies.  Supports single-config mode (d, _report_bar_svg(), _report_equity_svg(), _report_histogram_svg(), _write_single_html_report()
+
+### Community 61 - "Community 61"
 Cohesion: 0.28
 Nodes (12): _coerce_json(), _docker_postgres_password(), _load_trace_event(), _load_trade_rows(), main(), parse_args(), _pretty(), _print_trace_block() (+4 more)
 
-### Community 59 - "Community 59"
+### Community 62 - "Community 62"
 Cohesion: 0.21
 Nodes (13): 15-wide fly chain at entry window screenshot, 15-wide butterfly strike rows, Bid/ask color coding, Butterfly spread mode, Calls side, Entry-window candidate region, 20 MAR 26 weekly expiration, Liquidity metrics (+5 more)
 
-### Community 60 - "Community 60"
-Cohesion: 0.21
-Nodes (3): Backtest data loader using yfinance (free, no API key required).  Uses hourly ba, Loads historical SPX + VIX data via yfinance. No API key required., YFinanceDataLoader
+### Community 63 - "Community 63"
+Cohesion: 0.29
+Nodes (8): DayData, Runs full strategy on a single day using synthetic options., Runs full strategy on a single day using synthetic options., SimulationEngine, use_bias_filter=True should produce a trade result (direction set by bias)., direction_override takes precedence over use_bias_filter., When bias filter always returns None, day should be untraded., TestEngineIntegration
 
-### Community 61 - "Community 61"
+### Community 64 - "Community 64"
 Cohesion: 0.17
 Nodes (12): discover_dates(), All dates in [start, end] with >= 50 snapshots for `underlying`., All dates in [start, end] with >= 50 snapshots for `underlying`., All dates in [start, end] with >= 50 snapshots for `underlying`., All dates in [start, end] with >= 50 snapshots for `underlying`., All dates in [start, end] with >= 50 snapshots for `underlying`., All dates in [start, end] with >= 50 snapshots for `underlying`., All dates in [start, end] with >= 50 snapshots for `underlying`. (+4 more)
 
-### Community 62 - "Community 62"
+### Community 65 - "Community 65"
 Cohesion: 0.27
 Nodes (9): Trade service — orchestrates entry flow., Return the first regular-session open for the requested Eastern date., Return the first regular-session open for the requested Eastern date., Return the first regular-session open for the requested Eastern date., _session_open_from_intraday_candles(), _candle(), test_session_open_ignores_premarket_and_missing_open_values(), test_session_open_returns_none_when_no_regular_session_bar_exists() (+1 more)
 
-### Community 63 - "Community 63"
+### Community 66 - "Community 66"
 Cohesion: 0.18
 Nodes (11): get_vix_prev_close(), Return VIX daily close strictly before *date* from daily_bars., Load full-day snapshots for specific strikes only (3 legs of a butterfly)., Up to *n* daily closes strictly before *date*, chronological order., Return VIX daily close strictly before *date* from daily_bars., Return VIX daily close strictly before *date* from daily_bars., Return VIX daily close strictly before *date* from daily_bars., Return VIX daily close strictly before *date* from daily_bars. (+3 more)
 
-### Community 64 - "Community 64"
-Cohesion: 0.18
-Nodes (11): get_recent_closes(), Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order. (+3 more)
-
-### Community 65 - "Community 65"
-Cohesion: 0.18
-Nodes (11): merge_chains(), Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains. (+3 more)
-
-### Community 66 - "Community 66"
+### Community 67 - "Community 67"
 Cohesion: 0.18
 Nodes (11): load_entry_chains(), Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection. (+3 more)
 
-### Community 67 - "Community 67"
-Cohesion: 0.2
-Nodes (10): BUTTERFLYGUY, connectivity visual association, precision visual association, technology visual association, butterfly mark, central cyan glow, cyan-to-purple neon palette, dark navy background (+2 more)
-
 ### Community 68 - "Community 68"
-Cohesion: 0.2
-Nodes (8): ButterflyCandidate, Pydantic models for option data and trade records., A butterfly spread candidate identified by the scanner., O(N*W) scan: for each center strike within spot_range, for each wing_width,, O(N*W) scan: for each center strike within spot_range, for each wing_width,, EntrySelectionResult, Result of a single entry selection pass., Result of a single entry selection pass.
+Cohesion: 0.18
+Nodes (11): get_recent_closes(), Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order., Up to *n* daily closes strictly before *date*, chronological order. (+3 more)
 
 ### Community 69 - "Community 69"
-Cohesion: 0.2
-Nodes (9): get_time_regime(), minutes_to_close(), now_pacific(), Market timezone helpers for 0-DTE trading., Current time in US/Pacific., Check if current time is within the given window (HH:MM strings)., Minutes remaining until market close., Classify minutes since open into a named time regime. (+1 more)
+Cohesion: 0.18
+Nodes (11): merge_chains(), Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains., Merge entry-window (all strikes) and monitoring (3 strikes, full day) chains. (+3 more)
 
 ### Community 70 - "Community 70"
 Cohesion: 0.2
-Nodes (9): Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars., Fetch today's first regular-session open from Schwab intraday bars. (+1 more)
+Nodes (10): BUTTERFLYGUY, connectivity visual association, precision visual association, technology visual association, butterfly mark, central cyan glow, cyan-to-purple neon palette, dark navy background (+2 more)
 
 ### Community 71 - "Community 71"
 Cohesion: 0.2
-Nodes (4): Queries for daily_risk_state table., Sum of realized PnL for the rolling 7-day window (closed trades only)., PnL of the last N closed trades (most recent first), for consecutive loss detect, RiskQueries
+Nodes (8): ButterflyCandidate, Pydantic models for option data and trade records., A butterfly spread candidate identified by the scanner., O(N*W) scan: for each center strike within spot_range, for each wing_width,, O(N*W) scan: for each center strike within spot_range, for each wing_width,, EntrySelectionResult, Result of a single entry selection pass., Result of a single entry selection pass.
 
 ### Community 72 - "Community 72"
-Cohesion: 0.29
-Nodes (3): DiscordNotifier, Discord webhook notifications., Sends trading notifications to Discord via webhook.
+Cohesion: 0.2
+Nodes (4): Queries for daily_risk_state table., Sum of realized PnL for the rolling 7-day window (closed trades only)., PnL of the last N closed trades (most recent first), for consecutive loss detect, RiskQueries
 
 ### Community 73 - "Community 73"
-Cohesion: 0.27
-Nodes (8): candidate_from_trade_row(), _parse_for_asset(), test_backtest_auto_direction_uses_first_regular_session_snapshot(), test_candidate_from_trade_row_pins_live_trade_fields(), test_default_entry_bar_lookup_rejects_late_fallback(), test_ndx_backtest_drawdown_defaults_match_live_config(), test_spx_backtest_drawdown_defaults_match_live_config(), test_xsp_backtest_drawdown_defaults_match_live_config()
+Cohesion: 0.29
+Nodes (3): DiscordNotifier, Discord webhook notifications., Sends trading notifications to Discord via webhook.
 
 ### Community 74 - "Community 74"
 Cohesion: 0.2
@@ -479,48 +479,48 @@ Cohesion: 0.25
 Nodes (5): Intraday VIX regime filter — skips entry when volatility is too elevated., Filter entries based on intraday VIX level at the time of entry., Most recent VIX bar close at or before entry_ts. None if no bars., True = safe to trade. False = skip (VIX too high).          Returns True if no V, RegimeFilter
 
 ### Community 76 - "Community 76"
-Cohesion: 0.22
-Nodes (9): Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width., Select the best butterfly candidate for a single wing width. (+1 more)
+Cohesion: 0.28
+Nodes (7): EntryDecision, find_entry_candidate(), Find best candidate in the 10:00–10:30 ET window, returning full decision contex, determine_direction(), DirectionFilter, Direction filter — determines CALL or PUT based on open vs previous close., CALL if price >= previous close (bullish gap), PUT otherwise.
 
 ### Community 77 - "Community 77"
-Cohesion: 0.22
-Nodes (8): Butterfly Guy — Implementation Plan, Context, Phase 1: Infrastructure + TimescaleDB + Option Chain Collector, Phase 2: Butterfly Scanner, Phase 3: Paper Trading Execution, Phase 4: Profit Management State Machine, Phase 5: Synthetic Engine + Backtesting, Phase 6: Dashboard + Monitoring + Discord
+Cohesion: 0.31
+Nodes (7): candidate_from_trade_row(), _parse_for_asset(), test_backtest_auto_direction_uses_first_regular_session_snapshot(), test_candidate_from_trade_row_pins_live_trade_fields(), test_ndx_backtest_drawdown_defaults_match_live_config(), test_spx_backtest_drawdown_defaults_match_live_config(), test_xsp_backtest_drawdown_defaults_match_live_config()
 
 ### Community 78 - "Community 78"
 Cohesion: 0.22
-Nodes (8): code:block1 (═══════════════════════════════════════════════════════════), code:bash (.venv/bin/python -m butterfly_guy.scripts.run_backtest_db --), Goal, Implementation, Real vs Synthetic Backtest Comparison — Design Spec, Run Command, Scope, Stats Block
+Nodes (8): Butterfly Guy — Implementation Plan, Context, Phase 1: Infrastructure + TimescaleDB + Option Chain Collector, Phase 2: Butterfly Scanner, Phase 3: Paper Trading Execution, Phase 4: Profit Management State Machine, Phase 5: Synthetic Engine + Backtesting, Phase 6: Dashboard + Monitoring + Discord
 
 ### Community 79 - "Community 79"
 Cohesion: 0.22
-Nodes (9): Bid Ask Quote, Bottom Time Axis, Candlestick Price Chart, Right Side Price Axis, SPX Symbol, 10 Minute Timeframe, Thinkorswim Side Panels, 3 Day Chart Range (+1 more)
+Nodes (8): code:block1 (═══════════════════════════════════════════════════════════), code:bash (.venv/bin/python -m butterfly_guy.scripts.run_backtest_db --), Goal, Implementation, Real vs Synthetic Backtest Comparison — Design Spec, Run Command, Scope, Stats Block
 
 ### Community 80 - "Community 80"
-Cohesion: 0.25
-Nodes (8): BUTTERFLYGUY, Butterfly options motif, Technology or trading brand signal, Dark navy background, Futuristic uppercase wordmark, Geometric butterfly icon, Neon green accent color, Polygonal connected linework
+Cohesion: 0.22
+Nodes (9): Bid Ask Quote, Bottom Time Axis, Candlestick Price Chart, Right Side Price Axis, SPX Symbol, 10 Minute Timeframe, Thinkorswim Side Panels, 3 Day Chart Range (+1 more)
 
 ### Community 81 - "Community 81"
 Cohesion: 0.25
-Nodes (6): Classify regime then delegate to simulate_day() with matching params.          R, Classify regime then delegate to simulate_day() with matching params.          R, Classify regime then delegate to simulate_day() with matching params.          R, Maps Regime → SimulationParams for use with simulate_day_adaptive().      Per-re, Maps Regime → SimulationParams for use with simulate_day_adaptive().      Per-re, RegimeDispatch
+Nodes (8): BUTTERFLYGUY, Butterfly options motif, Technology or trading brand signal, Dark navy background, Futuristic uppercase wordmark, Geometric butterfly icon, Neon green accent color, Polygonal connected linework
 
 ### Community 82 - "Community 82"
 Cohesion: 0.43
 Nodes (7): fly_settlement_value(), Butterfly cash-settlement value from the underlying index close., make_candidate(), Tests for butterfly position valuation helpers., test_call_butterfly_settles_to_intrinsic_with_spot_below_all_strikes(), test_put_butterfly_settles_to_intrinsic_with_spot_above_all_strikes(), test_settlement_value_respects_tent_value_inside_the_body()
 
-### Community 83 - "Community 83"
-Cohesion: 0.29
-Nodes (7): _active_widths_and_sigmas(), Shared entry selection for live trading and backtests., Resolve the widths to scan and their positional VIX sigmas., Select the live/backtest entry candidate with shared pure logic., Resolve the widths to scan and their positional VIX sigmas., Select the live/backtest entry candidate with shared pure logic., select_entry_candidate()
-
-### Community 85 - "Community 85"
+### Community 84 - "Community 84"
 Cohesion: 0.38
 Nodes (5): _compute_or(), _compute_vwap(), _ema(), Multi-signal directional bias filter for 0-DTE butterfly entries., Compute bias score from 4 signals:           gap          : +1 if entry_close >
 
-### Community 86 - "Community 86"
+### Community 85 - "Community 85"
 Cohesion: 0.57
 Nodes (6): _capture(), _make_result(), Tests for _print_comparison_table aggregate stats., test_no_trade_days_handled(), test_perfect_correlation(), test_stats_block_present()
 
-### Community 87 - "Community 87"
+### Community 86 - "Community 86"
 Cohesion: 0.33
 Nodes (7): Synthetic vs Real Backtest Comparison Design, Comparison Stats Implementation Plan, Real vs Synthetic Aggregate Stats Design, Compare Synthetic Same Entry Design, Compare Real vs Synthetic Chains, DB Backtesting, Phase 5 Synthetic Engine and Backtesting
+
+### Community 87 - "Community 87"
+Cohesion: 0.33
+Nodes (5): is_trading_day(), Check if a given date is a trading day (weekday, not a holiday)., Check all risk conditions. Returns (allowed, reason).          account_value and, test_is_trading_day_monday(), test_is_trading_day_weekend()
 
 ### Community 88 - "Community 88"
 Cohesion: 0.6
@@ -564,11 +564,11 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: appears_to_contextualize) - confidence is low._
 - **What is the exact relationship between `central cyan glow` and `technology visual association`?**
   _Edge tagged AMBIGUOUS (relation: suggests) - confidence is low._
-- **Why does `OptionQuote` connect `Community 3` to `Community 0`, `Community 1`, `Community 66`, `Community 68`, `Community 4`, `Community 44`, `Community 14`, `Community 16`, `Community 17`, `Community 52`, `Community 23`, `Community 24`, `Community 26`, `Community 91`, `Community 28`, `Community 31`?**
+- **Why does `OptionQuote` connect `Community 3` to `Community 0`, `Community 1`, `Community 67`, `Community 4`, `Community 71`, `Community 43`, `Community 76`, `Community 14`, `Community 16`, `Community 17`, `Community 55`, `Community 22`, `Community 23`, `Community 26`, `Community 91`, `Community 28`?**
   _High betweenness centrality (0.084) - this node is a cross-community bridge._
-- **Why does `ButterflyCandidate` connect `Community 68` to `Community 0`, `Community 33`, `Community 1`, `Community 3`, `Community 36`, `Community 73`, `Community 15`, `Community 81`, `Community 17`, `Community 18`, `Community 82`, `Community 21`, `Community 54`, `Community 23`, `Community 57`, `Community 26`, `Community 31`?**
+- **Why does `ButterflyCandidate` connect `Community 71` to `Community 0`, `Community 1`, `Community 33`, `Community 3`, `Community 5`, `Community 76`, `Community 77`, `Community 47`, `Community 15`, `Community 17`, `Community 18`, `Community 82`, `Community 22`, `Community 59`, `Community 28`, `Community 30`, `Community 63`?**
   _High betweenness centrality (0.068) - this node is a cross-community bridge._
-- **Why does `run_single()` connect `Community 8` to `Community 65`, `Community 36`, `Community 39`, `Community 40`, `Community 42`, `Community 43`, `Community 12`, `Community 48`, `Community 18`, `Community 83`, `Community 53`, `Community 54`, `Community 21`, `Community 25`, `Community 28`, `Community 61`?**
+- **Why does `run_single()` connect `Community 12` to `Community 64`, `Community 33`, `Community 37`, `Community 38`, `Community 69`, `Community 41`, `Community 42`, `Community 11`, `Community 47`, `Community 50`, `Community 18`, `Community 56`, `Community 24`, `Community 26`, `Community 60`, `Community 63`?**
   _High betweenness centrality (0.065) - this node is a cross-community bridge._
 - **Are the 44 inferred relationships involving `str` (e.g. with `make_chain_data()` and `make_chain_data_with_spread()`) actually correct?**
   _`str` has 44 INFERRED edges - model-reasoned connections that need verification._

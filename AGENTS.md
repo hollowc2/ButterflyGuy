@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Repository instructions for Codex and other coding agents working in this tree.
+Repository instructions for Cursor, Codex, and other coding agents working in this tree.
 
 ## Project Context
 
@@ -11,7 +11,8 @@ This code can affect live trading behavior. Treat strategy, execution, risk, tok
 ## First Reads
 
 - `README.md` is the user-facing overview and has the current research/backtest commands.
-- `CLAUDE.md` contains a detailed architecture map and historical agent guidance. Use it as supporting context, but follow this `AGENTS.md` first for Codex behavior.
+- `CLAUDE.md` contains a detailed architecture map and historical agent guidance. Use it as supporting context, but follow this `AGENTS.md` first.
+- Cursor project rules in `.cursor/rules/` point here and to `CLAUDE.md`.
 - Main source lives under `src/butterfly_guy/`.
 - Runtime configs live under `configs/`.
 - Docker and monitoring config live under `infra/`.
@@ -121,4 +122,4 @@ Rules:
 - Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
 - For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
-- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
+- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost). Binary: `/home/billy/.local/bin/graphify` (uv tool `graphifyy`).

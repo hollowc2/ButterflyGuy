@@ -1,0 +1,29 @@
+---
+description: Butterfly Guy project context — read AGENTS.md and CLAUDE.md first
+alwaysApply: true
+---
+
+# Project Context
+
+This repo is an automated 0-DTE butterfly options system (SPX, NDX, XSP) on Schwab. Paper trading by default; Docker + TimescaleDB in production.
+
+## Required Reading (in order)
+
+1. **`AGENTS.md`** — primary agent instructions (commands, working rules, verification, safety). Follow this first.
+2. **`CLAUDE.md`** — architecture map (entry loops, strategy pipeline, exit logic, DB tables, infra). Use for deep "how does X work?" questions.
+
+Do not duplicate those files here. When unsure, read them before changing code.
+
+## Safety Defaults
+
+- Surgical changes only; no unsolicited refactors.
+- Do not change trading limits, paper/live mode, account guards, order routing, or token handling unless explicitly asked.
+- State risk before commands that place orders, call Schwab write APIs, or alter live Docker services.
+- Never print, commit, or summarize `.env` or `tokens.json`.
+
+## Repo Conventions
+
+- Python: `uv sync`, `uv run pytest`, `uv run ruff check .`
+- Docker: `docker compose -f infra/docker-compose.yml --profile spx|ndx|xsp up -d`
+- Configs: `configs/config.yaml`, `config_ndx.yaml`, `config_xsp.yaml`
+- **`reports/`** is intentionally untracked local output — do not commit it.
