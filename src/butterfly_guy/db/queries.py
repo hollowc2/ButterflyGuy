@@ -136,6 +136,62 @@ class ChainQueries:
         }
 
 
+class MonitoringLegQueries:
+    """Queries for high-frequency live monitor quotes of open-position legs."""
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def insert_quotes(
+        self,
+        *,
+        ts: dt.datetime,
+        trade_id: int,
+        underlying: str,
+        expiration: dt.date,
+        quotes: list[dict[str, Any]],
+        spot_price: float | None,
+        fly_mark: float,
+        peak_value: float,
+        drawdown_pct: float,
+    ) -> int:
+        if not quotes:
+            return 0
+
+        columns = [
+            "ts", "trade_id", "underlying", "expiration", "strike", "option_type",
+            "bid", "ask", "mark", "symbol", "spot_price", "fly_mark",
+            "peak_value", "drawdown_pct",
+        ]
+        records = [
+            (
+                ts,
+                trade_id,
+                underlying,
+                expiration,
+                quote["strike"],
+                quote["option_type"],
+                quote.get("bid"),
+                quote.get("ask"),
+                quote.get("mark"),
+                quote.get("symbol"),
+                spot_price,
+                fly_mark,
+                peak_value,
+                drawdown_pct,
+            )
+            for quote in quotes
+        ]
+
+        async with self.db.pool.acquire() as conn:
+            await conn.copy_records_to_table(
+                "monitoring_leg_quotes",
+                records=records,
+                columns=columns,
+            )
+        return len(records)
+
+
 class SpotQueries:
     """Queries for spot_prices table."""
 
@@ -210,14 +266,22 @@ class TradeQueries:
 
     async def get_open_trades(self, underlying: str) -> list[dict]:
         rows = await self.db.pool.fetch(
-            "SELECT * FROM butterfly_trades WHERE status = 'OPEN' AND underlying = $1 ORDER BY entry_time",
+            """
+            SELECT * FROM butterfly_trades
+            WHERE status = 'OPEN' AND underlying = $1
+            ORDER BY entry_time
+            """,
             underlying,
         )
         return [dict(r) for r in rows]
 
     async def get_trades_for_date(self, trade_date: dt.date, underlying: str) -> list[dict]:
         rows = await self.db.pool.fetch(
-            "SELECT * FROM butterfly_trades WHERE trade_date = $1 AND underlying = $2 ORDER BY entry_time",
+            """
+            SELECT * FROM butterfly_trades
+            WHERE trade_date = $1 AND underlying = $2
+            ORDER BY entry_time
+            """,
             trade_date, underlying,
         )
         return [dict(r) for r in rows]
@@ -237,7 +301,11 @@ class RiskQueries:
         if row:
             return dict(row)
         await self.db.pool.execute(
-            "INSERT INTO daily_risk_state (trade_date, underlying) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            """
+            INSERT INTO daily_risk_state (trade_date, underlying)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+            """,
             trade_date, underlying,
         )
         row = await self.db.pool.fetchrow(
@@ -268,7 +336,11 @@ class RiskQueries:
 
     async def set_halted(self, trade_date: dt.date, underlying: str) -> None:
         await self.db.pool.execute(
-            "UPDATE daily_risk_state SET halted = TRUE, max_loss_hit = TRUE WHERE trade_date = $1 AND underlying = $2",
+            """
+            UPDATE daily_risk_state
+            SET halted = TRUE, max_loss_hit = TRUE
+            WHERE trade_date = $1 AND underlying = $2
+            """,
             trade_date, underlying,
         )
 
@@ -306,7 +378,12 @@ class DecisionQueries:
     def __init__(self, db: DatabasePool) -> None:
         self.db = db
 
-    async def log_event(self, event_type: str, data: dict[str, Any], underlying: str | None = None) -> None:
+    async def log_event(
+        self,
+        event_type: str,
+        data: dict[str, Any],
+        underlying: str | None = None,
+    ) -> None:
         await self.db.pool.execute(
             "INSERT INTO decision_log (event_type, data, underlying) VALUES ($1, $2::jsonb, $3)",
             event_type, json.dumps(data), underlying,

@@ -33,6 +33,7 @@ from butterfly_guy.db.queries import (
     ChainQueries,
     DailyBarQueries,
     DecisionQueries,
+    MonitoringLegQueries,
     RiskQueries,
     SpotQueries,
     TentQueries,
@@ -167,6 +168,7 @@ async def main() -> None:
     trade_q = TradeQueries(db)
     risk_q = RiskQueries(db)
     decision_q = DecisionQueries(db)
+    monitoring_leg_q = MonitoringLegQueries(db)
     candidate_q = CandidateQueries(db)
     daily_bar_q = DailyBarQueries(db)
     tent_q = TentQueries(db)
@@ -237,6 +239,8 @@ async def main() -> None:
         risk_engine=risk_engine,
         trade_queries=trade_q,
         decision_queries=decision_q,
+        chain_queries=chain_q,
+        monitoring_leg_queries=monitoring_leg_q,
         tent_queries=tent_q,
         notifier=notifier,
     )

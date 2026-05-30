@@ -16,12 +16,22 @@ from butterfly_guy.data.schwab_client import (
     SCHWAB_SPOT_SYMBOLS,
     SchwabClientWrapper,
 )
-from butterfly_guy.db.queries import DecisionQueries, TentQueries, TradeQueries
+from butterfly_guy.db.queries import (
+    ChainQueries,
+    DecisionQueries,
+    MonitoringLegQueries,
+    TentQueries,
+    TradeQueries,
+)
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.position.position_manager import PositionManager, fly_settlement_value
 from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
+from butterfly_guy.strategy.exit_mark_parity import (
+    DB_EXIT_PARITY_MAX_LAG_SECONDS,
+    build_exit_mark_parity,
+)
 
 log = get_logger(__name__)
 
@@ -37,6 +47,8 @@ class PositionService:
         risk_engine: RiskEngine,
         trade_queries: TradeQueries,
         decision_queries: DecisionQueries,
+        chain_queries: ChainQueries,
+        monitoring_leg_queries: MonitoringLegQueries | None,
         tent_queries: TentQueries,
         notifier: DiscordNotifier | None = None,
     ) -> None:
@@ -46,6 +58,8 @@ class PositionService:
         self.risk_engine = risk_engine
         self.trade_queries = trade_queries
         self.decision_queries = decision_queries
+        self.chain_queries = chain_queries
+        self.monitoring_leg_queries = monitoring_leg_queries
         self.tent_queries = tent_queries
         self.notifier = notifier
         self.position_manager = PositionManager(config.strategy.underlying)
@@ -82,10 +96,22 @@ class PositionService:
                         ),
                         expiration,
                     )
+                chain_fetched_at = now_eastern()
                 quotes = self._extract_quotes(chain_data, expiration, candidate)
 
                 # Update position
                 pos_state = self.position_manager.update_position_value(candidate, quotes)
+
+                if self.monitoring_leg_queries is not None:
+                    await self._record_monitoring_leg_quotes(
+                        trade=trade,
+                        candidate=candidate,
+                        expiration=expiration,
+                        quotes=quotes,
+                        ts=chain_fetched_at,
+                        pos_state=pos_state,
+                        spot_price=_chain_spot_price(chain_data),
+                    )
 
                 # Persist new peak to DB so it survives a restart
                 if pos_state.peak_value > self._last_persisted_peak:
@@ -125,6 +151,20 @@ class PositionService:
                         value=pos_state.current_value,
                     )
 
+                    exit_mark_parity = await self._exit_mark_parity_report(
+                        candidate=candidate,
+                        quotes=quotes,
+                        pos_state=pos_state,
+                        exit_reason=signal.reason,
+                        chain_fetched_at=chain_fetched_at,
+                    )
+                    exit_mark_parity["trade_id"] = trade.trade_id
+                    await self.decision_queries.log_event(
+                        "exit_mark_parity",
+                        exit_mark_parity,
+                        underlying=self.config.strategy.underlying,
+                    )
+
                     await self.decision_queries.log_event("exit_signal_fired", {
                         "trade_id": trade.trade_id,
                         "reason": signal.reason,
@@ -134,6 +174,7 @@ class PositionService:
                         "drawdown_pct": round(pos_state.drawdown_from_peak * 100, 1),
                         "regime": pos_state.time_regime,
                         "entry_price": pos_state.entry_price,
+                        "exit_mark_parity": exit_mark_parity,
                     }, underlying=self.config.strategy.underlying)
 
                     fill = await self.order_manager.execute_exit(
@@ -176,6 +217,7 @@ class PositionService:
                                 "exit_ladder_steps": exit_ladder_steps,
                                 "exit_signal_reason": signal.reason,
                                 "exit_mark_at_signal": pos_state.current_value,
+                                "exit_mark_parity": exit_mark_parity,
                             },
                         )
 
@@ -208,6 +250,7 @@ class PositionService:
                             "peak_value": pos_state.peak_value,
                             "exit_ladder_steps": exit_ladder_steps,
                             "forced": fill.get("forced", False),
+                            "exit_mark_parity": exit_mark_parity,
                         }, underlying=self.config.strategy.underlying)
 
                         if self.notifier:
@@ -226,7 +269,12 @@ class PositionService:
                             except Exception as e:
                                 log.warning("notify_exit_failed", error=str(e))
 
-                        log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason=signal.reason)
+                        log.info(
+                            "trade_exited",
+                            trade_id=trade.trade_id,
+                            pnl=pnl,
+                            reason=signal.reason,
+                        )
 
             except Exception as e:
                 log.error("monitor_error", error=str(e))
@@ -322,6 +370,84 @@ class PositionService:
         ).inc()
         daily_pnl.labels(underlying=underlying).inc(pnl)
 
+    async def _exit_mark_parity_report(
+        self,
+        *,
+        candidate: ButterflyCandidate,
+        quotes: dict[float, OptionQuote],
+        pos_state,
+        exit_reason: str,
+        chain_fetched_at: dt.datetime,
+    ) -> dict[str, object]:
+        """Compare live Schwab exit marks with the nearest DB collector snapshot."""
+        expiration = get_0dte_expiration()
+        underlying = self.config.strategy.underlying
+        at_utc = chain_fetched_at.astimezone(dt.timezone.utc)
+        snapshot = await self.chain_queries.get_nearest_snapshot_chain(
+            underlying,
+            expiration,
+            at_utc,
+            max_lag_seconds=DB_EXIT_PARITY_MAX_LAG_SECONDS,
+        )
+        return build_exit_mark_parity(
+            candidate=candidate,
+            live_quotes=quotes,
+            live_fly_mark=pos_state.current_value,
+            live_peak=pos_state.peak_value,
+            live_drawdown_pct=round(pos_state.drawdown_from_peak * 100, 1),
+            exit_reason=exit_reason,
+            live_spread_bid=pos_state.spread_bid,
+            snapshot=snapshot,
+            underlying=underlying,
+            expiration=expiration,
+        )
+
+    async def _record_monitoring_leg_quotes(
+        self,
+        *,
+        trade: TradeRecord,
+        candidate: ButterflyCandidate,
+        expiration: dt.date,
+        quotes: dict[float, OptionQuote],
+        ts: dt.datetime,
+        pos_state,
+        spot_price: float | None,
+    ) -> None:
+        """Persist the three live-polled legs so DB replay can match monitor timing."""
+        rows = []
+        for strike in (candidate.lower_strike, candidate.center_strike, candidate.upper_strike):
+            quote = quotes.get(strike)
+            if quote is None:
+                continue
+            rows.append(
+                {
+                    "strike": quote.strike,
+                    "option_type": quote.option_type,
+                    "bid": quote.bid,
+                    "ask": quote.ask,
+                    "mark": quote.mark,
+                    "symbol": quote.symbol,
+                }
+            )
+        try:
+            await self.monitoring_leg_queries.insert_quotes(
+                ts=ts,
+                trade_id=trade.trade_id,
+                underlying=self.config.strategy.underlying,
+                expiration=expiration,
+                quotes=rows,
+                spot_price=spot_price,
+                fly_mark=pos_state.current_value,
+                peak_value=pos_state.peak_value,
+                drawdown_pct=round(pos_state.drawdown_from_peak * 100, 4),
+            )
+        except Exception as e:
+            log.warning(
+                "monitoring_leg_quote_persist_failed",
+                trade_id=trade.trade_id,
+                error=str(e),
+            )
+
     def _extract_quotes(
         self,
         chain_data: dict,
@@ -350,3 +476,15 @@ class PositionService:
             )
             if strike in target_strikes
         }
+
+
+def _chain_spot_price(chain_data: dict) -> float | None:
+    for key in ("underlyingPrice", "underlying_price", "lastPrice", "last"):
+        value = chain_data.get(key)
+        if value is None:
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return None

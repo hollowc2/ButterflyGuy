@@ -560,9 +560,10 @@ async def load_monitoring_chains(
     underlying: str,
     strikes: list[float],
     option_types: list[str],
+    trade_id: int | None = None,
 ) -> ChainDay:
-    """Load full-day snapshots for specific strikes only (3 legs of a butterfly)."""
-    rows = await conn.fetch(
+    """Load monitor quotes for specific legs, preferring 2s live polls when available."""
+    collector_rows = await conn.fetch(
         """
         SELECT snapshot_time, strike, option_type, bid, ask, mark, last,
                volume, open_interest, iv, delta, gamma, theta, vega, symbol, spot_price
@@ -576,8 +577,29 @@ async def load_monitoring_chains(
         """,
         underlying, date, strikes, option_types,
     )
+    monitor_rows = []
+    has_monitoring_table = await conn.fetchval(
+        "SELECT to_regclass('public.monitoring_leg_quotes') IS NOT NULL"
+    )
+    if has_monitoring_table:
+        monitor_rows = await conn.fetch(
+            """
+            SELECT ts AS snapshot_time, strike, option_type, bid, ask, mark,
+                   NULL::numeric AS last, 0 AS volume, 0 AS open_interest,
+                   NULL::numeric AS iv, NULL::numeric AS delta, NULL::numeric AS gamma,
+                   NULL::numeric AS theta, NULL::numeric AS vega, symbol, spot_price
+            FROM monitoring_leg_quotes
+            WHERE underlying = $1
+              AND expiration = $2
+              AND ($5::integer IS NULL OR trade_id = $5)
+              AND strike = ANY($3::numeric[])
+              AND option_type = ANY($4)
+            ORDER BY snapshot_time, strike, option_type
+            """,
+            underlying, date, strikes, option_types, trade_id,
+        )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
-    for r in rows:
+    for r in [*collector_rows, *monitor_rows]:
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
@@ -602,6 +624,36 @@ async def load_monitoring_chains(
             )
         )
     return ChainDay(chains)
+
+
+def day_with_monitoring_bars(day: DayData, monitoring: ChainDay) -> DayData:
+    """Add live monitor timestamps to bar iteration while carrying nearest spot forward."""
+    if not monitoring:
+        return day
+    existing = {bar.ts: bar for bar in day.bars}
+    ordered = sorted(existing)
+    for ts in monitoring:
+        if ts in existing:
+            continue
+        i = bisect.bisect_right(ordered, ts) - 1
+        ref = existing[ordered[i]] if i >= 0 else day.bars[0]
+        existing[ts] = MinuteBar(
+            ts=ts,
+            open=ref.close,
+            high=ref.close,
+            low=ref.close,
+            close=ref.close,
+            volume=0,
+        )
+        bisect.insort(ordered, ts)
+    return DayData(
+        date=day.date,
+        bars=[existing[ts] for ts in ordered],
+        vix=day.vix,
+        prev_close=day.prev_close,
+        recent_closes=day.recent_closes,
+        vix_bars=day.vix_bars,
+    )
 
 
 async def load_live_trades(
@@ -1708,6 +1760,7 @@ async def run_live_pinned_replay(args: argparse.Namespace) -> None:
                 args.asset,
                 [pinned.lower_strike, pinned.center_strike, pinned.upper_strike],
                 [pinned.direction],
+                trade_id=int(trade["id"]),
             )
             if not monitoring:
                 print(" SKIPPED (no monitoring chain data for live legs)")
@@ -1733,7 +1786,7 @@ async def run_live_pinned_replay(args: argparse.Namespace) -> None:
             )
             restore = _patch_chain_cache(monitoring, date)
             result = engine.simulate_day_from_entry(
-                d["day"],
+                day_with_monitoring_bars(d["day"], monitoring),
                 params,
                 entry_candidate=pinned,
                 entry_price=float(trade["entry_price"]),
@@ -2063,7 +2116,7 @@ async def run_single(args: argparse.Namespace) -> None:
 
             restore = _patch_chain_cache(full_chains, date)
             result = engine.simulate_day_from_entry(
-                d["day"],
+                day_with_monitoring_bars(d["day"], monitoring),
                 params,
                 entry_candidate=chosen,
                 entry_price=backtest_entry_price(chosen.cost, live_config, args.slippage),
@@ -2376,15 +2429,17 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 )
                 full_chains = merge_chains(d["chains"], monitoring)
             else:
+                monitoring = ChainDay({})
                 full_chains = d["chains"]
 
             restore = _patch_chain_cache(full_chains, date)
+            sim_day = day_with_monitoring_bars(d["day"], monitoring)
             for ci, (resolved_direction, chosen, sim_params, entry_time) in enumerate(per_combo):
                 if chosen is None or sim_params is None or entry_time is None:
                     combo_day_results[ci].append((date, None))
                     continue
                 result = engine.simulate_day_from_entry(
-                    d["day"],
+                    sim_day,
                     sim_params,
                     entry_candidate=chosen,
                     entry_price=backtest_entry_price(chosen.cost, live_config, args.slippage),

@@ -141,6 +141,18 @@ async def analyze_trade(conn: asyncpg.Connection, trade_id: int) -> None:
         print(f"Trade {trade_id} not found.")
         return
 
+    parity_row = await conn.fetchrow(
+        """
+        SELECT ts, data
+        FROM decision_log
+        WHERE event_type = 'exit_mark_parity'
+          AND (data->>'trade_id')::int = $1
+        ORDER BY ts DESC
+        LIMIT 1
+        """,
+        trade_id,
+    )
+
     underlying = trade["underlying"]
     expiration = trade["trade_date"]
     direction = trade["direction"]
@@ -168,6 +180,23 @@ async def analyze_trade(conn: asyncpg.Connection, trade_id: int) -> None:
     live_mark = metadata.get("exit_mark_at_signal")
     if live_mark is not None:
         print(f"  Live exit_mark_at_signal (Schwab poll): {float(live_mark):.4f}")
+
+    logged_parity = metadata.get("exit_mark_parity")
+    if isinstance(logged_parity, str):
+        logged_parity = json.loads(logged_parity)
+    if parity_row is not None:
+        logged_parity = parity_row["data"]
+        if isinstance(logged_parity, str):
+            logged_parity = json.loads(logged_parity)
+    if logged_parity and logged_parity.get("available"):
+        print(
+            f"  Logged exit_mark_parity: live={logged_parity.get('live_fly_mark')} "
+            f"db={logged_parity.get('db_fly_mark')} "
+            f"delta={logged_parity.get('fly_mark_delta')} "
+            f"replay_miss={logged_parity.get('replay_would_miss_drawdown')}"
+        )
+    elif logged_parity and not logged_parity.get("available"):
+        print(f"  Logged exit_mark_parity unavailable: {logged_parity.get('reason', 'unknown')}")
 
     ladder = metadata.get("exit_ladder_steps") or []
     if ladder:
