@@ -30,6 +30,7 @@ from butterfly_guy.core.time_utils import (
     time_in_window,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
+from butterfly_guy.data.db_chain_quotes import rows_to_option_quotes
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import (
     SCHWAB_CHAIN_SYMBOLS,
@@ -46,13 +47,20 @@ from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_e
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
 from butterfly_guy.strategy.entry_selection import (
+    EntrySelectionResult,
     entry_strategy_snapshot,
     select_entry_candidate,
+)
+from butterfly_guy.strategy.entry_selection_parity import (
+    build_entry_selection_parity,
+    select_entry_from_db_quotes,
 )
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime
 
 log = get_logger(__name__)
+
+DB_SELECTION_PARITY_MAX_LAG_SECONDS = 60
 
 
 def _session_open_from_intraday_candles(
@@ -322,6 +330,23 @@ class TradeService:
                     rr=round(best.reward_risk, 2),
                 )
 
+            selection_parity_report: dict[str, object] | None = None
+            if step == 0:
+                selection_parity_report = await self._entry_selection_parity_report(
+                    underlying=underlying,
+                    expiration=expiration,
+                    chain_fetched_at=chain_fetched_at,
+                    spot_price=spot_price,
+                    direction=direction,
+                    vix_price=vix_price,
+                    live_selection=selection,
+                )
+                await self.decision_queries.log_event(
+                    "entry_selection_parity",
+                    selection_parity_report,
+                    underlying=underlying,
+                )
+
             # Log candidates to DB on first scan only (avoid noise from retries)
             if not candidates_logged:
                 candidates_logged = True
@@ -394,6 +419,7 @@ class TradeService:
                     }
                     for c in per_width_bests
                 ],
+                "selection_parity": selection_parity_report,
             }
             entry_attempts.append(attempt_record)
             log.debug(
@@ -441,6 +467,7 @@ class TradeService:
                             for c in per_width_bests
                         ],
                         "entry_attempts": entry_attempts,
+                        "selection_parity": selection_parity_report,
                     },
                 }
                 trade_id = await self.trade_queries.insert_trade(trade_data)
@@ -501,6 +528,7 @@ class TradeService:
                         "selected_center": best.center_strike,
                         "selected_width": best.wing_width,
                         "entry_attempts": entry_attempts,
+                        "selection_parity": selection_parity_report,
                     },
                     underlying=underlying,
                 )
@@ -600,6 +628,59 @@ class TradeService:
         except Exception as e:
             log.warning("session_open_fetch_failed", error=str(e))
             return None
+
+    async def _entry_selection_parity_report(
+        self,
+        *,
+        underlying: str,
+        expiration: dt.date,
+        chain_fetched_at: dt.datetime,
+        spot_price: float,
+        direction: str,
+        vix_price: float | None,
+        live_selection: EntrySelectionResult,
+    ) -> dict[str, object]:
+        """Compare Schwab selection with the nearest DB collector snapshot."""
+        at_utc = chain_fetched_at.astimezone(dt.timezone.utc)
+        snapshot = await self.chain_queries.get_nearest_snapshot_chain(
+            underlying,
+            expiration,
+            at_utc,
+            max_lag_seconds=DB_SELECTION_PARITY_MAX_LAG_SECONDS,
+        )
+        if snapshot is None:
+            return {
+                "available": False,
+                "reason": f"no_db_snapshot_within_{DB_SELECTION_PARITY_MAX_LAG_SECONDS}s",
+            }
+
+        db_quotes = rows_to_option_quotes(
+            snapshot["rows"],
+            underlying=underlying,
+            expiration=expiration,
+        )
+        if not db_quotes:
+            return {"available": False, "reason": "empty_db_snapshot"}
+
+        db_spot = snapshot["spot_price"] if snapshot["spot_price"] is not None else spot_price
+        db_selection = select_entry_from_db_quotes(
+            quotes=db_quotes,
+            spot=db_spot,
+            direction=direction,
+            vix=vix_price,
+            config=self.config,
+            asset=underlying,
+        )
+        report = build_entry_selection_parity(
+            live=live_selection,
+            db=db_selection,
+            snapshot_lag_seconds=snapshot["lag_seconds"],
+            db_snapshot_time=snapshot["snapshot_time"].isoformat(),
+            db_spot=db_spot,
+            live_spot=spot_price,
+        )
+        report["available"] = True
+        return report
 
     def _parse_chain_to_quotes(
         self, chain_data: dict, expiration: dt.date

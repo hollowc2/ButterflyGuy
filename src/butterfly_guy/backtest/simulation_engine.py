@@ -51,6 +51,9 @@ class SimulationParams:
     late_morning_drawdown: float = 0.40
     afternoon_drawdown: float = 0.30
     slippage: float = 0.05  # per spread
+    exit_before_close_minutes: int = 0
+    paper_commission_per_contract: float = 0.65
+    quantity: int = 1
     direction_override: str | None = None  # "CALL" or "PUT" to force direction
     use_bias_filter: bool = False
     vix_max: float | None = None
@@ -65,6 +68,10 @@ class SimulationParams:
     drawdown_schedule: tuple[DrawdownWindow, ...] | None = None
     profit_management_strategy: ProfitManagementStrategy = "peakvaluetrailer"
     profitprotector: ProfitProtectorSettings = field(default_factory=ProfitProtectorSettings)
+
+    def paper_entry_commission(self) -> float:
+        """Paper trading commission: 4 legs × quantity × rate."""
+        return 4 * self.quantity * self.paper_commission_per_contract / 100
 
 
 @dataclass
@@ -256,8 +263,8 @@ class SimulationEngine:
                 if best:
                     entry_candidate = best
                     entry_bar = bar
-                    # Apply slippage
-                    entry_price = best.cost + params.slippage
+                    # Apply slippage and paper commission (matches live fill_price)
+                    entry_price = best.cost + params.slippage + params.paper_entry_commission()
                     result.traded = True
                     result.direction = direction
                     result.entry_time = bar.ts
@@ -318,7 +325,7 @@ class SimulationEngine:
                 - bar_et
             ).total_seconds() / 60.0
 
-            if minutes_to_close <= 5:
+            if minutes_to_close <= params.exit_before_close_minutes:
                 result.exit_time = bar.ts
                 result.exit_price = max(0.05, current_value - params.slippage)
                 result.exit_reason = "end_of_day"
@@ -465,7 +472,7 @@ class SimulationEngine:
                 - bar_et
             ).total_seconds() / 60.0
 
-            if minutes_to_close <= 5:
+            if minutes_to_close <= params.exit_before_close_minutes:
                 result.exit_time = bar.ts
                 result.exit_price = max(0.05, current_value - params.slippage)
                 result.exit_reason = "end_of_day"

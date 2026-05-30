@@ -113,6 +113,20 @@ def load_asset_config(asset: str) -> AppConfig:
     return load_config(config_path=ASSET_CONFIG_PATHS[asset])
 
 
+def backtest_entry_price(cost: float, live_config: AppConfig, slippage: float) -> float:
+    """Entry fill price with slippage and paper commission (matches live OrderManager)."""
+    commission = 4 * live_config.execution.paper_commission_per_contract / 100
+    return cost + slippage + commission
+
+
+def _sim_parity_fields(live_config: AppConfig) -> dict[str, float | int]:
+    """Shared live/backtest parity fields from runtime config."""
+    return {
+        "exit_before_close_minutes": live_config.profit_management.exit_before_close_minutes,
+        "paper_commission_per_contract": live_config.execution.paper_commission_per_contract,
+    }
+
+
 def _asset_drawdowns(
     config: AppConfig,
     fallback: tuple[float, float, float],
@@ -1715,6 +1729,7 @@ async def run_live_pinned_replay(args: argparse.Namespace) -> None:
                 drawdown_schedule=dd_schedule,
                 profit_management_strategy=profit_strategy,
                 profitprotector=live_config.profit_management.profitprotector,
+                **_sim_parity_fields(live_config),
             )
             restore = _patch_chain_cache(monitoring, date)
             result = engine.simulate_day_from_entry(
@@ -2043,6 +2058,7 @@ async def run_single(args: argparse.Namespace) -> None:
                 drawdown_schedule=dd_schedule,
                 profit_management_strategy=profit_strategy,
                 profitprotector=live_config.profit_management.profitprotector,
+                **_sim_parity_fields(live_config),
             )
 
             restore = _patch_chain_cache(full_chains, date)
@@ -2050,7 +2066,7 @@ async def run_single(args: argparse.Namespace) -> None:
                 d["day"],
                 params,
                 entry_candidate=chosen,
-                entry_price=chosen.cost + args.slippage,
+                entry_price=backtest_entry_price(chosen.cost, live_config, args.slippage),
                 entry_time=entry_bar.ts,
             )
             restore()
@@ -2347,6 +2363,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         drawdown_schedule=dd_schedule,
                         profit_management_strategy=profit_strategy,
                         profitprotector=live_config.profit_management.profitprotector,
+                        **_sim_parity_fields(live_config),
                     )
                 else:
                     sim_params = None
@@ -2370,7 +2387,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                     d["day"],
                     sim_params,
                     entry_candidate=chosen,
-                    entry_price=chosen.cost + args.slippage,
+                    entry_price=backtest_entry_price(chosen.cost, live_config, args.slippage),
                     entry_time=entry_time,
                 )
                 combo_day_results[ci].append((date, result))

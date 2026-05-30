@@ -19,6 +19,15 @@ def _candidate(width: int, rr: float) -> ButterflyCandidate:
     )
 
 
+def test_cross_width_selection_prefers_wider_wing_on_rr_tie():
+    best = select_cross_width_candidate(
+        [_candidate(20, 10.0), _candidate(30, 10.0)],
+    )
+
+    assert best is not None
+    assert best.wing_width == 30
+
+
 def test_cross_width_selection_can_prefer_first_bucket_width():
     best = select_cross_width_candidate(
         [_candidate(2, 12.0), _candidate(4, 9.0)],

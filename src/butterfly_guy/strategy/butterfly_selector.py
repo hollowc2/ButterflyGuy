@@ -68,8 +68,11 @@ class ButterflySelector:
         # Filter out unrealistically high R/R (too far OTM, nearly worthless)
         filtered = [c for c in pool if c.reward_risk <= self.settings.rr_max] or pool
 
-        # Among remaining, pick closest to target R/R
-        best = min(filtered, key=lambda c: abs(c.reward_risk - self.settings.rr_target))
+        # Among remaining, pick closest to target R/R; prefer wider wing on tie
+        best = min(
+            filtered,
+            key=lambda c: (abs(c.reward_risk - self.settings.rr_target), -c.wing_width),
+        )
 
         log.info(
             "candidate_selected",

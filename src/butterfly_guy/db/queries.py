@@ -72,6 +72,69 @@ class ChainQueries:
         )
         return [dict(r) for r in rows]
 
+    async def get_nearest_snapshot_chain(
+        self,
+        underlying: str,
+        expiration: dt.date,
+        at: dt.datetime,
+        max_lag_seconds: int = 120,
+    ) -> dict[str, Any] | None:
+        """Return the nearest full chain snapshot at or before *at* within *max_lag_seconds*."""
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=dt.timezone.utc)
+        window_start = at - dt.timedelta(seconds=max_lag_seconds)
+
+        snap_ts = await self.db.pool.fetchval(
+            """
+            SELECT snapshot_time
+            FROM option_chain_snapshots
+            WHERE underlying = $1
+              AND expiration = $2
+              AND snapshot_time <= $3
+              AND snapshot_time >= $4
+            ORDER BY snapshot_time DESC
+            LIMIT 1
+            """,
+            underlying,
+            expiration,
+            at,
+            window_start,
+        )
+        if snap_ts is None:
+            return None
+
+        rows = await self.db.pool.fetch(
+            """
+            SELECT strike, option_type, bid, ask, mark, last, volume,
+                   open_interest, iv, delta, gamma, theta, vega,
+                   symbol, spot_price, bid_size, ask_size, rho,
+                   intrinsic_value, time_value, in_the_money,
+                   days_to_expiration, multiplier, theoretical_value
+            FROM option_chain_snapshots
+            WHERE underlying = $1
+              AND expiration = $2
+              AND snapshot_time = $3
+            ORDER BY strike, option_type
+            """,
+            underlying,
+            expiration,
+            snap_ts,
+        )
+        if not rows:
+            return None
+
+        spot_price = next(
+            (float(row["spot_price"]) for row in rows if row["spot_price"] is not None),
+            None,
+        )
+        lag_seconds = (at - snap_ts).total_seconds()
+        return {
+            "snapshot_time": snap_ts,
+            "lag_seconds": lag_seconds,
+            "spot_price": spot_price,
+            "rows": [dict(row) for row in rows],
+        }
+
 
 class SpotQueries:
     """Queries for spot_prices table."""
