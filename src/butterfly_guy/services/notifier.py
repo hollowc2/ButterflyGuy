@@ -1,10 +1,11 @@
-"""Discord webhook notifications."""
+"""Trading and risk notifications."""
 
 from __future__ import annotations
 
 import datetime as dt
 
 import aiohttp
+from notify import send as send_telegram
 
 from butterfly_guy.core.logging import get_logger
 
@@ -135,3 +136,25 @@ class DiscordNotifier:
     async def notify_error(self, error: str, context: str = "") -> None:
         msg = f"🚨 **ERROR** {context}\n```{error[:1500]}```"
         await self._post(msg)
+
+
+class TelegramNotifier:
+    """Sends risk notifications through the existing Telegram notify helper."""
+
+    async def notify_consecutive_loss_warning(
+        self,
+        underlying: str,
+        loss_count: int,
+        recent_pnls: list[float],
+    ) -> None:
+        pnl_text = ", ".join(f"${pnl:.2f}" for pnl in recent_pnls[:10])
+        msg = (
+            f"⚠️ {underlying} RISK WARNING\n"
+            f"Recent closed trades show {loss_count} consecutive losses.\n"
+            f"Trading is not blocked by this warning.\n"
+            f"Recent P&L: {pnl_text}\n"
+            "Suggested action: review strategy health and decide whether to pause, "
+            "reset, or adjust risk manually."
+        )
+        if not send_telegram(msg):
+            log.warning("telegram_post_failed", context="consecutive_loss_warning")

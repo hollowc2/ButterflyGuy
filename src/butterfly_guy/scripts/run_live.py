@@ -42,7 +42,7 @@ from butterfly_guy.db.queries import (
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.risk.risk_engine import RiskEngine
-from butterfly_guy.services.notifier import DiscordNotifier
+from butterfly_guy.services.notifier import DiscordNotifier, TelegramNotifier
 from butterfly_guy.services.position_service import PositionService
 from butterfly_guy.services.trade_service import TradeService
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
@@ -173,15 +173,15 @@ async def main() -> None:
     daily_bar_q = DailyBarQueries(db)
     tent_q = TentQueries(db)
 
-    # Discord notifier — trade notifications only for live trading; risk warnings
-    # can still be sent in paper mode when a webhook is configured.
+    # Discord trade notifications stay disabled in paper mode. Risk warnings use
+    # the existing Telegram helper so paper-mode safety alerts still reach ops.
     webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get(
         "DISCORD_WEBHOOK_URL",
         "",
     )
-    risk_notifier = DiscordNotifier(webhook) if webhook else None
+    risk_notifier = TelegramNotifier()
     notifier = (
-        risk_notifier
+        DiscordNotifier(webhook)
         if (webhook and not config.execution.paper_trading)
         else None
     )
