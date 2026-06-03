@@ -7,7 +7,14 @@ import datetime as dt
 
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
-from butterfly_guy.core.metrics import daily_pnl, trades_active, trades_total
+from butterfly_guy.core.metrics import (
+    daily_pnl,
+    position_peak_value,
+    position_pnl,
+    position_value,
+    trades_active,
+    trades_total,
+)
 from butterfly_guy.core.time_utils import get_0dte_expiration, is_market_open, now_eastern
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
@@ -363,6 +370,9 @@ class PositionService:
 
         # Update prometheus metrics
         trades_active.labels(underlying=underlying).set(0)
+        position_value.labels(underlying=underlying).set(0)
+        position_peak_value.labels(underlying=underlying).set(0)
+        position_pnl.labels(underlying=underlying).set(0)
         trades_total.labels(
             underlying=underlying,
             direction=trade.direction,
