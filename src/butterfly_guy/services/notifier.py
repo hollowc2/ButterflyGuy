@@ -46,12 +46,17 @@ class DiscordNotifier:
     ) -> None:
         max_profit = wing_width - entry_price
         rr = max_profit / entry_price if entry_price > 0 else 0
-        order_str = f" `{order_id}`" if order_id and order_id != "PAPER" else (" `PAPER`" if order_id == "PAPER" else "")
+        order_str = (
+            f" `{order_id}`"
+            if order_id and order_id != "PAPER"
+            else (" `PAPER`" if order_id == "PAPER" else "")
+        )
         now_et = dt.datetime.now().strftime("%H:%M:%S ET")
         msg = (
             f"🦋 **{underlying} BUTTERFLY ENTERED** #{trade_id}{order_str}\n"
             f"> **{direction}** | Exp: {expiration}\n"
-            f"> Strikes: {lower_strike:.0f} / **{center_strike:.0f}** / {upper_strike:.0f}  (±{wing_width} pts)\n"
+            f"> Strikes: {lower_strike:.0f} / **{center_strike:.0f}** / "
+            f"{upper_strike:.0f}  (±{wing_width} pts)\n"
             f"> Fill: **${entry_price:.2f}** | Spot @ entry: {spot:.2f}\n"
             f"> Max Profit: ${max_profit:.2f} | R/R: {rr:.1f}x\n"
             f"> Breakevens: {lower_strike + entry_price:.2f} – {upper_strike - entry_price:.2f}\n"
@@ -107,6 +112,23 @@ class DiscordNotifier:
             f"> Trades: {trades}\n"
             f"> Total P&L: {pnl_str}\n"
             f"> Win Rate: {win_rate * 100:.0f}%"
+        )
+        await self._post(msg)
+
+    async def notify_consecutive_loss_warning(
+        self,
+        underlying: str,
+        loss_count: int,
+        recent_pnls: list[float],
+    ) -> None:
+        pnl_text = ", ".join(f"${pnl:.2f}" for pnl in recent_pnls[:10])
+        msg = (
+            f"⚠️ **{underlying} RISK WARNING**\n"
+            f"> Recent closed trades show **{loss_count} consecutive losses**.\n"
+            f"> Trading is **not blocked** by this warning.\n"
+            f"> Recent P&L: {pnl_text}\n"
+            f"> Suggested action: review strategy health and decide whether to pause, "
+            f"reset, or adjust risk manually."
         )
         await self._post(msg)
 

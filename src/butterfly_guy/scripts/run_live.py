@@ -173,13 +173,15 @@ async def main() -> None:
     daily_bar_q = DailyBarQueries(db)
     tent_q = TentQueries(db)
 
-    # Discord notifier — only for live trading, not paper
+    # Discord notifier — trade notifications only for live trading; risk warnings
+    # can still be sent in paper mode when a webhook is configured.
     webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get(
         "DISCORD_WEBHOOK_URL",
         "",
     )
+    risk_notifier = DiscordNotifier(webhook) if webhook else None
     notifier = (
-        DiscordNotifier(webhook)
+        risk_notifier
         if (webhook and not config.execution.paper_trading)
         else None
     )
@@ -206,7 +208,12 @@ async def main() -> None:
     )
 
     # Build service objects
-    risk_engine = RiskEngine(config.risk, risk_q, config.strategy.underlying)
+    risk_engine = RiskEngine(
+        config.risk,
+        risk_q,
+        config.strategy.underlying,
+        notifier=risk_notifier,
+    )
     order_builder = ButterflyOrderBuilder()
     order_manager = OrderManager(
         config.execution,

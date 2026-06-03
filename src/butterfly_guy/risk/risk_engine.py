@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Protocol
 
 from butterfly_guy.core.config import RiskSettings
 from butterfly_guy.core.logging import get_logger
@@ -12,13 +13,32 @@ from butterfly_guy.db.queries import RiskQueries
 log = get_logger(__name__)
 
 
+class ConsecutiveLossNotifier(Protocol):
+    """Notification hook for risk warnings that do not block trading."""
+
+    async def notify_consecutive_loss_warning(
+        self,
+        underlying: str,
+        loss_count: int,
+        recent_pnls: list[float],
+    ) -> None: ...
+
+
 class RiskEngine:
     """Enforces risk constraints before allowing trades."""
 
-    def __init__(self, settings: RiskSettings, risk_queries: RiskQueries, underlying: str = "SPX") -> None:
+    def __init__(
+        self,
+        settings: RiskSettings,
+        risk_queries: RiskQueries,
+        underlying: str = "SPX",
+        notifier: ConsecutiveLossNotifier | None = None,
+    ) -> None:
         self.settings = settings
         self.risk_queries = risk_queries
         self.underlying = underlying
+        self.notifier = notifier
+        self._consecutive_loss_alerted_for: set[dt.date] = set()
 
     async def can_trade(
         self,
@@ -97,9 +117,22 @@ class RiskEngine:
                 len(recent_pnls) >= self.settings.max_consecutive_losses
                 and all(p < 0 for p in recent_pnls)
             ):
-                log.warning("consecutive_loss_limit_hit", losses=recent_pnls, count=len(recent_pnls))
-                await self.risk_queries.set_halted(today, self.underlying)
-                return False, f"consecutive_losses ({len(recent_pnls)})"
+                log.warning(
+                    "consecutive_loss_warning",
+                    losses=recent_pnls,
+                    count=len(recent_pnls),
+                    action="trading_allowed_review_recommended",
+                )
+                if self.notifier is not None and today not in self._consecutive_loss_alerted_for:
+                    try:
+                        await self.notifier.notify_consecutive_loss_warning(
+                            self.underlying,
+                            len(recent_pnls),
+                            recent_pnls,
+                        )
+                        self._consecutive_loss_alerted_for.add(today)
+                    except Exception as e:
+                        log.warning("consecutive_loss_notify_failed", error=str(e))
 
         return True, "ok"
 
@@ -128,7 +161,11 @@ class RiskEngine:
         today = trade_date or dt.date.today()
         await self.risk_queries.get_or_create(today, self.underlying)
         await self.risk_queries.db.pool.execute(
-            "UPDATE daily_risk_state SET realized_pnl = $1 WHERE trade_date = $2 AND underlying = $3",
+            """
+            UPDATE daily_risk_state
+            SET realized_pnl = $1
+            WHERE trade_date = $2 AND underlying = $3
+            """,
             pnl, today, self.underlying,
         )
         log.info("synced_realized_pnl", pnl=pnl, underlying=self.underlying)
@@ -141,8 +178,17 @@ class RiskEngine:
         today = trade_date or dt.date.today()
         state = await self.risk_queries.get_or_create(today, self.underlying)
         if state["trade_count"] != count:
-            log.info("syncing_risk_trade_count", old=state["trade_count"], new=count, underlying=self.underlying)
+            log.info(
+                "syncing_risk_trade_count",
+                old=state["trade_count"],
+                new=count,
+                underlying=self.underlying,
+            )
             await self.risk_queries.db.pool.execute(
-                "UPDATE daily_risk_state SET trade_count = $1 WHERE trade_date = $2 AND underlying = $3",
+                """
+                UPDATE daily_risk_state
+                SET trade_count = $1
+                WHERE trade_date = $2 AND underlying = $3
+                """,
                 count, today, self.underlying
             )
