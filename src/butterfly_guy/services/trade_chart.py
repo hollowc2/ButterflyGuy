@@ -193,44 +193,59 @@ def _tent_hit_stats(
     return in_tent_bars > 0, in_tent_bars
 
 
-def summarize_exit_chart(
+def _exit_window_end(spec: ButterflyChartSpec, *, full_session: bool) -> dt.datetime:
+    entry_et = spec.entry_time.astimezone(EASTERN)
+    close_dt = dt.datetime.combine(entry_et.date(), MARKET_CLOSE, tzinfo=EASTERN)
+    if full_session:
+        return close_dt
+    exit_et = (spec.exit_time or dt.datetime.now(dt.timezone.utc)).astimezone(EASTERN)
+    return min(exit_et, close_dt)
+
+
+def _exit_chart_series(
     spec: ButterflyChartSpec,
     candles: list[dict],
-) -> tuple[bytes | None, bool | None]:
-    """Return EOD chart PNG and whether spot ever entered the profit tent."""
-    if not candles:
-        return None, None
-
-    entry_et = spec.entry_time.astimezone(EASTERN)
-    full_series = _session_series(candles_to_series(candles), entry_et.date())
-    exit_et = (spec.exit_time or dt.datetime.now(dt.timezone.utc)).astimezone(EASTERN)
-    close_dt = dt.datetime.combine(entry_et.date(), MARKET_CLOSE, tzinfo=EASTERN)
-    window_end = min(exit_et, close_dt)
-    series = [(ts, price) for ts, price in full_series if ts <= window_end]
-    if len(series) < 2:
-        return None, None
-
-    tent_hit, _ = _tent_hit_stats(series, spec.lower_be, spec.upper_be)
-    return build_exit_chart_png(spec, candles), tent_hit
-
-
-def build_exit_chart_png(spec: ButterflyChartSpec, candles: list[dict]) -> bytes | None:
-    """Build full-session chart with tent hit coloring."""
-    if not candles:
-        return None
-
+    *,
+    full_session: bool,
+) -> list[tuple[dt.datetime, float]] | None:
     entry_et = spec.entry_time.astimezone(EASTERN)
     full_series = _session_series(candles_to_series(candles), entry_et.date())
     if len(full_series) < 2:
         return None
-
-    exit_et = (spec.exit_time or dt.datetime.now(dt.timezone.utc)).astimezone(EASTERN)
-    close_dt = dt.datetime.combine(entry_et.date(), MARKET_CLOSE, tzinfo=EASTERN)
-    window_end = min(exit_et, close_dt)
+    window_end = _exit_window_end(spec, full_session=full_session)
     series = [(ts, price) for ts, price in full_series if ts <= window_end]
     if len(series) < 2:
         return None
+    return series
 
+
+def summarize_exit_chart(
+    spec: ButterflyChartSpec,
+    candles: list[dict],
+    *,
+    full_session: bool = False,
+) -> tuple[bytes | None, bool | None]:
+    """Return EOD chart PNG and whether spot ever entered the profit tent."""
+    series = _exit_chart_series(spec, candles, full_session=full_session)
+    if series is None:
+        return None, None
+
+    tent_hit, _ = _tent_hit_stats(series, spec.lower_be, spec.upper_be)
+    return build_exit_chart_png(spec, candles, full_session=full_session), tent_hit
+
+
+def build_exit_chart_png(
+    spec: ButterflyChartSpec,
+    candles: list[dict],
+    *,
+    full_session: bool = False,
+) -> bytes | None:
+    """Build full-session chart with tent hit coloring."""
+    series = _exit_chart_series(spec, candles, full_session=full_session)
+    if series is None:
+        return None
+
+    entry_et = spec.entry_time.astimezone(EASTERN)
     tent_hit, tent_bars = _tent_hit_stats(series, spec.lower_be, spec.upper_be)
     hit_label = "YES" if tent_hit else "NO"
     title = (

@@ -286,6 +286,32 @@ class TradeQueries:
         )
         return [dict(r) for r in rows]
 
+    async def get_trades_pending_eod_chart(
+        self, trade_date: dt.date, underlying: str
+    ) -> list[dict]:
+        rows = await self.db.pool.fetch(
+            """
+            SELECT * FROM butterfly_trades
+            WHERE trade_date = $1
+              AND underlying = $2
+              AND status = 'CLOSED'
+              AND COALESCE(metadata->>'eod_chart_sent', 'false') != 'true'
+            ORDER BY entry_time
+            """,
+            trade_date, underlying,
+        )
+        return [dict(r) for r in rows]
+
+    async def mark_eod_chart_sent(self, trade_id: int) -> None:
+        await self.db.pool.execute(
+            """
+            UPDATE butterfly_trades
+            SET metadata = metadata || '{"eod_chart_sent": true}'::jsonb
+            WHERE id = $1
+            """,
+            trade_id,
+        )
+
 
 class RiskQueries:
     """Queries for daily_risk_state table."""

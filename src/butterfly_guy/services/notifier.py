@@ -144,8 +144,6 @@ class DiscordNotifier:
         pnl: float,
         peak_value: float,
         entry_time: "dt.datetime | None" = None,
-        tent_hit: bool | None = None,
-        chart_png: bytes | None = None,
     ) -> None:
         emoji = "✅" if pnl > 0 else "❌"
         pnl_str = f"+${pnl:.2f}" if pnl > 0 else f"-${abs(pnl):.2f}"
@@ -160,15 +158,33 @@ class DiscordNotifier:
                 duration_str = f" | Held: {mins}m"
             except Exception:
                 pass
-        tent_str = ""
-        if tent_hit is not None:
-            tent_str = f"\n> Profit tent: **{'HIT' if tent_hit else 'MISSED'}**"
         msg = (
             f"{emoji} **{underlying} BUTTERFLY EXITED** #{trade_id}\n"
             f"> **{direction}** | Reason: `{exit_reason}`\n"
             f"> Entry: ${entry_price:.2f} → Exit: ${exit_price:.2f}\n"
             f"> P&L: **{pnl_str}** ({pnl_pct_str}) | Peak: ${peak_value:.2f}\n"
-            f"> Time: {now_et.strftime('%H:%M:%S ET')}{duration_str}{tent_str}"
+            f"> Time: {now_et.strftime('%H:%M:%S ET')}{duration_str}\n"
+            f"> EOD chart follows after market close."
+        )
+        await self._post(msg)
+
+    async def notify_eod_chart(
+        self,
+        trade_id: int,
+        underlying: str,
+        trade_date: "dt.date",
+        direction: str,
+        exit_reason: str,
+        pnl: float,
+        tent_hit: bool | None,
+        chart_png: bytes,
+    ) -> None:
+        tent_label = "HIT" if tent_hit else "MISSED" if tent_hit is not None else "N/A"
+        pnl_str = f"+${pnl:.2f}" if pnl > 0 else f"-${abs(pnl):.2f}"
+        msg = (
+            f"📈 **{underlying} EOD CHART** #{trade_id} ({trade_date})\n"
+            f"> **{direction}** | Exit: `{exit_reason}` | P&L: **{pnl_str}**\n"
+            f"> Profit tent: **{tent_label}**"
         )
         await self._post(msg, image_png=chart_png, image_name="eod_chart.png")
 

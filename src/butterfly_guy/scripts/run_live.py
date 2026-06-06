@@ -22,7 +22,7 @@ from butterfly_guy.core.metrics import (
     start_metrics_server,
     trades_active,
 )
-from butterfly_guy.core.time_utils import is_market_open, now_eastern
+from butterfly_guy.core.time_utils import is_market_open, is_trading_day, now_eastern
 from butterfly_guy.data.collector import OptionChainCollector
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
@@ -104,6 +104,29 @@ async def entry_loop(
                 log.error("entry_loop_error", error=str(e))
 
         await asyncio.sleep(15)
+
+
+EOD_CHART_DELAY_MINUTES = 5
+
+
+async def eod_chart_loop(position_service: PositionService) -> None:
+    """Send deferred full-session EOD charts after the cash close."""
+    while True:
+        await asyncio.sleep(60)
+        if position_service.notifier is None:
+            continue
+
+        now = now_eastern()
+        if not is_trading_day(now.date()):
+            continue
+
+        eod_ready = (now.hour, now.minute) >= (16, EOD_CHART_DELAY_MINUTES)
+        if not eod_ready:
+            continue
+
+        sent = await position_service.send_pending_eod_charts(now.date())
+        if sent:
+            log.info("eod_chart_batch_complete", sent=sent, trade_date=str(now.date()))
 
 
 async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
@@ -371,6 +394,8 @@ async def main() -> None:
                 name="entry_loop",
             )
             tg.create_task(daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset")
+            if notifier:
+                tg.create_task(eod_chart_loop(position_service), name="eod_charts")
     except* Exception as eg:
         for exc in eg.exceptions:
             log.error("task_group_error", error=str(exc))

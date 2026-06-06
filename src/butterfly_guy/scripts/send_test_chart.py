@@ -136,7 +136,7 @@ async def main() -> None:
             start_time=config.entry.start_time,
             timezone=config.entry.timezone,
         )
-        exit_png, tent_hit = summarize_exit_chart(spec, candles)
+        exit_png, tent_hit = summarize_exit_chart(spec, candles, full_session=True)
 
         notifier = DiscordNotifier(webhook)
         tent_label = "HIT" if tent_hit else "MISSED" if tent_hit is not None else "N/A"

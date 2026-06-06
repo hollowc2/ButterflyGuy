@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from butterfly_guy.services.trade_chart import (
     ButterflyChartSpec,
+    _exit_chart_series,
     build_entry_chart_png,
     build_exit_chart_png,
     candles_to_series,
@@ -102,6 +103,29 @@ def test_build_exit_chart_png_returns_png_bytes() -> None:
     png = build_exit_chart_png(spec, candles)
     assert png is not None
     assert png[:4] == b"\x89PNG"
+
+
+def test_full_session_extends_chart_to_market_close() -> None:
+    session = dt.date(2026, 6, 6)
+    entry = dt.datetime(2026, 6, 6, 10, 5, tzinfo=EASTERN)
+    early_exit = dt.datetime(2026, 6, 6, 11, 0, tzinfo=EASTERN)
+    spec = ButterflyChartSpec(
+        underlying="SPX",
+        direction="CALL",
+        lower_strike=5990,
+        center_strike=6000,
+        upper_strike=6010,
+        wing_width=10,
+        entry_price=1.25,
+        entry_time=entry,
+        exit_time=early_exit,
+        exit_reason="drawdown",
+    )
+    candles = _sample_candles(session, base_price=6001.0)
+    partial = _exit_chart_series(spec, candles, full_session=False)
+    full = _exit_chart_series(spec, candles, full_session=True)
+    assert partial is not None and full is not None
+    assert len(full) > len(partial)
 
 
 def test_summarize_exit_chart_detects_tent_hit() -> None:

@@ -263,11 +263,6 @@ class PositionService:
 
                         if self.notifier:
                             try:
-                                chart_png, tent_hit = await self._build_exit_chart_png(
-                                    trade=trade,
-                                    candidate=candidate,
-                                    exit_reason=signal.reason,
-                                )
                                 await self.notifier.notify_exit(
                                     trade_id=trade.trade_id,
                                     underlying=self.config.strategy.underlying,
@@ -278,8 +273,6 @@ class PositionService:
                                     pnl=pnl,
                                     peak_value=pos_state.peak_value,
                                     entry_time=trade.entry_time,
-                                    tent_hit=tent_hit,
-                                    chart_png=chart_png,
                                 )
                             except Exception as e:
                                 log.warning("notify_exit_failed", error=str(e))
@@ -350,11 +343,6 @@ class PositionService:
 
         if self.notifier:
             try:
-                chart_png, tent_hit = await self._build_exit_chart_png(
-                    trade=trade,
-                    candidate=candidate,
-                    exit_reason="cash_settled",
-                )
                 await self.notifier.notify_exit(
                     trade_id=trade.trade_id,
                     underlying=self.config.strategy.underlying,
@@ -365,8 +353,6 @@ class PositionService:
                     pnl=pnl,
                     peak_value=peak,
                     entry_time=trade.entry_time,
-                    tent_hit=tent_hit,
-                    chart_png=chart_png,
                 )
             except Exception as e:
                 log.warning("notify_exit_failed", error=str(e))
@@ -395,37 +381,75 @@ class PositionService:
         ).inc()
         daily_pnl.labels(underlying=underlying).inc(pnl)
 
-    async def _build_exit_chart_png(
+    async def send_pending_eod_charts(self, trade_date: dt.date) -> int:
+        """Send full-session EOD charts for closed trades after market close."""
+        if not self.notifier:
+            return 0
+
+        pending = await self.trade_queries.get_trades_pending_eod_chart(
+            trade_date, self.config.strategy.underlying
+        )
+        sent = 0
+        for row in pending:
+            try:
+                chart_png, tent_hit = await self._build_exit_chart_from_row(row, full_session=True)
+                if chart_png is None:
+                    continue
+                trade_date_val = row["trade_date"]
+                if isinstance(trade_date_val, dt.datetime):
+                    trade_date_val = trade_date_val.date()
+                await self.notifier.notify_eod_chart(
+                    trade_id=row["id"],
+                    underlying=row["underlying"],
+                    trade_date=trade_date_val,
+                    direction=row["direction"],
+                    exit_reason=row.get("exit_reason") or "unknown",
+                    pnl=float(row.get("pnl") or 0),
+                    tent_hit=tent_hit,
+                    chart_png=chart_png,
+                )
+                await self.trade_queries.mark_eod_chart_sent(row["id"])
+                sent += 1
+                log.info("eod_chart_sent", trade_id=row["id"], trade_date=str(trade_date))
+            except Exception as e:
+                log.warning("eod_chart_send_failed", trade_id=row["id"], error=str(e))
+        return sent
+
+    async def _build_exit_chart_from_row(
         self,
+        row: dict,
         *,
-        trade: TradeRecord,
-        candidate: ButterflyCandidate,
-        exit_reason: str,
-        exit_time: dt.datetime | None = None,
+        full_session: bool,
     ) -> tuple[bytes | None, bool | None]:
-        if trade.entry_time is None:
+        entry_time = row.get("entry_time")
+        if entry_time is None:
             return None, None
-        try:
-            underlying = self.config.strategy.underlying
-            spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
-            candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
-            spec = ButterflyChartSpec(
-                underlying=underlying,
-                direction=trade.direction,
-                lower_strike=trade.lower_strike,
-                center_strike=trade.center_strike,
-                upper_strike=trade.upper_strike,
-                wing_width=trade.wing_width,
-                entry_price=trade.entry_price,
-                entry_time=trade.entry_time,
-                entry_spot=candidate.spot_price,
-                exit_time=exit_time or now_eastern(),
-                exit_reason=exit_reason,
-            )
-            return summarize_exit_chart(spec, candles)
-        except Exception as e:
-            log.warning("exit_chart_failed", error=str(e))
-            return None, None
+        if entry_time.tzinfo is None:
+            entry_time = entry_time.replace(tzinfo=dt.timezone.utc)
+
+        metadata = row.get("metadata") or {}
+        if isinstance(metadata, str):
+            import json
+            metadata = json.loads(metadata)
+        entry_spot = metadata.get("entry_spot")
+
+        underlying = row["underlying"]
+        spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+        candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
+        spec = ButterflyChartSpec(
+            underlying=underlying,
+            direction=row["direction"],
+            lower_strike=float(row["lower_strike"]),
+            center_strike=float(row["center_strike"]),
+            upper_strike=float(row["upper_strike"]),
+            wing_width=int(row["wing_width"]),
+            entry_price=float(row["entry_price"]),
+            entry_time=entry_time,
+            entry_spot=float(entry_spot) if entry_spot is not None else None,
+            exit_time=row.get("exit_time"),
+            exit_reason=row.get("exit_reason"),
+        )
+        return summarize_exit_chart(spec, candles, full_session=full_session)
 
     async def _exit_mark_parity_report(
         self,
