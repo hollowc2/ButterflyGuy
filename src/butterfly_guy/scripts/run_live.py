@@ -173,18 +173,14 @@ async def main() -> None:
     daily_bar_q = DailyBarQueries(db)
     tent_q = TentQueries(db)
 
-    # Discord trade notifications stay disabled in paper mode. Risk warnings use
-    # the existing Telegram helper so paper-mode safety alerts still reach ops.
+    # Discord trade notifications when webhook is configured (paper and live).
+    # Risk warnings use the existing Telegram helper.
     webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get(
         "DISCORD_WEBHOOK_URL",
         "",
     )
     risk_notifier = TelegramNotifier()
-    notifier = (
-        DiscordNotifier(webhook)
-        if (webhook and not config.execution.paper_trading)
-        else None
-    )
+    notifier = DiscordNotifier(webhook) if webhook else None
 
     # Classify today's market regime (must precede TradeService construction)
     regime_classifier = RegimeClassifier()

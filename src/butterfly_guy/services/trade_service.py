@@ -547,6 +547,14 @@ class TradeService:
                             entry_price=fill["fill_price"],
                             spot=spot_price,
                             order_id=str(fill.get("order_id", "")),
+                            entry_time=fill.get("fill_time"),
+                            mark_price=best.cost,
+                            ask_price=best.ask,
+                            selected_rr=best.reward_risk,
+                            vix=vix_price,
+                            selection_method=selection_method,
+                            entry_step=step,
+                            distance_from_spot=best.distance_from_spot,
                         )
                     except Exception as e:
                         log.warning("notify_entry_failed", error=str(e))

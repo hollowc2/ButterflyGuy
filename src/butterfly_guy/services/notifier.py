@@ -8,6 +8,7 @@ import aiohttp
 from notify import send as send_telegram
 
 from butterfly_guy.core.logging import get_logger
+from butterfly_guy.core.time_utils import EASTERN, now_eastern
 
 log = get_logger(__name__)
 
@@ -44,25 +45,66 @@ class DiscordNotifier:
         entry_price: float,
         spot: float,
         order_id: str = "",
+        entry_time: "dt.datetime | None" = None,
+        mark_price: float | None = None,
+        ask_price: float | None = None,
+        selected_rr: float | None = None,
+        vix: float | None = None,
+        selection_method: str = "",
+        entry_step: int = 0,
+        distance_from_spot: float | None = None,
     ) -> None:
         max_profit = wing_width - entry_price
-        rr = max_profit / entry_price if entry_price > 0 else 0
+        fill_rr = max_profit / entry_price if entry_price > 0 else 0
         order_str = (
             f" `{order_id}`"
             if order_id and order_id != "PAPER"
             else (" `PAPER`" if order_id == "PAPER" else "")
         )
-        now_et = dt.datetime.now().strftime("%H:%M:%S ET")
+        if entry_time is not None:
+            entry_et = entry_time.astimezone(EASTERN)
+        else:
+            entry_et = now_eastern()
+        time_str = entry_et.strftime("%H:%M:%S ET")
+
+        method_str = f" | Method: {selection_method}" if selection_method else ""
+        quote_parts: list[str] = []
+        if mark_price is not None:
+            quote_parts.append(f"Mark ${mark_price:.2f}")
+        if ask_price is not None:
+            quote_parts.append(f"Ask ${ask_price:.2f}")
+        quote_parts.append(f"Fill **${entry_price:.2f}**")
+        quotes_str = " | ".join(quote_parts)
+
+        rr_str = f"{fill_rr:.1f}x"
+        if selected_rr is not None:
+            rr_str += f" (scan {selected_rr:.1f}x)"
+
+        spot_parts = [f"Spot: {spot:.2f}"]
+        if distance_from_spot is not None:
+            spot_parts.append(f"Center dist: {distance_from_spot:.1f} pts")
+        spot_str = " | ".join(spot_parts)
+
+        extras: list[str] = []
+        if vix is not None:
+            extras.append(f"VIX: {vix:.2f}")
+        if entry_step > 0:
+            extras.append(f"Ladder step: {entry_step}")
+        extras_str = " | ".join(extras)
+
         msg = (
             f"🦋 **{underlying} BUTTERFLY ENTERED** #{trade_id}{order_str}\n"
-            f"> **{direction}** | Exp: {expiration}\n"
+            f"> **{direction}** | Exp: {expiration}{method_str}\n"
             f"> Strikes: {lower_strike:.0f} / **{center_strike:.0f}** / "
             f"{upper_strike:.0f}  (±{wing_width} pts)\n"
-            f"> Fill: **${entry_price:.2f}** | Spot @ entry: {spot:.2f}\n"
-            f"> Max Profit: ${max_profit:.2f} | R/R: {rr:.1f}x\n"
+            f"> {quotes_str}\n"
+            f"> {spot_str}\n"
+            f"> Max Profit: ${max_profit:.2f} | R/R: {rr_str}\n"
             f"> Breakevens: {lower_strike + entry_price:.2f} – {upper_strike - entry_price:.2f}\n"
-            f"> Time: {now_et}"
         )
+        if extras_str:
+            msg += f"> {extras_str}\n"
+        msg += f"> Entry: {time_str}"
         await self._post(msg)
 
     async def notify_exit(
