@@ -18,7 +18,7 @@ async def test_notify_entry_includes_trade_stats():
     notifier = DiscordNotifier("https://example.com/webhook")
     posted: list[str] = []
 
-    async def capture(content: str) -> None:
+    async def capture(content: str, **kwargs: object) -> None:
         posted.append(content)
 
     entry_time = dt.datetime(2026, 6, 6, 10, 15, 30, tzinfo=dt.timezone.utc)

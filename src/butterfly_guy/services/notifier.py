@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 import aiohttp
 from notify import send as send_telegram
@@ -19,14 +20,38 @@ class DiscordNotifier:
     def __init__(self, webhook_url: str) -> None:
         self.webhook_url = webhook_url
 
-    async def _post(self, content: str) -> None:
+    async def _post(self, content: str, *, image_png: bytes | None = None, image_name: str = "chart.png") -> None:
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.webhook_url,
-                    json={"content": content},
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
+                if image_png:
+                    payload = {
+                        "content": content,
+                        "embeds": [{"image": {"url": f"attachment://{image_name}"}}],
+                    }
+                    form = aiohttp.FormData()
+                    form.add_field(
+                        "payload_json",
+                        json.dumps(payload),
+                        content_type="application/json",
+                    )
+                    form.add_field(
+                        "file",
+                        image_png,
+                        filename=image_name,
+                        content_type="image/png",
+                    )
+                    request = session.post(
+                        self.webhook_url,
+                        data=form,
+                        timeout=aiohttp.ClientTimeout(total=15),
+                    )
+                else:
+                    request = session.post(
+                        self.webhook_url,
+                        json={"content": content},
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    )
+                async with request as resp:
                     if resp.status not in (200, 204):
                         log.warning("discord_post_failed", status=resp.status)
         except Exception as e:
@@ -53,6 +78,7 @@ class DiscordNotifier:
         selection_method: str = "",
         entry_step: int = 0,
         distance_from_spot: float | None = None,
+        chart_png: bytes | None = None,
     ) -> None:
         max_profit = wing_width - entry_price
         fill_rr = max_profit / entry_price if entry_price > 0 else 0
@@ -105,7 +131,7 @@ class DiscordNotifier:
         if extras_str:
             msg += f"> {extras_str}\n"
         msg += f"> Entry: {time_str}"
-        await self._post(msg)
+        await self._post(msg, image_png=chart_png, image_name="entry_chart.png")
 
     async def notify_exit(
         self,
@@ -118,6 +144,8 @@ class DiscordNotifier:
         pnl: float,
         peak_value: float,
         entry_time: "dt.datetime | None" = None,
+        tent_hit: bool | None = None,
+        chart_png: bytes | None = None,
     ) -> None:
         emoji = "✅" if pnl > 0 else "❌"
         pnl_str = f"+${pnl:.2f}" if pnl > 0 else f"-${abs(pnl):.2f}"
@@ -132,14 +160,17 @@ class DiscordNotifier:
                 duration_str = f" | Held: {mins}m"
             except Exception:
                 pass
+        tent_str = ""
+        if tent_hit is not None:
+            tent_str = f"\n> Profit tent: **{'HIT' if tent_hit else 'MISSED'}**"
         msg = (
             f"{emoji} **{underlying} BUTTERFLY EXITED** #{trade_id}\n"
             f"> **{direction}** | Reason: `{exit_reason}`\n"
             f"> Entry: ${entry_price:.2f} → Exit: ${exit_price:.2f}\n"
             f"> P&L: **{pnl_str}** ({pnl_pct_str}) | Peak: ${peak_value:.2f}\n"
-            f"> Time: {now_et.strftime('%H:%M:%S ET')}{duration_str}"
+            f"> Time: {now_et.strftime('%H:%M:%S ET')}{duration_str}{tent_str}"
         )
-        await self._post(msg)
+        await self._post(msg, image_png=chart_png, image_name="eod_chart.png")
 
     async def notify_daily_summary(
         self,

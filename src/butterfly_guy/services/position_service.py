@@ -35,6 +35,7 @@ from butterfly_guy.position.position_manager import PositionManager, fly_settlem
 from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
+from butterfly_guy.services.trade_chart import ButterflyChartSpec, summarize_exit_chart
 from butterfly_guy.strategy.exit_mark_parity import (
     DB_EXIT_PARITY_MAX_LAG_SECONDS,
     build_exit_mark_parity,
@@ -262,6 +263,11 @@ class PositionService:
 
                         if self.notifier:
                             try:
+                                chart_png, tent_hit = await self._build_exit_chart_png(
+                                    trade=trade,
+                                    candidate=candidate,
+                                    exit_reason=signal.reason,
+                                )
                                 await self.notifier.notify_exit(
                                     trade_id=trade.trade_id,
                                     underlying=self.config.strategy.underlying,
@@ -272,6 +278,8 @@ class PositionService:
                                     pnl=pnl,
                                     peak_value=pos_state.peak_value,
                                     entry_time=trade.entry_time,
+                                    tent_hit=tent_hit,
+                                    chart_png=chart_png,
                                 )
                             except Exception as e:
                                 log.warning("notify_exit_failed", error=str(e))
@@ -342,6 +350,11 @@ class PositionService:
 
         if self.notifier:
             try:
+                chart_png, tent_hit = await self._build_exit_chart_png(
+                    trade=trade,
+                    candidate=candidate,
+                    exit_reason="cash_settled",
+                )
                 await self.notifier.notify_exit(
                     trade_id=trade.trade_id,
                     underlying=self.config.strategy.underlying,
@@ -352,6 +365,8 @@ class PositionService:
                     pnl=pnl,
                     peak_value=peak,
                     entry_time=trade.entry_time,
+                    tent_hit=tent_hit,
+                    chart_png=chart_png,
                 )
             except Exception as e:
                 log.warning("notify_exit_failed", error=str(e))
@@ -379,6 +394,38 @@ class PositionService:
             outcome="win" if pnl > 0 else "loss",
         ).inc()
         daily_pnl.labels(underlying=underlying).inc(pnl)
+
+    async def _build_exit_chart_png(
+        self,
+        *,
+        trade: TradeRecord,
+        candidate: ButterflyCandidate,
+        exit_reason: str,
+        exit_time: dt.datetime | None = None,
+    ) -> tuple[bytes | None, bool | None]:
+        if trade.entry_time is None:
+            return None, None
+        try:
+            underlying = self.config.strategy.underlying
+            spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+            candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
+            spec = ButterflyChartSpec(
+                underlying=underlying,
+                direction=trade.direction,
+                lower_strike=trade.lower_strike,
+                center_strike=trade.center_strike,
+                upper_strike=trade.upper_strike,
+                wing_width=trade.wing_width,
+                entry_price=trade.entry_price,
+                entry_time=trade.entry_time,
+                entry_spot=candidate.spot_price,
+                exit_time=exit_time or now_eastern(),
+                exit_reason=exit_reason,
+            )
+            return summarize_exit_chart(spec, candles)
+        except Exception as e:
+            log.warning("exit_chart_failed", error=str(e))
+            return None, None
 
     async def _exit_mark_parity_report(
         self,

@@ -26,6 +26,7 @@ dependencies = [
     "curl-cffi>=0.15.0",
     "requests>=2.33.0",
     "pygments>=2.20.0",
+    "matplotlib>=3.9.0",
 ]
 
 [project.optional-dependencies]

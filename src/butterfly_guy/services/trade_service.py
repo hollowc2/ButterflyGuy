@@ -41,6 +41,7 @@ from butterfly_guy.db.queries import CandidateQueries, ChainQueries, DecisionQue
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
+from butterfly_guy.services.trade_chart import ButterflyChartSpec, build_entry_chart_png
 from butterfly_guy.strategy.bias_filter import BiasScoreFilter
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_builder import vix_expected_move as _vix_expected_move
@@ -535,6 +536,13 @@ class TradeService:
 
                 if self.notifier:
                     try:
+                        chart_png = await self._build_entry_chart_png(
+                            underlying=underlying,
+                            direction=direction,
+                            best=best,
+                            fill=fill,
+                            spot_price=spot_price,
+                        )
                         await self.notifier.notify_entry(
                             trade_id=trade_id,
                             underlying=underlying,
@@ -555,6 +563,7 @@ class TradeService:
                             selection_method=selection_method,
                             entry_step=step,
                             distance_from_spot=best.distance_from_spot,
+                            chart_png=chart_png,
                         )
                     except Exception as e:
                         log.warning("notify_entry_failed", error=str(e))
@@ -597,6 +606,42 @@ class TradeService:
         )
         log.warning("entry_exhausted", direction=direction)
         return None
+
+    async def _build_entry_chart_png(
+        self,
+        *,
+        underlying: str,
+        direction: str,
+        best: ButterflyCandidate,
+        fill: dict,
+        spot_price: float,
+    ) -> bytes | None:
+        fill_time = fill.get("fill_time")
+        if fill_time is None:
+            return None
+        try:
+            spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+            candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
+            spec = ButterflyChartSpec(
+                underlying=underlying,
+                direction=direction,
+                lower_strike=best.lower_strike,
+                center_strike=best.center_strike,
+                upper_strike=best.upper_strike,
+                wing_width=best.wing_width,
+                entry_price=fill["fill_price"],
+                entry_time=fill_time,
+                entry_spot=spot_price,
+            )
+            return build_entry_chart_png(
+                spec,
+                candles,
+                start_time=self.config.entry.start_time,
+                timezone=self.config.entry.timezone,
+            )
+        except Exception as e:
+            log.warning("entry_chart_failed", error=str(e))
+            return None
 
     async def _bias_direction(
         self, prev_close: float, entry_close: float
