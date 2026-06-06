@@ -61,4 +61,4 @@ graphify-out/.graphify_root
 graphify-out/cache/
 
 # Local research output (intentionally untracked)
-reports/
+/reports/
