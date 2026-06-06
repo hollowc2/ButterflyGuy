@@ -543,7 +543,7 @@ _BASE_CSS = """
   color: var(--text);
 }
 body { margin: 0; }
-main { max-width: 1240px; margin: 0 auto; padding: 28px 24px 48px; }
+main { max-width: 1320px; margin: 0 auto; padding: 28px 24px 48px; }
 h1 { font-size: 28px; margin: 0 0 8px; font-weight: 600; }
 h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
 .sub { color: var(--muted); font-size: 14px; }
