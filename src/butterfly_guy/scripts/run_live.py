@@ -173,14 +173,18 @@ async def main() -> None:
     daily_bar_q = DailyBarQueries(db)
     tent_q = TentQueries(db)
 
-    # Discord trade notifications when webhook is configured (paper and live).
-    # Risk warnings use the existing Telegram helper.
+    # Discord trade notifications for SPX only (paper and live).
+    # NDX/XSP stay on logs/metrics; risk warnings use Telegram.
     webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get(
         "DISCORD_WEBHOOK_URL",
         "",
     )
     risk_notifier = TelegramNotifier()
-    notifier = DiscordNotifier(webhook) if webhook else None
+    notifier = (
+        DiscordNotifier(webhook)
+        if webhook and config.strategy.underlying == "SPX"
+        else None
+    )
 
     # Classify today's market regime (must precede TradeService construction)
     regime_classifier = RegimeClassifier()
