@@ -23,6 +23,10 @@
     "mtime": 1780510327.1181211,
     "hash": "31939df5ec0960d24db3cc74a090c50d"
   },
+  "/opt/butterflyguy/tests/test_forex_calendar.py": {
+    "mtime": 1780855704.710911,
+    "hash": "2dfa9c6a96bad6afeb890d5c797e6e38"
+  },
   "/opt/butterflyguy/tests/test_backtest_drawdown_schedule.py": {
     "mtime": 1778618512.5878658,
     "hash": "72fd4296a4d7a6b20aca491a3ac5478f"
@@ -147,6 +151,10 @@
     "mtime": 1776713894.4839926,
     "hash": "dfbafdf655ef13b89eae6319196605e1"
   },
+  "/opt/butterflyguy/tools/send_weekly_calendar.py": {
+    "mtime": 1780855689.2058382,
+    "hash": "48ca3bf7a77fa90c7bc468c823f2f5b3"
+  },
   "/opt/butterflyguy/tools/auth_init.py": {
     "mtime": 1773187461.4912927,
     "hash": "1e504ca54bd79831afb04ec3e0fee350"
@@ -167,9 +175,13 @@
     "mtime": 1780722436.3233914,
     "hash": "3ba69cd012f8c3f09fc3e1aefc4d4005"
   },
+  "/opt/butterflyguy/src/butterfly_guy/services/forex_calendar.py": {
+    "mtime": 1780855704.5259101,
+    "hash": "f4341392741ad569789f414498354797"
+  },
   "/opt/butterflyguy/src/butterfly_guy/services/notifier.py": {
-    "mtime": 1780722439.9684095,
-    "hash": "e6b483de56f51dcf42a52c13428e9043"
+    "mtime": 1780855690.9628463,
+    "hash": "9f2b93cf1ae33e8fcdf3c571d654f025"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/trade_service.py": {
     "mtime": 1780719122.3750842,
@@ -336,8 +348,8 @@
     "hash": "0801399eba486ac77175791dadc226d1"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1780722463.7315264,
-    "hash": "6ffd07e10d315bf3d30d1872256d7f0d"
+    "mtime": 1780855692.602854,
+    "hash": "36085eab23314e52376d26abe1a7aa13"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/download_schwab_cache.py": {
     "mtime": 1773353569.7177627,

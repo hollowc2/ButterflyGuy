@@ -284,7 +284,7 @@ async def main() -> None:
     )
 
     if notifier:
-        await notifier._post("🚀 Butterfly Guy starting up!")
+        await notifier.notify_startup()
 
     # Recover any open trade and initialize daily metrics from DB
     underlying = config.strategy.underlying
