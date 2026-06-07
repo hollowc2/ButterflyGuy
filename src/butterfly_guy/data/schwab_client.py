@@ -197,6 +197,60 @@ class SchwabClientWrapper:
         data = resp.json()
         return data.get("candles", [])
 
+    async def get_equity_quotes(
+        self,
+        symbols: list[str],
+        *,
+        batch_size: int = 150,
+    ) -> dict[str, dict[str, Any]]:
+        """Fetch regular + extended quote fields for equities in batches."""
+        if not symbols:
+            return {}
+
+        fields = [
+            self.client.Quote.Fields.QUOTE,
+            self.client.Quote.Fields.EXTENDED,
+        ]
+        results: dict[str, dict[str, Any]] = {}
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i : i + batch_size]
+            resp = await self._retry(
+                self.client.get_quotes,
+                batch,
+                fields=fields,
+                endpoint="get_equity_quotes",
+            )
+            payload = resp.json()
+            if isinstance(payload, dict):
+                results.update(payload)
+        return results
+
+    async def get_market_movers(
+        self,
+        index: str,
+        *,
+        sort_order: str = "PERCENT_CHANGE_UP",
+        frequency: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return Schwab's top movers list for an index/exchange bucket."""
+        from schwab.client import Client
+
+        sort = getattr(Client.Movers.SortOrder, sort_order, sort_order)
+        kwargs: dict[str, Any] = {"sort_order": sort}
+        if frequency is not None:
+            kwargs["frequency"] = frequency
+
+        resp = await self._retry(
+            self.client.get_movers,
+            index,
+            endpoint="get_market_movers",
+            **kwargs,
+        )
+        data = resp.json()
+        if isinstance(data, list):
+            return data
+        return data.get("screeners", data.get("movers", []))
+
     async def get_todays_orders(self) -> list[dict[str, Any]]:
         """Fetch all orders entered today from Schwab."""
         today = dt.date.today()

@@ -237,6 +237,12 @@ class DiscordNotifier:
         msg = f"🚨 **ERROR** {context}\n```{error[:1500]}```"
         await self._post(msg)
 
+    async def notify_messages(self, messages: list[str]) -> None:
+        """Post one or more plain-text messages (e.g. morning equity scan)."""
+        for message in messages:
+            if message.strip():
+                await self._post(message)
+
 
 class TelegramNotifier:
     """Sends risk notifications through the existing Telegram notify helper."""

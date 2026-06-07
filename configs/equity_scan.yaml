@@ -1,0 +1,39 @@
+# Morning equity scan — separate from butterfly options trading.
+# Uses Butterfly Guy Schwab auth (tokens.json + .env credentials).
+# Discord: set EQUITY_DISCORD_WEBHOOK_URL in .env (not DISCORD_WEBHOOK_URL).
+# Cron: weekdays 6:00 AM Pacific — see crontab (equity_morning_scan.log).
+
+universes:
+  - sp500
+  - nq100
+  - custom
+
+universe_dir: configs/universes
+custom_watchlist: configs/universes/custom.txt
+
+filters:
+  min_price: 5.0
+  min_volume: 500000
+  prior_day_min_pct: 3.0
+  premarket_min_gap_pct: 2.0
+
+limits:
+  prior_gainers: 15
+  prior_losers: 15
+  premarket_gainers: 15
+  premarket_losers: 15
+  movers_per_bucket: 10
+
+batch_size: 150
+include_movers: true
+mover_indexes:
+  - NASDAQ
+  - NYSE
+  - EQUITY_ALL
+
+context_symbols:
+  - $SPX
+  - $COMPX
+  - $DJI
+  - SPY
+  - QQQ
