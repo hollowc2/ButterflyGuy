@@ -5,7 +5,10 @@ from __future__ import annotations
 import datetime as dt
 
 from butterfly_guy.reports.live_performance import TradePoint, compute_stats
-from butterfly_guy.reports.performance_chart import build_performance_chart_png
+from butterfly_guy.reports.performance_chart import (
+    build_combined_performance_chart_png,
+    build_performance_chart_png,
+)
 
 
 def _trade(
@@ -41,6 +44,20 @@ def test_build_performance_chart_png_returns_png_bytes() -> None:
         _trade(dt.date(2026, 3, 19), 75.0),
     ]
     png = build_performance_chart_png(trades, title="SPX Weekly", period_label="Weekly")
+    assert png.startswith(b"\x89PNG\r\n")
+    assert len(png) > 1000
+
+
+def test_build_combined_performance_chart_png_returns_png_bytes() -> None:
+    weekly = [_trade(dt.date(2026, 6, 3), -125.0)]
+    monthly = weekly + [_trade(dt.date(2026, 6, 4), -229.0)]
+    all_time = [
+        _trade(dt.date(2026, 3, 17), 100.0),
+        _trade(dt.date(2026, 3, 18), -50.0, exit_reason="drawdown_morning"),
+        _trade(dt.date(2026, 3, 19), 75.0),
+    ]
+    periods = [("Weekly", weekly), ("Monthly", monthly), ("All-Time", all_time)]
+    png = build_combined_performance_chart_png(periods)
     assert png.startswith(b"\x89PNG\r\n")
     assert len(png) > 1000
 

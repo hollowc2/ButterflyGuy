@@ -17,7 +17,7 @@ from butterfly_guy.reports.live_performance import (
     trade_pnl_dollars,
     trade_point_from_row,
 )
-from butterfly_guy.reports.performance_chart import build_performance_chart_png
+from butterfly_guy.reports.performance_chart import build_combined_performance_chart_png
 from butterfly_guy.services.chart_data import load_spot_series
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, summarize_exit_chart
@@ -135,6 +135,21 @@ def format_performance_caption(label: str, trades: list[TradePoint]) -> str:
         f"Win rate: {stats.win_rate:.0f}% | PF: {stats.profit_factor:.2f} | "
         f"Max DD: ${stats.max_drawdown:.2f}"
     )
+
+
+def format_combined_performance_caption(
+    weekly: list[TradePoint],
+    monthly: list[TradePoint],
+    all_time: list[TradePoint],
+) -> str:
+    lines = ["📊 **Performance Summary**"]
+    for label, trades in (
+        ("Weekly", weekly),
+        ("Monthly", monthly),
+        ("All-Time", all_time),
+    ):
+        lines.append(format_performance_caption(label, trades).split("\n", 1)[1])
+    return "\n".join(lines)
 
 
 def format_review_header(windows: ReviewWindows, trade_count: int) -> str:
@@ -290,24 +305,27 @@ async def send_weekend_review(
             )
         messages_sent += 1
 
-    performance_blocks = [
+    performance_periods = [
         ("Weekly", weekly_points),
         ("Monthly", monthly_points),
         ("All-Time", all_points),
     ]
-    for label, points in performance_blocks:
-        caption = format_performance_caption(label, points)
-        chart_png = build_performance_chart_png(points, title=f"SPX {label}", period_label=label)
-        await _post_with_delay(
-            notifier,
-            content=caption,
-            image_png=chart_png,
-            image_name=f"perf_{label.lower().replace('-', '_')}.png",
-            dry_run=dry_run,
-            dry_run_dir=dry_run_dir,
-            dry_run_counter=dry_run_counter,
-        )
-        messages_sent += 1
+    combined_caption = format_combined_performance_caption(
+        weekly_points,
+        monthly_points,
+        all_points,
+    )
+    combined_png = build_combined_performance_chart_png(performance_periods)
+    await _post_with_delay(
+        notifier,
+        content=combined_caption,
+        image_png=combined_png,
+        image_name="performance_summary.png",
+        dry_run=dry_run,
+        dry_run_dir=dry_run_dir,
+        dry_run_counter=dry_run_counter,
+    )
+    messages_sent += 1
 
     log.info(
         "weekend_review_complete",

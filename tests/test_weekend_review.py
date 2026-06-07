@@ -153,7 +153,7 @@ async def test_send_weekend_review_dry_run_with_weekly_trades(tmp_path) -> None:
             new=AsyncMock(return_value=(fake_png, True)),
         ),
         patch(
-            "butterfly_guy.services.weekend_review.build_performance_chart_png",
+            "butterfly_guy.services.weekend_review.build_combined_performance_chart_png",
             return_value=fake_png,
         ),
         patch(
@@ -172,6 +172,6 @@ async def test_send_weekend_review_dry_run_with_weekly_trades(tmp_path) -> None:
 
     assert result.skipped is False
     assert result.weekly_trade_count == 1
-    assert result.messages_sent == 5
+    assert result.messages_sent == 3
     png_files = list(tmp_path.glob("*.png"))
-    assert len(png_files) == 4
+    assert len(png_files) == 2
