@@ -107,6 +107,10 @@
     "mtime": 1778047168.281972,
     "hash": "c0abab433f59114c3366366d60f889b6"
   },
+  "/opt/butterflyguy/tests/test_weekend_review.py": {
+    "mtime": 1780856452.6395328,
+    "hash": "f8e9b068518592feb113dbb64b381a5b"
+  },
   "/opt/butterflyguy/tests/test_width_selection.py": {
     "mtime": 1780099367.3875327,
     "hash": "55daea014a9edcad3e173bc28db6182d"
@@ -126,6 +130,10 @@
   "/opt/butterflyguy/tests/test_notifier.py": {
     "mtime": 1780719282.8148708,
     "hash": "2d91ad5da0747c0f9781f70459f3cf74"
+  },
+  "/opt/butterflyguy/tests/test_performance_chart.py": {
+    "mtime": 1780856385.9302042,
+    "hash": "d5ecdff8fc5a7b83102ac3e7e8cd7073"
   },
   "/opt/butterflyguy/tests/integration/__init__.py": {
     "mtime": 1773186977.9160578,
@@ -151,6 +159,10 @@
     "mtime": 1776713894.4839926,
     "hash": "dfbafdf655ef13b89eae6319196605e1"
   },
+  "/opt/butterflyguy/tools/send_weekend_review.py": {
+    "mtime": 1780856343.0889935,
+    "hash": "f8c1cba688d089f34c549db6d155ea79"
+  },
   "/opt/butterflyguy/tools/send_weekly_calendar.py": {
     "mtime": 1780855689.2058382,
     "hash": "48ca3bf7a77fa90c7bc468c823f2f5b3"
@@ -170,6 +182,14 @@
   "/opt/butterflyguy/src/butterfly_guy/services/__init__.py": {
     "mtime": 1773186977.915058,
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/services/chart_data.py": {
+    "mtime": 1780856317.94987,
+    "hash": "ef8785c9d6f3cba4885aba38c59a08f2"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/services/weekend_review.py": {
+    "mtime": 1780856328.0139196,
+    "hash": "008659298c5bcdd360821de150e4d8e6"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/trade_chart.py": {
     "mtime": 1780722436.3233914,
@@ -250,6 +270,10 @@
   "/opt/butterflyguy/src/butterfly_guy/reports/__init__.py": {
     "mtime": 1780724210.0754035,
     "hash": "444dd4c7c8b25a317359042c174e2151"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/reports/performance_chart.py": {
+    "mtime": 1780856441.2714767,
+    "hash": "5b3c6a7bcae9b4a91f9cbdff060784e0"
   },
   "/opt/butterflyguy/src/butterfly_guy/reports/live_performance.py": {
     "mtime": 1780725967.9252086,
@@ -372,8 +396,8 @@
     "hash": "59f68d9f4fdaefed639efa93f35b16fd"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/send_test_chart.py": {
-    "mtime": 1780722458.4825006,
-    "hash": "1c1d3ad10d85259721f035f5180d1b9b"
+    "mtime": 1780856345.1370037,
+    "hash": "72dd7d731080020cdca90835864dd7e2"
   },
   "/opt/butterflyguy/src/butterfly_guy/db/__init__.py": {
     "mtime": 1773186977.914058,

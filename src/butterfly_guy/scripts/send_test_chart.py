@@ -18,6 +18,7 @@ sys.path.insert(0, str(root / "tools"))
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.db.connection import DatabasePool
+from butterfly_guy.services.chart_data import load_spot_series
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import (
     ButterflyChartSpec,
@@ -26,13 +27,6 @@ from butterfly_guy.services.trade_chart import (
 )
 
 log = get_logger(__name__)
-
-
-def _spot_rows_to_candles(rows: list) -> list[dict]:
-    return [
-        {"datetime": int(row["ts"].timestamp() * 1000), "close": float(row["price"])}
-        for row in rows
-    ]
 
 
 async def _load_trade(db: DatabasePool, trade_id: int | None) -> dict | None:
@@ -52,27 +46,6 @@ async def _load_trade(db: DatabasePool, trade_id: int | None) -> dict | None:
         """
     )
     return dict(row) if row else None
-
-
-async def _load_spot_series(
-    db: DatabasePool,
-    underlying: str,
-    session_date: dt.date,
-) -> list[dict]:
-    rows = await db.pool.fetch(
-        """
-        SELECT ts, price
-        FROM spot_prices
-        WHERE underlying = $1
-          AND ts >= $2::timestamptz
-          AND ts < $3::timestamptz
-        ORDER BY ts ASC
-        """,
-        underlying,
-        dt.datetime.combine(session_date, dt.time.min, tzinfo=dt.timezone.utc),
-        dt.datetime.combine(session_date + dt.timedelta(days=1), dt.time.min, tzinfo=dt.timezone.utc),
-    )
-    return _spot_rows_to_candles(rows)
 
 
 async def main() -> None:
@@ -104,7 +77,7 @@ async def main() -> None:
             session_date = session_date.date()
 
         underlying = trade["underlying"]
-        candles = await _load_spot_series(db, underlying, session_date)
+        candles = await load_spot_series(db, underlying, session_date)
         if len(candles) < 10:
             raise SystemExit(
                 f"Insufficient spot_prices for {underlying} on {session_date} ({len(candles)} rows)"
