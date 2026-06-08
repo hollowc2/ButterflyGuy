@@ -41,7 +41,7 @@ ALL_WING_WIDTHS = [10, 20, 30, 50, 75]
 
 ASSET_CONFIGS: dict[str, dict] = {
     "SPX": {"wing_widths": [10, 20, 30], "spot_range": 100, "center_tolerance": 50, "yfinance_index": "^GSPC"},
-    "NDX": {"wing_widths": [25, 50, 75], "spot_range": 250, "center_tolerance": 100, "yfinance_index": "^NDX"},
+    "NDX": {"wing_widths": [80, 100, 150], "spot_range": 250, "center_tolerance": 100, "yfinance_index": "^NDX"},
     "XSP": {"wing_widths": [10, 20, 30], "spot_range": 100, "center_tolerance": 50, "yfinance_index": "SPX"},
 }
 

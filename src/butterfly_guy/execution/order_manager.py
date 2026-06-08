@@ -114,17 +114,32 @@ class OrderManager:
             if spread is None:
                 log.warning("paper_entry_no_spread", center=candidate.center_strike)
                 return None
-            log.debug("paper_entry_spread", bid=spread.bid, mark=spread.mark,
-                      ask=spread.ask, limit=limit_price)
-            if limit_price >= spread.mark:
-                fill_price = round(spread.mark + self.settings.paper_slippage_per_spread + self._commission(quantity), 2)
+            fill_threshold = spread.ask + self.settings.paper_fill_buffer
+            log.debug(
+                "paper_entry_spread",
+                bid=spread.bid,
+                mark=spread.mark,
+                ask=spread.ask,
+                limit=limit_price,
+                fill_threshold=fill_threshold,
+            )
+            if limit_price >= fill_threshold:
+                fill_price = round(
+                    spread.ask + self.settings.paper_slippage_per_spread + self._commission(quantity),
+                    2,
+                )
                 log.info("paper_entry_filled", limit=limit_price, fill_price=fill_price)
                 return {
                     "order_id": "PAPER",
                     "fill_price": fill_price,
                     "fill_time": now_utc(),
                 }
-            log.debug("paper_entry_not_filled", limit=limit_price, mark=spread.mark)
+            log.debug(
+                "paper_entry_not_filled",
+                limit=limit_price,
+                ask=spread.ask,
+                fill_threshold=fill_threshold,
+            )
             return None
 
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)

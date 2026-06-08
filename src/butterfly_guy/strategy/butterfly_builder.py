@@ -30,9 +30,12 @@ VIX_SIGMA_BY_WIDTH: dict[int, float] = {
     10: 0.25,
     20: 0.50,
     30: 0.75,
-    25: 0.25,  # NDX narrow
-    50: 0.50,  # NDX mid
-    75: 0.75,  # NDX wide
+    25: 0.25,  # legacy NDX (non-10pt grid)
+    50: 0.50,
+    75: 0.75,
+    80: 0.25,  # NDX narrow (10-pt strike grid)
+    100: 0.50,  # NDX mid
+    150: 0.75,  # NDX wide
     1: 0.25,   # XSP narrow
     2: 0.50,   # XSP mid
     3: 0.75,   # XSP wide

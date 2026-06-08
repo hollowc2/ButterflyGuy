@@ -263,8 +263,9 @@ class SimulationEngine:
                 if best:
                     entry_candidate = best
                     entry_bar = bar
-                    # Apply slippage and paper commission (matches live fill_price)
-                    entry_price = best.cost + params.slippage + params.paper_entry_commission()
+                    # Debit at composite ask (natural buy), plus slippage/commission
+                    entry_debit = best.ask if best.ask > 0 else best.cost
+                    entry_price = entry_debit + params.slippage + params.paper_entry_commission()
                     result.traded = True
                     result.direction = direction
                     result.entry_time = bar.ts

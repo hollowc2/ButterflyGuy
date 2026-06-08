@@ -4,13 +4,13 @@ schwab:
 
 strategy:
   underlying: "NDX"
-  wing_widths: [25, 50, 75]   # NDX strikes are wider
+  wing_widths: [80, 100, 150]  # must be multiples of 10 (NDX strike increment)
   spot_range: 250              # NDX trades ~20000, wider scan range
   rr_min: 8.0
   max_cost_per_width:
-    25: 2.00
-    50: 4.00
-    75: 6.00
+    80: 6.00
+    100: 8.00
+    150: 12.00
 entry:
   start_time: "07:00"  # PST
   end_time: "07:45"    # PST

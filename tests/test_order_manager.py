@@ -1018,3 +1018,34 @@ async def test_paper_entry_uses_current_mark_not_ratchet():
     assert result is not None
     # fill_price should be based on mark=2.30, not ratcheted 3.00
     assert result["fill_price"] == pytest.approx(2.40)  # limit=2.40 (step 2 of low_spread), no slippage
+
+
+# ---------------------------------------------------------------------------
+# execute_single_attempt (TradeService entry path)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_paper_single_attempt_fills_at_ask_not_mark():
+    settings = make_settings(paper_trading=True, paper_slippage_per_spread=0.05)
+    om, _schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 3.30)
+
+    wide_spread = LiveSpread(bid=2.50, mark=3.30, ask=9.80)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=wide_spread)):
+        result = await om.execute_single_attempt(candidate, limit_price=9.80)
+
+    assert result is not None
+    assert result["fill_price"] == pytest.approx(9.85)  # ask + slippage
+
+
+@pytest.mark.asyncio
+async def test_paper_single_attempt_no_fill_when_limit_below_ask():
+    settings = make_settings(paper_trading=True)
+    om, _schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 3.30)
+
+    wide_spread = LiveSpread(bid=2.50, mark=3.30, ask=9.80)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=wide_spread)):
+        result = await om.execute_single_attempt(candidate, limit_price=5.00)
+
+    assert result is None

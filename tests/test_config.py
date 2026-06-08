@@ -128,9 +128,10 @@ def test_spx_goldilocks_width_bucket_uses_20_30_40():
     assert config.strategy.vix_width_buckets[1].widths == [20, 30, 40]
 
 
-def test_ndx_config_keeps_spx_style_rr_target_with_default_50_wide_ceiling():
+def test_ndx_config_keeps_spx_style_rr_target_with_10pt_grid_wing_widths():
     config = load_config(config_path="configs/config_ndx.yaml")
 
     assert config.strategy.underlying == "NDX"
     assert config.strategy.rr_target == 10.0
-    assert config.strategy.max_cost_per_width[50] == 4.0
+    assert config.strategy.wing_widths == [80, 100, 150]
+    assert config.strategy.max_cost_per_width[100] == 8.0
