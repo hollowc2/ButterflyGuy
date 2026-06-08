@@ -53,6 +53,18 @@ uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03
 uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --method VIX
 ```
 
+Equity morning scan and universe refresh:
+
+```bash
+uv run python src/butterfly_guy/scripts/refresh_equity_universes.py --dry-run
+uv run python src/butterfly_guy/scripts/refresh_equity_universes.py
+uv run python src/butterfly_guy/scripts/run_morning_scan.py --dry-run
+```
+
+Weekly cron (Sunday 8 PM Pacific): `refresh_equity_universes.py` rebuilds `liquid.txt`
+from NASDAQ/NYSE seeds validated via Schwab (price ≥ $5, 20d avg vol ≥ 500K).
+Config: `configs/equity_scan.yaml`.
+
 Docker stack:
 
 ```bash

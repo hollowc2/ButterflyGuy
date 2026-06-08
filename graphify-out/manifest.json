@@ -51,6 +51,10 @@
     "mtime": 1778778584.9101913,
     "hash": "a64649a3d8d7eb413f75a1265c65d085"
   },
+  "/opt/butterflyguy/tests/test_equity_scan_volume.py": {
+    "mtime": 1780859615.163055,
+    "hash": "cff9e9af28488f5b286f0650360fa826"
+  },
   "/opt/butterflyguy/tests/test_monitoring_leg_replay.py": {
     "mtime": 1780104542.1769912,
     "hash": "dd2ab0c462b1993424ceb71969f26acf"
@@ -62,6 +66,10 @@
   "/opt/butterflyguy/tests/test_position_manager.py": {
     "mtime": 1778530313.1634445,
     "hash": "094134bc51cb9b482b5276a1dfbc3ee2"
+  },
+  "/opt/butterflyguy/tests/test_equity_universes.py": {
+    "mtime": 1780879229.6563764,
+    "hash": "f300173a5d973cd93c3fbae9d9fe56a8"
   },
   "/opt/butterflyguy/tests/test_run_backtest_db.py": {
     "mtime": 1778103240.056372,
@@ -78,6 +86,10 @@
   "/opt/butterflyguy/tests/test_trade_service.py": {
     "mtime": 1778616782.922592,
     "hash": "6d505464fcdb3937b4fe1340a4f12290"
+  },
+  "/opt/butterflyguy/tests/test_equity_scan.py": {
+    "mtime": 1780859637.8241608,
+    "hash": "0513935089d8e4d8592d18cbd3f6d11a"
   },
   "/opt/butterflyguy/tests/test_chain_cache.py": {
     "mtime": 1778094722.5694659,
@@ -200,8 +212,8 @@
     "hash": "f4341392741ad569789f414498354797"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/notifier.py": {
-    "mtime": 1780855690.9628463,
-    "hash": "9f2b93cf1ae33e8fcdf3c571d654f025"
+    "mtime": 1780859221.7952673,
+    "hash": "aa5f0027af240a85826c44672743da7b"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/trade_service.py": {
     "mtime": 1780719122.3750842,
@@ -236,8 +248,8 @@
     "hash": "5c1c3ce574663f06392f60d43d41c519"
   },
   "/opt/butterflyguy/src/butterfly_guy/data/schwab_client.py": {
-    "mtime": 1777928460.5733974,
-    "hash": "c6a844a5d863f81d8841334ed4dfae83"
+    "mtime": 1780859200.4141738,
+    "hash": "ad38e52dbeddc15a6b85d0119c6f6c2b"
   },
   "/opt/butterflyguy/src/butterfly_guy/data/db_chain_quotes.py": {
     "mtime": 1780099084.069,
@@ -343,6 +355,10 @@
     "mtime": 1778731842.1636193,
     "hash": "0f1538c6da43e62917584d2e3b9e1537"
   },
+  "/opt/butterflyguy/src/butterfly_guy/scripts/run_morning_scan.py": {
+    "mtime": 1780859601.7389922,
+    "hash": "4cb0d0339a8b3102e1c5d83e48570413"
+  },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_paper_replay.py": {
     "mtime": 1778731838.5795991,
     "hash": "60f218f63499fdf82be71201161fe0b9"
@@ -387,6 +403,10 @@
     "mtime": 1776713870.7988763,
     "hash": "31226e32d020175211bd967ed9fc4a3f"
   },
+  "/opt/butterflyguy/src/butterfly_guy/scripts/refresh_equity_universes.py": {
+    "mtime": 1780879207.4922695,
+    "hash": "1ad40ad645ca6ff8691bd139f38d45a8"
+  },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_schwab_sweep.py": {
     "mtime": 1776718898.2188172,
     "hash": "72375ed87d0d153390033bc4ec701bd7"
@@ -398,6 +418,30 @@
   "/opt/butterflyguy/src/butterfly_guy/scripts/send_test_chart.py": {
     "mtime": 1780856345.1370037,
     "hash": "72dd7d731080020cdca90835864dd7e2"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/equity_scan/__init__.py": {
+    "mtime": 1780859200.4911742,
+    "hash": "40d0052dff3e001ff8d962bbd7797c6c"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/equity_scan/config.py": {
+    "mtime": 1780879207.4932694,
+    "hash": "89236004ed87c8fae6f630fb2e86134f"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/equity_scan/volume.py": {
+    "mtime": 1780859634.658146,
+    "hash": "6222fccfff0e6b660dd3588a6f76fdcc"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/equity_scan/scanner.py": {
+    "mtime": 1780859575.2498689,
+    "hash": "a7696bacc55640b0e25ff2d2cab982fd"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/equity_scan/report.py": {
+    "mtime": 1780859590.9869423,
+    "hash": "3401b9520a21cece5f574140d0a4ab06"
+  },
+  "/opt/butterflyguy/src/butterfly_guy/equity_scan/universes.py": {
+    "mtime": 1780879229.387375,
+    "hash": "b70d2acb335f31277b31e2917242d196"
   },
   "/opt/butterflyguy/src/butterfly_guy/db/__init__.py": {
     "mtime": 1773186977.914058,
@@ -528,8 +572,8 @@
     "hash": "05b6988c146a0c8e4c62a1d6422fa0ef"
   },
   "/opt/butterflyguy/AGENTS.md": {
-    "mtime": 1780082543.777446,
-    "hash": "87905c015b84efa9bfea9eeb1d3ca146"
+    "mtime": 1780879224.0703495,
+    "hash": "1a29699de0179b29719dc53396617a7d"
   },
   "/opt/butterflyguy/CLAUDE.md": {
     "mtime": 1776720045.4967031,
@@ -595,6 +639,10 @@
     "mtime": 1777089382.0873015,
     "hash": "ad8b83396aa1edb9a96814c6cba93212"
   },
+  "/opt/butterflyguy/configs/equity_scan.yaml": {
+    "mtime": 1780879215.86531,
+    "hash": "6f1a8b578b80f79c2b36d17603c091de"
+  },
   "/opt/butterflyguy/configs/config_xsp.yaml": {
     "mtime": 1779386189.7368271,
     "hash": "3a94516a527935c5e51a8135868f1128"
@@ -606,6 +654,18 @@
   "/opt/butterflyguy/configs/config_ndx.yaml": {
     "mtime": 1779303088.503476,
     "hash": "ea7fdc850a2318471b3326d94386c707"
+  },
+  "/opt/butterflyguy/configs/universes/nq100.txt": {
+    "mtime": 1780859612.1670408,
+    "hash": "c4c119c87bb67af003c266b22689c323"
+  },
+  "/opt/butterflyguy/configs/universes/custom.txt": {
+    "mtime": 1780859227.2552912,
+    "hash": "85dfbf9b8c69df21658c155b555fc1fb"
+  },
+  "/opt/butterflyguy/configs/universes/sp500.txt": {
+    "mtime": 1780859612.1670408,
+    "hash": "6cf3a4577d1bb1f67edf8072d6a674b1"
   },
   "/opt/butterflyguy/data/ToS_examples/20wide_fly_chain_at_entrywinow.png": {
     "mtime": 1775064604.7338266,

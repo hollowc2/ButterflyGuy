@@ -26,8 +26,8 @@ class EquityScanLimits(BaseModel):
 
 
 class EquityScanSettings(BaseModel):
-    universes: list[Literal["sp500", "nq100", "custom"]] = Field(
-        default_factory=lambda: ["sp500", "nq100", "custom"]
+    universes: list[Literal["sp500", "nq100", "liquid", "custom"]] = Field(
+        default_factory=lambda: ["sp500", "nq100", "liquid", "custom"]
     )
     universe_dir: str = "configs/universes"
     custom_watchlist: str = "configs/universes/custom.txt"
