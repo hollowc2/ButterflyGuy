@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 
 from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.equity_scan.config import EquityScanSettings
@@ -142,40 +143,61 @@ def build_report(
             group_by_sector=group_by_sector,
         )
     )
-    sections.append(
-        _format_snapshot_section(
-            f"Premarket Gaps (>{settings.filters.premarket_min_gap_pct:.1f}%)",
-            results.premarket_gainers,
-            pct_field="session_gap_pct",
-            empty_text="_No meaningful gap-up names._",
-            group_by_sector=group_by_sector,
+    if results.show_premarket:
+        sections.append(
+            _format_snapshot_section(
+                f"Premarket Gaps (>{settings.filters.premarket_min_gap_pct:.1f}%)",
+                results.premarket_gainers,
+                pct_field="session_gap_pct",
+                empty_text="_No meaningful gap-up names._",
+                group_by_sector=group_by_sector,
+            )
         )
-    )
-    sections.append(
-        _format_snapshot_section(
-            f"Premarket Gaps (<-{settings.filters.premarket_min_gap_pct:.1f}%)",
-            results.premarket_losers,
-            pct_field="session_gap_pct",
-            empty_text="_No meaningful gap-down names._",
-            group_by_sector=group_by_sector,
+        sections.append(
+            _format_snapshot_section(
+                f"Premarket Gaps (<-{settings.filters.premarket_min_gap_pct:.1f}%)",
+                results.premarket_losers,
+                pct_field="session_gap_pct",
+                empty_text="_No meaningful gap-down names._",
+                group_by_sector=group_by_sector,
+            )
         )
-    )
+    else:
+        sections.append(
+            _format_section(
+                "Premarket Gaps",
+                [],
+                empty_text=(
+                    f"_Premarket scan starts at {settings.premarket_start_et} ET "
+                    "(prior-day section above is still current)._"
+                ),
+            )
+        )
 
     if settings.include_movers:
-        sections.append(
-            _format_section(
-                "Schwab Movers (Up)",
-                [_format_mover_line(item) for item in results.movers_up],
-                empty_text="_Movers unavailable (market closed or no data)._",
+        if results.show_movers:
+            sections.append(
+                _format_section(
+                    "Schwab Movers (Up)",
+                    [_format_mover_line(item) for item in results.movers_up],
+                    empty_text="_No qualifying movers._",
+                )
             )
-        )
-        sections.append(
-            _format_section(
-                "Schwab Movers (Down)",
-                [_format_mover_line(item) for item in results.movers_down],
-                empty_text="_Movers unavailable (market closed or no data)._",
+            sections.append(
+                _format_section(
+                    "Schwab Movers (Down)",
+                    [_format_mover_line(item) for item in results.movers_down],
+                    empty_text="_No qualifying movers._",
+                )
             )
-        )
+        else:
+            sections.append(
+                _format_section(
+                    "Schwab Movers",
+                    [],
+                    empty_text="_Movers available during regular market hours only._",
+                )
+            )
 
     messages: list[str] = []
     current = header
@@ -189,3 +211,17 @@ def build_report(
     if current:
         messages.append(current)
     return messages
+
+
+def archive_report(
+    messages: list[str],
+    *,
+    report_dir: str,
+    generated_at: dt.datetime,
+) -> Path:
+    """Write the scan report to a dated markdown file under report_dir."""
+    out_dir = Path(report_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{generated_at.strftime('%Y-%m-%d')}.md"
+    path.write_text("\n\n---\n\n".join(messages) + "\n")
+    return path

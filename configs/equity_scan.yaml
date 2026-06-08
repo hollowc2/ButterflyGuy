@@ -1,7 +1,7 @@
 # Morning equity scan — separate from butterfly options trading.
 # Uses Butterfly Guy Schwab auth (tokens.json + .env credentials).
 # Discord: set EQUITY_DISCORD_WEBHOOK_URL in .env (not DISCORD_WEBHOOK_URL).
-# Cron: weekdays 6:00 AM Pacific — see crontab (equity_morning_scan.log).
+# Cron: weekdays 6:00 AM Pacific — see infra/cron/equity_morning_scan.cron
 # Universe refresh: Sundays 8:00 PM Pacific — refresh_equity_universes.py
 #   (sp500/nq100 from public sources; liquid from NASDAQ/NYSE seeds + Schwab
 #   price/volume validation). Expect ~10–20 min for liquid rebuild; morning scan
@@ -17,11 +17,13 @@ universe_dir: configs/universes
 custom_watchlist: configs/universes/custom.txt
 
 filters:
-  min_price: 5.0
+  min_price: 10.0
   min_volume: 500000
   prior_day_min_pct: 3.0
   premarket_min_gap_pct: 2.0
-  min_rvol: 0.0  # 0 = off; try 0.05–0.15 for unusual premarket volume
+  min_rvol: 0.05
+  max_abs_pct: 50.0
+  require_index_membership: true
 
 rvol_lookback_days: 20
 rvol_fetch_concurrency: 10
@@ -36,10 +38,16 @@ limits:
 
 batch_size: 150
 include_movers: true
+movers_min_abs_pct: 1.0
 mover_indexes:
   - NASDAQ
   - NYSE
   - EQUITY_ALL
+
+premarket_start_et: "04:00"
+dedupe_premarket_with_prior: true
+gap_overlap_tolerance_pct: 0.5
+report_dir: reports/equity_scans
 
 context_symbols:
   - $SPX

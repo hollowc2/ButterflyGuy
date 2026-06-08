@@ -10,6 +10,8 @@ PACIFIC = ZoneInfo("America/Los_Angeles")
 
 MARKET_OPEN = dt.time(9, 30)
 MARKET_CLOSE = dt.time(16, 0)
+PREMARKET_OPEN = dt.time(4, 0)
+AFTERHOURS_CLOSE = dt.time(20, 0)
 
 # US market holidays (2026) — extend as needed
 HOLIDAYS_2026 = {
@@ -46,6 +48,15 @@ def is_market_open(at: dt.datetime | None = None) -> bool:
     if not is_trading_day(now.date()):
         return False
     return MARKET_OPEN <= now.time() < MARKET_CLOSE
+
+
+def is_premarket_window(at: dt.datetime | None = None, *, start: str = "04:00") -> bool:
+    """True during weekday premarket (default 4:00–9:30 AM ET)."""
+    now = (at or now_eastern()).astimezone(EASTERN)
+    if not is_trading_day(now.date()):
+        return False
+    start_time = dt.time.fromisoformat(start)
+    return start_time <= now.time() < MARKET_OPEN
 
 
 def is_trading_day(d: dt.date | None = None) -> bool:

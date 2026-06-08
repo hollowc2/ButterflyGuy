@@ -112,14 +112,26 @@ def write_sector_map(path: Path, sectors: dict[str, str]) -> None:
 
 
 def load_sector_map(universe_dir: str | Path) -> dict[str, str]:
-    """Load symbol -> GICS sector mapping written by refresh_equity_universes."""
+    """Load symbol -> sector mapping (GICS for index names, exchange fallback for liquid)."""
     path = Path(universe_dir) / "sectors.json"
-    if not path.exists():
-        return {}
-    data = json.loads(path.read_text())
-    if not isinstance(data, dict):
-        return {}
-    return {str(symbol).upper(): str(sector) for symbol, sector in data.items()}
+    sectors: dict[str, str] = {}
+    if path.exists():
+        data = json.loads(path.read_text())
+        if isinstance(data, dict):
+            sectors = {str(symbol).upper(): str(sector) for symbol, sector in data.items()}
+
+    meta_path = Path(universe_dir) / "liquid_meta.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+        if isinstance(meta, dict):
+            for symbol, payload in meta.items():
+                sym = str(symbol).upper()
+                if sym in sectors or not isinstance(payload, dict):
+                    continue
+                exchange = str(payload.get("exchange") or "").strip()
+                if exchange:
+                    sectors[sym] = exchange
+    return sectors
 
 
 def lookup_sector(symbol: str, sector_map: dict[str, str]) -> str:
@@ -132,6 +144,9 @@ def refresh_builtin_universes(universe_dir: str | Path) -> dict[str, int]:
     sp500 = fetch_sp500_tickers()
     nq100 = fetch_nq100_tickers()
     sectors = fetch_sp500_sectors()
+    for ticker in nq100:
+        if ticker not in sectors:
+            sectors[ticker] = "Nasdaq-100"
     write_universe_file(base / "sp500.txt", sp500)
     write_universe_file(base / "nq100.txt", nq100)
     write_sector_map(base / "sectors.json", sectors)

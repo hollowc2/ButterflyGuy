@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
+
 from butterfly_guy.equity_scan.config import EquityScanSettings
 from butterfly_guy.equity_scan.universes import (
     build_liquid_meta,
     extract_quote_price,
     filter_symbols_by_avg_volume,
     filter_symbols_by_price,
+    load_sector_map,
     parse_nasdaq_listed_text,
     parse_nyse_listed_text,
 )
@@ -93,3 +96,15 @@ def test_build_liquid_meta():
 def test_equity_scan_settings_accepts_liquid_universe():
     settings = EquityScanSettings(universes=["sp500", "nq100", "liquid", "custom"])
     assert "liquid" in settings.universes
+
+
+def test_load_sector_map_uses_liquid_meta_exchange_fallback(tmp_path):
+    universe_dir = tmp_path / "universes"
+    universe_dir.mkdir()
+    (universe_dir / "sectors.json").write_text(json.dumps({"AAPL": "Information Technology"}))
+    (universe_dir / "liquid_meta.json").write_text(
+        json.dumps({"MARA": {"exchange": "NASDAQ", "price": 12.0}})
+    )
+    sectors = load_sector_map(universe_dir)
+    assert sectors["AAPL"] == "Information Technology"
+    assert sectors["MARA"] == "NASDAQ"

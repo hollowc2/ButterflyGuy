@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
+from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.equity_scan.config import EquityScanSettings
-from butterfly_guy.equity_scan.report import build_report
+from butterfly_guy.equity_scan.report import archive_report, build_report
 from butterfly_guy.equity_scan.scanner import (
     build_snapshots,
+    filter_movers,
     parse_equity_quote,
     rank_scan_results,
 )
 from butterfly_guy.equity_scan.universes import build_symbol_map
 from butterfly_guy.equity_scan.volume import avg_daily_volume, compute_rvol
+
+
+def _premarket_et() -> dt.datetime:
+    return dt.datetime(2026, 6, 8, 8, 0, tzinfo=EASTERN)
+
+
+def _market_open_et() -> dt.datetime:
+    return dt.datetime(2026, 6, 8, 11, 0, tzinfo=EASTERN)
 
 
 def _quote_payload(
@@ -135,12 +147,101 @@ def test_rank_scan_results_returns_expected_sections():
         movers_down=[{"symbol": "ABC", "changePercent": -8.1}],
         market_context=[],
         scanned_symbols=3,
+        generated_at=_premarket_et(),
     )
     assert [snap.symbol for snap in results.prior_gainers] == ["WIN"]
     assert [snap.symbol for snap in results.prior_losers] == ["LOSE"]
     assert [snap.symbol for snap in results.premarket_gainers] == ["WIN", "GAPUP"]
     assert [snap.symbol for snap in results.premarket_losers] == ["LOSE"]
+    assert results.movers_up == []
+    assert results.movers_down == []
+
+
+def test_rank_scan_results_includes_movers_during_regular_hours():
+    settings = EquityScanSettings()
+    snapshots = [
+        parse_equity_quote(
+            "WIN",
+            _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
+            universes={"sp500"},
+        ),
+    ]
+    snapshots = [snap for snap in snapshots if snap is not None]
+    results = rank_scan_results(
+        snapshots,
+        settings=settings,
+        movers_up=[{"symbol": "XYZ", "changePercent": 12.3}],
+        movers_down=[{"symbol": "ABC", "changePercent": -8.1}],
+        market_context=[],
+        scanned_symbols=1,
+        generated_at=_market_open_et(),
+    )
     assert results.movers_up[0]["symbol"] == "XYZ"
+    assert results.movers_down[0]["symbol"] == "ABC"
+
+
+def test_rank_scan_results_dedupes_premarket_when_gap_matches_prior():
+    settings = EquityScanSettings()
+    settings.dedupe_premarket_with_prior = True
+    settings.gap_overlap_tolerance_pct = 0.5
+    snap = parse_equity_quote(
+        "WIN",
+        _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000, extended_last=110.2),
+        universes={"sp500"},
+    )
+    assert snap is not None
+    results = rank_scan_results(
+        [snap],
+        settings=settings,
+        movers_up=[],
+        movers_down=[],
+        market_context=[],
+        scanned_symbols=1,
+        generated_at=_premarket_et(),
+    )
+    assert results.prior_gainers[0].symbol == "WIN"
+    assert results.premarket_gainers == []
+
+
+def test_filter_movers_drops_stale_identical_lists():
+    up, down = filter_movers(
+        [
+            {"symbol": "NVDA", "changePercent": 0.0},
+            {"symbol": "INTC", "changePercent": 0.1},
+        ],
+        [
+            {"symbol": "NVDA", "changePercent": 0.0},
+            {"symbol": "INTC", "changePercent": 0.1},
+        ],
+        min_abs_pct=1.0,
+        limit=10,
+    )
+    assert up == []
+    assert down == []
+
+
+def test_build_snapshots_requires_index_membership_when_enabled():
+    settings = EquityScanSettings()
+    settings.filters.require_index_membership = True
+    settings.filters.min_rvol = 0.0
+    symbol_map = build_symbol_map({"custom": ["ONLY"], "sp500": ["INDEX"]})
+    quotes = {
+        "ONLY": _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
+        "INDEX": _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
+    }
+    snapshots = build_snapshots(quotes, symbol_map, settings)
+    assert [snap.symbol for snap in snapshots] == ["INDEX"]
+
+
+def test_archive_report_writes_dated_markdown(tmp_path):
+    generated_at = _premarket_et()
+    path = archive_report(
+        ["line one", "line two"],
+        report_dir=str(tmp_path),
+        generated_at=generated_at,
+    )
+    assert path.name == "2026-06-08.md"
+    assert "line one" in path.read_text()
 
 
 def test_build_report_groups_snapshots_by_sector():
@@ -168,6 +269,7 @@ def test_build_report_groups_snapshots_by_sector():
         movers_down=[],
         market_context=[],
         scanned_symbols=2,
+        generated_at=_premarket_et(),
     )
     messages = build_report(results, settings=settings)
     report = "\n".join(messages)
@@ -211,6 +313,7 @@ def test_build_report_splits_long_output():
         movers_down=[],
         market_context=[],
         scanned_symbols=30,
+        generated_at=_premarket_et(),
     )
     messages = build_report(results, settings=settings)
     assert len(messages) >= 1

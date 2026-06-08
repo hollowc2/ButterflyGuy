@@ -19,7 +19,7 @@ from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.core.time_utils import now_eastern
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.equity_scan.config import load_equity_scan_config
-from butterfly_guy.equity_scan.report import build_report
+from butterfly_guy.equity_scan.report import archive_report, build_report
 from butterfly_guy.equity_scan.scanner import (
     build_snapshots,
     parse_market_context,
@@ -57,6 +57,7 @@ async def run_scan(
     schwab = SchwabClientWrapper(app_config.schwab)
     await schwab.initialize()
     try:
+        generated_at = now_eastern()
         log.info(
             "equity_scan_start",
             universes=scan_config.universes,
@@ -68,13 +69,18 @@ async def run_scan(
             batch_size=len(scan_config.context_symbols),
         )
         sector_map = load_sector_map(scan_config.universe_dir)
-        avg_volumes = await fetch_avg_volumes(
-            schwab,
-            symbols,
-            lookback_days=scan_config.rvol_lookback_days,
-            concurrency=scan_config.rvol_fetch_concurrency,
-        )
-        log.info("equity_scan_rvol_loaded", symbols_with_avg_volume=len(avg_volumes))
+
+        avg_volumes: dict[str, float] = {}
+        if scan_config.filters.min_rvol > 0:
+            avg_volumes = await fetch_avg_volumes(
+                schwab,
+                symbols,
+                lookback_days=scan_config.rvol_lookback_days,
+                concurrency=scan_config.rvol_fetch_concurrency,
+            )
+            log.info("equity_scan_rvol_loaded", symbols_with_avg_volume=len(avg_volumes))
+        else:
+            log.info("equity_scan_rvol_skipped", reason="min_rvol disabled")
 
         snapshots = build_snapshots(
             quotes,
@@ -107,15 +113,25 @@ async def run_scan(
             movers_down=movers_down,
             market_context=market_context,
             scanned_symbols=len(symbols),
+            generated_at=generated_at,
         )
-        messages = build_report(results, settings=scan_config, generated_at=now_eastern())
+        messages = build_report(results, settings=scan_config, generated_at=generated_at)
+        archive_path = archive_report(
+            messages,
+            report_dir=scan_config.report_dir,
+            generated_at=generated_at,
+        )
         log.info(
             "equity_scan_complete",
             prior_gainers=len(results.prior_gainers),
             prior_losers=len(results.prior_losers),
             premarket_gainers=len(results.premarket_gainers),
             premarket_losers=len(results.premarket_losers),
+            matched_symbols=results.matched_symbols,
+            show_premarket=results.show_premarket,
+            show_movers=results.show_movers,
             messages=len(messages),
+            archive=str(archive_path),
         )
         if dry_run:
             for message in messages:

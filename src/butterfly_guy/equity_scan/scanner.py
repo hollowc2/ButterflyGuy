@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import dataclass
 from typing import Any
 
+from butterfly_guy.core.time_utils import is_market_open, is_premarket_window
 from butterfly_guy.equity_scan.config import EquityScanSettings
 from butterfly_guy.equity_scan.volume import compute_rvol
+
+INDEX_UNIVERSES = frozenset({"sp500", "nq100"})
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,8 @@ class ScanResults:
     market_context: list[MarketContext]
     scanned_symbols: int
     matched_symbols: int
+    show_premarket: bool = True
+    show_movers: bool = True
 
 
 def _as_float(value: Any) -> float | None:
@@ -110,9 +116,84 @@ def passes_filters(snapshot: EquitySnapshot, settings: EquityScanSettings) -> bo
     filters = settings.filters
     if snapshot.price < filters.min_price or snapshot.volume < filters.min_volume:
         return False
+    if filters.require_index_membership and not (INDEX_UNIVERSES & set(snapshot.universes)):
+        return False
+    if filters.max_abs_pct is not None:
+        cap = filters.max_abs_pct
+        if abs(snapshot.prior_day_pct) > cap or abs(snapshot.session_gap_pct) > cap:
+            return False
     if filters.min_rvol <= 0:
         return True
     return snapshot.rvol is not None and snapshot.rvol >= filters.min_rvol
+
+
+def _is_duplicate_premarket(snapshot: EquitySnapshot, *, tolerance_pct: float) -> bool:
+    """True when the gap is essentially the same as the prior-day move."""
+    return abs(snapshot.session_gap_pct - snapshot.prior_day_pct) <= tolerance_pct
+
+
+def _dedupe_premarket(
+    snapshots: list[EquitySnapshot],
+    *,
+    tolerance_pct: float,
+) -> list[EquitySnapshot]:
+    return [
+        snap
+        for snap in snapshots
+        if not _is_duplicate_premarket(snap, tolerance_pct=tolerance_pct)
+    ]
+
+
+def _mover_change_pct(item: dict[str, Any]) -> float | None:
+    pct = item.get("changePercent") or item.get("netPercentChange")
+    if pct is None:
+        change = item.get("change") or item.get("netChange")
+        if change is None:
+            return None
+        try:
+            return float(change)
+        except (TypeError, ValueError):
+            return None
+    try:
+        return float(pct)
+    except (TypeError, ValueError):
+        return None
+
+
+def _mover_symbol(item: dict[str, Any]) -> str:
+    return str(item.get("symbol") or item.get("ticker") or "?")
+
+
+def filter_movers(
+    movers_up: list[dict[str, Any]],
+    movers_down: list[dict[str, Any]],
+    *,
+    min_abs_pct: float,
+    limit: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Drop stale/trivial movers and collapse identical up/down lists."""
+
+    def _filter(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        filtered: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in items:
+            pct = _mover_change_pct(item)
+            if pct is None or abs(pct) < min_abs_pct:
+                continue
+            symbol = _mover_symbol(item)
+            if symbol in seen:
+                continue
+            seen.add(symbol)
+            filtered.append(item)
+        return filtered[:limit]
+
+    up = _filter(movers_up)
+    down = _filter(movers_down)
+    up_symbols = {_mover_symbol(item) for item in up}
+    down_symbols = {_mover_symbol(item) for item in down}
+    if up_symbols and up_symbols == down_symbols:
+        return [], []
+    return up, down
 
 
 def build_snapshots(
@@ -177,41 +258,78 @@ def rank_scan_results(
     movers_down: list[dict[str, Any]],
     market_context: list[MarketContext],
     scanned_symbols: int,
+    generated_at: dt.datetime | None = None,
 ) -> ScanResults:
     limits = settings.limits
     filters = settings.filters
-    return ScanResults(
-        prior_gainers=_top(
-            snapshots,
-            key="prior_day_pct",
-            reverse=True,
-            min_abs_pct=filters.prior_day_min_pct,
-            limit=limits.prior_gainers,
-        ),
-        prior_losers=_top(
-            snapshots,
-            key="prior_day_pct",
-            reverse=False,
-            min_abs_pct=filters.prior_day_min_pct,
-            limit=limits.prior_losers,
-        ),
-        premarket_gainers=_top(
+    show_premarket = is_premarket_window(
+        generated_at,
+        start=settings.premarket_start_et,
+    )
+    show_movers = settings.include_movers and is_market_open(generated_at)
+
+    prior_gainers = _top(
+        snapshots,
+        key="prior_day_pct",
+        reverse=True,
+        min_abs_pct=filters.prior_day_min_pct,
+        limit=limits.prior_gainers,
+    )
+    prior_losers = _top(
+        snapshots,
+        key="prior_day_pct",
+        reverse=False,
+        min_abs_pct=filters.prior_day_min_pct,
+        limit=limits.prior_losers,
+    )
+
+    premarket_gainers: list[EquitySnapshot] = []
+    premarket_losers: list[EquitySnapshot] = []
+    if show_premarket:
+        premarket_gainers = _top(
             snapshots,
             key="session_gap_pct",
             reverse=True,
             min_abs_pct=filters.premarket_min_gap_pct,
             limit=limits.premarket_gainers,
-        ),
-        premarket_losers=_top(
+        )
+        premarket_losers = _top(
             snapshots,
             key="session_gap_pct",
             reverse=False,
             min_abs_pct=filters.premarket_min_gap_pct,
             limit=limits.premarket_losers,
-        ),
-        movers_up=movers_up[: limits.movers_per_bucket],
-        movers_down=movers_down[: limits.movers_per_bucket],
+        )
+        if settings.dedupe_premarket_with_prior:
+            premarket_gainers = _dedupe_premarket(
+                premarket_gainers,
+                tolerance_pct=settings.gap_overlap_tolerance_pct,
+            )
+            premarket_losers = _dedupe_premarket(
+                premarket_losers,
+                tolerance_pct=settings.gap_overlap_tolerance_pct,
+            )
+
+    filtered_movers_up: list[dict[str, Any]] = []
+    filtered_movers_down: list[dict[str, Any]] = []
+    if show_movers:
+        filtered_movers_up, filtered_movers_down = filter_movers(
+            movers_up,
+            movers_down,
+            min_abs_pct=settings.movers_min_abs_pct,
+            limit=limits.movers_per_bucket,
+        )
+
+    return ScanResults(
+        prior_gainers=prior_gainers,
+        prior_losers=prior_losers,
+        premarket_gainers=premarket_gainers,
+        premarket_losers=premarket_losers,
+        movers_up=filtered_movers_up,
+        movers_down=filtered_movers_down,
         market_context=market_context,
         scanned_symbols=scanned_symbols,
         matched_symbols=len(snapshots),
+        show_premarket=show_premarket,
+        show_movers=show_movers,
     )
