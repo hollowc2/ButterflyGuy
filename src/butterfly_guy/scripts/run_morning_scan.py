@@ -25,7 +25,8 @@ from butterfly_guy.equity_scan.scanner import (
     parse_market_context,
     rank_scan_results,
 )
-from butterfly_guy.equity_scan.universes import build_symbol_map, load_universes
+from butterfly_guy.equity_scan.universes import build_symbol_map, load_sector_map, load_universes
+from butterfly_guy.equity_scan.volume import fetch_avg_volumes
 from butterfly_guy.services.notifier import DiscordNotifier
 
 log = get_logger("run_morning_scan")
@@ -66,8 +67,22 @@ async def run_scan(
             scan_config.context_symbols,
             batch_size=len(scan_config.context_symbols),
         )
+        sector_map = load_sector_map(scan_config.universe_dir)
+        avg_volumes = await fetch_avg_volumes(
+            schwab,
+            symbols,
+            lookback_days=scan_config.rvol_lookback_days,
+            concurrency=scan_config.rvol_fetch_concurrency,
+        )
+        log.info("equity_scan_rvol_loaded", symbols_with_avg_volume=len(avg_volumes))
 
-        snapshots = build_snapshots(quotes, symbol_map, scan_config)
+        snapshots = build_snapshots(
+            quotes,
+            symbol_map,
+            scan_config,
+            avg_volumes=avg_volumes,
+            sector_map=sector_map,
+        )
         market_context = [
             ctx
             for symbol, payload in context_quotes.items()

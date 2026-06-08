@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from butterfly_guy.equity_scan.config import EquityScanSettings
+from butterfly_guy.equity_scan.volume import compute_rvol
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,10 @@ class EquitySnapshot:
     prior_day_pct: float
     session_gap_pct: float
     volume: int
+    premarket_volume: int
+    avg_volume_20d: float | None
+    rvol: float | None
+    sector: str
     universes: tuple[str, ...]
 
 
@@ -60,6 +65,8 @@ def parse_equity_quote(
     payload: dict[str, Any],
     *,
     universes: set[str],
+    sector: str = "Unknown",
+    avg_volume_20d: float | None = None,
 ) -> EquitySnapshot | None:
     """Normalize a Schwab quote payload into an EquitySnapshot."""
     quote = payload.get("quote", {})
@@ -81,6 +88,8 @@ def parse_equity_quote(
 
     session_gap_pct = (price - prior_close) / prior_close * 100.0
     volume = _as_int(quote.get("totalVolume"))
+    premarket_volume = _as_int(extended.get("totalVolume"))
+    rvol = compute_rvol(premarket_volume, avg_volume_20d)
 
     return EquitySnapshot(
         symbol=symbol,
@@ -89,26 +98,45 @@ def parse_equity_quote(
         prior_day_pct=prior_day_pct,
         session_gap_pct=session_gap_pct,
         volume=volume,
+        premarket_volume=premarket_volume,
+        avg_volume_20d=avg_volume_20d,
+        rvol=rvol,
+        sector=sector,
         universes=tuple(sorted(universes)),
     )
 
 
 def passes_filters(snapshot: EquitySnapshot, settings: EquityScanSettings) -> bool:
     filters = settings.filters
-    return snapshot.price >= filters.min_price and snapshot.volume >= filters.min_volume
+    if snapshot.price < filters.min_price or snapshot.volume < filters.min_volume:
+        return False
+    if filters.min_rvol <= 0:
+        return True
+    return snapshot.rvol is not None and snapshot.rvol >= filters.min_rvol
 
 
 def build_snapshots(
     quotes: dict[str, dict[str, Any]],
     symbol_map: dict[str, set[str]],
     settings: EquityScanSettings,
+    *,
+    avg_volumes: dict[str, float] | None = None,
+    sector_map: dict[str, str] | None = None,
 ) -> list[EquitySnapshot]:
+    avg_volumes = avg_volumes or {}
+    sector_map = sector_map or {}
     snapshots: list[EquitySnapshot] = []
     for symbol, payload in quotes.items():
         universes = symbol_map.get(symbol)
         if not universes:
             continue
-        snapshot = parse_equity_quote(symbol, payload, universes=universes)
+        snapshot = parse_equity_quote(
+            symbol,
+            payload,
+            universes=universes,
+            sector=sector_map.get(symbol, "Unknown"),
+            avg_volume_20d=avg_volumes.get(symbol),
+        )
         if snapshot is None:
             continue
         if passes_filters(snapshot, settings):

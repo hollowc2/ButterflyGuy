@@ -27,13 +27,55 @@ def _fmt_universes(snapshot: EquitySnapshot) -> str:
     return f" `{tags}`"
 
 
+def _fmt_rvol(snapshot: EquitySnapshot) -> str:
+    if snapshot.rvol is None:
+        return ""
+    return f" | RVOL {snapshot.rvol:.2f}x"
+
+
 def _format_snapshot_line(snapshot: EquitySnapshot, *, pct_field: str) -> str:
     pct = getattr(snapshot, pct_field)
     vol_m = snapshot.volume / 1_000_000
     return (
         f"**{snapshot.symbol}** {_fmt_pct(pct)} | "
-        f"{_fmt_price(snapshot.price)} | vol {vol_m:.1f}M{_fmt_universes(snapshot)}"
+        f"{_fmt_price(snapshot.price)} | vol {vol_m:.1f}M"
+        f"{_fmt_rvol(snapshot)}{_fmt_universes(snapshot)}"
     )
+
+
+def _group_snapshots_by_sector(snapshots: list[EquitySnapshot]) -> list[tuple[str, list[EquitySnapshot]]]:
+    grouped: dict[str, list[EquitySnapshot]] = {}
+    for snapshot in snapshots:
+        grouped.setdefault(snapshot.sector, []).append(snapshot)
+
+    known = sorted(sector for sector in grouped if sector != "Unknown")
+    if "Unknown" in grouped:
+        known.append("Unknown")
+    return [(sector, grouped[sector]) for sector in known]
+
+
+def _format_snapshot_section(
+    title: str,
+    snapshots: list[EquitySnapshot],
+    *,
+    pct_field: str,
+    empty_text: str,
+    group_by_sector: bool,
+) -> str:
+    if not snapshots:
+        return _format_section(title, [], empty_text=empty_text)
+
+    if not group_by_sector:
+        lines = [_format_snapshot_line(snapshot, pct_field=pct_field) for snapshot in snapshots]
+        return _format_section(title, lines, empty_text=empty_text)
+
+    lines: list[str] = []
+    for sector, sector_snapshots in _group_snapshots_by_sector(snapshots):
+        lines.append(f"_{sector}_")
+        lines.extend(
+            _format_snapshot_line(snapshot, pct_field=pct_field) for snapshot in sector_snapshots
+        )
+    return _format_section(title, lines, empty_text=empty_text)
 
 
 def _format_mover_line(item: dict) -> str:
@@ -81,32 +123,41 @@ def build_report(
         ]
         sections.append(_format_section("Market Context", ctx_lines, empty_text="No context quotes."))
 
+    group_by_sector = settings.group_by_sector
     sections.append(
-        _format_section(
+        _format_snapshot_section(
             f"Prior-Day Rallies (>{settings.filters.prior_day_min_pct:.1f}%)",
-            [_format_snapshot_line(s, pct_field="prior_day_pct") for s in results.prior_gainers],
+            results.prior_gainers,
+            pct_field="prior_day_pct",
             empty_text="_None above threshold._",
+            group_by_sector=group_by_sector,
         )
     )
     sections.append(
-        _format_section(
+        _format_snapshot_section(
             f"Prior-Day Dumps (<-{settings.filters.prior_day_min_pct:.1f}%)",
-            [_format_snapshot_line(s, pct_field="prior_day_pct") for s in results.prior_losers],
+            results.prior_losers,
+            pct_field="prior_day_pct",
             empty_text="_None below threshold._",
+            group_by_sector=group_by_sector,
         )
     )
     sections.append(
-        _format_section(
+        _format_snapshot_section(
             f"Premarket Gaps (>{settings.filters.premarket_min_gap_pct:.1f}%)",
-            [_format_snapshot_line(s, pct_field="session_gap_pct") for s in results.premarket_gainers],
+            results.premarket_gainers,
+            pct_field="session_gap_pct",
             empty_text="_No meaningful gap-up names._",
+            group_by_sector=group_by_sector,
         )
     )
     sections.append(
-        _format_section(
+        _format_snapshot_section(
             f"Premarket Gaps (<-{settings.filters.premarket_min_gap_pct:.1f}%)",
-            [_format_snapshot_line(s, pct_field="session_gap_pct") for s in results.premarket_losers],
+            results.premarket_losers,
+            pct_field="session_gap_pct",
             empty_text="_No meaningful gap-down names._",
+            group_by_sector=group_by_sector,
         )
     )
 

@@ -16,6 +16,11 @@ filters:
   min_volume: 500000
   prior_day_min_pct: 3.0
   premarket_min_gap_pct: 2.0
+  min_rvol: 0.0  # 0 = off; try 0.05–0.15 for unusual premarket volume
+
+rvol_lookback_days: 20
+rvol_fetch_concurrency: 10
+group_by_sector: true
 
 limits:
   prior_gainers: 15

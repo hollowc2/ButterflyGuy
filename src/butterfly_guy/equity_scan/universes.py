@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import re
 import urllib.request
 from pathlib import Path
@@ -55,13 +56,29 @@ def build_symbol_map(universes: dict[str, list[str]]) -> dict[str, set[str]]:
     return symbol_map
 
 
-def fetch_sp500_tickers() -> list[str]:
-    """Download the current S&P 500 constituents list."""
+def fetch_sp500_rows() -> list[dict[str, str]]:
+    """Download S&P 500 constituents with GICS sector metadata."""
     req = urllib.request.Request(SP500_CSV_URL, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=30) as resp:
         text = resp.read().decode()
-    rows = csv.DictReader(io.StringIO(text))
+    return list(csv.DictReader(io.StringIO(text)))
+
+
+def fetch_sp500_tickers() -> list[str]:
+    """Download the current S&P 500 constituents list."""
+    rows = fetch_sp500_rows()
     return sorted({row["Symbol"].strip().upper() for row in rows if row.get("Symbol")})
+
+
+def fetch_sp500_sectors() -> dict[str, str]:
+    """Map S&P 500 tickers to GICS sector names."""
+    sectors: dict[str, str] = {}
+    for row in fetch_sp500_rows():
+        symbol = (row.get("Symbol") or "").strip().upper()
+        sector = (row.get("GICS Sector") or "").strip()
+        if symbol and sector:
+            sectors[symbol] = sector
+    return sectors
 
 
 def fetch_nq100_tickers() -> list[str]:
@@ -86,11 +103,33 @@ def write_universe_file(path: Path, tickers: list[str]) -> None:
     path.write_text("\n".join(tickers) + "\n")
 
 
+def write_sector_map(path: Path, sectors: dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(sorted(sectors.items())), indent=2) + "\n")
+
+
+def load_sector_map(universe_dir: str | Path) -> dict[str, str]:
+    """Load symbol -> GICS sector mapping written by refresh_equity_universes."""
+    path = Path(universe_dir) / "sectors.json"
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text())
+    if not isinstance(data, dict):
+        return {}
+    return {str(symbol).upper(): str(sector) for symbol, sector in data.items()}
+
+
+def lookup_sector(symbol: str, sector_map: dict[str, str]) -> str:
+    return sector_map.get(symbol.upper(), "Unknown")
+
+
 def refresh_builtin_universes(universe_dir: str | Path) -> dict[str, int]:
-    """Refresh sp500.txt and nq100.txt from public sources."""
+    """Refresh sp500.txt, nq100.txt, and sectors.json from public sources."""
     base = Path(universe_dir)
     sp500 = fetch_sp500_tickers()
     nq100 = fetch_nq100_tickers()
+    sectors = fetch_sp500_sectors()
     write_universe_file(base / "sp500.txt", sp500)
     write_universe_file(base / "nq100.txt", nq100)
-    return {"sp500": len(sp500), "nq100": len(nq100)}
+    write_sector_map(base / "sectors.json", sectors)
+    return {"sp500": len(sp500), "nq100": len(nq100), "sectors": len(sectors)}

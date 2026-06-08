@@ -14,6 +14,7 @@ class EquityScanFilters(BaseModel):
     min_volume: int = 500_000
     prior_day_min_pct: float = 3.0
     premarket_min_gap_pct: float = 2.0
+    min_rvol: float = 0.0  # 0 = disabled; e.g. 0.05 = 5% of 20d avg daily volume
 
 
 class EquityScanLimits(BaseModel):
@@ -33,6 +34,9 @@ class EquityScanSettings(BaseModel):
     filters: EquityScanFilters = Field(default_factory=EquityScanFilters)
     limits: EquityScanLimits = Field(default_factory=EquityScanLimits)
     batch_size: int = 150
+    rvol_lookback_days: int = 20
+    rvol_fetch_concurrency: int = 10
+    group_by_sector: bool = True
     include_movers: bool = True
     mover_indexes: list[str] = Field(
         default_factory=lambda: ["NASDAQ", "NYSE", "EQUITY_ALL"]

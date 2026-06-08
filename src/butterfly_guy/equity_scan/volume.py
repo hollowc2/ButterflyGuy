@@ -1,0 +1,74 @@
+"""Relative volume helpers using Schwab daily bar history."""
+
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from butterfly_guy.data.schwab_client import SchwabClientWrapper
+
+
+def _as_int(value: object) -> int:
+    try:
+        return int(value or 0)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+
+
+def avg_daily_volume(candles: list[dict], *, lookback: int = 20) -> float | None:
+    """Average daily volume from completed sessions (excludes today)."""
+    if not candles or lookback <= 0:
+        return None
+
+    today_start_ms = int(
+        dt.datetime.combine(dt.date.today(), dt.time.min).timestamp() * 1000
+    )
+    volumes = [
+        _as_int(candle.get("volume"))
+        for candle in candles
+        if _as_int(candle.get("volume")) > 0
+        and _as_int(candle.get("datetime")) < today_start_ms
+    ]
+    if not volumes:
+        return None
+
+    recent = volumes[-lookback:]
+    if len(recent) < max(1, lookback // 2):
+        return None
+    return sum(recent) / len(recent)
+
+
+def compute_rvol(premarket_volume: int, avg_volume: float | None) -> float | None:
+    if avg_volume is None or avg_volume <= 0 or premarket_volume <= 0:
+        return None
+    return premarket_volume / avg_volume
+
+
+async def fetch_avg_volumes(
+    schwab: SchwabClientWrapper,
+    symbols: list[str],
+    *,
+    lookback_days: int = 20,
+    concurrency: int = 10,
+) -> dict[str, float]:
+    """Fetch 20-day average daily volume for each symbol."""
+    if not symbols:
+        return {}
+
+    sem = asyncio.Semaphore(concurrency)
+    results: dict[str, float] = {}
+
+    async def _fetch_one(symbol: str) -> None:
+        async with sem:
+            try:
+                candles = await schwab.get_daily_bars(symbol)
+                avg = avg_daily_volume(candles, lookback=lookback_days)
+                if avg is not None:
+                    results[symbol] = avg
+            except Exception:
+                return
+
+    await asyncio.gather(*(_fetch_one(symbol) for symbol in symbols))
+    return results
