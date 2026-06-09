@@ -251,18 +251,58 @@ class SchwabClientWrapper:
             return data
         return data.get("screeners", data.get("movers", []))
 
-    async def get_todays_orders(self) -> list[dict[str, Any]]:
-        """Fetch all orders entered today from Schwab."""
-        today = dt.date.today()
+    async def get_orders_for_day(self, day: dt.date) -> list[dict[str, Any]]:
+        """Fetch all orders entered on a given date from Schwab."""
         resp = await self._retry(
             self.client.get_orders_for_account,
             self.account_hash,
-            from_entered_datetime=dt.datetime.combine(today, dt.time.min),
-            to_entered_datetime=dt.datetime.combine(today, dt.time.max),
-            endpoint="get_todays_orders",
+            from_entered_datetime=dt.datetime.combine(day, dt.time.min),
+            to_entered_datetime=dt.datetime.combine(day, dt.time.max),
+            endpoint="get_orders_for_day",
         )
         data = resp.json()
         return data if isinstance(data, list) else []
+
+    async def get_todays_orders(self) -> list[dict[str, Any]]:
+        """Fetch all orders entered today from Schwab."""
+        return await self.get_orders_for_day(dt.date.today())
+
+    async def get_transactions_for_day(
+        self,
+        day: dt.date,
+        *,
+        transaction_types: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch account transactions for a given date."""
+        from schwab.client import Client
+
+        kwargs: dict[str, Any] = {
+            "start_date": dt.datetime.combine(day, dt.time.min),
+            "end_date": dt.datetime.combine(day, dt.time.max),
+        }
+        if transaction_types:
+            kwargs["transaction_types"] = [
+                getattr(Client.Transactions.TransactionType, t, t)
+                for t in transaction_types
+            ]
+        resp = await self._retry(
+            self.client.get_transactions,
+            self.account_hash,
+            endpoint="get_transactions_for_day",
+            **kwargs,
+        )
+        data = resp.json()
+        return data if isinstance(data, list) else []
+
+    async def get_account_snapshot(self) -> dict[str, Any]:
+        """Fetch full account snapshot: balances, metadata, and positions."""
+        resp = await self._retry(
+            self.client.get_account,
+            self.account_hash,
+            fields=[self.client.Account.Fields.POSITIONS],
+            endpoint="get_account_snapshot",
+        )
+        return resp.json()
 
     async def get_positions(self) -> dict:
         """Fetch account positions and buying power."""
