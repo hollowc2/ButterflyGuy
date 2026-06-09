@@ -79,24 +79,6 @@ def _format_snapshot_section(
     return _format_section(title, lines, empty_text=empty_text)
 
 
-def _format_mover_line(item: dict) -> str:
-    symbol = item.get("symbol") or item.get("ticker") or "?"
-    description = item.get("description") or item.get("name") or ""
-    change = item.get("change") or item.get("netChange")
-    pct = item.get("changePercent") or item.get("netPercentChange")
-    if pct is not None:
-        try:
-            pct_text = _fmt_pct(float(pct))
-        except (TypeError, ValueError):
-            pct_text = str(pct)
-    elif change is not None:
-        pct_text = str(change)
-    else:
-        pct_text = "n/a"
-    suffix = f" — {description}" if description else ""
-    return f"**{symbol}** {pct_text}{suffix}"
-
-
 def _format_section(title: str, lines: list[str], *, empty_text: str) -> str:
     body = "\n".join(lines) if lines else empty_text
     return f"**{title}**\n{body}"
@@ -168,36 +150,11 @@ def build_report(
                 "Premarket Gaps",
                 [],
                 empty_text=(
-                    f"_Premarket scan starts at {settings.premarket_start_et} ET "
+                    f"_Premarket gaps populate between {settings.premarket_start_et}–9:30 ET "
                     "(prior-day section above is still current)._"
                 ),
             )
         )
-
-    if settings.include_movers:
-        if results.show_movers:
-            sections.append(
-                _format_section(
-                    "Schwab Movers (Up)",
-                    [_format_mover_line(item) for item in results.movers_up],
-                    empty_text="_No qualifying movers._",
-                )
-            )
-            sections.append(
-                _format_section(
-                    "Schwab Movers (Down)",
-                    [_format_mover_line(item) for item in results.movers_down],
-                    empty_text="_No qualifying movers._",
-                )
-            )
-        else:
-            sections.append(
-                _format_section(
-                    "Schwab Movers",
-                    [],
-                    empty_text="_Movers available during regular market hours only._",
-                )
-            )
 
     messages: list[str] = []
     current = header

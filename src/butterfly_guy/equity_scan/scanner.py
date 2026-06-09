@@ -66,6 +66,46 @@ def _as_int(value: Any) -> int:
         return 0
 
 
+def _mid_bid_ask(payload: dict[str, Any]) -> float | None:
+    bid = _as_float(payload.get("bidPrice"))
+    ask = _as_float(payload.get("askPrice"))
+    if bid is None or ask is None or bid <= 0 or ask <= 0:
+        return None
+    return (bid + ask) / 2.0
+
+
+def _quote_trade_time_ms(payload: dict[str, Any]) -> int:
+    return _as_int(payload.get("tradeTime"))
+
+
+def _live_price(
+    quote: dict[str, Any],
+    extended: dict[str, Any],
+    *,
+    in_premarket: bool,
+) -> float | None:
+    """Pick the best current price; during premarket prefer the fresher quote side."""
+    regular = _as_float(quote.get("lastPrice")) or _as_float(quote.get("mark"))
+    extended_px = _as_float(extended.get("lastPrice")) or _as_float(extended.get("mark"))
+
+    if not in_premarket:
+        return regular or extended_px
+
+    ext_time = _quote_trade_time_ms(extended)
+    reg_time = _quote_trade_time_ms(quote)
+    if ext_time and reg_time:
+        if ext_time >= reg_time:
+            return extended_px or regular or _mid_bid_ask(extended) or _mid_bid_ask(quote)
+        return regular or extended_px or _mid_bid_ask(quote) or _mid_bid_ask(extended)
+
+    return (
+        extended_px
+        or regular
+        or _mid_bid_ask(extended)
+        or _mid_bid_ask(quote)
+    )
+
+
 def parse_equity_quote(
     symbol: str,
     payload: dict[str, Any],
@@ -73,6 +113,7 @@ def parse_equity_quote(
     universes: set[str],
     sector: str = "Unknown",
     avg_volume_20d: float | None = None,
+    in_premarket: bool = False,
 ) -> EquitySnapshot | None:
     """Normalize a Schwab quote payload into an EquitySnapshot."""
     quote = payload.get("quote", {})
@@ -83,8 +124,7 @@ def parse_equity_quote(
         return None
 
     regular_price = _as_float(quote.get("lastPrice")) or _as_float(quote.get("mark"))
-    extended_price = _as_float(extended.get("lastPrice")) or _as_float(extended.get("mark"))
-    price = extended_price or regular_price
+    price = _live_price(quote, extended, in_premarket=in_premarket)
     if price is None or price <= 0:
         return None
 
@@ -203,6 +243,7 @@ def build_snapshots(
     *,
     avg_volumes: dict[str, float] | None = None,
     sector_map: dict[str, str] | None = None,
+    in_premarket: bool = False,
 ) -> list[EquitySnapshot]:
     avg_volumes = avg_volumes or {}
     sector_map = sector_map or {}
@@ -217,6 +258,7 @@ def build_snapshots(
             universes=universes,
             sector=sector_map.get(symbol, "Unknown"),
             avg_volume_20d=avg_volumes.get(symbol),
+            in_premarket=in_premarket,
         )
         if snapshot is None:
             continue

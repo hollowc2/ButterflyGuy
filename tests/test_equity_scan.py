@@ -21,10 +21,6 @@ def _premarket_et() -> dt.datetime:
     return dt.datetime(2026, 6, 8, 8, 0, tzinfo=EASTERN)
 
 
-def _market_open_et() -> dt.datetime:
-    return dt.datetime(2026, 6, 8, 11, 0, tzinfo=EASTERN)
-
-
 def _quote_payload(
     *,
     close: float,
@@ -64,6 +60,7 @@ def test_parse_equity_quote_uses_extended_price_for_gap():
         universes={"sp500"},
         sector="Information Technology",
         avg_volume_20d=1_000_000.0,
+        in_premarket=True,
     )
     assert snap is not None
     assert snap.price == 105.0
@@ -72,6 +69,32 @@ def test_parse_equity_quote_uses_extended_price_for_gap():
     assert snap.premarket_volume == 250_000
     assert snap.rvol == 0.25
     assert snap.sector == "Information Technology"
+
+
+def test_parse_equity_quote_prefers_fresher_quote_during_premarket():
+    payload = {
+        "quote": {
+            "closePrice": 100.0,
+            "lastPrice": 101.0,
+            "netPercentChange": 1.0,
+            "totalVolume": 1_000_000,
+            "tradeTime": 2_000,
+        },
+        "extended": {
+            "lastPrice": 104.0,
+            "totalVolume": 50_000,
+            "tradeTime": 3_000,
+        },
+    }
+    snap = parse_equity_quote(
+        "GAP",
+        payload,
+        universes={"sp500"},
+        in_premarket=True,
+    )
+    assert snap is not None
+    assert snap.price == 104.0
+    assert snap.session_gap_pct == 4.0
 
 
 def test_build_snapshots_filters_by_price_volume_and_rvol():
@@ -148,18 +171,21 @@ def test_rank_scan_results_returns_expected_sections():
             _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000, extended_last=112),
             universes={"sp500"},
             sector="Information Technology",
+            in_premarket=True,
         ),
         parse_equity_quote(
             "LOSE",
             _quote_payload(close=100, last=90, net_pct=-10.0, volume=1_000_000, extended_last=88),
             universes={"nq100"},
             sector="Health Care",
+            in_premarket=True,
         ),
         parse_equity_quote(
             "GAPUP",
             _quote_payload(close=100, last=101, net_pct=1.0, volume=1_000_000, extended_last=104),
             universes={"custom"},
             sector="Information Technology",
+            in_premarket=True,
         ),
     ]
     snapshots = [snap for snap in snapshots if snap is not None]
@@ -178,29 +204,6 @@ def test_rank_scan_results_returns_expected_sections():
     assert [snap.symbol for snap in results.premarket_losers] == ["LOSE"]
     assert results.movers_up == []
     assert results.movers_down == []
-
-
-def test_rank_scan_results_includes_movers_during_regular_hours():
-    settings = EquityScanSettings()
-    snapshots = [
-        parse_equity_quote(
-            "WIN",
-            _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
-            universes={"sp500"},
-        ),
-    ]
-    snapshots = [snap for snap in snapshots if snap is not None]
-    results = rank_scan_results(
-        snapshots,
-        settings=settings,
-        movers_up=[{"symbol": "XYZ", "changePercent": 12.3}],
-        movers_down=[{"symbol": "ABC", "changePercent": -8.1}],
-        market_context=[],
-        scanned_symbols=1,
-        generated_at=_market_open_et(),
-    )
-    assert results.movers_up[0]["symbol"] == "XYZ"
-    assert results.movers_down[0]["symbol"] == "ABC"
 
 
 def test_rank_scan_results_dedupes_premarket_when_gap_matches_prior():

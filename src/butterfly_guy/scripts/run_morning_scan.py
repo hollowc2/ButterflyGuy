@@ -16,7 +16,7 @@ sys.path.insert(0, str(root / "tools"))
 
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
-from butterfly_guy.core.time_utils import now_eastern
+from butterfly_guy.core.time_utils import is_premarket_window, now_eastern
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.equity_scan.config import load_equity_scan_config
 from butterfly_guy.equity_scan.report import archive_report, build_report
@@ -70,6 +70,11 @@ async def run_scan(
         )
         sector_map = load_sector_map(scan_config.universe_dir)
 
+        in_premarket = is_premarket_window(
+            generated_at,
+            start=scan_config.premarket_start_et,
+        )
+
         avg_volumes: dict[str, float] = {}
         if scan_config.filters.min_rvol > 0:
             rvol_symbols = symbols_needing_rvol_fetch(quotes)
@@ -94,6 +99,7 @@ async def run_scan(
             scan_config,
             avg_volumes=avg_volumes,
             sector_map=sector_map,
+            in_premarket=in_premarket,
         )
         market_context = [
             ctx
@@ -101,22 +107,11 @@ async def run_scan(
             if (ctx := parse_market_context(symbol, payload)) is not None
         ]
 
-        movers_up: list[dict] = []
-        movers_down: list[dict] = []
-        if scan_config.include_movers:
-            for index in scan_config.mover_indexes:
-                movers_up.extend(
-                    await schwab.get_market_movers(index, sort_order="PERCENT_CHANGE_UP")
-                )
-                movers_down.extend(
-                    await schwab.get_market_movers(index, sort_order="PERCENT_CHANGE_DOWN")
-                )
-
         results = rank_scan_results(
             snapshots,
             settings=scan_config,
-            movers_up=movers_up,
-            movers_down=movers_down,
+            movers_up=[],
+            movers_down=[],
             market_context=market_context,
             scanned_symbols=len(symbols),
             generated_at=generated_at,
@@ -135,7 +130,6 @@ async def run_scan(
             premarket_losers=len(results.premarket_losers),
             matched_symbols=results.matched_symbols,
             show_premarket=results.show_premarket,
-            show_movers=results.show_movers,
             messages=len(messages),
             archive=str(archive_path),
         )

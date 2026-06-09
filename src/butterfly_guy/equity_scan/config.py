@@ -39,7 +39,7 @@ class EquityScanSettings(BaseModel):
     rvol_lookback_days: int = 20
     rvol_fetch_concurrency: int = 4
     group_by_sector: bool = True
-    include_movers: bool = True
+    include_movers: bool = False
     movers_min_abs_pct: float = 1.0
     mover_indexes: list[str] = Field(
         default_factory=lambda: ["NASDAQ", "NYSE", "EQUITY_ALL"]

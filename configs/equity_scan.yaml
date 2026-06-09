@@ -38,13 +38,6 @@ limits:
   movers_per_bucket: 10
 
 batch_size: 150
-include_movers: true
-movers_min_abs_pct: 1.0
-mover_indexes:
-  - NASDAQ
-  - NYSE
-  - EQUITY_ALL
-
 premarket_start_et: "04:00"
 dedupe_premarket_with_prior: true
 gap_overlap_tolerance_pct: 0.5
