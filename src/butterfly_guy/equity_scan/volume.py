@@ -46,6 +46,15 @@ def compute_rvol(premarket_volume: int, avg_volume: float | None) -> float | Non
     return premarket_volume / avg_volume
 
 
+def symbols_needing_rvol_fetch(quotes: dict[str, dict]) -> list[str]:
+    """Symbols with premarket volume — only these need avg-volume for RVOL filter."""
+    return sorted(
+        symbol
+        for symbol, payload in quotes.items()
+        if _as_int(payload.get("extended", {}).get("totalVolume")) > 0
+    )
+
+
 async def fetch_avg_volumes(
     schwab: SchwabClientWrapper,
     symbols: list[str],

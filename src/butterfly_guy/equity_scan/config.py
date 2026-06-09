@@ -37,7 +37,7 @@ class EquityScanSettings(BaseModel):
     limits: EquityScanLimits = Field(default_factory=EquityScanLimits)
     batch_size: int = 150
     rvol_lookback_days: int = 20
-    rvol_fetch_concurrency: int = 10
+    rvol_fetch_concurrency: int = 4
     group_by_sector: bool = True
     include_movers: bool = True
     movers_min_abs_pct: float = 1.0

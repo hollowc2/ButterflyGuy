@@ -14,7 +14,7 @@ from butterfly_guy.equity_scan.scanner import (
     rank_scan_results,
 )
 from butterfly_guy.equity_scan.universes import build_symbol_map
-from butterfly_guy.equity_scan.volume import avg_daily_volume, compute_rvol
+from butterfly_guy.equity_scan.volume import avg_daily_volume, compute_rvol, symbols_needing_rvol_fetch
 
 
 def _premarket_et() -> dt.datetime:
@@ -315,6 +315,19 @@ def test_avg_daily_volume_ignores_today_and_compute_rvol():
     avg = avg_daily_volume(candles, lookback=3)
     assert avg == 2_000_000.0
     assert compute_rvol(400_000, avg) == 0.2
+
+
+def test_symbols_needing_rvol_fetch_only_includes_premarket_volume():
+    quotes = {
+        "GAP": _quote_payload(
+            close=100, last=105, net_pct=5.0, volume=1_000_000, extended_volume=50_000
+        ),
+        "FLAT": _quote_payload(close=100, last=101, net_pct=1.0, volume=1_000_000),
+        "ZERO": _quote_payload(
+            close=100, last=105, net_pct=5.0, volume=1_000_000, extended_volume=0
+        ),
+    }
+    assert symbols_needing_rvol_fetch(quotes) == ["GAP"]
 
 
 def test_build_report_splits_long_output():

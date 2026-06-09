@@ -26,7 +26,7 @@ from butterfly_guy.equity_scan.scanner import (
     rank_scan_results,
 )
 from butterfly_guy.equity_scan.universes import build_symbol_map, load_sector_map, load_universes
-from butterfly_guy.equity_scan.volume import fetch_avg_volumes
+from butterfly_guy.equity_scan.volume import fetch_avg_volumes, symbols_needing_rvol_fetch
 from butterfly_guy.services.notifier import DiscordNotifier
 
 log = get_logger("run_morning_scan")
@@ -72,9 +72,15 @@ async def run_scan(
 
         avg_volumes: dict[str, float] = {}
         if scan_config.filters.min_rvol > 0:
+            rvol_symbols = symbols_needing_rvol_fetch(quotes)
+            log.info(
+                "equity_scan_rvol_targets",
+                universe=len(symbols),
+                needing_rvol=len(rvol_symbols),
+            )
             avg_volumes = await fetch_avg_volumes(
                 schwab,
-                symbols,
+                rvol_symbols,
                 lookback_days=scan_config.rvol_lookback_days,
                 concurrency=scan_config.rvol_fetch_concurrency,
             )
