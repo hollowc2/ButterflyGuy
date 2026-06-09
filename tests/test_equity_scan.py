@@ -117,6 +117,29 @@ def test_build_snapshots_filters_by_price_volume_and_rvol():
     assert snapshots[0].rvol == 0.2
 
 
+def test_build_snapshots_skips_rvol_filter_without_premarket_volume():
+    settings = EquityScanSettings()
+    settings.filters.min_rvol = 0.10
+    symbol_map = build_symbol_map({"sp500": ["NOWVOL"]})
+    quotes = {
+        "NOWVOL": _quote_payload(
+            close=100,
+            last=112,
+            net_pct=12.0,
+            volume=1_000_000,
+            extended_volume=0,
+        ),
+    }
+    avg_volumes = {"NOWVOL": 1_000_000.0}
+    snapshots = build_snapshots(
+        quotes,
+        symbol_map,
+        settings,
+        avg_volumes=avg_volumes,
+    )
+    assert [snap.symbol for snap in snapshots] == ["NOWVOL"]
+
+
 def test_rank_scan_results_returns_expected_sections():
     settings = EquityScanSettings()
     snapshots = [

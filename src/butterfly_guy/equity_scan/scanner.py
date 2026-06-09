@@ -122,9 +122,9 @@ def passes_filters(snapshot: EquitySnapshot, settings: EquityScanSettings) -> bo
         cap = filters.max_abs_pct
         if abs(snapshot.prior_day_pct) > cap or abs(snapshot.session_gap_pct) > cap:
             return False
-    if filters.min_rvol <= 0:
-        return True
-    return snapshot.rvol is not None and snapshot.rvol >= filters.min_rvol
+    if filters.min_rvol > 0 and snapshot.premarket_volume > 0:
+        return snapshot.rvol is not None and snapshot.rvol >= filters.min_rvol
+    return True
 
 
 def _is_duplicate_premarket(snapshot: EquitySnapshot, *, tolerance_pct: float) -> bool:
