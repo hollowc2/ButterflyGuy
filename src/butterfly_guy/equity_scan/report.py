@@ -11,6 +11,22 @@ from butterfly_guy.equity_scan.scanner import EquitySnapshot, MarketContext, Sca
 
 DISCORD_CHAR_LIMIT = 1900
 
+_UNIVERSE_LABELS = {
+    "sp500": "S&P",
+    "nq100": "NDX",
+    "liquid": "Liq",
+    "custom": "★",
+}
+
+_SECTOR_SHORT = {
+    "Information Technology": "Tech",
+    "Consumer Discretionary": "Cons Disc",
+    "Consumer Staples": "Cons Stap",
+    "Health Care": "Health",
+    "Communication Services": "Comm",
+    "Real Estate": "RE",
+}
+
 
 def _fmt_pct(value: float) -> str:
     sign = "+" if value >= 0 else ""
@@ -21,27 +37,43 @@ def _fmt_price(value: float) -> str:
     return f"${value:.2f}"
 
 
+def _fmt_volume(volume: int) -> str:
+    if volume >= 1_000_000:
+        return f"{volume / 1_000_000:.1f}M"
+    if volume >= 1_000:
+        return f"{volume / 1_000:.0f}K"
+    return str(volume)
+
+
 def _fmt_universes(snapshot: EquitySnapshot) -> str:
     if not snapshot.universes:
         return ""
-    tags = ",".join(snapshot.universes)
-    return f" `{tags}`"
+    labels = [_UNIVERSE_LABELS.get(tag, tag) for tag in snapshot.universes]
+    return f" · {'+'.join(labels)}"
 
 
 def _fmt_rvol(snapshot: EquitySnapshot) -> str:
     if snapshot.rvol is None:
         return ""
-    return f" | RVOL {snapshot.rvol:.2f}x"
+    label = "🔥" if snapshot.rvol >= 1.0 else ""
+    return f" · {label}RVOL {snapshot.rvol:.1f}x"
+
+
+def _direction_emoji(pct: float) -> str:
+    return "🟢" if pct >= 0 else "🔴"
 
 
 def _format_snapshot_line(snapshot: EquitySnapshot, *, pct_field: str) -> str:
     pct = getattr(snapshot, pct_field)
-    vol_m = snapshot.volume / 1_000_000
     return (
-        f"**{snapshot.symbol}** {_fmt_pct(pct)} | "
-        f"{_fmt_price(snapshot.price)} | vol {vol_m:.1f}M"
+        f"{_direction_emoji(pct)} **{snapshot.symbol}** **{_fmt_pct(pct)}** "
+        f"@ {_fmt_price(snapshot.price)} · {_fmt_volume(snapshot.volume)} vol"
         f"{_fmt_rvol(snapshot)}{_fmt_universes(snapshot)}"
     )
+
+
+def _sector_label(sector: str) -> str:
+    return _SECTOR_SHORT.get(sector, sector)
 
 
 def _group_snapshots_by_sector(snapshots: list[EquitySnapshot]) -> list[tuple[str, list[EquitySnapshot]]]:
@@ -72,7 +104,7 @@ def _format_snapshot_section(
 
     lines: list[str] = []
     for sector, sector_snapshots in _group_snapshots_by_sector(snapshots):
-        lines.append(f"_{sector}_")
+        lines.append(f"**{_sector_label(sector)}** ({len(sector_snapshots)})")
         lines.extend(
             _format_snapshot_line(snapshot, pct_field=pct_field) for snapshot in sector_snapshots
         )
@@ -81,7 +113,41 @@ def _format_snapshot_section(
 
 def _format_section(title: str, lines: list[str], *, empty_text: str) -> str:
     body = "\n".join(lines) if lines else empty_text
-    return f"**{title}**\n{body}"
+    return f"{title}\n{body}"
+
+
+def _format_market_context(context: list[MarketContext]) -> str:
+    if not context:
+        return "_No index quotes available._"
+
+    priority = {"$SPX", "SPY", "QQQ", "$COMPX", "$DJI"}
+    ordered = sorted(
+        context,
+        key=lambda ctx: (
+            0 if ctx.symbol in priority else 1,
+            list(priority).index(ctx.symbol) if ctx.symbol in priority else 99,
+            ctx.symbol,
+        ),
+    )
+    parts = [f"**{ctx.symbol}** {_fmt_pct(ctx.change_pct)}" for ctx in ordered]
+    return " · ".join(parts)
+
+
+def _format_header(
+    results: ScanResults,
+    *,
+    settings: EquityScanSettings,
+    ts: dt.datetime,
+) -> str:
+    universe_labels = [_UNIVERSE_LABELS.get(u, u) for u in settings.universes]
+    tape = _format_market_context(results.market_context)
+    return (
+        f"📈 **Morning Equity Scan** · {ts.strftime('%a %b %d')} · "
+        f"{ts.strftime('%I:%M %p').lstrip('0')} ET\n"
+        f"**Tape:** {tape}\n"
+        f"_Scanned {results.scanned_symbols:,} names ({', '.join(universe_labels)}) "
+        f"· {results.matched_symbols:,} passed filters_"
+    )
 
 
 def build_report(
@@ -92,66 +158,59 @@ def build_report(
 ) -> list[str]:
     """Build one or more Discord messages within the 2000-char limit."""
     ts = generated_at or dt.datetime.now(EASTERN)
-    header = (
-        f"📈 **Equity Morning Scan** — {ts.strftime('%a %b %d, %Y %H:%M %Z')}\n"
-        f"> Universes: {', '.join(settings.universes)} | "
-        f"Scanned: {results.scanned_symbols} | Matched filters: {results.matched_symbols}"
-    )
+    header = _format_header(results, settings=settings, ts=ts)
 
     sections: list[str] = []
-    if results.market_context:
-        ctx_lines = [
-            f"**{ctx.symbol}** {_fmt_price(ctx.price)} ({_fmt_pct(ctx.change_pct)})"
-            for ctx in results.market_context
-        ]
-        sections.append(_format_section("Market Context", ctx_lines, empty_text="No context quotes."))
-
     group_by_sector = settings.group_by_sector
+
+    prior_min = settings.filters.prior_day_min_pct
     sections.append(
         _format_snapshot_section(
-            f"Prior-Day Rallies (>{settings.filters.prior_day_min_pct:.1f}%)",
+            f"**📊 Yesterday's Rallies** ({len(results.prior_gainers)}) · >{prior_min:.0f}%",
             results.prior_gainers,
             pct_field="prior_day_pct",
-            empty_text="_None above threshold._",
+            empty_text="_Nothing cleared the rally threshold._",
             group_by_sector=group_by_sector,
         )
     )
     sections.append(
         _format_snapshot_section(
-            f"Prior-Day Dumps (<-{settings.filters.prior_day_min_pct:.1f}%)",
+            f"**📉 Yesterday's Selloffs** ({len(results.prior_losers)}) · <-{prior_min:.0f}%",
             results.prior_losers,
             pct_field="prior_day_pct",
-            empty_text="_None below threshold._",
+            empty_text="_Nothing cleared the selloff threshold._",
             group_by_sector=group_by_sector,
         )
     )
+
+    gap_min = settings.filters.premarket_min_gap_pct
     if results.show_premarket:
         sections.append(
             _format_snapshot_section(
-                f"Premarket Gaps (>{settings.filters.premarket_min_gap_pct:.1f}%)",
+                f"**🌅 Premarket Gap-Ups** ({len(results.premarket_gainers)}) · >{gap_min:.0f}%",
                 results.premarket_gainers,
                 pct_field="session_gap_pct",
-                empty_text="_No meaningful gap-up names._",
+                empty_text="_No meaningful gap-ups yet._",
                 group_by_sector=group_by_sector,
             )
         )
         sections.append(
             _format_snapshot_section(
-                f"Premarket Gaps (<-{settings.filters.premarket_min_gap_pct:.1f}%)",
+                f"**🌧 Premarket Gap-Downs** ({len(results.premarket_losers)}) · <-{gap_min:.0f}%",
                 results.premarket_losers,
                 pct_field="session_gap_pct",
-                empty_text="_No meaningful gap-down names._",
+                empty_text="_No meaningful gap-downs yet._",
                 group_by_sector=group_by_sector,
             )
         )
     else:
         sections.append(
             _format_section(
-                "Premarket Gaps",
+                "**🌅 Premarket Gaps**",
                 [],
                 empty_text=(
-                    f"_Premarket gaps populate between {settings.premarket_start_et}–9:30 ET "
-                    "(prior-day section above is still current)._"
+                    f"_Gap scan starts at {settings.premarket_start_et} ET — "
+                    "yesterday's moves above are still current._"
                 ),
             )
         )

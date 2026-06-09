@@ -299,8 +299,10 @@ def test_build_report_groups_snapshots_by_sector():
     )
     messages = build_report(results, settings=settings)
     report = "\n".join(messages)
-    assert "_Information Technology_" in report
-    assert "_Health Care_" in report
+    assert "**Tech** (1)" in report
+    assert "**Health** (1)" in report
+    assert "🟢 **WIN** **+10.0%**" in report
+    assert "🔴 **LOSE** **-10.0%**" in report
 
 
 def test_avg_daily_volume_ignores_today_and_compute_rvol():
@@ -357,4 +359,4 @@ def test_build_report_splits_long_output():
     messages = build_report(results, settings=settings)
     assert len(messages) >= 1
     assert all(len(message) <= 2000 for message in messages)
-    assert "Equity Morning Scan" in messages[0]
+    assert "Morning Equity Scan" in messages[0]
