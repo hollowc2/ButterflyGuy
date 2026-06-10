@@ -51,7 +51,7 @@ class SimulationParams:
     late_morning_drawdown: float = 0.40
     afternoon_drawdown: float = 0.30
     slippage: float = 0.05  # per spread
-    exit_before_close_minutes: int = 0
+    exit_before_close_minutes: int = 5
     paper_commission_per_contract: float = 0.65
     quantity: int = 1
     direction_override: str | None = None  # "CALL" or "PUT" to force direction

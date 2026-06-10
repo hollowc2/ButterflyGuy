@@ -19,10 +19,17 @@ A daily-regenerated static HTML page at `https://billybitcoin.cloud/butterfly-sp
 | Visibility | Public (no auth) |
 | Web root | `/var/www/billybitcoin.cloud/html/butterfly-spx/index.html` |
 | Nginx changes | None (subfolder under existing static root) |
-| Regeneration | Cron at 1:15 PM PT, Mon–Fri |
+| Regeneration | Cron at 1:30 PM PT, Mon–Fri (after market close) |
 
 ```cron
-15 13 * * 1-5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python src/butterfly_guy/scripts/generate_live_performance.py >> /var/www/billybitcoin.cloud/butterfly-spx/generate.log 2>&1
+# 1:30 PM Pacific — Vixie cron ignores CRON_TZ in user crontabs; UTC slots + wrapper
+30 20,21 * * 1-5 cd /opt/butterflyguy && tools/run_live_performance_cron.sh >> /var/www/billybitcoin.cloud/html/butterfly-spx/generate.log 2>&1
+```
+
+Install/update from repo:
+
+```bash
+crontab -l 2>/dev/null | grep -v run_live_performance | grep -v generate_live_performance | cat - infra/cron/live_performance.cron | crontab -
 ```
 
 ## Architecture

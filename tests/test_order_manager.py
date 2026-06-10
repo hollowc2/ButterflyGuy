@@ -889,6 +889,44 @@ async def test_paper_forced_exit_applies_buffer_and_slippage():
     assert result["fill_price"] == pytest.approx(3.35)
 
 
+@pytest.mark.asyncio
+async def test_paper_exit_eod_fills_immediately_at_mark():
+    settings = make_settings(paper_trading=True)
+    om, _schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+
+    fetch = AsyncMock()
+    with patch.object(om, "_fetch_live_spread", new=fetch):
+        result = await om.execute_exit(
+            candidate,
+            current_value=16.63,
+            quantity=1,
+            exit_reason="end_of_day",
+        )
+
+    assert result is not None
+    assert result.get("eod_immediate") is True
+    assert result.get("forced") is False
+    assert result["fill_price"] == pytest.approx(16.63)
+    fetch.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_paper_forced_fill_uses_mark_when_market_closed():
+    settings = make_settings(paper_trading=True, order_timeout_seconds=0)
+    om, _schwab = make_order_manager(settings)
+    candidate = make_candidate(7250, 7290, 7330, 3.98)
+    garbage_spread = LiveSpread(bid=0.05, mark=0.05, ask=0.10)
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=garbage_spread)), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        result = await om.execute_exit(candidate, current_value=16.63, quantity=1)
+
+    assert result is not None
+    assert result.get("forced") is True
+    assert result["fill_price"] == pytest.approx(16.63)
+
+
 # ---------------------------------------------------------------------------
 # Paper realism: open interest gate
 # ---------------------------------------------------------------------------

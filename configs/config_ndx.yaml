@@ -52,7 +52,7 @@ profit_management:
       drawdown_threshold: 0.90
       confirmation_polls: 2
       min_peak_profit_ratio: 1.5
-  exit_before_close_minutes: 0
+  exit_before_close_minutes: 5
   max_loss_from_cost: 0.50
   use_absolute_loss_stop: false
   quote_quality:

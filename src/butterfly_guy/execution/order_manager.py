@@ -95,6 +95,28 @@ class OrderManager:
         _LEGS = 4
         return _LEGS * quantity * self.settings.paper_commission_per_contract / 100
 
+    def _paper_exit_fill_price(self, fill_ref: float, quantity: int) -> float:
+        return round(
+            max(
+                0.05,
+                fill_ref
+                - self.settings.paper_fill_buffer
+                - self.settings.paper_slippage_per_spread
+                - self._commission(quantity),
+            ),
+            2,
+        )
+
+    def _paper_forced_fill_ref(
+        self, bid_floor: float | None, current_value: float
+    ) -> float:
+        """Ignore collapsed post-close bids that no longer reflect mark at signal."""
+        if bid_floor is None:
+            return current_value
+        if current_value > 0 and bid_floor < current_value * 0.5:
+            return current_value
+        return bid_floor
+
     async def execute_single_attempt(
         self, candidate: ButterflyCandidate, limit_price: float, quantity: int = 1
     ) -> dict | None:
@@ -295,7 +317,11 @@ class OrderManager:
             log.info("entry_ladder_exhausted_repricing", candidate_center=candidate.center_strike)
 
     async def execute_exit(
-        self, candidate: ButterflyCandidate, current_value: float, quantity: int = 1
+        self,
+        candidate: ButterflyCandidate,
+        current_value: float,
+        quantity: int = 1,
+        exit_reason: str | None = None,
     ) -> dict | None:
         """
         Execute exit with reverse price ladder: reprice from live mark each step,
@@ -307,15 +333,37 @@ class OrderManager:
         timeout = self.settings.order_timeout_seconds
 
         if self.settings.paper_trading:
+            if exit_reason == "end_of_day":
+                fill_price = self._paper_exit_fill_price(current_value, quantity)
+                log.info(
+                    "paper_exit_eod_immediate_fill",
+                    fill_price=fill_price,
+                    mark=current_value,
+                )
+                return {
+                    "order_id": "PAPER",
+                    "fill_price": fill_price,
+                    "fill_time": now_utc(),
+                    "forced": False,
+                    "eod_immediate": True,
+                    "ladder_steps": [],
+                }
+
             deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
             bid_floor: float | None = None
             step_trace: list[dict[str, float | int | bool | None]] = []
 
             while True:
                 if dt.datetime.now(dt.timezone.utc) >= deadline:
-                    fill_ref = bid_floor if bid_floor is not None else current_value
-                    fill_price = round(max(0.05, fill_ref - self.settings.paper_fill_buffer - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2)
-                    log.warning("paper_exit_forced_fill", fill_price=fill_price)
+                    fill_ref = self._paper_forced_fill_ref(bid_floor, current_value)
+                    fill_price = self._paper_exit_fill_price(fill_ref, quantity)
+                    log.warning(
+                        "paper_exit_forced_fill",
+                        fill_price=fill_price,
+                        fill_ref=fill_ref,
+                        bid_floor=bid_floor,
+                        mark_at_signal=current_value,
+                    )
                     return {
                         "order_id": "PAPER",
                         "fill_price": fill_price,
@@ -330,9 +378,15 @@ class OrderManager:
                         bid_floor = spread.bid if bid_floor is None else min(bid_floor, spread.bid)
 
                     if dt.datetime.now(dt.timezone.utc) >= deadline:
-                        fill_ref = bid_floor if bid_floor is not None else current_value
-                        fill_price = round(max(0.05, fill_ref - self.settings.paper_fill_buffer - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2)
-                        log.warning("paper_exit_forced_fill", fill_price=fill_price)
+                        fill_ref = self._paper_forced_fill_ref(bid_floor, current_value)
+                        fill_price = self._paper_exit_fill_price(fill_ref, quantity)
+                        log.warning(
+                            "paper_exit_forced_fill",
+                            fill_price=fill_price,
+                            fill_ref=fill_ref,
+                            bid_floor=bid_floor,
+                            mark_at_signal=current_value,
+                        )
                         return {
                             "order_id": "PAPER",
                             "fill_price": fill_price,
@@ -358,7 +412,7 @@ class OrderManager:
                     if spread is not None:
                         fill_threshold = spread.bid - self.settings.paper_fill_buffer
                         if limit_price <= fill_threshold:
-                            fill_price = round(max(0.05, limit_price - self.settings.paper_slippage_per_spread - self._commission(quantity)), 2)
+                            fill_price = self._paper_exit_fill_price(limit_price, quantity)
                             log.info("paper_exit_filled", price=limit_price, fill_price=fill_price, step=i)
                             step_trace[-1]["filled"] = True
                             return {

@@ -186,7 +186,10 @@ class PositionService:
                     }, underlying=self.config.strategy.underlying)
 
                     fill = await self.order_manager.execute_exit(
-                        candidate, pos_state.current_value, trade.quantity
+                        candidate,
+                        pos_state.current_value,
+                        trade.quantity,
+                        exit_reason=signal.reason,
                     )
 
                     if fill is None:

@@ -10,6 +10,6 @@ def test_paper_entry_commission_matches_live_formula():
     assert params.paper_entry_commission() == pytest.approx(0.026)
 
 
-def test_exit_before_close_defaults_to_zero_like_live_config():
+def test_exit_before_close_defaults_to_five_like_live_config():
     params = SimulationParams()
-    assert params.exit_before_close_minutes == 0
+    assert params.exit_before_close_minutes == 5

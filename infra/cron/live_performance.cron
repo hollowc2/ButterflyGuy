@@ -1,0 +1,5 @@
+# SPX live performance site — 1:30 PM Pacific Mon-Fri (after 4 PM ET / 1 PM PT close).
+# Vixie cron ignores CRON_TZ in user crontabs; use UTC slots + wrapper for DST.
+# Install:
+#   crontab -l 2>/dev/null | grep -v run_live_performance | grep -v generate_live_performance | cat - infra/cron/live_performance.cron | crontab -
+30 20,21 * * 1-5 cd /opt/butterflyguy && tools/run_live_performance_cron.sh >> /var/www/billybitcoin.cloud/html/butterfly-spx/generate.log 2>&1
