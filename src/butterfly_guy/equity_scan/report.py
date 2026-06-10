@@ -76,6 +76,11 @@ def _sector_label(sector: str) -> str:
     return _SECTOR_SHORT.get(sector, sector)
 
 
+def _format_sector_header(sector: str, count: int) -> str:
+    label = _sector_label(sector).upper()
+    return f"▸ __**{label}**__ · {count}"
+
+
 def _group_snapshots_by_sector(snapshots: list[EquitySnapshot]) -> list[tuple[str, list[EquitySnapshot]]]:
     grouped: dict[str, list[EquitySnapshot]] = {}
     for snapshot in snapshots:
@@ -104,7 +109,9 @@ def _format_snapshot_section(
 
     lines: list[str] = []
     for sector, sector_snapshots in _group_snapshots_by_sector(snapshots):
-        lines.append(f"**{_sector_label(sector)}** ({len(sector_snapshots)})")
+        if lines:
+            lines.append("")
+        lines.append(_format_sector_header(sector, len(sector_snapshots)))
         lines.extend(
             _format_snapshot_line(snapshot, pct_field=pct_field) for snapshot in sector_snapshots
         )

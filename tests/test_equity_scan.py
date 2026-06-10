@@ -299,8 +299,8 @@ def test_build_report_groups_snapshots_by_sector():
     )
     messages = build_report(results, settings=settings)
     report = "\n".join(messages)
-    assert "**Tech** (1)" in report
-    assert "**Health** (1)" in report
+    assert "▸ __**TECH**__ · 1" in report
+    assert "▸ __**HEALTH**__ · 1" in report
     assert "🟢 **WIN** **+10.0%**" in report
     assert "🔴 **LOSE** **-10.0%**" in report
 
