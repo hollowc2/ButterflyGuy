@@ -5,7 +5,6 @@ on:
     branches:
       - main
 
-# Forces GitHub to execute actions using Node 24 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -17,15 +16,9 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Execute Remote SSH Deployment
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
-          script: |
-            cd ${{ secrets.WORK_DIR }}
-            git pull origin main
-            docker compose up --build -d
-            docker image prune -f
+      - name: Deploy
+        working-directory: /opt/butterflyguy
+        run: |
+          git pull origin main
+          docker compose up --build -d
+          docker image prune -f
