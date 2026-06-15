@@ -21,8 +21,11 @@ from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.core.time_utils import is_premarket_window, now_eastern
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.equity_scan.config import load_equity_scan_config
+from butterfly_guy.equity_scan.news import fetch_news_impacts
 from butterfly_guy.equity_scan.report import archive_report, archive_report_json, build_report
 from butterfly_guy.equity_scan.scanner import (
+    EquitySnapshot,
+    attach_news_impacts,
     build_snapshots,
     parse_market_context,
     rank_scan_results,
@@ -39,6 +42,24 @@ from butterfly_guy.services.notifier import DiscordNotifier
 log = get_logger("run_morning_scan")
 
 
+def _news_candidate_symbols(
+    snapshots: list[EquitySnapshot],
+    *,
+    limit: int,
+) -> list[str]:
+    ordered = sorted(
+        snapshots,
+        key=lambda snap: (
+            "custom" in snap.universes,
+            abs(snap.session_gap_pct),
+            abs(snap.prior_day_pct),
+            snap.volume,
+        ),
+        reverse=True,
+    )
+    return [snapshot.symbol for snapshot in ordered[:limit]]
+
+
 async def run_scan(
     *,
     app_config_path: str,
@@ -48,6 +69,13 @@ async def run_scan(
 ) -> list[str]:
     app_config = load_config(app_config_path)
     scan_config = load_equity_scan_config(scan_config_path)
+    env = {**dotenv_values(".env"), **os.environ}
+    for key in (
+        scan_config.news.alpha_vantage_api_key_env,
+        scan_config.news.sec_user_agent_env,
+    ):
+        if env.get(key):
+            os.environ.setdefault(key, str(env[key]))
     if open_scan:
         scan_config.include_movers = True
 
@@ -123,6 +151,22 @@ async def run_scan(
             rejected_symbols=rejected_symbols,
             bad_data=bad_data,
         )
+        news_symbols = _news_candidate_symbols(
+            snapshots,
+            limit=scan_config.news.max_symbols,
+        )
+        news_impacts = await fetch_news_impacts(
+            news_symbols,
+            settings=scan_config.news,
+            generated_at=generated_at,
+        )
+        snapshots = attach_news_impacts(snapshots, news_impacts)
+        log.info(
+            "equity_scan_news_loaded",
+            candidates=len(news_symbols),
+            matched=len(news_impacts),
+            providers=scan_config.news.providers,
+        )
         market_context = [
             ctx
             for symbol, payload in context_quotes.items()
@@ -186,7 +230,6 @@ async def run_scan(
                 print("\n" + ("-" * 60) + "\n")
             return messages
 
-        env = {**dotenv_values(".env"), **os.environ}
         webhook = env.get("EQUITY_DISCORD_WEBHOOK_URL", "")
         if not webhook:
             raise RuntimeError(

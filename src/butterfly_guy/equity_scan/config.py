@@ -27,7 +27,38 @@ class EquityScanLimits(BaseModel):
     premarket_gainers: int = 15
     premarket_losers: int = 15
     opening_focus: int = 12
+    catalyst_watch: int = 12
     movers_per_bucket: int = 10
+
+
+class EquityNewsSettings(BaseModel):
+    enabled: bool = True
+    providers: list[Literal["sec", "alpha_vantage"]] = Field(
+        default_factory=lambda: ["sec", "alpha_vantage"]
+    )
+    recent_days: int = 3
+    upcoming_days: int = 5
+    max_symbols: int = 80
+    min_score_for_focus: float = 4.0
+    request_timeout_seconds: float = 10.0
+    sec_user_agent: str = "butterfly-guy-equity-scan/0.1 (set SEC_USER_AGENT)"
+    sec_user_agent_env: str = "SEC_USER_AGENT"
+    sec_forms: list[str] = Field(
+        default_factory=lambda: [
+            "8-K",
+            "10-Q",
+            "10-K",
+            "S-1",
+            "S-3",
+            "SC 13D",
+            "SC 13G",
+            "DEF 14A",
+            "PRE 14A",
+        ]
+    )
+    alpha_vantage_api_key_env: str = "ALPHA_VANTAGE_API_KEY"
+    alpha_vantage_max_news_symbols: int = 20
+    alpha_vantage_news_limit: int = 20
 
 
 class EquityScanSettings(BaseModel):
@@ -38,6 +69,7 @@ class EquityScanSettings(BaseModel):
     custom_watchlist: str = "configs/universes/custom.txt"
     filters: EquityScanFilters = Field(default_factory=EquityScanFilters)
     limits: EquityScanLimits = Field(default_factory=EquityScanLimits)
+    news: EquityNewsSettings = Field(default_factory=EquityNewsSettings)
     batch_size: int = 150
     rvol_lookback_days: int = 20
     rvol_fetch_concurrency: int = 4

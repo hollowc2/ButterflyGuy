@@ -38,7 +38,23 @@ limits:
   premarket_gainers: 15
   premarket_losers: 15
   opening_focus: 12
+  catalyst_watch: 12
   movers_per_bucket: 10
+
+news:
+  enabled: true
+  providers:
+    - sec
+    - alpha_vantage
+  recent_days: 3
+  upcoming_days: 5
+  max_symbols: 80
+  min_score_for_focus: 4.0
+  request_timeout_seconds: 10.0
+  sec_user_agent_env: SEC_USER_AGENT
+  alpha_vantage_api_key_env: ALPHA_VANTAGE_API_KEY
+  alpha_vantage_max_news_symbols: 20
+  alpha_vantage_news_limit: 20
 
 batch_size: 150
 premarket_start_et: "04:00"

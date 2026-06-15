@@ -76,6 +76,15 @@ def _fmt_quality(snapshot: EquitySnapshot) -> str:
     return " · " + " · ".join(parts)
 
 
+def _fmt_news(snapshot: EquitySnapshot) -> str:
+    if snapshot.news is None:
+        return ""
+    parts = [f"news {snapshot.news.score:.1f}"]
+    if snapshot.news.reasons:
+        parts.append("/".join(snapshot.news.reasons[:2]))
+    return " · " + " · ".join(parts)
+
+
 def _direction_emoji(pct: float) -> str:
     return "🟢" if pct >= 0 else "🔴"
 
@@ -85,7 +94,8 @@ def _format_snapshot_line(snapshot: EquitySnapshot, *, pct_field: str) -> str:
     return (
         f"{_direction_emoji(pct)} **{snapshot.symbol}** **{_fmt_pct(pct)}** "
         f"@ {_fmt_price(snapshot.price)} · {_fmt_volume(snapshot.volume)} vol"
-        f"{_fmt_rvol(snapshot)}{_fmt_universes(snapshot)}{_fmt_quality(snapshot)}"
+        f"{_fmt_rvol(snapshot)}{_fmt_news(snapshot)}{_fmt_universes(snapshot)}"
+        f"{_fmt_quality(snapshot)}"
     )
 
 
@@ -96,7 +106,19 @@ def _format_focus_line(item: OpeningFocusItem) -> str:
         f"{_direction_emoji(snapshot.session_gap_pct)} **{snapshot.symbol}** "
         f"gap {_fmt_pct(snapshot.session_gap_pct)} · prior {_fmt_pct(snapshot.prior_day_pct)} "
         f"@ {_fmt_price(snapshot.price)} · {reasons}{_fmt_rvol(snapshot)}"
-        f"{_fmt_universes(snapshot)}{_fmt_quality(snapshot)}"
+        f"{_fmt_news(snapshot)}{_fmt_universes(snapshot)}{_fmt_quality(snapshot)}"
+    )
+
+
+def _format_catalyst_line(snapshot: EquitySnapshot) -> str:
+    assert snapshot.news is not None
+    labels = [*snapshot.news.upcoming_events, *snapshot.news.recent_headlines]
+    detail = labels[0] if labels else ", ".join(snapshot.news.reasons)
+    providers = "+".join(snapshot.news.providers)
+    return (
+        f"📰 **{snapshot.symbol}** news {snapshot.news.score:.1f} · "
+        f"gap {_fmt_pct(snapshot.session_gap_pct)} · prior {_fmt_pct(snapshot.prior_day_pct)} "
+        f"· {detail} · {providers}{_fmt_universes(snapshot)}"
     )
 
 
@@ -250,6 +272,14 @@ def build_report(
             f"**🎯 Opening Focus** ({len(results.opening_focus)})",
             [_format_focus_line(item) for item in results.opening_focus],
             empty_text="_No focused opening setups cleared the scan._",
+        )
+    )
+
+    sections.append(
+        _format_section(
+            f"**📰 Catalyst Watch** ({len(results.catalyst_watch)})",
+            [_format_catalyst_line(snapshot) for snapshot in results.catalyst_watch],
+            empty_text="_No recent or upcoming catalyst signals found for filtered names._",
         )
     )
 

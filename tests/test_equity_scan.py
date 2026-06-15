@@ -6,8 +6,10 @@ import datetime as dt
 
 from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.equity_scan.config import EquityScanSettings
+from butterfly_guy.equity_scan.news import NewsImpact
 from butterfly_guy.equity_scan.report import archive_report, archive_report_json, build_report
 from butterfly_guy.equity_scan.scanner import (
+    attach_news_impacts,
     build_snapshots,
     filter_movers,
     parse_equity_quote,
@@ -210,6 +212,43 @@ def test_rank_scan_results_returns_expected_sections():
     assert results.movers_down == []
 
 
+def test_news_impacts_create_catalyst_watch_and_focus_reason():
+    settings = EquityScanSettings()
+    settings.news.min_score_for_focus = 4.0
+    snap = parse_equity_quote(
+        "CAT",
+        _quote_payload(close=100, last=101, net_pct=1.0, volume=1_000_000),
+        universes={"sp500"},
+        sector="Information Technology",
+    )
+    assert snap is not None
+    snapshots = attach_news_impacts(
+        [snap],
+        {
+            "CAT": NewsImpact(
+                symbol="CAT",
+                score=6.0,
+                reasons=("recent SEC filing",),
+                recent_headlines=("8-K filed 2026-06-08",),
+                sec_forms=("8-K",),
+                providers=("sec",),
+            )
+        },
+    )
+    results = rank_scan_results(
+        snapshots,
+        settings=settings,
+        movers_up=[],
+        movers_down=[],
+        market_context=[],
+        scanned_symbols=1,
+        generated_at=_premarket_et(),
+    )
+    assert [item.snapshot.symbol for item in results.opening_focus] == ["CAT"]
+    assert results.opening_focus[0].reasons == ("news catalyst",)
+    assert [snapshot.symbol for snapshot in results.catalyst_watch] == ["CAT"]
+
+
 def test_rank_scan_results_dedupes_premarket_when_gap_matches_prior():
     settings = EquityScanSettings()
     settings.dedupe_premarket_with_prior = True
@@ -358,6 +397,41 @@ def test_build_report_groups_snapshots_by_sector():
     assert "▸ __**HEALTH**__ · 1" in report
     assert "🟢 **WIN** **+10.0%**" in report
     assert "🔴 **LOSE** **-10.0%**" in report
+
+
+def test_build_report_includes_catalyst_watch():
+    settings = EquityScanSettings()
+    snap = parse_equity_quote(
+        "CAT",
+        _quote_payload(close=100, last=104, net_pct=4.0, volume=1_000_000),
+        universes={"sp500"},
+    )
+    assert snap is not None
+    snapshots = attach_news_impacts(
+        [snap],
+        {
+            "CAT": NewsImpact(
+                symbol="CAT",
+                score=5.0,
+                reasons=("upcoming earnings",),
+                upcoming_events=("earnings expected 2026-06-10",),
+                providers=("alpha_vantage",),
+            )
+        },
+    )
+    results = rank_scan_results(
+        snapshots,
+        settings=settings,
+        movers_up=[],
+        movers_down=[],
+        market_context=[],
+        scanned_symbols=1,
+        generated_at=_premarket_et(),
+    )
+    report = "\n".join(build_report(results, settings=settings, generated_at=_premarket_et()))
+    assert "Catalyst Watch" in report
+    assert "**CAT** news 5.0" in report
+    assert "earnings expected 2026-06-10" in report
 
 
 def test_avg_daily_volume_ignores_today_and_compute_rvol():

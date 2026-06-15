@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from butterfly_guy.core.time_utils import is_market_open, is_premarket_window
 from butterfly_guy.equity_scan.config import EquityScanSettings
+from butterfly_guy.equity_scan.news import NewsImpact
 from butterfly_guy.equity_scan.volume import compute_rvol
 
 INDEX_UNIVERSES = frozenset({"sp500", "nq100"})
@@ -31,6 +32,7 @@ class EquitySnapshot:
     quote_age_seconds: float | None = None
     reference_price: float | None = None
     data_quality_flags: tuple[str, ...] = ()
+    news: NewsImpact | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,7 @@ class MarketContext:
 @dataclass(frozen=True)
 class ScanResults:
     opening_focus: list[OpeningFocusItem]
+    catalyst_watch: list[EquitySnapshot]
     prior_gainers: list[EquitySnapshot]
     prior_losers: list[EquitySnapshot]
     premarket_gainers: list[EquitySnapshot]
@@ -383,6 +386,19 @@ def build_snapshots(
     return snapshots
 
 
+def attach_news_impacts(
+    snapshots: list[EquitySnapshot],
+    news_impacts: dict[str, NewsImpact],
+) -> list[EquitySnapshot]:
+    """Attach catalyst metadata without changing quote normalization."""
+    if not news_impacts:
+        return snapshots
+    return [
+        replace(snapshot, news=news_impacts.get(snapshot.symbol, snapshot.news))
+        for snapshot in snapshots
+    ]
+
+
 def _focus_reasons(
     snapshot: EquitySnapshot,
     settings: EquityScanSettings,
@@ -417,6 +433,11 @@ def _focus_reasons(
         reasons.append("sector cluster")
     if snapshot.data_quality_flags:
         reasons.append("data flag")
+    if (
+        snapshot.news is not None
+        and snapshot.news.score >= settings.news.min_score_for_focus
+    ):
+        reasons.append("news catalyst")
     return tuple(reasons)
 
 
@@ -443,6 +464,7 @@ def rank_opening_focus(
         custom_score = 6.0 if "custom" in snapshot.universes else 0.0
         index_score = 2.0 if INDEX_UNIVERSES & set(snapshot.universes) else 0.0
         sector_score = 3.0 if "sector cluster" in reasons else 0.0
+        news_score = snapshot.news.score if snapshot.news is not None else 0.0
         score = (
             abs(snapshot.session_gap_pct) * 2.0
             + abs(snapshot.prior_day_pct)
@@ -450,9 +472,27 @@ def rank_opening_focus(
             + custom_score
             + index_score
             + sector_score
+            + news_score
         )
         items.append(OpeningFocusItem(snapshot=snapshot, score=score, reasons=reasons))
     return sorted(items, key=lambda item: item.score, reverse=True)[: settings.limits.opening_focus]
+
+
+def rank_catalyst_watch(
+    snapshots: list[EquitySnapshot],
+    *,
+    settings: EquityScanSettings,
+) -> list[EquitySnapshot]:
+    catalysts = [snapshot for snapshot in snapshots if snapshot.news is not None]
+    return sorted(
+        catalysts,
+        key=lambda snap: (
+            snap.news.score if snap.news is not None else 0.0,
+            abs(snap.session_gap_pct),
+            abs(snap.prior_day_pct),
+        ),
+        reverse=True,
+    )[: settings.limits.catalyst_watch]
 
 
 def _top(
@@ -554,6 +594,7 @@ def rank_scan_results(
 
     return ScanResults(
         opening_focus=rank_opening_focus(snapshots, settings=settings),
+        catalyst_watch=rank_catalyst_watch(snapshots, settings=settings),
         prior_gainers=prior_gainers,
         prior_losers=prior_losers,
         premarket_gainers=premarket_gainers,
