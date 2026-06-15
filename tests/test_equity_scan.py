@@ -6,7 +6,7 @@ import datetime as dt
 
 from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.equity_scan.config import EquityScanSettings
-from butterfly_guy.equity_scan.report import archive_report, build_report
+from butterfly_guy.equity_scan.report import archive_report, archive_report_json, build_report
 from butterfly_guy.equity_scan.scanner import (
     build_snapshots,
     filter_movers,
@@ -14,7 +14,11 @@ from butterfly_guy.equity_scan.scanner import (
     rank_scan_results,
 )
 from butterfly_guy.equity_scan.universes import build_symbol_map
-from butterfly_guy.equity_scan.volume import avg_daily_volume, compute_rvol, symbols_needing_rvol_fetch
+from butterfly_guy.equity_scan.volume import (
+    avg_daily_volume,
+    compute_rvol,
+    symbols_needing_rvol_fetch,
+)
 
 
 def _premarket_et() -> dt.datetime:
@@ -246,7 +250,7 @@ def test_filter_movers_drops_stale_identical_lists():
     assert down == []
 
 
-def test_build_snapshots_requires_index_membership_when_enabled():
+def test_build_snapshots_allows_custom_when_index_membership_enabled():
     settings = EquityScanSettings()
     settings.filters.require_index_membership = True
     settings.filters.min_rvol = 0.0
@@ -256,7 +260,30 @@ def test_build_snapshots_requires_index_membership_when_enabled():
         "INDEX": _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
     }
     snapshots = build_snapshots(quotes, symbol_map, settings)
-    assert [snap.symbol for snap in snapshots] == ["INDEX"]
+    assert [snap.symbol for snap in snapshots] == ["ONLY", "INDEX"]
+
+
+def test_build_snapshots_rejects_reference_price_deviation():
+    settings = EquityScanSettings()
+    settings.filters.max_reference_price_deviation_pct = 75.0
+    symbol_map = build_symbol_map({"sp500": ["BAD", "GOOD"]})
+    quotes = {
+        "BAD": _quote_payload(close=100, last=400, net_pct=300.0, volume=1_000_000),
+        "GOOD": _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
+    }
+    rejected: dict[str, int] = {}
+    bad_data: list[dict] = []
+    snapshots = build_snapshots(
+        quotes,
+        symbol_map,
+        settings,
+        reference_prices={"BAD": 100.0, "GOOD": 100.0},
+        rejected_symbols=rejected,
+        bad_data=bad_data,
+    )
+    assert [snap.symbol for snap in snapshots] == ["GOOD"]
+    assert rejected["reference_price_deviation"] == 1
+    assert bad_data[0]["symbol"] == "BAD"
 
 
 def test_archive_report_writes_dated_markdown(tmp_path):
@@ -268,6 +295,33 @@ def test_archive_report_writes_dated_markdown(tmp_path):
     )
     assert path.name == "2026-06-08.md"
     assert "line one" in path.read_text()
+
+
+def test_archive_report_json_writes_scan_internals(tmp_path):
+    settings = EquityScanSettings()
+    snap = parse_equity_quote(
+        "WIN",
+        _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
+        universes={"sp500"},
+    )
+    assert snap is not None
+    generated_at = _premarket_et()
+    results = rank_scan_results(
+        [snap],
+        settings=settings,
+        movers_up=[],
+        movers_down=[],
+        market_context=[],
+        scanned_symbols=1,
+        generated_at=generated_at,
+        rejected_symbols={"reference_price_deviation": 1},
+        bad_data=[{"symbol": "BAD", "reason": "reference_price_deviation"}],
+    )
+    path = archive_report_json(results, report_dir=str(tmp_path), generated_at=generated_at)
+    text = path.read_text()
+    assert path.name == "2026-06-08.json"
+    assert '"opening_focus"' in text
+    assert '"reference_price_deviation": 1' in text
 
 
 def test_build_report_groups_snapshots_by_sector():
@@ -299,6 +353,7 @@ def test_build_report_groups_snapshots_by_sector():
     )
     messages = build_report(results, settings=settings)
     report = "\n".join(messages)
+    assert "Opening Focus" in report
     assert "▸ __**TECH**__ · 1" in report
     assert "▸ __**HEALTH**__ · 1" in report
     assert "🟢 **WIN** **+10.0%**" in report

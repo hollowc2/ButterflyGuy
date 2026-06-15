@@ -1,5 +1,7 @@
 """Morning equity scan — premarket movers and prior-day rallies/dumps via Schwab."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
@@ -19,13 +21,18 @@ from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.core.time_utils import is_premarket_window, now_eastern
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.equity_scan.config import load_equity_scan_config
-from butterfly_guy.equity_scan.report import archive_report, build_report
+from butterfly_guy.equity_scan.report import archive_report, archive_report_json, build_report
 from butterfly_guy.equity_scan.scanner import (
     build_snapshots,
     parse_market_context,
     rank_scan_results,
 )
-from butterfly_guy.equity_scan.universes import build_symbol_map, load_sector_map, load_universes
+from butterfly_guy.equity_scan.universes import (
+    build_symbol_map,
+    load_liquid_meta,
+    load_sector_map,
+    load_universes,
+)
 from butterfly_guy.equity_scan.volume import fetch_avg_volumes, symbols_needing_rvol_fetch
 from butterfly_guy.services.notifier import DiscordNotifier
 
@@ -37,9 +44,12 @@ async def run_scan(
     app_config_path: str,
     scan_config_path: str,
     dry_run: bool = False,
+    open_scan: bool = False,
 ) -> list[str]:
     app_config = load_config(app_config_path)
     scan_config = load_equity_scan_config(scan_config_path)
+    if open_scan:
+        scan_config.include_movers = True
 
     universes = load_universes(
         scan_config.universes,
@@ -69,6 +79,12 @@ async def run_scan(
             batch_size=len(scan_config.context_symbols),
         )
         sector_map = load_sector_map(scan_config.universe_dir)
+        liquid_meta = load_liquid_meta(scan_config.universe_dir)
+        reference_prices = {
+            symbol: float(payload["price"])
+            for symbol, payload in liquid_meta.items()
+            if isinstance(payload, dict) and payload.get("price") is not None
+        }
 
         in_premarket = is_premarket_window(
             generated_at,
@@ -93,28 +109,49 @@ async def run_scan(
         else:
             log.info("equity_scan_rvol_skipped", reason="min_rvol disabled")
 
+        rejected_symbols: dict[str, int] = {}
+        bad_data: list[dict] = []
         snapshots = build_snapshots(
             quotes,
             symbol_map,
             scan_config,
             avg_volumes=avg_volumes,
             sector_map=sector_map,
+            reference_prices=reference_prices,
             in_premarket=in_premarket,
+            generated_at=generated_at,
+            rejected_symbols=rejected_symbols,
+            bad_data=bad_data,
         )
         market_context = [
             ctx
             for symbol, payload in context_quotes.items()
             if (ctx := parse_market_context(symbol, payload)) is not None
         ]
+        movers_up: list[dict] = []
+        movers_down: list[dict] = []
+        if scan_config.include_movers:
+            for index in scan_config.mover_indexes:
+                try:
+                    movers_up.extend(
+                        await schwab.get_market_movers(index, sort_order="PERCENT_CHANGE_UP")
+                    )
+                    movers_down.extend(
+                        await schwab.get_market_movers(index, sort_order="PERCENT_CHANGE_DOWN")
+                    )
+                except Exception as exc:
+                    log.warning("equity_scan_movers_failed", index=index, error=str(exc))
 
         results = rank_scan_results(
             snapshots,
             settings=scan_config,
-            movers_up=[],
-            movers_down=[],
+            movers_up=movers_up,
+            movers_down=movers_down,
             market_context=market_context,
             scanned_symbols=len(symbols),
             generated_at=generated_at,
+            rejected_symbols=rejected_symbols,
+            bad_data=bad_data,
         )
         messages = build_report(results, settings=scan_config, generated_at=generated_at)
         archive_path = archive_report(
@@ -122,16 +159,26 @@ async def run_scan(
             report_dir=scan_config.report_dir,
             generated_at=generated_at,
         )
+        json_archive_path = archive_report_json(
+            results,
+            report_dir=scan_config.report_dir,
+            generated_at=generated_at,
+        )
         log.info(
             "equity_scan_complete",
+            open_scan=open_scan,
             prior_gainers=len(results.prior_gainers),
             prior_losers=len(results.prior_losers),
             premarket_gainers=len(results.premarket_gainers),
             premarket_losers=len(results.premarket_losers),
+            opening_focus=len(results.opening_focus),
             matched_symbols=results.matched_symbols,
             show_premarket=results.show_premarket,
+            show_movers=results.show_movers,
+            rejected_symbols=rejected_symbols,
             messages=len(messages),
             archive=str(archive_path),
+            json_archive=str(json_archive_path),
         )
         if dry_run:
             for message in messages:
@@ -165,6 +212,11 @@ async def main() -> None:
         action="store_true",
         help="Print the report instead of posting to Discord",
     )
+    parser.add_argument(
+        "--open-scan",
+        action="store_true",
+        help="Include after-open Schwab mover buckets and Opening Focus context",
+    )
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
 
@@ -173,6 +225,7 @@ async def main() -> None:
         app_config_path=args.config,
         scan_config_path=args.scan_config,
         dry_run=args.dry_run,
+        open_scan=args.open_scan,
     )
 
 

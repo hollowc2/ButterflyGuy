@@ -24,6 +24,8 @@ filters:
   premarket_min_gap_pct: 2.0
   min_rvol: 0.05
   max_abs_pct: 50.0
+  max_price_disagreement_pct: 5.0
+  max_reference_price_deviation_pct: 75.0
   require_index_membership: true
 
 rvol_lookback_days: 20
@@ -35,6 +37,7 @@ limits:
   prior_losers: 15
   premarket_gainers: 15
   premarket_losers: 15
+  opening_focus: 12
   movers_per_bucket: 10
 
 batch_size: 150

@@ -16,6 +16,8 @@ class EquityScanFilters(BaseModel):
     premarket_min_gap_pct: float = 2.0
     min_rvol: float = 0.0  # 0 = disabled; e.g. 0.05 = 5% of 20d avg daily volume
     max_abs_pct: float | None = 50.0  # cap extreme % moves; None = off
+    max_price_disagreement_pct: float | None = 5.0
+    max_reference_price_deviation_pct: float | None = 75.0
     require_index_membership: bool = False  # symbol must be in sp500 or nq100
 
 
@@ -24,6 +26,7 @@ class EquityScanLimits(BaseModel):
     prior_losers: int = 15
     premarket_gainers: int = 15
     premarket_losers: int = 15
+    opening_focus: int = 12
     movers_per_bucket: int = 10
 
 

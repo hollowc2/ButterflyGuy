@@ -26,6 +26,18 @@ class EquitySnapshot:
     rvol: float | None
     sector: str
     universes: tuple[str, ...]
+    price_source: str = "unknown"
+    price_time_ms: int | None = None
+    quote_age_seconds: float | None = None
+    reference_price: float | None = None
+    data_quality_flags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class OpeningFocusItem:
+    snapshot: EquitySnapshot
+    score: float
+    reasons: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -37,6 +49,7 @@ class MarketContext:
 
 @dataclass(frozen=True)
 class ScanResults:
+    opening_focus: list[OpeningFocusItem]
     prior_gainers: list[EquitySnapshot]
     prior_losers: list[EquitySnapshot]
     premarket_gainers: list[EquitySnapshot]
@@ -48,6 +61,8 @@ class ScanResults:
     matched_symbols: int
     show_premarket: bool = True
     show_movers: bool = True
+    rejected_symbols: dict[str, int] | None = None
+    bad_data: list[dict[str, Any]] | None = None
 
 
 def _as_float(value: Any) -> float | None:
@@ -78,32 +93,57 @@ def _quote_trade_time_ms(payload: dict[str, Any]) -> int:
     return _as_int(payload.get("tradeTime"))
 
 
-def _live_price(
+def _quote_age_seconds(
+    trade_time_ms: int | None,
+    generated_at: dt.datetime | None,
+) -> float | None:
+    if not trade_time_ms or generated_at is None:
+        return None
+    ts = dt.datetime.fromtimestamp(trade_time_ms / 1000.0, tz=dt.timezone.utc)
+    return max(0.0, (generated_at.astimezone(dt.timezone.utc) - ts).total_seconds())
+
+
+def _price_choice(
     quote: dict[str, Any],
     extended: dict[str, Any],
     *,
     in_premarket: bool,
-) -> float | None:
+) -> tuple[float | None, str, int | None]:
     """Pick the best current price; during premarket prefer the fresher quote side."""
     regular = _as_float(quote.get("lastPrice")) or _as_float(quote.get("mark"))
     extended_px = _as_float(extended.get("lastPrice")) or _as_float(extended.get("mark"))
 
     if not in_premarket:
-        return regular or extended_px
+        if regular:
+            return regular, "quote.lastPrice_or_mark", _quote_trade_time_ms(quote) or None
+        return extended_px, "extended.lastPrice_or_mark", _quote_trade_time_ms(extended) or None
 
     ext_time = _quote_trade_time_ms(extended)
     reg_time = _quote_trade_time_ms(quote)
     if ext_time and reg_time:
         if ext_time >= reg_time:
-            return extended_px or regular or _mid_bid_ask(extended) or _mid_bid_ask(quote)
-        return regular or extended_px or _mid_bid_ask(quote) or _mid_bid_ask(extended)
+            if extended_px:
+                return extended_px, "extended.lastPrice_or_mark", ext_time
+            if regular:
+                return regular, "quote.lastPrice_or_mark", reg_time
+            if mid := _mid_bid_ask(extended):
+                return mid, "extended.bid_ask_mid", ext_time
+            return _mid_bid_ask(quote), "quote.bid_ask_mid", reg_time
+        if regular:
+            return regular, "quote.lastPrice_or_mark", reg_time
+        if extended_px:
+            return extended_px, "extended.lastPrice_or_mark", ext_time
+        if mid := _mid_bid_ask(quote):
+            return mid, "quote.bid_ask_mid", reg_time
+        return _mid_bid_ask(extended), "extended.bid_ask_mid", ext_time
 
-    return (
-        extended_px
-        or regular
-        or _mid_bid_ask(extended)
-        or _mid_bid_ask(quote)
-    )
+    if extended_px:
+        return extended_px, "extended.lastPrice_or_mark", ext_time or None
+    if regular:
+        return regular, "quote.lastPrice_or_mark", reg_time or None
+    if mid := _mid_bid_ask(extended):
+        return mid, "extended.bid_ask_mid", ext_time or None
+    return _mid_bid_ask(quote), "quote.bid_ask_mid", reg_time or None
 
 
 def parse_equity_quote(
@@ -114,6 +154,11 @@ def parse_equity_quote(
     sector: str = "Unknown",
     avg_volume_20d: float | None = None,
     in_premarket: bool = False,
+    generated_at: dt.datetime | None = None,
+    reference_price: float | None = None,
+    max_price_disagreement_pct: float | None = None,
+    max_reference_price_deviation_pct: float | None = None,
+    reject_reasons: list[dict[str, Any]] | None = None,
 ) -> EquitySnapshot | None:
     """Normalize a Schwab quote payload into an EquitySnapshot."""
     quote = payload.get("quote", {})
@@ -121,11 +166,15 @@ def parse_equity_quote(
 
     prior_close = _as_float(quote.get("closePrice"))
     if prior_close is None or prior_close <= 0:
+        if reject_reasons is not None:
+            reject_reasons.append({"symbol": symbol, "reason": "missing_prior_close"})
         return None
 
     regular_price = _as_float(quote.get("lastPrice")) or _as_float(quote.get("mark"))
-    price = _live_price(quote, extended, in_premarket=in_premarket)
+    price, price_source, price_time_ms = _price_choice(quote, extended, in_premarket=in_premarket)
     if price is None or price <= 0:
+        if reject_reasons is not None:
+            reject_reasons.append({"symbol": symbol, "reason": "missing_live_price"})
         return None
 
     prior_day_pct = _as_float(quote.get("netPercentChange"))
@@ -133,6 +182,44 @@ def parse_equity_quote(
         prior_day_pct = ((regular_price or price) - prior_close) / prior_close * 100.0
 
     session_gap_pct = (price - prior_close) / prior_close * 100.0
+    flags: list[str] = []
+    if regular_price and max_price_disagreement_pct is not None:
+        regular_move_pct = (regular_price - prior_close) / prior_close * 100.0
+        if abs(regular_move_pct - prior_day_pct) > max_price_disagreement_pct:
+            if reject_reasons is not None:
+                reject_reasons.append(
+                    {
+                        "symbol": symbol,
+                        "reason": "quote_percent_disagreement",
+                        "regular_move_pct": regular_move_pct,
+                        "net_percent_change": prior_day_pct,
+                        "price": regular_price,
+                        "prior_close": prior_close,
+                    }
+                )
+            return None
+    if reference_price and max_reference_price_deviation_pct is not None:
+        reference_deviation_pct = abs(price - reference_price) / reference_price * 100.0
+        if reference_deviation_pct > max_reference_price_deviation_pct:
+            if reject_reasons is not None:
+                reject_reasons.append(
+                    {
+                        "symbol": symbol,
+                        "reason": "reference_price_deviation",
+                        "reference_deviation_pct": reference_deviation_pct,
+                        "price": price,
+                        "reference_price": reference_price,
+                        "price_source": price_source,
+                    }
+                )
+            return None
+    if (
+        in_premarket
+        and price_source.startswith("extended")
+        and _as_int(extended.get("totalVolume")) <= 0
+    ):
+        flags.append("extended_price_without_volume")
+
     volume = _as_int(quote.get("totalVolume"))
     premarket_volume = _as_int(extended.get("totalVolume"))
     rvol = compute_rvol(premarket_volume, avg_volume_20d)
@@ -149,6 +236,11 @@ def parse_equity_quote(
         rvol=rvol,
         sector=sector,
         universes=tuple(sorted(universes)),
+        price_source=price_source,
+        price_time_ms=price_time_ms,
+        quote_age_seconds=_quote_age_seconds(price_time_ms, generated_at),
+        reference_price=reference_price,
+        data_quality_flags=tuple(flags),
     )
 
 
@@ -156,7 +248,12 @@ def passes_filters(snapshot: EquitySnapshot, settings: EquityScanSettings) -> bo
     filters = settings.filters
     if snapshot.price < filters.min_price or snapshot.volume < filters.min_volume:
         return False
-    if filters.require_index_membership and not (INDEX_UNIVERSES & set(snapshot.universes)):
+    universe_set = set(snapshot.universes)
+    if (
+        filters.require_index_membership
+        and "custom" not in universe_set
+        and not (INDEX_UNIVERSES & universe_set)
+    ):
         return False
     if filters.max_abs_pct is not None:
         cap = filters.max_abs_pct
@@ -243,15 +340,21 @@ def build_snapshots(
     *,
     avg_volumes: dict[str, float] | None = None,
     sector_map: dict[str, str] | None = None,
+    reference_prices: dict[str, float] | None = None,
     in_premarket: bool = False,
+    generated_at: dt.datetime | None = None,
+    rejected_symbols: dict[str, int] | None = None,
+    bad_data: list[dict[str, Any]] | None = None,
 ) -> list[EquitySnapshot]:
     avg_volumes = avg_volumes or {}
     sector_map = sector_map or {}
+    reference_prices = reference_prices or {}
     snapshots: list[EquitySnapshot] = []
     for symbol, payload in quotes.items():
         universes = symbol_map.get(symbol)
         if not universes:
             continue
+        reject_reasons: list[dict[str, Any]] = []
         snapshot = parse_equity_quote(
             symbol,
             payload,
@@ -259,12 +362,97 @@ def build_snapshots(
             sector=sector_map.get(symbol, "Unknown"),
             avg_volume_20d=avg_volumes.get(symbol),
             in_premarket=in_premarket,
+            generated_at=generated_at,
+            reference_price=reference_prices.get(symbol),
+            max_price_disagreement_pct=settings.filters.max_price_disagreement_pct,
+            max_reference_price_deviation_pct=settings.filters.max_reference_price_deviation_pct,
+            reject_reasons=reject_reasons,
         )
         if snapshot is None:
+            if rejected_symbols is not None:
+                for item in reject_reasons or [{"reason": "parse_failed"}]:
+                    reason = str(item.get("reason", "parse_failed"))
+                    rejected_symbols[reason] = rejected_symbols.get(reason, 0) + 1
+            if bad_data is not None:
+                bad_data.extend(reject_reasons)
             continue
         if passes_filters(snapshot, settings):
             snapshots.append(snapshot)
+        elif rejected_symbols is not None:
+            rejected_symbols["filter_failed"] = rejected_symbols.get("filter_failed", 0) + 1
     return snapshots
+
+
+def _focus_reasons(
+    snapshot: EquitySnapshot,
+    settings: EquityScanSettings,
+    *,
+    sector_counts: dict[str, int],
+) -> tuple[str, ...]:
+    filters = settings.filters
+    reasons: list[str] = []
+    gap_ok = abs(snapshot.session_gap_pct) >= filters.premarket_min_gap_pct
+    prior_ok = abs(snapshot.prior_day_pct) >= filters.prior_day_min_pct
+    volume_ok = (
+        (snapshot.rvol is not None and snapshot.rvol >= max(filters.min_rvol, 0.05))
+        or snapshot.premarket_volume > 0
+    )
+    if gap_ok and volume_ok:
+        reasons.append("gap with volume")
+    if (
+        prior_ok
+        and gap_ok
+        and snapshot.prior_day_pct * snapshot.session_gap_pct > 0
+    ):
+        reasons.append("continuation setup")
+    if (
+        abs(snapshot.prior_day_pct) >= filters.prior_day_min_pct
+        and abs(snapshot.session_gap_pct) >= filters.premarket_min_gap_pct
+        and snapshot.prior_day_pct * snapshot.session_gap_pct < 0
+    ):
+        reasons.append("fade risk")
+    if "custom" in snapshot.universes and (gap_ok or prior_ok):
+        reasons.append("custom watchlist")
+    if sector_counts.get(snapshot.sector, 0) >= 2 and snapshot.sector != "Unknown":
+        reasons.append("sector cluster")
+    if snapshot.data_quality_flags:
+        reasons.append("data flag")
+    return tuple(reasons)
+
+
+def rank_opening_focus(
+    snapshots: list[EquitySnapshot],
+    *,
+    settings: EquityScanSettings,
+) -> list[OpeningFocusItem]:
+    """Rank names that deserve attention near or after the open."""
+    sector_counts: dict[str, int] = {}
+    for snapshot in snapshots:
+        if (
+            abs(snapshot.session_gap_pct) >= settings.filters.premarket_min_gap_pct
+            or abs(snapshot.prior_day_pct) >= settings.filters.prior_day_min_pct
+        ):
+            sector_counts[snapshot.sector] = sector_counts.get(snapshot.sector, 0) + 1
+
+    items: list[OpeningFocusItem] = []
+    for snapshot in snapshots:
+        reasons = _focus_reasons(snapshot, settings, sector_counts=sector_counts)
+        if not reasons:
+            continue
+        rvol_score = min(snapshot.rvol or 0.0, 2.0) * 10.0
+        custom_score = 6.0 if "custom" in snapshot.universes else 0.0
+        index_score = 2.0 if INDEX_UNIVERSES & set(snapshot.universes) else 0.0
+        sector_score = 3.0 if "sector cluster" in reasons else 0.0
+        score = (
+            abs(snapshot.session_gap_pct) * 2.0
+            + abs(snapshot.prior_day_pct)
+            + rvol_score
+            + custom_score
+            + index_score
+            + sector_score
+        )
+        items.append(OpeningFocusItem(snapshot=snapshot, score=score, reasons=reasons))
+    return sorted(items, key=lambda item: item.score, reverse=True)[: settings.limits.opening_focus]
 
 
 def _top(
@@ -301,6 +489,8 @@ def rank_scan_results(
     market_context: list[MarketContext],
     scanned_symbols: int,
     generated_at: dt.datetime | None = None,
+    rejected_symbols: dict[str, int] | None = None,
+    bad_data: list[dict[str, Any]] | None = None,
 ) -> ScanResults:
     limits = settings.limits
     filters = settings.filters
@@ -363,6 +553,7 @@ def rank_scan_results(
         )
 
     return ScanResults(
+        opening_focus=rank_opening_focus(snapshots, settings=settings),
         prior_gainers=prior_gainers,
         prior_losers=prior_losers,
         premarket_gainers=premarket_gainers,
@@ -374,4 +565,6 @@ def rank_scan_results(
         matched_symbols=len(snapshots),
         show_premarket=show_premarket,
         show_movers=show_movers,
+        rejected_symbols=rejected_symbols,
+        bad_data=bad_data,
     )

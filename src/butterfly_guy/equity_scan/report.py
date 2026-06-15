@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
+from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.equity_scan.config import EquityScanSettings
-from butterfly_guy.equity_scan.scanner import EquitySnapshot, MarketContext, ScanResults
+from butterfly_guy.equity_scan.scanner import (
+    EquitySnapshot,
+    MarketContext,
+    OpeningFocusItem,
+    ScanResults,
+)
 
 DISCORD_CHAR_LIMIT = 1900
 
@@ -59,6 +67,15 @@ def _fmt_rvol(snapshot: EquitySnapshot) -> str:
     return f" · {label}RVOL {snapshot.rvol:.1f}x"
 
 
+def _fmt_quality(snapshot: EquitySnapshot) -> str:
+    parts: list[str] = [f"src {snapshot.price_source}"]
+    if snapshot.quote_age_seconds is not None:
+        parts.append(f"age {snapshot.quote_age_seconds / 60.0:.0f}m")
+    if snapshot.data_quality_flags:
+        parts.append("flags " + ",".join(snapshot.data_quality_flags))
+    return " · " + " · ".join(parts)
+
+
 def _direction_emoji(pct: float) -> str:
     return "🟢" if pct >= 0 else "🔴"
 
@@ -68,7 +85,18 @@ def _format_snapshot_line(snapshot: EquitySnapshot, *, pct_field: str) -> str:
     return (
         f"{_direction_emoji(pct)} **{snapshot.symbol}** **{_fmt_pct(pct)}** "
         f"@ {_fmt_price(snapshot.price)} · {_fmt_volume(snapshot.volume)} vol"
-        f"{_fmt_rvol(snapshot)}{_fmt_universes(snapshot)}"
+        f"{_fmt_rvol(snapshot)}{_fmt_universes(snapshot)}{_fmt_quality(snapshot)}"
+    )
+
+
+def _format_focus_line(item: OpeningFocusItem) -> str:
+    snapshot = item.snapshot
+    reasons = ", ".join(item.reasons)
+    return (
+        f"{_direction_emoji(snapshot.session_gap_pct)} **{snapshot.symbol}** "
+        f"gap {_fmt_pct(snapshot.session_gap_pct)} · prior {_fmt_pct(snapshot.prior_day_pct)} "
+        f"@ {_fmt_price(snapshot.price)} · {reasons}{_fmt_rvol(snapshot)}"
+        f"{_fmt_universes(snapshot)}{_fmt_quality(snapshot)}"
     )
 
 
@@ -81,7 +109,9 @@ def _format_sector_header(sector: str, count: int) -> str:
     return f"▸ __**{label}**__ · {count}"
 
 
-def _group_snapshots_by_sector(snapshots: list[EquitySnapshot]) -> list[tuple[str, list[EquitySnapshot]]]:
+def _group_snapshots_by_sector(
+    snapshots: list[EquitySnapshot],
+) -> list[tuple[str, list[EquitySnapshot]]]:
     grouped: dict[str, list[EquitySnapshot]] = {}
     for snapshot in snapshots:
         grouped.setdefault(snapshot.sector, []).append(snapshot)
@@ -123,6 +153,28 @@ def _format_section(title: str, lines: list[str], *, empty_text: str) -> str:
     return f"{title}\n{body}"
 
 
+def _split_section(section: str) -> list[str]:
+    if len(section) <= DISCORD_CHAR_LIMIT:
+        return [section]
+    lines = section.splitlines()
+    if len(lines) <= 1:
+        return [section[:DISCORD_CHAR_LIMIT]]
+
+    title = lines[0]
+    chunks: list[str] = []
+    current = title
+    for line in lines[1:]:
+        candidate = f"{current}\n{line}"
+        if len(candidate) > DISCORD_CHAR_LIMIT:
+            chunks.append(current)
+            current = f"{title} (cont.)\n{line}"
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def _format_market_context(context: list[MarketContext]) -> str:
     if not context:
         return "_No index quotes available._"
@@ -138,6 +190,29 @@ def _format_market_context(context: list[MarketContext]) -> str:
     )
     parts = [f"**{ctx.symbol}** {_fmt_pct(ctx.change_pct)}" for ctx in ordered]
     return " · ".join(parts)
+
+
+def _format_mover_item(item: dict[str, Any]) -> str:
+    symbol = str(item.get("symbol") or item.get("ticker") or "?")
+    pct = item.get("changePercent") or item.get("netPercentChange")
+    if pct is None:
+        pct = item.get("change") or item.get("netChange") or 0
+    try:
+        pct_value = float(pct)
+    except (TypeError, ValueError):
+        pct_value = 0.0
+    return f"{_direction_emoji(pct_value)} **{symbol}** {_fmt_pct(pct_value)}"
+
+
+def _format_bad_data(results: ScanResults) -> str:
+    rejected = results.rejected_symbols or {}
+    bad_data = results.bad_data or []
+    if not rejected and not bad_data:
+        return "_No quote sanity rejects._"
+    counts = ", ".join(f"{reason}: {count}" for reason, count in sorted(rejected.items()))
+    examples = [f"{item.get('symbol', '?')} {item.get('reason', '?')}" for item in bad_data[:5]]
+    suffix = f" · examples: {', '.join(examples)}" if examples else ""
+    return f"{counts}{suffix}"
 
 
 def _format_header(
@@ -169,6 +244,14 @@ def build_report(
 
     sections: list[str] = []
     group_by_sector = settings.group_by_sector
+
+    sections.append(
+        _format_section(
+            f"**🎯 Opening Focus** ({len(results.opening_focus)})",
+            [_format_focus_line(item) for item in results.opening_focus],
+            empty_text="_No focused opening setups cleared the scan._",
+        )
+    )
 
     prior_min = settings.filters.prior_day_min_pct
     sections.append(
@@ -222,15 +305,40 @@ def build_report(
             )
         )
 
+    if results.show_movers:
+        sections.append(
+            _format_section(
+                f"**⚡ Schwab Movers Up** ({len(results.movers_up)})",
+                [_format_mover_item(item) for item in results.movers_up],
+                empty_text="_No Schwab mover gainers cleared the threshold._",
+            )
+        )
+        sections.append(
+            _format_section(
+                f"**⚡ Schwab Movers Down** ({len(results.movers_down)})",
+                [_format_mover_item(item) for item in results.movers_down],
+                empty_text="_No Schwab mover losers cleared the threshold._",
+            )
+        )
+
+    sections.append(
+        _format_section(
+            "**🧪 Quote Sanity**",
+            [_format_bad_data(results)],
+            empty_text="_No quote sanity rejects._",
+        )
+    )
+
     messages: list[str] = []
     current = header
     for section in sections:
-        candidate = f"{current}\n\n{section}"
-        if len(candidate) > DISCORD_CHAR_LIMIT:
-            messages.append(current)
-            current = section
-        else:
-            current = candidate
+        for chunk in _split_section(section):
+            candidate = f"{current}\n\n{chunk}"
+            if len(candidate) > DISCORD_CHAR_LIMIT:
+                messages.append(current)
+                current = chunk
+            else:
+                current = candidate
     if current:
         messages.append(current)
     return messages
@@ -247,4 +355,20 @@ def archive_report(
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{generated_at.strftime('%Y-%m-%d')}.md"
     path.write_text("\n\n---\n\n".join(messages) + "\n")
+    return path
+
+
+def archive_report_json(
+    results: ScanResults,
+    *,
+    report_dir: str,
+    generated_at: dt.datetime,
+) -> Path:
+    """Write machine-readable scan internals next to the markdown report."""
+    out_dir = Path(report_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{generated_at.strftime('%Y-%m-%d')}.json"
+    payload = asdict(results)
+    payload["generated_at"] = generated_at.isoformat()
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return path
