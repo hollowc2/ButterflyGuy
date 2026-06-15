@@ -19,6 +19,6 @@ jobs:
       - name: Deploy
         working-directory: /opt/butterflyguy
         run: |
-          git pull origin main
-          docker compose up --build -d
+          git pull --ff-only origin main
+          docker compose -f infra/docker-compose.yml up --build -d
           docker image prune -f
