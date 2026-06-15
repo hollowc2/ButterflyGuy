@@ -20,5 +20,5 @@ jobs:
         working-directory: /opt/butterflyguy
         run: |
           git pull --ff-only origin main
-          docker compose -f infra/docker-compose.yml up --build -d
+          docker compose -f infra/docker-compose.yml --profile ndx --profile xsp up --build -d app_spx app_ndx app_xsp
           docker image prune -f
