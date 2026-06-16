@@ -30,6 +30,7 @@ class StrategySettings(BaseModel):
     wing_widths: list[int] = Field(default_factory=lambda: [10, 20, 30])
     vix_width_buckets: list[VixWidthBucket] | None = None
     spot_range: int = 100
+    min_debit: float = 0.05
     rr_min: float = 8.0
     rr_max: float = 12.0
     rr_target: float = 10.0
@@ -69,12 +70,24 @@ class TimeRegime(BaseModel):
     drawdown_threshold: float
     confirmation_polls: int = 1
     min_peak_profit_ratio: float = 1.0
+    min_hold_minutes: float = 0.0
 
 
 class QuoteQualitySettings(BaseModel):
     enabled: bool = False
     min_bid_to_mark_ratio: float = 0.0
     max_spread_width_ratio: float | None = None
+    min_mark_value: float = 0.0
+    max_leg_spread_to_mark_ratio: float | None = None
+    max_leg_spread_abs: float | None = None
+
+
+class PeakTrackingSettings(BaseModel):
+    confirmation_polls: int = 1
+    confirmation_tolerance_ratio: float = 0.05
+    require_quote_quality: bool = False
+    max_jump_ratio: float | None = None
+    max_jump_abs: float | None = None
 
 
 class ProfitProtectorSettings(BaseModel):
@@ -89,10 +102,12 @@ class ProfitProtectorSettings(BaseModel):
 class ProfitManagementSettings(BaseModel):
     strategy: Literal["peakvaluetrailer", "profitprotector"] = "peakvaluetrailer"
     regimes: dict[str, TimeRegime] = Field(default_factory=dict)
-    exit_before_close_minutes: int = 5
+    # 0 disables pre-close liquidation; cash-settled index butterflies should run to close.
+    exit_before_close_minutes: int = 0
     max_loss_from_cost: float = 0.50
     use_absolute_loss_stop: bool = False
     quote_quality: QuoteQualitySettings = Field(default_factory=QuoteQualitySettings)
+    peak_tracking: PeakTrackingSettings = Field(default_factory=PeakTrackingSettings)
     profitprotector: ProfitProtectorSettings = Field(default_factory=ProfitProtectorSettings)
 
 

@@ -55,7 +55,10 @@ class ProfitStateMachine:
         Evaluate position and return ExitSignal if we should exit, else None.
         """
         # Hard exits first
-        if pos.minutes_to_close <= self.settings.exit_before_close_minutes:
+        if (
+            self.settings.exit_before_close_minutes > 0
+            and pos.minutes_to_close <= self.settings.exit_before_close_minutes
+        ):
             return ExitSignal(
                 reason="end_of_day",
                 target_credit=pos.current_value,
@@ -96,6 +99,13 @@ class ProfitStateMachine:
         )
         confirmation_polls = max(1, regime_config.confirmation_polls)
         min_peak_value = pos.entry_price * regime_config.min_peak_profit_ratio
+        if (
+            regime_config.min_hold_minutes > 0
+            and pos.position_age_minutes is not None
+            and pos.position_age_minutes < regime_config.min_hold_minutes
+        ):
+            self._reset_pending_drawdown()
+            return None
 
         # Only exit on drawdown if position has ever been above entry
         if self._ever_in_profit and pos.peak_value >= min_peak_value:
@@ -131,6 +141,8 @@ class ProfitStateMachine:
                         spread_bid=pos.spread_bid,
                         spread_ask=pos.spread_ask,
                         bid_to_mark_ratio=pos.bid_to_mark_ratio,
+                        max_leg_spread_to_mark_ratio=pos.max_leg_spread_to_mark_ratio,
+                        max_leg_spread_abs=pos.max_leg_spread_abs,
                     )
                     self._reset_pending_drawdown()
                     return None
@@ -194,10 +206,27 @@ class ProfitStateMachine:
         if pos.bid_to_mark_ratio < settings.min_bid_to_mark_ratio:
             return False
 
+        if pos.current_value < settings.min_mark_value:
+            return False
+
         if settings.max_spread_width_ratio is not None and pos.current_value > 0:
             spread_width_ratio = (pos.spread_ask - pos.spread_bid) / pos.current_value
             if spread_width_ratio > settings.max_spread_width_ratio:
                 return False
+
+        if (
+            settings.max_leg_spread_to_mark_ratio is not None
+            and pos.max_leg_spread_to_mark_ratio is not None
+            and pos.max_leg_spread_to_mark_ratio > settings.max_leg_spread_to_mark_ratio
+        ):
+            return False
+
+        if (
+            settings.max_leg_spread_abs is not None
+            and pos.max_leg_spread_abs is not None
+            and pos.max_leg_spread_abs > settings.max_leg_spread_abs
+        ):
+            return False
 
         return True
 

@@ -51,21 +51,28 @@ class SimulationParams:
     late_morning_drawdown: float = 0.40
     afternoon_drawdown: float = 0.30
     slippage: float = 0.05  # per spread
-    exit_before_close_minutes: int = 5
+    exit_before_close_minutes: int = 0
     paper_commission_per_contract: float = 0.65
     quantity: int = 1
     direction_override: str | None = None  # "CALL" or "PUT" to force direction
     use_bias_filter: bool = False
     vix_max: float | None = None
     hold_to_expiry: bool = False  # skip all drawdown exits; let butterfly expire
-    skip_morning_exit: bool = False  # never exit on drawdown during morning regime (<2h after open)
-    use_vix_center: bool = False  # anchor center to VIX-implied expected move; sigma from VIX_SIGMA_BY_WIDTH
+    # Never exit on drawdown during morning regime (<2h after open).
+    skip_morning_exit: bool = False
+    # Anchor center to VIX-implied expected move.
+    use_vix_center: bool = False
     selection_method: Literal["VIX", "TARGET_COST", "BEST_RR"] = "VIX"
     max_cost_per_width: dict[int, float] = field(default_factory=dict)
-    vix_center_sigma: float = 0.0  # override per-width sigma (0.0 = use VIX_SIGMA_BY_WIDTH lookup)
-    max_loss_from_cost: float = 0.50  # exit if position loses this fraction of cost (no profit required)
+    # Override per-width sigma (0.0 = use VIX_SIGMA_BY_WIDTH lookup).
+    vix_center_sigma: float = 0.0
+    # Exit if position loses this fraction of cost (no profit required).
+    max_loss_from_cost: float = 0.50
     use_absolute_loss_stop: bool = True  # set False to disable the absolute loss stop entirely
     drawdown_schedule: tuple[DrawdownWindow, ...] | None = None
+    drawdown_confirmation_polls: int = 1
+    min_peak_profit_ratio: float = 1.0
+    min_hold_minutes: float = 0.0
     profit_management_strategy: ProfitManagementStrategy = "peakvaluetrailer"
     profitprotector: ProfitProtectorSettings = field(default_factory=ProfitProtectorSettings)
 
@@ -279,6 +286,8 @@ class SimulationEngine:
 
         # Monitor position until exit
         peak_value = result.entry_price
+        pending_drawdown_reason: str | None = None
+        pending_drawdown_count = 0
 
         for bar in day.bars:
             bar_et = bar.ts.astimezone(EASTERN)
@@ -320,13 +329,16 @@ class SimulationEngine:
 
             peak_value = max(peak_value, current_value)
 
-            # Check end-of-day exit (5 min before close)
+            # Optional pre-close exit; disabled by default for cash-settled indexes.
             minutes_to_close = (
                 dt.datetime(day.date.year, day.date.month, day.date.day, 16, 0, tzinfo=EASTERN)
                 - bar_et
             ).total_seconds() / 60.0
 
-            if minutes_to_close <= params.exit_before_close_minutes:
+            if (
+                params.exit_before_close_minutes > 0
+                and minutes_to_close <= params.exit_before_close_minutes
+            ):
                 result.exit_time = bar.ts
                 result.exit_price = max(0.05, current_value - params.slippage)
                 result.exit_reason = "end_of_day"
@@ -335,7 +347,11 @@ class SimulationEngine:
                 return result
 
             # Absolute loss stop — fires regardless of peak (no profit required)
-            if not params.hold_to_expiry and params.use_absolute_loss_stop and result.entry_price > 0:
+            if (
+                not params.hold_to_expiry
+                and params.use_absolute_loss_stop
+                and result.entry_price > 0
+            ):
                 loss_from_cost = (result.entry_price - current_value) / result.entry_price
                 if loss_from_cost >= params.max_loss_from_cost:
                     result.exit_time = bar.ts
@@ -347,7 +363,14 @@ class SimulationEngine:
 
             # Drawdown exit (only if we've been in profit tent)
             skip_exit = params.hold_to_expiry or (params.skip_morning_exit and regime == "morning")
-            if not skip_exit and peak_value > result.entry_price and peak_value > 0:
+            entry_age_minutes = (bar.ts - entry_bar.ts).total_seconds() / 60.0
+            if (
+                not skip_exit
+                and entry_age_minutes >= params.min_hold_minutes
+                and peak_value >= result.entry_price * params.min_peak_profit_ratio
+                and peak_value > result.entry_price
+                and peak_value > 0
+            ):
                 drawdown = (peak_value - current_value) / peak_value
                 exit_reason = self._profit_exit_reason(
                     params,
@@ -359,16 +382,30 @@ class SimulationEngine:
                     drawdown_label=drawdown_label,
                 )
                 if exit_reason:
+                    if pending_drawdown_reason == exit_reason:
+                        pending_drawdown_count += 1
+                    else:
+                        pending_drawdown_reason = exit_reason
+                        pending_drawdown_count = 1
+
+                    if pending_drawdown_count < max(1, params.drawdown_confirmation_polls):
+                        continue
+
                     result.exit_time = bar.ts
                     result.exit_price = max(0.05, current_value - params.slippage)
                     result.exit_reason = exit_reason
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
                     return result
+                pending_drawdown_reason = None
+                pending_drawdown_count = 0
+            else:
+                pending_drawdown_reason = None
+                pending_drawdown_count = 0
 
-        # Data ended before 15:55 ET EOD trigger — exit at last available bar
+        # Data ended before the session close — exit at last available bar
         # (handles CSV sources that stop at 15:15 ET; no-op for full-day data
-        # since the loop would have already returned via minutes_to_close <= 5)
+        # when no explicit pre-close exit was configured)
         if day.bars:
             last_bar = day.bars[-1]
             last_bar_et = last_bar.ts.astimezone(EASTERN)
@@ -434,6 +471,8 @@ class SimulationEngine:
         expiration = day.date
         real_chains = load_chain_day(day.date)  # None when caller patches it out
         peak_value = entry_price
+        pending_drawdown_reason: str | None = None
+        pending_drawdown_count = 0
         open_dt = dt.datetime(day.date.year, day.date.month, day.date.day, 9, 30, tzinfo=EASTERN)
 
         for bar in day.bars:
@@ -473,7 +512,10 @@ class SimulationEngine:
                 - bar_et
             ).total_seconds() / 60.0
 
-            if minutes_to_close <= params.exit_before_close_minutes:
+            if (
+                params.exit_before_close_minutes > 0
+                and minutes_to_close <= params.exit_before_close_minutes
+            ):
                 result.exit_time = bar.ts
                 result.exit_price = max(0.05, current_value - params.slippage)
                 result.exit_reason = "end_of_day"
@@ -481,7 +523,11 @@ class SimulationEngine:
                 result.pnl = result.exit_price - result.entry_price
                 return result
 
-            if not params.hold_to_expiry and params.use_absolute_loss_stop and result.entry_price > 0:
+            if (
+                not params.hold_to_expiry
+                and params.use_absolute_loss_stop
+                and result.entry_price > 0
+            ):
                 loss_from_cost = (result.entry_price - current_value) / result.entry_price
                 if loss_from_cost >= params.max_loss_from_cost:
                     result.exit_time = bar.ts
@@ -492,7 +538,14 @@ class SimulationEngine:
                     return result
 
             skip_exit = params.hold_to_expiry or (params.skip_morning_exit and regime == "morning")
-            if not skip_exit and peak_value > result.entry_price and peak_value > 0:
+            entry_age_minutes = (bar.ts - entry_time).total_seconds() / 60.0
+            if (
+                not skip_exit
+                and entry_age_minutes >= params.min_hold_minutes
+                and peak_value >= result.entry_price * params.min_peak_profit_ratio
+                and peak_value > result.entry_price
+                and peak_value > 0
+            ):
                 drawdown = (peak_value - current_value) / peak_value
                 exit_reason = self._profit_exit_reason(
                     params,
@@ -504,12 +557,26 @@ class SimulationEngine:
                     drawdown_label=drawdown_label,
                 )
                 if exit_reason:
+                    if pending_drawdown_reason == exit_reason:
+                        pending_drawdown_count += 1
+                    else:
+                        pending_drawdown_reason = exit_reason
+                        pending_drawdown_count = 1
+
+                    if pending_drawdown_count < max(1, params.drawdown_confirmation_polls):
+                        continue
+
                     result.exit_time = bar.ts
                     result.exit_price = max(0.05, current_value - params.slippage)
                     result.exit_reason = exit_reason
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
                     return result
+                pending_drawdown_reason = None
+                pending_drawdown_count = 0
+            else:
+                pending_drawdown_reason = None
+                pending_drawdown_count = 0
 
         if day.bars:
             last_bar = day.bars[-1]
@@ -524,7 +591,11 @@ class SimulationEngine:
                     strike_min=entry_candidate.lower_strike - 5,
                     strike_max=entry_candidate.upper_strike + 5,
                 )
-                quote_map = {q.strike: q for q in quotes if q.option_type == entry_candidate.direction}
+                quote_map = {
+                    q.strike: q
+                    for q in quotes
+                    if q.option_type == entry_candidate.direction
+                }
                 lower_q = quote_map.get(entry_candidate.lower_strike)
                 center_q = quote_map.get(entry_candidate.center_strike)
                 upper_q = quote_map.get(entry_candidate.upper_strike)

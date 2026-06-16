@@ -121,9 +121,25 @@ def backtest_entry_price(cost: float, live_config: AppConfig, slippage: float) -
 
 def _sim_parity_fields(live_config: AppConfig) -> dict[str, float | int]:
     """Shared live/backtest parity fields from runtime config."""
+    regimes = live_config.profit_management.regimes
+    confirmation_polls = max(
+        (regime.confirmation_polls for regime in regimes.values()),
+        default=1,
+    )
+    min_peak_profit_ratio = max(
+        (regime.min_peak_profit_ratio for regime in regimes.values()),
+        default=1.0,
+    )
+    min_hold_minutes = max(
+        (regime.min_hold_minutes for regime in regimes.values()),
+        default=0.0,
+    )
     return {
         "exit_before_close_minutes": live_config.profit_management.exit_before_close_minutes,
         "paper_commission_per_contract": live_config.execution.paper_commission_per_contract,
+        "drawdown_confirmation_polls": confirmation_polls,
+        "min_peak_profit_ratio": min_peak_profit_ratio,
+        "min_hold_minutes": min_hold_minutes,
     }
 
 

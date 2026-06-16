@@ -7,11 +7,11 @@ from dataclasses import dataclass
 
 from scipy.optimize import brentq
 
+from butterfly_guy.core.config import ProfitManagementSettings
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import position_peak_value, position_pnl, position_value
 from butterfly_guy.core.time_utils import get_time_regime, minutes_since_open, minutes_to_close
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, fly_mark_value
-
 from butterfly_guy.quant_engine.black_scholes import bs_call_price, bs_put_price, implied_vol
 
 log = get_logger(__name__)
@@ -55,7 +55,15 @@ class PositionState:
     spread_bid: float | None = None   # fly bid = lower.bid + upper.bid - 2*center.ask
     spread_ask: float | None = None   # fly ask = lower.ask + upper.ask - 2*center.bid
     peak_bid: float | None = None     # highest spread_bid seen since entry
-    bid_to_mark_ratio: float | None = None  # spread_bid / current_value; <1 always, lower = worse liquidity
+    # spread_bid / current_value; lower means worse liquidity.
+    bid_to_mark_ratio: float | None = None
+    position_age_minutes: float | None = None
+    peak_update_rejected: bool = False
+    peak_rejection_reason: str | None = None
+    pending_peak_value: float | None = None
+    pending_peak_confirmation_count: int = 0
+    max_leg_spread_to_mark_ratio: float | None = None
+    max_leg_spread_abs: float | None = None
 
 
 def compute_tent_boundaries(
@@ -63,7 +71,7 @@ def compute_tent_boundaries(
     lower_q: OptionQuote,
     center_q: OptionQuote,
     upper_q: OptionQuote,
-    T_years: float,
+    t_years: float,
     r: float = 0.05,
 ) -> tuple[float | None, float | None]:
     """Find the two spot prices where the fly's BS mark equals entry cost.
@@ -74,22 +82,22 @@ def compute_tent_boundaries(
     Returns (None, None) if the fly's theoretical max (at center) is below
     entry cost or if IV data is unavailable.
     """
-    if T_years <= 0:
+    if t_years <= 0:
         return None, None
 
     entry_cost = candidate.cost
     kl, kc, ku = candidate.lower_strike, candidate.center_strike, candidate.upper_strike
     wing = float(candidate.wing_width)
-    S = candidate.spot_price
+    spot_price = candidate.spot_price
 
     # Schwab returns volatility as a percentage (e.g. 15.3 → σ=0.153).
     # For index options (SPX, NDX) Schwab often returns null/-999; fall back to
     # BS-implied vol from the mark price so tent lines still appear.
-    def _resolve_iv(raw_iv: float | None, mark: float, K: float) -> float:
+    def _resolve_iv(raw_iv: float | None, mark: float, strike: float) -> float:
         v = float(raw_iv) if raw_iv is not None else 0.0
         if math.isfinite(v) and v > 0:
             return v
-        imp = implied_vol(mark, S, K, T_years, r, candidate.direction)
+        imp = implied_vol(mark, spot_price, strike, t_years, r, candidate.direction)
         return imp * 100.0 if imp is not None else 0.0
 
     iv_l = _resolve_iv(lower_q.iv, lower_q.mark, kl)
@@ -106,7 +114,11 @@ def compute_tent_boundaries(
     pricer = bs_call_price if candidate.direction == "CALL" else bs_put_price
 
     def fly_val(spot: float) -> float:
-        return pricer(spot, kl, T_years, r, σl) - 2 * pricer(spot, kc, T_years, r, σc) + pricer(spot, ku, T_years, r, σu)
+        return (
+            pricer(spot, kl, t_years, r, σl)
+            - 2 * pricer(spot, kc, t_years, r, σc)
+            + pricer(spot, ku, t_years, r, σu)
+        )
 
     if fly_val(kc) <= entry_cost:
         return None, None
@@ -122,17 +134,28 @@ def compute_tent_boundaries(
 class PositionManager:
     """Tracks position value from chain data and manages peak tracking."""
 
-    def __init__(self, underlying: str) -> None:
+    def __init__(
+        self,
+        underlying: str,
+        profit_settings: ProfitManagementSettings | None = None,
+    ) -> None:
         self._underlying = underlying
+        self._profit_settings = profit_settings or ProfitManagementSettings()
         self._peak_value: float = 0.0
         self._peak_bid: float = 0.0
         self._entry_price: float = 0.0
+        self._last_mark_value: float | None = None
+        self._pending_peak_value: float | None = None
+        self._pending_peak_count: int = 0
 
     def reset(self, entry_price: float, peak_value: float | None = None) -> None:
         """Reset for a new position. Optionally restore a persisted peak (e.g. after restart)."""
         self._entry_price = entry_price
         self._peak_value = peak_value if (peak_value and peak_value > 0) else entry_price
         self._peak_bid = 0.0
+        self._last_mark_value = None
+        self._pending_peak_value = None
+        self._pending_peak_count = 0
 
     def update_position_value(
         self,
@@ -149,6 +172,10 @@ class PositionManager:
 
         spread_bid: float | None = None
         spread_ask: float | None = None
+        max_leg_spread_to_mark_ratio: float | None = None
+        max_leg_spread_abs: float | None = None
+        peak_update_rejected = False
+        peak_rejection_reason: str | None = None
 
         if not all([lower_q, center_q, upper_q]):
             # Use last known value if quotes missing
@@ -158,10 +185,26 @@ class PositionManager:
             current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
             spread_bid = max(0.0, fly_bid_value(lower_q, center_q, upper_q))
             spread_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
+            max_leg_spread_to_mark_ratio = _max_leg_spread_to_mark_ratio(
+                lower_q,
+                center_q,
+                upper_q,
+            )
+            max_leg_spread_abs = max(q.ask - q.bid for q in (lower_q, center_q, upper_q))
 
-        # Update mark peak
+        # Update mark peak only after configured confirmation and quote-quality gates.
         if current_value > self._peak_value:
-            self._peak_value = current_value
+            peak_accepted, peak_rejection_reason = self._maybe_update_peak(
+                current_value=current_value,
+                spread_bid=spread_bid,
+                spread_ask=spread_ask,
+                max_leg_spread_to_mark_ratio=max_leg_spread_to_mark_ratio,
+                max_leg_spread_abs=max_leg_spread_abs,
+            )
+            peak_update_rejected = not peak_accepted and peak_rejection_reason is not None
+        else:
+            self._pending_peak_value = None
+            self._pending_peak_count = 0
 
         # Update bid peak
         if spread_bid is not None and spread_bid > self._peak_bid:
@@ -175,6 +218,7 @@ class PositionManager:
         bid_to_mark_ratio: float | None = None
         if spread_bid is not None and current_value > 0:
             bid_to_mark_ratio = round(spread_bid / current_value, 4)
+        self._last_mark_value = current_value
 
         # Determine time regime
         mins_open = minutes_since_open()
@@ -185,9 +229,9 @@ class PositionManager:
         lower_tent: float | None = None
         upper_tent: float | None = None
         if all([lower_q, center_q, upper_q]) and mins_left > 0:
-            T_years = mins_left / (365 * 24 * 60)
+            t_years = mins_left / (365 * 24 * 60)
             lower_tent, upper_tent = compute_tent_boundaries(
-                candidate, lower_q, center_q, upper_q, T_years
+                candidate, lower_q, center_q, upper_q, t_years
             )
 
         # Update metrics
@@ -210,4 +254,144 @@ class PositionManager:
             spread_ask=round(spread_ask, 4) if spread_ask is not None else None,
             peak_bid=round(self._peak_bid, 4) if self._peak_bid > 0 else None,
             bid_to_mark_ratio=bid_to_mark_ratio,
+            peak_update_rejected=peak_update_rejected,
+            peak_rejection_reason=peak_rejection_reason,
+            pending_peak_value=round(self._pending_peak_value, 4)
+            if self._pending_peak_value is not None
+            else None,
+            pending_peak_confirmation_count=self._pending_peak_count,
+            max_leg_spread_to_mark_ratio=round(max_leg_spread_to_mark_ratio, 4)
+            if max_leg_spread_to_mark_ratio is not None
+            else None,
+            max_leg_spread_abs=round(max_leg_spread_abs, 4)
+            if max_leg_spread_abs is not None
+            else None,
         )
+
+    def _maybe_update_peak(
+        self,
+        *,
+        current_value: float,
+        spread_bid: float | None,
+        spread_ask: float | None,
+        max_leg_spread_to_mark_ratio: float | None,
+        max_leg_spread_abs: float | None,
+    ) -> tuple[bool, str | None]:
+        peak_settings = self._profit_settings.peak_tracking
+        quote_settings = self._profit_settings.quote_quality
+
+        if current_value < quote_settings.min_mark_value:
+            self._clear_pending_peak()
+            return False, "mark_below_minimum"
+
+        if peak_settings.require_quote_quality and not _quote_quality_ok(
+            current_value=current_value,
+            spread_bid=spread_bid,
+            spread_ask=spread_ask,
+            bid_to_mark_ratio=(spread_bid / current_value)
+            if spread_bid is not None and current_value > 0
+            else None,
+            max_leg_spread_to_mark_ratio=max_leg_spread_to_mark_ratio,
+            max_leg_spread_abs=max_leg_spread_abs,
+            settings=quote_settings,
+        ):
+            self._clear_pending_peak()
+            return False, "quote_quality"
+
+        if self._last_mark_value is not None and self._last_mark_value > 0:
+            jump = current_value - self._last_mark_value
+            jump_ratio = jump / self._last_mark_value
+            if (
+                peak_settings.max_jump_ratio is not None
+                and peak_settings.max_jump_abs is not None
+                and jump_ratio > peak_settings.max_jump_ratio
+                and jump > peak_settings.max_jump_abs
+            ):
+                self._clear_pending_peak()
+                log.info(
+                    "peak_update_rejected",
+                    reason="mark_jump",
+                    current=current_value,
+                    previous=self._last_mark_value,
+                    jump=jump,
+                    jump_ratio=jump_ratio,
+                )
+                return False, "mark_jump"
+
+        confirmation_polls = max(1, peak_settings.confirmation_polls)
+        if confirmation_polls == 1:
+            self._peak_value = current_value
+            self._clear_pending_peak()
+            return True, None
+
+        tolerance = max(0.0, peak_settings.confirmation_tolerance_ratio)
+        if (
+            self._pending_peak_value is None
+            or current_value < self._pending_peak_value * (1 - tolerance)
+        ):
+            self._pending_peak_value = current_value
+            self._pending_peak_count = 1
+            return False, "pending_confirmation"
+
+        self._pending_peak_value = max(self._pending_peak_value, current_value)
+        self._pending_peak_count += 1
+        if self._pending_peak_count < confirmation_polls:
+            return False, "pending_confirmation"
+
+        self._peak_value = self._pending_peak_value
+        self._clear_pending_peak()
+        return True, None
+
+    def _clear_pending_peak(self) -> None:
+        self._pending_peak_value = None
+        self._pending_peak_count = 0
+
+
+def _max_leg_spread_to_mark_ratio(
+    lower_q: OptionQuote,
+    center_q: OptionQuote,
+    upper_q: OptionQuote,
+) -> float | None:
+    ratios = []
+    for quote in (lower_q, center_q, upper_q):
+        if quote.mark <= 0:
+            continue
+        ratios.append((quote.ask - quote.bid) / quote.mark)
+    return max(ratios) if ratios else None
+
+
+def _quote_quality_ok(
+    *,
+    current_value: float,
+    spread_bid: float | None,
+    spread_ask: float | None,
+    bid_to_mark_ratio: float | None,
+    max_leg_spread_to_mark_ratio: float | None,
+    max_leg_spread_abs: float | None,
+    settings,
+) -> bool:
+    if current_value < settings.min_mark_value:
+        return False
+    if spread_bid is None or spread_ask is None or bid_to_mark_ratio is None:
+        return False
+    if spread_bid <= 0:
+        return False
+    if bid_to_mark_ratio < settings.min_bid_to_mark_ratio:
+        return False
+    if settings.max_spread_width_ratio is not None and current_value > 0:
+        spread_width_ratio = (spread_ask - spread_bid) / current_value
+        if spread_width_ratio > settings.max_spread_width_ratio:
+            return False
+    if (
+        settings.max_leg_spread_to_mark_ratio is not None
+        and max_leg_spread_to_mark_ratio is not None
+        and max_leg_spread_to_mark_ratio > settings.max_leg_spread_to_mark_ratio
+    ):
+        return False
+    if (
+        settings.max_leg_spread_abs is not None
+        and max_leg_spread_abs is not None
+        and max_leg_spread_abs > settings.max_leg_spread_abs
+    ):
+        return False
+    return True

@@ -172,7 +172,7 @@ class ButterflyBuilder:
                 # Fly ask: real market cost hitting the spread.
                 fly_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
 
-                if cost < 0.05:  # minimum practical butterfly debit; filters fp-epsilon zeros
+                if cost < self.settings.min_debit:
                     if not include_all:
                         continue
 

@@ -15,7 +15,12 @@ from butterfly_guy.core.metrics import (
     trades_active,
     trades_total,
 )
-from butterfly_guy.core.time_utils import get_0dte_expiration, is_market_open, now_eastern
+from butterfly_guy.core.time_utils import (
+    EASTERN,
+    get_0dte_expiration,
+    is_market_open,
+    now_eastern,
+)
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import (
@@ -70,7 +75,10 @@ class PositionService:
         self.monitoring_leg_queries = monitoring_leg_queries
         self.tent_queries = tent_queries
         self.notifier = notifier
-        self.position_manager = PositionManager(config.strategy.underlying)
+        self.position_manager = PositionManager(
+            config.strategy.underlying,
+            config.profit_management,
+        )
         self.state_machine = ProfitStateMachine(config.profit_management)
         self._last_profit_state: str | None = None
         self._last_persisted_peak: float = 0.0
@@ -109,6 +117,12 @@ class PositionService:
 
                 # Update position
                 pos_state = self.position_manager.update_position_value(candidate, quotes)
+                if trade.entry_time is not None:
+                    pos_state.position_age_minutes = max(
+                        0.0,
+                        (chain_fetched_at - trade.entry_time.astimezone(EASTERN)).total_seconds()
+                        / 60.0,
+                    )
 
                 if self.monitoring_leg_queries is not None:
                     await self._record_monitoring_leg_quotes(
@@ -119,6 +133,29 @@ class PositionService:
                         ts=chain_fetched_at,
                         pos_state=pos_state,
                         spot_price=_chain_spot_price(chain_data),
+                    )
+
+                if pos_state.peak_update_rejected:
+                    await self.decision_queries.log_event(
+                        "peak_update_rejected",
+                        {
+                            "trade_id": trade.trade_id,
+                            "reason": pos_state.peak_rejection_reason,
+                            "raw_mark": pos_state.current_value,
+                            "accepted_peak": pos_state.peak_value,
+                            "pending_peak": pos_state.pending_peak_value,
+                            "pending_confirmation_count": (
+                                pos_state.pending_peak_confirmation_count
+                            ),
+                            "spread_bid": pos_state.spread_bid,
+                            "spread_ask": pos_state.spread_ask,
+                            "bid_to_mark_ratio": pos_state.bid_to_mark_ratio,
+                            "max_leg_spread_to_mark_ratio": (
+                                pos_state.max_leg_spread_to_mark_ratio
+                            ),
+                            "max_leg_spread_abs": pos_state.max_leg_spread_abs,
+                        },
+                        underlying=self.config.strategy.underlying,
                     )
 
                 # Persist new peak to DB so it survives a restart

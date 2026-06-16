@@ -24,7 +24,7 @@ def make_settings() -> ProfitManagementSettings:
                 drawdown_threshold=0.30,
             ),
         },
-        exit_before_close_minutes=5,
+        exit_before_close_minutes=0,
     )
 
 
@@ -40,6 +40,9 @@ def make_pos(
     spread_bid=None,
     spread_ask=None,
     bid_to_mark_ratio=None,
+    position_age_minutes=None,
+    max_leg_spread_to_mark_ratio=None,
+    max_leg_spread_abs=None,
 ) -> PositionState:
     return PositionState(
         entry_price=entry,
@@ -53,6 +56,9 @@ def make_pos(
         spread_bid=spread_bid,
         spread_ask=spread_ask,
         bid_to_mark_ratio=bid_to_mark_ratio,
+        position_age_minutes=position_age_minutes,
+        max_leg_spread_to_mark_ratio=max_leg_spread_to_mark_ratio,
+        max_leg_spread_abs=max_leg_spread_abs,
     )
 
 
@@ -84,9 +90,19 @@ def test_absolute_loss_stop_fires_without_profit_tent():
     assert signal.urgency == "high"
 
 
-def test_exit_on_end_of_day():
-    """Should always signal exit when minutes_to_close <= 5."""
+def test_no_end_of_day_exit_when_pre_close_exit_disabled():
+    """Cash-settled butterflies should keep running into the close by default."""
     sm = ProfitStateMachine(make_settings())
+    pos = make_pos(mins_to_close=4.0)
+    signal = sm.evaluate(pos)
+    assert signal is None
+
+
+def test_exit_on_end_of_day_when_pre_close_exit_configured():
+    """Pre-close exit remains available when explicitly configured."""
+    settings = make_settings()
+    settings.exit_before_close_minutes = 5
+    sm = ProfitStateMachine(settings)
     pos = make_pos(mins_to_close=4.0)
     signal = sm.evaluate(pos)
     assert signal is not None
@@ -233,6 +249,38 @@ def test_drawdown_requires_configured_confirmation_polls():
     assert second.reason == "drawdown_morning"
 
 
+def test_drawdown_respects_min_hold_minutes():
+    settings = make_settings()
+    settings.regimes["morning"].min_hold_minutes = 30
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(make_pos(entry=1.0, current=3.0, peak=3.0, pnl=2.0, drawdown=0.0))
+
+    early = sm.evaluate(
+        make_pos(
+            entry=1.0,
+            current=1.35,
+            peak=3.0,
+            pnl=0.35,
+            drawdown=0.55,
+            position_age_minutes=12,
+        )
+    )
+    late = sm.evaluate(
+        make_pos(
+            entry=1.0,
+            current=1.35,
+            peak=3.0,
+            pnl=0.35,
+            drawdown=0.55,
+            position_age_minutes=31,
+        )
+    )
+
+    assert early is None
+    assert late is not None
+    assert late.reason == "drawdown_morning"
+
+
 def test_drawdown_requires_min_peak_profit_ratio():
     settings = make_settings()
     settings.regimes["morning"].min_peak_profit_ratio = 1.5
@@ -275,6 +323,50 @@ def test_quote_quality_guard_blocks_bad_drawdown_exit():
             spread_bid=0.1,
             spread_ask=4.0,
             bid_to_mark_ratio=0.07,
+        )
+    )
+
+    assert signal is None
+
+
+def test_quote_quality_guard_blocks_bad_leg_spread():
+    settings = make_settings()
+    settings.quote_quality = QuoteQualitySettings(
+        enabled=True,
+        min_bid_to_mark_ratio=0.35,
+        max_spread_width_ratio=1.5,
+        min_mark_value=0.25,
+        max_leg_spread_to_mark_ratio=1.0,
+        max_leg_spread_abs=0.20,
+    )
+    sm = ProfitStateMachine(settings)
+    sm.evaluate(
+        make_pos(
+            entry=1.0,
+            current=3.0,
+            peak=3.0,
+            pnl=2.0,
+            drawdown=0.0,
+            spread_bid=2.7,
+            spread_ask=3.3,
+            bid_to_mark_ratio=0.9,
+            max_leg_spread_to_mark_ratio=0.5,
+            max_leg_spread_abs=0.1,
+        )
+    )
+
+    signal = sm.evaluate(
+        make_pos(
+            entry=1.0,
+            current=1.35,
+            peak=3.0,
+            pnl=0.35,
+            drawdown=0.55,
+            spread_bid=1.1,
+            spread_ask=1.8,
+            bid_to_mark_ratio=0.81,
+            max_leg_spread_to_mark_ratio=1.5,
+            max_leg_spread_abs=0.25,
         )
     )
 

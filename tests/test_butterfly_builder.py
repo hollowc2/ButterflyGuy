@@ -111,6 +111,26 @@ def test_builder_cost_filter():
     assert len(candidates) == 0
 
 
+def test_builder_respects_configured_min_debit():
+    settings = StrategySettings(
+        wing_widths=[5],
+        spot_range=50,
+        min_debit=0.25,
+        rr_min=0.1,
+        max_cost_per_width={5: 10.0},
+    )
+    builder = ButterflyBuilder(settings)
+    quotes = [
+        make_quote(5500, "CALL", 1.0),
+        make_quote(5505, "CALL", 0.5),
+        make_quote(5510, "CALL", 0.1),
+    ]
+
+    candidates = builder.build_candidates(quotes, 5500.0, "CALL")
+
+    assert candidates == []
+
+
 def test_builder_cost_positive():
     settings = StrategySettings(
         wing_widths=[5, 10],

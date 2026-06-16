@@ -4,27 +4,25 @@ schwab:
 
 strategy:
   underlying: "XSP"
-  # XSP is run as a 1/10th-size SPX proxy. Width buckets mirror SPX
-  # buckets as closely as integer XSP strikes allow.
-  wing_widths: [2, 3, 4, 5, 6, 7]
+  # XSP is managed independently from SPX parity. Wider flies and a real
+  # debit floor avoid penny-noise trades where a few cents dominate behavior.
+  wing_widths: [3, 4, 5]
   vix_width_buckets:
     - vix_max: 17.0
-      widths: [2, 3]
+      widths: [3, 4]
     - vix_max: 24.5
-      widths: [2, 3, 4]
+      widths: [3, 4, 5]
     - vix_max: 32.0
       widths: [4, 5]
     - vix_max: 9999.0
-      widths: [5, 6, 7]
+      widths: [4, 5]
   spot_range: 10
+  min_debit: 0.25
   rr_min: 8.0
   max_cost_per_width:
-    2: 0.20
     3: 0.30
     4: 0.40
     5: 0.50
-    6: 0.60
-    7: 0.70
 entry:
   start_time: "07:00"  # PST
   end_time: "07:45"    # PST
@@ -52,28 +50,40 @@ profit_management:
     morning:
       start_minutes_after_open: 0
       end_minutes_after_open: 120
-      drawdown_threshold: 0.60
-      confirmation_polls: 2
-      min_peak_profit_ratio: 1.10
+      drawdown_threshold: 0.80
+      confirmation_polls: 3
+      min_peak_profit_ratio: 1.25
+      min_hold_minutes: 30
     late_morning:
       start_minutes_after_open: 120
       end_minutes_after_open: 240
       drawdown_threshold: 0.90
-      confirmation_polls: 2
-      min_peak_profit_ratio: 1.10
+      confirmation_polls: 3
+      min_peak_profit_ratio: 1.25
+      min_hold_minutes: 45
     afternoon:
       start_minutes_after_open: 240
       end_minutes_after_open: 390
-      drawdown_threshold: 0.75
-      confirmation_polls: 2
-      min_peak_profit_ratio: 1.10
-  exit_before_close_minutes: 5
+      drawdown_threshold: 0.85
+      confirmation_polls: 3
+      min_peak_profit_ratio: 1.25
+      min_hold_minutes: 45
+  exit_before_close_minutes: 0
   max_loss_from_cost: 0.50
   use_absolute_loss_stop: false
   quote_quality:
     enabled: true
     min_bid_to_mark_ratio: 0.75
     max_spread_width_ratio: 0.50
+    min_mark_value: 0.25
+    max_leg_spread_to_mark_ratio: 1.00
+    max_leg_spread_abs: 0.20
+  peak_tracking:
+    confirmation_polls: 3
+    confirmation_tolerance_ratio: 0.10
+    require_quote_quality: true
+    max_jump_ratio: 0.50
+    max_jump_abs: 0.10
 risk:
   max_daily_loss: 50.0        # 1/10th of SPX; raw credit units (not dollar-multiplied)
   max_trades_per_day: 1

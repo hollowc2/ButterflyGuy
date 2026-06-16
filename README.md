@@ -73,6 +73,7 @@ Under the `strategy:` block:
 ```yaml
 strategy:
   wing_widths: [10, 20, 30]        # Fixed scan widths; used by NDX/XSP and by backtests
+  min_debit: 0.05                  # Minimum practical butterfly debit
   rr_target: 10.0                  # Ideal Reward/Risk ratio
   max_cost_per_width:              # Max debit allowed per width ($0.10/pt)
     10: 1.00
@@ -87,7 +88,7 @@ Live width selection is configured in two layers:
 1. The builder scans every width in the active width set.
 2. The selector chooses the best candidate using one of the entry methods below.
 
-For SPX, `vix_width_buckets` can replace the fixed width list at runtime. Each bucket supplies a narrow/mid/wide triplet, and the live trader uses the active triplet based on the current VIX level. If buckets are configured and VIX data is unavailable, entry is skipped rather than falling back to an arbitrary width.
+For SPX and XSP, `vix_width_buckets` can replace the fixed width list at runtime. Each bucket supplies an ordered narrow-to-wide set, and the live trader uses the active set based on the current VIX level. If buckets are configured and VIX data is unavailable, entry is skipped rather than falling back to an arbitrary width.
 
 Center placement in `VIX` mode uses 0.25σ/0.50σ/0.75σ fractions depending on whether the width is treated as narrow, mid, or wide in the active set.
 
@@ -111,8 +112,10 @@ Backtests are not affected — `--wing` still sweeps individual fixed widths as 
 | Asset | Method | Widths |
 |---|---|---|
 | SPX | VIX-bucketed by default in `configs/config.yaml` | Uses `vix_width_buckets` when present; otherwise scans the fixed `wing_widths` list |
-| NDX | Fixed | Always scans `[25, 50, 75]` |
-| XSP | Fixed | Always scans `[1, 2, 3]` |
+| NDX | Fixed | Always scans `[80, 100, 150]` |
+| XSP | VIX-bucketed in `configs/config_xsp.yaml` | Scans `[3, 4, 5]` only, uses `min_debit: 0.25`, and prefers the first viable width in the active bucket |
+
+XSP is not treated as linear SPX parity. Its config uses wider minimum flies than the old width-2 profile, stricter quote validation, confirmed peak tracking, longer drawdown confirmation, and smaller standalone risk limits.
 
 ---
 

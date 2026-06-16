@@ -5,7 +5,9 @@ from zoneinfo import ZoneInfo
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.scripts.run_backtest_db import (
     _find_entry_bar_at,
+    _sim_parity_fields,
     candidate_from_trade_row,
+    load_asset_config,
     parse_args,
     select_direction_bar,
 )
@@ -57,10 +59,14 @@ def test_backtest_tracks_explicit_selection_overrides(monkeypatch):
 def test_xsp_backtest_drawdown_defaults_match_live_config(monkeypatch):
     args = _parse_for_asset(monkeypatch, "XSP")
 
-    assert args.morning_dd == [0.60]
+    assert args.morning_dd == [0.80]
     assert args.late_morning_dd == [0.90]
-    assert args.afternoon_dd == [0.75]
+    assert args.afternoon_dd == [0.85]
     assert args.slippage == 0.005
+    parity = _sim_parity_fields(load_asset_config("XSP"))
+    assert parity["drawdown_confirmation_polls"] == 3
+    assert parity["min_peak_profit_ratio"] == 1.25
+    assert parity["min_hold_minutes"] == 45
 
 
 def test_backtest_auto_direction_uses_first_regular_session_snapshot():
