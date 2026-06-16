@@ -17,7 +17,7 @@ class EquityScanFilters(BaseModel):
     min_rvol: float = 0.0  # 0 = disabled; e.g. 0.05 = 5% of 20d avg daily volume
     max_abs_pct: float | None = 50.0  # cap extreme % moves; None = off
     max_price_disagreement_pct: float | None = 5.0
-    max_reference_price_deviation_pct: float | None = 75.0
+    max_reference_price_deviation_pct: float | None = 25.0
     require_index_membership: bool = False  # symbol must be in sp500 or nq100
 
 
@@ -80,8 +80,6 @@ class EquityScanSettings(BaseModel):
         default_factory=lambda: ["NASDAQ", "NYSE", "EQUITY_ALL"]
     )
     premarket_start_et: str = "04:00"
-    dedupe_premarket_with_prior: bool = True
-    gap_overlap_tolerance_pct: float = 0.5
     report_dir: str = "reports/equity_scans"
     context_symbols: list[str] = Field(
         default_factory=lambda: ["$SPX", "$COMPX", "$DJI", "SPY", "QQQ"]

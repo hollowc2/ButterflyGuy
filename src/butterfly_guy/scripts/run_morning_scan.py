@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
 import sys
 from pathlib import Path
@@ -25,6 +26,7 @@ from butterfly_guy.equity_scan.news import fetch_news_impacts
 from butterfly_guy.equity_scan.report import archive_report, archive_report_json, build_report
 from butterfly_guy.equity_scan.scanner import (
     EquitySnapshot,
+    ScanResults,
     attach_news_impacts,
     build_snapshots,
     parse_market_context,
@@ -36,7 +38,11 @@ from butterfly_guy.equity_scan.universes import (
     load_sector_map,
     load_universes,
 )
-from butterfly_guy.equity_scan.volume import fetch_avg_volumes, symbols_needing_rvol_fetch
+from butterfly_guy.equity_scan.volume import (
+    fetch_avg_volumes,
+    fetch_prior_day_changes,
+    symbols_needing_rvol_fetch,
+)
 from butterfly_guy.services.notifier import DiscordNotifier
 
 log = get_logger("run_morning_scan")
@@ -58,6 +64,16 @@ def _news_candidate_symbols(
         reverse=True,
     )
     return [snapshot.symbol for snapshot in ordered[:limit]]
+
+
+def _prior_day_change_symbols(results: ScanResults) -> list[str]:
+    symbols: set[str] = set()
+    symbols.update(item.snapshot.symbol for item in results.opening_focus)
+    symbols.update(snapshot.symbol for snapshot in results.prior_gainers)
+    symbols.update(snapshot.symbol for snapshot in results.prior_losers)
+    symbols.update(snapshot.symbol for snapshot in results.premarket_gainers)
+    symbols.update(snapshot.symbol for snapshot in results.premarket_losers)
+    return sorted(symbols)
 
 
 async def run_scan(
@@ -150,6 +166,37 @@ async def run_scan(
             generated_at=generated_at,
             rejected_symbols=rejected_symbols,
             bad_data=bad_data,
+        )
+        preliminary_results = rank_scan_results(
+            snapshots,
+            settings=scan_config,
+            movers_up=[],
+            movers_down=[],
+            market_context=[],
+            scanned_symbols=len(symbols),
+            generated_at=generated_at,
+        )
+        prior_day_symbols = _prior_day_change_symbols(preliminary_results)
+        prior_day_changes = await fetch_prior_day_changes(
+            schwab,
+            prior_day_symbols,
+            concurrency=scan_config.rvol_fetch_concurrency,
+        )
+        if prior_day_changes:
+            snapshots = build_snapshots(
+                quotes,
+                symbol_map,
+                scan_config,
+                avg_volumes=avg_volumes,
+                sector_map=sector_map,
+                reference_prices=reference_prices,
+                prior_day_changes=prior_day_changes,
+                in_premarket=in_premarket,
+                generated_at=generated_at,
+            )
+        log.info(
+            "equity_scan_prior_day_changes_loaded",
+            symbols=len(prior_day_changes),
         )
         news_symbols = _news_candidate_symbols(
             snapshots,
@@ -264,6 +311,8 @@ async def main() -> None:
     args = parser.parse_args()
 
     setup_logging(args.log_level, json_output=False)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     await run_scan(
         app_config_path=args.config,
         scan_config_path=args.scan_config,

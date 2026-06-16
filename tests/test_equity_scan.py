@@ -19,6 +19,7 @@ from butterfly_guy.equity_scan.universes import build_symbol_map
 from butterfly_guy.equity_scan.volume import (
     avg_daily_volume,
     compute_rvol,
+    prior_session_pct_change,
     symbols_needing_rvol_fetch,
 )
 
@@ -249,10 +250,8 @@ def test_news_impacts_create_catalyst_watch_and_focus_reason():
     assert [snapshot.symbol for snapshot in results.catalyst_watch] == ["CAT"]
 
 
-def test_rank_scan_results_dedupes_premarket_when_gap_matches_prior():
+def test_rank_scan_results_keeps_premarket_gap_when_quote_pct_matches():
     settings = EquityScanSettings()
-    settings.dedupe_premarket_with_prior = True
-    settings.gap_overlap_tolerance_pct = 0.5
     snap = parse_equity_quote(
         "WIN",
         _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000, extended_last=110.2),
@@ -269,7 +268,7 @@ def test_rank_scan_results_dedupes_premarket_when_gap_matches_prior():
         generated_at=_premarket_et(),
     )
     assert results.prior_gainers[0].symbol == "WIN"
-    assert results.premarket_gainers == []
+    assert [snap.symbol for snap in results.premarket_gainers] == ["WIN"]
 
 
 def test_filter_movers_drops_stale_identical_lists():
@@ -302,12 +301,42 @@ def test_build_snapshots_allows_custom_when_index_membership_enabled():
     assert [snap.symbol for snap in snapshots] == ["ONLY", "INDEX"]
 
 
+def test_build_snapshots_allows_liquid_only_when_index_membership_disabled():
+    settings = EquityScanSettings()
+    settings.filters.require_index_membership = False
+    settings.filters.min_rvol = 0.0
+    symbol_map = build_symbol_map({"liquid": ["LIQ"]})
+    quotes = {
+        "LIQ": _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
+    }
+    snapshots = build_snapshots(quotes, symbol_map, settings)
+    assert [snap.symbol for snap in snapshots] == ["LIQ"]
+
+
+def test_build_snapshots_uses_prior_day_change_override():
+    settings = EquityScanSettings()
+    settings.filters.min_rvol = 0.0
+    symbol_map = build_symbol_map({"sp500": ["GAP"]})
+    quotes = {
+        "GAP": _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
+    }
+    snapshots = build_snapshots(
+        quotes,
+        symbol_map,
+        settings,
+        prior_day_changes={"GAP": -2.5},
+    )
+    assert len(snapshots) == 1
+    assert snapshots[0].session_gap_pct == 10.0
+    assert snapshots[0].prior_day_pct == -2.5
+
+
 def test_build_snapshots_rejects_reference_price_deviation():
     settings = EquityScanSettings()
-    settings.filters.max_reference_price_deviation_pct = 75.0
+    settings.filters.max_reference_price_deviation_pct = 25.0
     symbol_map = build_symbol_map({"sp500": ["BAD", "GOOD"]})
     quotes = {
-        "BAD": _quote_payload(close=100, last=400, net_pct=300.0, volume=1_000_000),
+        "BAD": _quote_payload(close=100, last=130, net_pct=30.0, volume=1_000_000),
         "GOOD": _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
     }
     rejected: dict[str, int] = {}
@@ -361,6 +390,32 @@ def test_archive_report_json_writes_scan_internals(tmp_path):
     assert path.name == "2026-06-08.json"
     assert '"opening_focus"' in text
     assert '"reference_price_deviation": 1' in text
+
+
+def test_build_report_omits_routine_filter_failures_and_quote_source_noise():
+    settings = EquityScanSettings()
+    snap = parse_equity_quote(
+        "WIN",
+        _quote_payload(close=100, last=110, net_pct=10.0, volume=1_000_000),
+        universes={"sp500"},
+    )
+    assert snap is not None
+    results = rank_scan_results(
+        [snap],
+        settings=settings,
+        movers_up=[],
+        movers_down=[],
+        market_context=[],
+        scanned_symbols=2,
+        generated_at=_premarket_et(),
+        rejected_symbols={"filter_failed": 1},
+        bad_data=[],
+    )
+    report = "\n".join(build_report(results, settings=settings, generated_at=_premarket_et()))
+    assert "Quote Sanity" not in report
+    assert "filter_failed" not in report
+    assert "src quote.lastPrice_or_mark" not in report
+    assert "age " not in report
 
 
 def test_build_report_groups_snapshots_by_sector():
@@ -441,13 +496,14 @@ def test_avg_daily_volume_ignores_today_and_compute_rvol():
         dt.datetime.combine(dt.date.today(), dt.time.min).timestamp() * 1000
     )
     candles = [
-        {"volume": 1_000_000, "datetime": today_start_ms - 259_200_000},
-        {"volume": 2_000_000, "datetime": today_start_ms - 172_800_000},
-        {"volume": 3_000_000, "datetime": today_start_ms - 86_400_000},
-        {"volume": 9_999_999, "datetime": today_start_ms},
+        {"close": 100.0, "volume": 1_000_000, "datetime": today_start_ms - 259_200_000},
+        {"close": 120.0, "volume": 2_000_000, "datetime": today_start_ms - 172_800_000},
+        {"close": 180.0, "volume": 3_000_000, "datetime": today_start_ms - 86_400_000},
+        {"close": 200.0, "volume": 9_999_999, "datetime": today_start_ms},
     ]
     avg = avg_daily_volume(candles, lookback=3)
     assert avg == 2_000_000.0
+    assert prior_session_pct_change(candles) == 50.0
     assert compute_rvol(400_000, avg) == 0.2
 
 

@@ -25,8 +25,8 @@ filters:
   min_rvol: 0.05
   max_abs_pct: 50.0
   max_price_disagreement_pct: 5.0
-  max_reference_price_deviation_pct: 75.0
-  require_index_membership: true
+  max_reference_price_deviation_pct: 25.0
+  require_index_membership: false
 
 rvol_lookback_days: 20
 rvol_fetch_concurrency: 4
@@ -58,8 +58,6 @@ news:
 
 batch_size: 150
 premarket_start_et: "04:00"
-dedupe_premarket_with_prior: true
-gap_overlap_tolerance_pct: 0.5
 report_dir: reports/equity_scans
 
 context_symbols:

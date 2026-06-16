@@ -68,12 +68,9 @@ def _fmt_rvol(snapshot: EquitySnapshot) -> str:
 
 
 def _fmt_quality(snapshot: EquitySnapshot) -> str:
-    parts: list[str] = [f"src {snapshot.price_source}"]
-    if snapshot.quote_age_seconds is not None:
-        parts.append(f"age {snapshot.quote_age_seconds / 60.0:.0f}m")
     if snapshot.data_quality_flags:
-        parts.append("flags " + ",".join(snapshot.data_quality_flags))
-    return " · " + " · ".join(parts)
+        return " · flags " + ",".join(snapshot.data_quality_flags)
+    return ""
 
 
 def _fmt_news(snapshot: EquitySnapshot) -> str:
@@ -228,6 +225,11 @@ def _format_mover_item(item: dict[str, Any]) -> str:
 
 def _format_bad_data(results: ScanResults) -> str:
     rejected = results.rejected_symbols or {}
+    rejected = {
+        reason: count
+        for reason, count in rejected.items()
+        if reason != "filter_failed"
+    }
     bad_data = results.bad_data or []
     if not rejected and not bad_data:
         return "_No quote sanity rejects._"
@@ -351,13 +353,15 @@ def build_report(
             )
         )
 
-    sections.append(
-        _format_section(
-            "**🧪 Quote Sanity**",
-            [_format_bad_data(results)],
-            empty_text="_No quote sanity rejects._",
+    quote_sanity = _format_bad_data(results)
+    if quote_sanity != "_No quote sanity rejects._":
+        sections.append(
+            _format_section(
+                "**🧪 Quote Sanity**",
+                [quote_sanity],
+                empty_text="_No quote sanity rejects._",
+            )
         )
-    )
 
     messages: list[str] = []
     current = header

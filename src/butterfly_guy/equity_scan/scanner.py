@@ -161,6 +161,7 @@ def parse_equity_quote(
     reference_price: float | None = None,
     max_price_disagreement_pct: float | None = None,
     max_reference_price_deviation_pct: float | None = None,
+    prior_day_pct_override: float | None = None,
     reject_reasons: list[dict[str, Any]] | None = None,
 ) -> EquitySnapshot | None:
     """Normalize a Schwab quote payload into an EquitySnapshot."""
@@ -180,27 +181,34 @@ def parse_equity_quote(
             reject_reasons.append({"symbol": symbol, "reason": "missing_live_price"})
         return None
 
-    prior_day_pct = _as_float(quote.get("netPercentChange"))
+    quote_net_percent_change = _as_float(quote.get("netPercentChange"))
+    prior_day_pct = quote_net_percent_change
     if prior_day_pct is None:
         prior_day_pct = ((regular_price or price) - prior_close) / prior_close * 100.0
 
     session_gap_pct = (price - prior_close) / prior_close * 100.0
     flags: list[str] = []
-    if regular_price and max_price_disagreement_pct is not None:
+    if (
+        regular_price
+        and quote_net_percent_change is not None
+        and max_price_disagreement_pct is not None
+    ):
         regular_move_pct = (regular_price - prior_close) / prior_close * 100.0
-        if abs(regular_move_pct - prior_day_pct) > max_price_disagreement_pct:
+        if abs(regular_move_pct - quote_net_percent_change) > max_price_disagreement_pct:
             if reject_reasons is not None:
                 reject_reasons.append(
                     {
                         "symbol": symbol,
                         "reason": "quote_percent_disagreement",
                         "regular_move_pct": regular_move_pct,
-                        "net_percent_change": prior_day_pct,
+                        "net_percent_change": quote_net_percent_change,
                         "price": regular_price,
                         "prior_close": prior_close,
                     }
                 )
             return None
+    if prior_day_pct_override is not None:
+        prior_day_pct = prior_day_pct_override
     if reference_price and max_reference_price_deviation_pct is not None:
         reference_deviation_pct = abs(price - reference_price) / reference_price * 100.0
         if reference_deviation_pct > max_reference_price_deviation_pct:
@@ -267,23 +275,6 @@ def passes_filters(snapshot: EquitySnapshot, settings: EquityScanSettings) -> bo
     return True
 
 
-def _is_duplicate_premarket(snapshot: EquitySnapshot, *, tolerance_pct: float) -> bool:
-    """True when the gap is essentially the same as the prior-day move."""
-    return abs(snapshot.session_gap_pct - snapshot.prior_day_pct) <= tolerance_pct
-
-
-def _dedupe_premarket(
-    snapshots: list[EquitySnapshot],
-    *,
-    tolerance_pct: float,
-) -> list[EquitySnapshot]:
-    return [
-        snap
-        for snap in snapshots
-        if not _is_duplicate_premarket(snap, tolerance_pct=tolerance_pct)
-    ]
-
-
 def _mover_change_pct(item: dict[str, Any]) -> float | None:
     pct = item.get("changePercent") or item.get("netPercentChange")
     if pct is None:
@@ -344,6 +335,7 @@ def build_snapshots(
     avg_volumes: dict[str, float] | None = None,
     sector_map: dict[str, str] | None = None,
     reference_prices: dict[str, float] | None = None,
+    prior_day_changes: dict[str, float] | None = None,
     in_premarket: bool = False,
     generated_at: dt.datetime | None = None,
     rejected_symbols: dict[str, int] | None = None,
@@ -352,6 +344,7 @@ def build_snapshots(
     avg_volumes = avg_volumes or {}
     sector_map = sector_map or {}
     reference_prices = reference_prices or {}
+    prior_day_changes = prior_day_changes or {}
     snapshots: list[EquitySnapshot] = []
     for symbol, payload in quotes.items():
         universes = symbol_map.get(symbol)
@@ -369,6 +362,7 @@ def build_snapshots(
             reference_price=reference_prices.get(symbol),
             max_price_disagreement_pct=settings.filters.max_price_disagreement_pct,
             max_reference_price_deviation_pct=settings.filters.max_reference_price_deviation_pct,
+            prior_day_pct_override=prior_day_changes.get(symbol),
             reject_reasons=reject_reasons,
         )
         if snapshot is None:
@@ -572,16 +566,6 @@ def rank_scan_results(
             min_abs_pct=filters.premarket_min_gap_pct,
             limit=limits.premarket_losers,
         )
-        if settings.dedupe_premarket_with_prior:
-            premarket_gainers = _dedupe_premarket(
-                premarket_gainers,
-                tolerance_pct=settings.gap_overlap_tolerance_pct,
-            )
-            premarket_losers = _dedupe_premarket(
-                premarket_losers,
-                tolerance_pct=settings.gap_overlap_tolerance_pct,
-            )
-
     filtered_movers_up: list[dict[str, Any]] = []
     filtered_movers_down: list[dict[str, Any]] = []
     if show_movers:
