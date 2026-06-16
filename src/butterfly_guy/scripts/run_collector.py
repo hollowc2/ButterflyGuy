@@ -33,7 +33,7 @@ async def main() -> None:
     log.info("collector_starting", underlying=config.strategy.underlying)
 
     # Start Prometheus metrics
-    start_metrics_server(config.monitoring.metrics_port)
+    start_metrics_server(config.monitoring.metrics_port, underlying=config.strategy.underlying)
 
     # Init DB
     db = DatabasePool(config.database.dsn)
