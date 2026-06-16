@@ -357,6 +357,18 @@ def render_report_html(
   <h2>Portfolio Drawdown</h2>
   <section class="panel chart-panel"><canvas id="drawdownChart" height="90"></canvas></section>
 
+  <h2>Return Distribution</h2>
+  <section class="panel chart-panel">
+    <div class="chart-tools" aria-label="Return distribution controls">
+      <div class="segmented" role="group" aria-label="Bucket size">
+        <button type="button" class="bucket-control active" data-bucket="250">$250</button>
+        <button type="button" class="bucket-control" data-bucket="500">$500</button>
+      </div>
+      <label class="toggle"><input type="checkbox" id="fitCurveToggle" checked> Fit curve</label>
+    </div>
+    <canvas id="returnDistributionChart" height="95"></canvas>
+  </section>
+
   <h2>Trade Log</h2>
   <section class="panel">
     <table>
@@ -378,6 +390,7 @@ const maxDdPct = {max_dd_pct:.4f};
 const labels = chartData.map((d) => d.date);
 const equityValues = chartData.map((d) => d.equity);
 const drawdownValues = chartData.map((d) => -d.drawdown_pct);
+const returnValues = chartData.map((d) => d.pnl);
 const pointRadii = chartData.map((d) => d.is_drawdown_exit ? 6 : 3);
 const pointColors = chartData.map((d) => d.is_drawdown_exit ? '#cc5555' : '#c8922a');
 
@@ -403,6 +416,73 @@ function drawdownTooltip(context) {{
     `Drawdown: ${{d.drawdown_pct.toFixed(1)}}% ($${{d.drawdown_dollars.toFixed(0)}})`,
     `Equity: ${{d.equity >= 0 ? '+' : ''}}$${{d.equity.toFixed(0)}} · Peak: $${{d.peak_equity.toFixed(0)}}`,
   ];
+}}
+
+function bucketLabel(start, bucketSize) {{
+  const end = start + bucketSize;
+  return `$${{start.toFixed(0)}} to $${{end.toFixed(0)}}`;
+}}
+
+function buildReturnDistribution(bucketSize) {{
+  if (!returnValues.length) return {{ labels: [], counts: [], curve: [], buckets: [] }};
+  const minBucket = Math.floor(Math.min(...returnValues) / bucketSize) * bucketSize;
+  const maxBucket = Math.floor(Math.max(...returnValues) / bucketSize) * bucketSize;
+  const buckets = [];
+  for (let start = minBucket; start <= maxBucket; start += bucketSize) {{
+    buckets.push({{ start, end: start + bucketSize, count: 0, trades: [] }});
+  }}
+  returnValues.forEach((value, index) => {{
+    const bucketStart = Math.floor(value / bucketSize) * bucketSize;
+    const rawIndex = Math.round((bucketStart - minBucket) / bucketSize);
+    const bucketIndex = Math.max(0, Math.min(buckets.length - 1, rawIndex));
+    buckets[bucketIndex].count += 1;
+    buckets[bucketIndex].trades.push(chartData[index]);
+  }});
+
+  const counts = buckets.map((bucket) => bucket.count);
+  const maxCount = Math.max(...counts, 1);
+  const mean = returnValues.reduce((sum, value) => sum + value, 0) / returnValues.length;
+  const variance = returnValues.reduce(
+    (sum, value) => sum + Math.pow(value - mean, 2),
+    0,
+  ) / returnValues.length;
+  const stdDev = Math.sqrt(variance) || bucketSize;
+  const rawCurve = buckets.map((bucket) => {{
+    const midpoint = bucket.start + bucketSize / 2;
+    return Math.exp(-0.5 * Math.pow((midpoint - mean) / stdDev, 2));
+  }});
+  const maxCurve = Math.max(...rawCurve, 1);
+  const curve = rawCurve.map((value) => value / maxCurve * maxCount);
+
+  return {{
+    labels: buckets.map((bucket) => bucketLabel(bucket.start, bucketSize)),
+    counts,
+    curve,
+    buckets,
+  }};
+}}
+
+function returnDistributionTooltip(context, distribution) {{
+  const bucket = distribution.buckets[context.dataIndex];
+  const pnls = bucket.trades.map((trade) => trade.pnl);
+  const total = pnls.reduce((sum, value) => sum + value, 0);
+  return [
+    bucketLabel(bucket.start, bucket.end - bucket.start),
+    `${{bucket.count}} trade${{bucket.count === 1 ? '' : 's'}}`,
+    `Bucket PnL: ${{total >= 0 ? '+' : ''}}$${{total.toFixed(0)}}`,
+  ];
+}}
+
+function returnBucketFillColor(bucket) {{
+  if (bucket.end <= 0) return 'rgba(204,85,85,0.55)';
+  if (bucket.start >= 0) return 'rgba(106,170,120,0.55)';
+  return 'rgba(200,146,42,0.55)';
+}}
+
+function returnBucketBorderColor(bucket) {{
+  if (bucket.end <= 0) return '#cc5555';
+  if (bucket.start >= 0) return '#6aaa78';
+  return '#c8922a';
 }}
 
 const chartDefaults = {{
@@ -523,6 +603,96 @@ new Chart(document.getElementById('drawdownChart'), {{
     }},
   }},
 }});
+
+let activeBucketSize = 250;
+let showFitCurve = true;
+let returnDistribution = buildReturnDistribution(activeBucketSize);
+
+const returnDistributionChart = new Chart(document.getElementById('returnDistributionChart'), {{
+  type: 'bar',
+  data: {{
+    labels: returnDistribution.labels,
+    datasets: [
+      {{
+        type: 'bar',
+        label: 'Trades',
+        data: returnDistribution.counts,
+        backgroundColor: returnDistribution.buckets.map(returnBucketFillColor),
+        borderColor: returnDistribution.buckets.map(returnBucketBorderColor),
+        borderWidth: 1,
+        borderRadius: 4,
+      }},
+      {{
+        type: 'line',
+        label: 'Fit curve',
+        data: returnDistribution.curve,
+        borderColor: '#e8e2d6',
+        backgroundColor: 'transparent',
+        pointRadius: 0,
+        borderWidth: 2,
+        tension: 0.35,
+        hidden: !showFitCurve,
+      }},
+    ],
+  }},
+  options: {{
+    ...chartDefaults,
+    plugins: {{
+      ...chartDefaults.plugins,
+      tooltip: {{
+        ...chartDefaults.plugins.tooltip,
+        callbacks: {{
+          title: (items) => items.length ? returnDistribution.labels[items[0].dataIndex] : '',
+          label: () => '',
+          afterBody: (items) => (
+            items.length ? returnDistributionTooltip(items[0], returnDistribution) : []
+          ),
+        }},
+      }},
+    }},
+    scales: {{
+      ...chartDefaults.scales,
+      y: {{
+        beginAtZero: true,
+        ticks: {{
+          color: '#6a6460',
+          precision: 0,
+        }},
+        grid: {{ color: 'rgba(232,226,214,0.06)' }},
+      }},
+    }},
+  }},
+}});
+
+function updateReturnDistribution() {{
+  returnDistribution = buildReturnDistribution(activeBucketSize);
+  returnDistributionChart.data.labels = returnDistribution.labels;
+  returnDistributionChart.data.datasets[0].data = returnDistribution.counts;
+  returnDistributionChart.data.datasets[0].backgroundColor = (
+    returnDistribution.buckets.map(returnBucketFillColor)
+  );
+  returnDistributionChart.data.datasets[0].borderColor = (
+    returnDistribution.buckets.map(returnBucketBorderColor)
+  );
+  returnDistributionChart.data.datasets[1].data = returnDistribution.curve;
+  returnDistributionChart.data.datasets[1].hidden = !showFitCurve;
+  returnDistributionChart.update();
+}}
+
+document.querySelectorAll('.bucket-control').forEach((button) => {{
+  button.addEventListener('click', () => {{
+    activeBucketSize = Number(button.dataset.bucket);
+    document.querySelectorAll('.bucket-control').forEach((item) => {{
+      item.classList.toggle('active', item === button);
+    }});
+    updateReturnDistribution();
+  }});
+}});
+
+document.getElementById('fitCurveToggle').addEventListener('change', (event) => {{
+  showFitCurve = event.target.checked;
+  updateReturnDistribution();
+}});
 </script>
 </body>
 </html>"""
@@ -584,6 +754,43 @@ h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 500
   overflow-x: auto;
 }
 .chart-panel { min-height: 220px; }
+.chart-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: #0f0f0f;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.bucket-control {
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 11px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+.bucket-control.active {
+  color: var(--text);
+  background: rgba(200, 146, 42, 0.18);
+}
+.toggle {
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+.toggle input { accent-color: var(--accent); }
 .empty { padding: 40px; text-align: center; color: var(--muted); }
 table {
   width: 100%;

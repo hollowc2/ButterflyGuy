@@ -131,9 +131,13 @@ def test_render_report_html_contains_sections() -> None:
     )
     assert "Equity Curve" in html_doc
     assert "Portfolio Drawdown" in html_doc
+    assert "Return Distribution" in html_doc
     assert "Trade Log" in html_doc
     assert "Paper Trading" in html_doc
     assert "drawdownChart" in html_doc
+    assert "returnDistributionChart" in html_doc
+    assert 'data-bucket="250"' in html_doc
+    assert "Fit curve" in html_doc
     assert "max_trades_reached (1)" in html_doc
 
 
