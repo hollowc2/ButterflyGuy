@@ -102,6 +102,8 @@ class RiskSettings(BaseModel):
     max_position_size: int = 1
     max_weekly_loss: float = 1500.0        # 3x daily default; halt for week if exceeded
     max_consecutive_losses: int = 10        # halt after N consecutive losing trades (0 = disabled)
+    min_buying_power: float = 500.0        # minimum buying power required to enter
+    fail_safe_on_balance_error: bool = True  # if True, block trading when balance API unavailable
 
 
 class CollectorSettings(BaseModel):

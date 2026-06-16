@@ -134,8 +134,28 @@ class TradeService:
         ):
             return None
 
-        # Risk check (includes daily/weekly loss and consecutive loss checks)
-        allowed, reason = await self.risk_engine.can_trade()
+        # Fetch account balances for buying power checks (live trading only)
+        buying_power: float | None = None
+        if not self.config.execution.paper_trading:
+            try:
+                balances = await self.schwab.get_account_balances()
+                buying_power = balances["buying_power"]
+                log.info(
+                    "account_balances_fetched",
+                    buying_power=round(buying_power, 2),
+                )
+            except Exception as e:
+                log.error("account_balance_fetch_failed", error=str(e))
+                if self.config.risk.fail_safe_on_balance_error:
+                    await self.decision_queries.log_event(
+                        "entry_blocked",
+                        {"reason": "balance_fetch_failed", "error": str(e)},
+                        underlying=self.config.strategy.underlying,
+                    )
+                    return None
+
+        # Risk check (includes buying power, daily/weekly loss, and consecutive loss checks)
+        allowed, reason = await self.risk_engine.can_trade(buying_power=buying_power)
         if not allowed:
             await self.decision_queries.log_event(
                 "entry_blocked",

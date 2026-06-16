@@ -43,9 +43,15 @@ class RiskEngine:
     async def can_trade(
         self,
         trade_date: dt.date | None = None,
+        buying_power: float | None = None,
         quantity: int = 1,
     ) -> tuple[bool, str]:
-        """Check risk conditions before entry. Returns (allowed, reason)."""
+        """
+        Check risk conditions before entry. Returns (allowed, reason).
+
+        buying_power is optional; pass it from a pre-fetched Schwab balance call.
+        If None, the buying power check is skipped.
+        """
         today = trade_date or dt.date.today()
 
         if not is_trading_day(today):
@@ -72,6 +78,16 @@ class RiskEngine:
             log.warning("max_daily_loss_hit", pnl=state["realized_pnl"])
             await self.risk_queries.set_halted(today, self.underlying)
             return False, f"max_daily_loss ({state['realized_pnl']})"
+
+        # Buying power guard
+        if buying_power is not None:
+            if buying_power < self.settings.min_buying_power:
+                log.warning(
+                    "insufficient_buying_power",
+                    buying_power=buying_power,
+                    minimum=self.settings.min_buying_power,
+                )
+                return False, f"insufficient_buying_power ({buying_power:.2f})"
 
         # Weekly loss circuit breaker
         weekly_pnl = await self.risk_queries.get_weekly_pnl(self.underlying)

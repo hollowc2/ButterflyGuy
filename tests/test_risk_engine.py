@@ -65,6 +65,18 @@ async def test_can_trade_max_loss():
 
 
 @pytest.mark.asyncio
+async def test_can_trade_blocks_low_buying_power():
+    engine, _ = make_risk_engine()
+    engine.settings.min_buying_power = 500.0
+    from unittest.mock import patch
+    with patch("butterfly_guy.risk.risk_engine.is_market_open", return_value=True), \
+         patch("butterfly_guy.risk.risk_engine.is_trading_day", return_value=True):
+        allowed, reason = await engine.can_trade(buying_power=200.0)
+    assert not allowed
+    assert "insufficient_buying_power" in reason
+
+
+@pytest.mark.asyncio
 async def test_can_trade_blocks_quantity_above_max_position_size():
     engine, _ = make_risk_engine()
     engine.settings.max_position_size = 1
