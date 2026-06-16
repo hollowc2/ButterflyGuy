@@ -48,11 +48,26 @@ _shutdown = False
 
 
 def _now_et() -> str:
-    """Return current time as Eastern Time string."""
-    # Use UTC and derive ET (DST-aware). Simpler: use UTC with -4/-5 offset.
-    # For display purposes just use localtime with TZ hint.
-    t = time.localtime()
-    return time.strftime("%Y-%m-%d %H:%M:%S", t)
+    """Return current time as Eastern Time, handling DST correctly."""
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    year = now.year
+
+    # Compute second Sunday of March (DST start: 2am ET = 7am UTC)
+    march_1 = datetime(year, 3, 1, tzinfo=timezone.utc)
+    first_sun = march_1 + timedelta(days=(6 - march_1.weekday()))
+    dst_start = first_sun + timedelta(days=7)
+    dst_start = dst_start.replace(hour=7, minute=0, second=0, microsecond=0)
+
+    # Compute first Sunday of November (DST end: 2am ET -> 1am ET = 6am UTC)
+    nov_1 = datetime(year, 11, 1, tzinfo=timezone.utc)
+    dst_end = nov_1 + timedelta(days=(6 - nov_1.weekday()))
+    dst_end = dst_end.replace(hour=6, minute=0, second=0, microsecond=0)
+
+    offset = timedelta(hours=-4) if dst_start <= now < dst_end else timedelta(hours=-5)
+    et = now + offset
+    return et.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_config(config_path: str | None) -> dict:
@@ -108,13 +123,24 @@ def check_endpoint(url: str) -> dict:
     return result
 
 
-def extract_service_name(url: str) -> str:
-    """Derive a human-readable service name from a health URL."""
+def extract_service_name(url: str, result: dict | None = None) -> str:
+    """Derive a human-readable service name from a health URL.
+
+    Prefers the ``service`` field returned by the /health endpoint when
+    available; falls back to port-based lookup for unreachable services.
+    """
+    # If the endpoint responded, use the name it reports
+    if result and result.get("data") and isinstance(result["data"], dict):
+        reported = result["data"].get("service")
+        if reported:
+            return str(reported)
+
+    # Fallback: port-based guess for down/unreachable endpoints
     port_map = {"8000": "SPX", "8001": "NDX", "8002": "SPX-2", "8003": "XSP"}
     for port, name in port_map.items():
         if f":{port}" in url:
             return name
-    # Fallback: take the host:port part
+    # Last resort: host:port part
     parts = url.split("://", 1)[-1].split("/")[0]
     return parts
 
@@ -143,7 +169,7 @@ def run_check_cycle(cfg: dict) -> list[dict]:
     results = []
     for url in cfg["urls"]:
         result = check_endpoint(url)
-        service_name = extract_service_name(url)
+        service_name = extract_service_name(url, result)
         key = service_name
 
         # Initialize state for this service if not tracked

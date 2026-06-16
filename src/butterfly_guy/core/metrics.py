@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 
 from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
@@ -134,6 +134,6 @@ def start_metrics_server(port: int = 8000, underlying: str = "unknown") -> None:
     _server_underlying = underlying
     _server_start_time = time.time()
 
-    server = HTTPServer(("0.0.0.0", port), _MetricsHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", port), _MetricsHandler)
     thread = Thread(target=server.serve_forever, daemon=True, name=f"metrics-{port}")
     thread.start()
