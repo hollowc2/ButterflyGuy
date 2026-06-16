@@ -16,7 +16,7 @@ Automated options trading strategy and research platform for 0-DTE SPX, NDX, and
   - `BEST_RR`: Selects the candidate with the Reward/Risk closest to your target (e.g., 10:1).
 - **Gap Regime Filter**: Two statistically validated signals applied before direction selection — flip to CALL on gap-down days in a BULL regime (`bull_call_bias`), and skip days where the gap is too small to have edge (`min_gap_pct`). Used identically in live trading and backtesting.
 - **Automated Data Collection**: Continuous snapshotting of option chains and spot prices into a TimescaleDB instance.
-- **Risk Management**: Layered capital protection including daily/weekly loss limits, consecutive loss circuit breaker, real-time PDT floor enforcement, and buying power validation via Schwab API.
+- **Risk Management**: Layered capital protection including daily/weekly loss limits and a consecutive loss circuit breaker.
 - **Research Tools**: Powerful scripts to inspect historical entries and simulate strategy changes.
 
 ---
@@ -30,21 +30,15 @@ Butterfly Guy has multiple layers of capital protection, all configurable under 
 | Daily loss limit | `max_daily_loss` | Halts trading for the day once realized PnL hits this threshold |
 | Weekly loss limit | `max_weekly_loss` | Halts trading for the day if rolling 7-day losses exceed this |
 | Consecutive loss breaker | `max_consecutive_losses` | Halts after N consecutive losing trades (default: 10) |
-| PDT floor | `min_account_value` | Blocks entry if account liquidation value drops below this (default: $25,500) |
-| Buying power guard | `min_buying_power` | Blocks entry if available buying power is below this |
-| Balance fetch fail-safe | `fail_safe_on_balance_error` | If `true`, blocks trading when the Schwab balance API is unreachable |
 | Trade count cap | `max_trades_per_day` | Hard limit on entries per day per underlying |
 
-Account balances are fetched from Schwab before every entry attempt. On restart, any open position's entry cost is included as worst-case committed loss so the daily budget is never silently overspent.
+On restart, any open position's entry cost is included as worst-case committed loss so the daily budget is never silently overspent.
 
 ```yaml
 risk:
   max_daily_loss: 50.0
   max_weekly_loss: 150.0
   max_consecutive_losses: 10
-  min_account_value: 25500.0
-  min_buying_power: 200.0
-  fail_safe_on_balance_error: true
   max_trades_per_day: 1
 ```
 

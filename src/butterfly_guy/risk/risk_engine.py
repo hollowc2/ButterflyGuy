@@ -43,16 +43,9 @@ class RiskEngine:
     async def can_trade(
         self,
         trade_date: dt.date | None = None,
-        account_value: float | None = None,
-        buying_power: float | None = None,
         quantity: int = 1,
     ) -> tuple[bool, str]:
-        """
-        Check all risk conditions. Returns (allowed, reason).
-
-        account_value and buying_power are optional — pass them from a pre-fetched
-        Schwab balance call. If None, those checks are skipped.
-        """
+        """Check risk conditions before entry. Returns (allowed, reason)."""
         today = trade_date or dt.date.today()
 
         if not is_trading_day(today):
@@ -79,27 +72,6 @@ class RiskEngine:
             log.warning("max_daily_loss_hit", pnl=state["realized_pnl"])
             await self.risk_queries.set_halted(today, self.underlying)
             return False, f"max_daily_loss ({state['realized_pnl']})"
-
-        # Account floor — PDT compliance
-        if account_value is not None:
-            if account_value < self.settings.min_account_value:
-                log.warning(
-                    "account_below_minimum",
-                    account_value=account_value,
-                    minimum=self.settings.min_account_value,
-                )
-                await self.risk_queries.set_halted(today, self.underlying)
-                return False, f"account_below_minimum ({account_value:.2f})"
-
-        # Buying power guard
-        if buying_power is not None:
-            if buying_power < self.settings.min_buying_power:
-                log.warning(
-                    "insufficient_buying_power",
-                    buying_power=buying_power,
-                    minimum=self.settings.min_buying_power,
-                )
-                return False, f"insufficient_buying_power ({buying_power:.2f})"
 
         # Weekly loss circuit breaker
         weekly_pnl = await self.risk_queries.get_weekly_pnl(self.underlying)
