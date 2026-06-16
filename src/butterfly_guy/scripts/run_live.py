@@ -174,7 +174,7 @@ async def main() -> None:
         rr_target=config.strategy.rr_target,
         center_tolerance=config.entry.center_tolerance,
     )
-    start_metrics_server(config.monitoring.metrics_port)
+    start_metrics_server(config.monitoring.metrics_port, underlying=config.strategy.underlying)
 
     # Init DB
     db = DatabasePool(config.database.dsn)

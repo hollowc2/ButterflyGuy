@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+import json
+import time
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from threading import Thread
+
+from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 # Chain collection
 chain_snapshots_total = Counter(
@@ -78,6 +83,57 @@ schwab_api_errors = Counter(
 )
 
 
-def start_metrics_server(port: int = 8000) -> None:
-    """Start the Prometheus metrics HTTP server."""
-    start_http_server(port)
+_server_start_time: float | None = None
+_server_underlying: str = "unknown"
+
+
+class _MetricsHandler(BaseHTTPRequestHandler):
+    """HTTP request handler serving both Prometheus metrics and health checks."""
+
+    def log_message(self, format: str, *args: object) -> None:
+        """Suppress default request logging to stderr."""
+        pass
+
+    def _send_json(self, status: int, data: dict) -> None:
+        body = json.dumps(data).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_text(self, status: int, content: str, content_type: str = "text/plain") -> None:
+        body = content.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:
+        if self.path == "/health":
+            uptime = time.time() - _server_start_time if _server_start_time else 0.0
+            self._send_json(200, {
+                "status": "ok",
+                "service": _server_underlying,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
+                "uptime_seconds": round(uptime, 1),
+            })
+        elif self.path == "/metrics":
+            self._send_text(200, generate_latest().decode("utf-8"), CONTENT_TYPE_LATEST)
+        else:
+            self._send_json(404, {"error": "not found"})
+
+
+def start_metrics_server(port: int = 8000, underlying: str = "unknown") -> None:
+    """Start HTTP server serving /metrics (Prometheus) and /health on *port*.
+
+    Runs in a daemon thread so it does not block the main application.
+    """
+    global _server_start_time, _server_underlying
+    _server_underlying = underlying
+    _server_start_time = time.time()
+
+    server = HTTPServer(("0.0.0.0", port), _MetricsHandler)
+    thread = Thread(target=server.serve_forever, daemon=True, name=f"metrics-{port}")
+    thread.start()
