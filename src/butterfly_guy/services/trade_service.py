@@ -134,17 +134,14 @@ class TradeService:
         ):
             return None
 
-        # Fetch account balances for PDT floor and buying power checks (live trading only)
-        account_value: float | None = None
+        # Fetch account balances for buying power checks (live trading only)
         buying_power: float | None = None
         if not self.config.execution.paper_trading:
             try:
                 balances = await self.schwab.get_account_balances()
-                account_value = balances["liquidation_value"]
                 buying_power = balances["buying_power"]
                 log.info(
                     "account_balances_fetched",
-                    account_value=round(account_value, 2),
                     buying_power=round(buying_power, 2),
                 )
             except Exception as e:
@@ -157,11 +154,8 @@ class TradeService:
                     )
                     return None
 
-        # Risk check (includes account floor, weekly loss, consecutive loss checks)
-        allowed, reason = await self.risk_engine.can_trade(
-            account_value=account_value,
-            buying_power=buying_power,
-        )
+        # Risk check (includes buying power, daily/weekly loss, and consecutive loss checks)
+        allowed, reason = await self.risk_engine.can_trade(buying_power=buying_power)
         if not allowed:
             await self.decision_queries.log_event(
                 "entry_blocked",

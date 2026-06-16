@@ -80,7 +80,6 @@ risk:
   max_position_size: 1
   max_weekly_loss: 150.0      # 3x daily; halt for the day if rolling 7-day losses hit this
   max_consecutive_losses: 10  # halt after 10 consecutive losing trades (across any days)
-  min_account_value: 25500.0  # PDT floor ($25k) + $500 buffer; block entry if account drops below
   min_buying_power: 200.0     # minimum buying power required before entering a trade
   fail_safe_on_balance_error: true  # block trading if Schwab balance API is unavailable
 collector:
