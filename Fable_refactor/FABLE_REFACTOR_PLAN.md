@@ -1,127 +1,278 @@
+# ButterflyGuy Fable 5 Refactor Plan
 
-  # ButterflyGuy Fable 5 Rebuild Plan
+This file is the entry point for the Fable 5 refactor package. Feed it first, then feed
+the companion documents in the order below. The goal is not to copy the current Python
+implementation. The goal is to build a clean, live-capable trading platform core that
+preserves the current system's market-data contracts and verified trading behavior.
 
-  ## Summary
+## Document Map
 
-  Use a long-lived rebuild branch in a separate Git worktree, created from updated origin/main, while keeping the current
-  repo as the behavioral and data reference. Do not fork as the main strategy unless remote-level isolation becomes
-  necessary.
+Read these files as one continuous package:
 
-  The rebuild should be a new product-shape trading platform core: live-capable, but gated; open to a new tech stack;
-  clean-room implementation; and read-compatible with the existing TimescaleDB data so current historical option-chain
-  data remains usable for backtesting.
+1. `FABLE_REFACTOR_PLAN.md`
+   - Defines the rebuild objective, sequencing, safety constraints, and acceptance
+     milestones.
+2. `DATABASE_COMPATIBILITY.md`
+   - Defines the existing TimescaleDB read contract for historical replay and
+     backtesting. This is the first implementation dependency.
+3. `DOMAIN_MODEL.md`
+   - Defines the canonical domain objects, broker symbol details, ingestion boundaries,
+     and strict typing target for Fable.
+4. `BEHAVIORAL_SPEC.md`
+   - Defines strategy selection, paper-fill conventions, exit behavior, lifecycle
+     states, quote-quality gates, and live-trading safety requirements.
+5. `CONFIG_MATRIX.md`
+   - Defines the current SPX, NDX, and XSP profile differences that Fable must preserve
+     or intentionally change with tests.
+6. `ACCEPTANCE_TESTS.md`
+   - Defines the phase gates, fixture package, golden replay requirements, and behavior
+     map for the rebuilt system.
+7. `FIXTURE_MANIFEST.md`
+   - Defines the deterministic fixture identifiers, config hashes, selected candidates,
+     and golden replay cases that prevent abstract parity tests from drifting away from
+     observed SPX, NDX, and XSP behavior.
 
-  ## Git Process
+Use `DATABASE_COMPATIBILITY.md` before `DOMAIN_MODEL.md` because the first Fable
+milestone must prove it can read existing historical data without mutating production
+tables. Use `BEHAVIORAL_SPEC.md` after the model is in place because behavior should be
+implemented against typed domain objects and explicit data adapters. Use
+`CONFIG_MATRIX.md` when implementing profile loading and per-asset behavior. Use
+`FIXTURE_MANIFEST.md` when building deterministic tests. Use `ACCEPTANCE_TESTS.md` as
+the definition of done for each phase.
 
-  - Preserve current local state before doing anything:
-      - Local main is currently behind origin/main by 15 commits.
-      - Local uncommitted files exist: .github/workflows/deploy.yml and .claude/settings.local.json.
-  - Create the rebuild from origin/main, not stale local main.
-  - Recommended shape:
-      - Branch: fable5/rebuild-core
-      - Worktree: sibling directory such as ../ButterflyGuy-fable5
-      - Current repo remains the reference implementation and database schema source.
-  - Merge finished slices back through PRs only after tests/backtests pass.
+## Refactor Objective
 
-  ## Fable Context Package
+Build a new ButterflyGuy platform core for automated 0-DTE SPX, NDX, and XSP butterfly
+trading with these modes:
 
-  Create docs/fable5/ as the handoff package:
+- Historical database replay and backtesting.
+- Paper trading with realistic mark, bid/ask, spread, and fill rules.
+- Research inspection and reporting.
+- Gated live trading, disabled by default.
 
-  - REBUILD_BRIEF.md
-      - Product intent: automated 0-DTE SPX/NDX/XSP butterfly trading platform.
-      - Core modes: paper trading, gated live trading, backtesting, research inspection, reporting.
-  - DOMAIN_MODEL.md
-      - Underlyings, option chains, spots, daily bars, butterfly candidates, trades, fills, marks, risk state, decision
-        logs, regimes.
-  - DATABASE_COMPATIBILITY.md
-      - Existing TimescaleDB schema treated as an external data contract for historical reads.
-      - Required first-milestone read tables: option_chain_snapshots, spot_prices, daily_bars.
-      - Runtime writes should go to rebuilt/namespaced tables first, not the current production tables.
-  - BEHAVIORAL_SPEC.md
-      - Entry window, direction logic, VIX anchoring, width selection, candidate filtering, paper fill convention, exit
-        state machine, risk gates.
-  - ACCEPTANCE_TESTS.md
-      - Behavior-level tests derived from current repo tests and configs, without copying implementation.
+The rebuilt system must be read-compatible with the existing TimescaleDB market-data
+tables so current option-chain, spot, and daily-bar history remains usable immediately.
+New runtime writes should initially use new or namespaced tables until write
+compatibility is deliberately designed and tested.
 
-  ## Implementation Guidance For Fable
+## Non-Negotiable Constraints
 
-  - Treat the current Python repo as reference behavior only, not source to copy.
-  - Fable may choose a new stack, but it must preserve these external capabilities:
-      - Read historical data from existing TimescaleDB tables for backtests.
-      - Replay option chains from option_chain_snapshots by underlying, expiration, and timestamp.
-      - Use spot_prices and daily_bars for spot/VIX/regime/backtest context.
-      - Keep Schwab market data and order integration behind explicit boundaries.
-      - Use mark price (bid + ask) / 2 for paper fills.
-      - Log decisions and risk blocks in the rebuilt system’s own persistence layer.
-  - Live trading must be gated:
-      - Default mode is non-live.
-      - Live order placement requires explicit config.
-      - Account, buying-power, and risk guards must pass.
-      - No token values or secrets appear in generated docs, logs, or commits.
+- Treat the current repo as a behavioral reference, not source code to copy.
+- Do not place broker orders during the refactor.
+- Default execution mode must be non-live.
+- Live routing must require explicit config approval plus an explicit environment
+  confirmation, checked immediately before every broker order submission.
+- Do not print, commit, or summarize Schwab tokens, account ids, or secret values.
+- Paper fills use the project convention of mark price `(bid + ask) / 2`, with the
+  spread-quality refinements defined in `BEHAVIORAL_SPEC.md`.
+- Historical backtests must be deterministic for a fixed DB snapshot and config.
+- Existing production tables must not be mutated by early Fable milestones.
 
-  ## Database Interoperability
+## Recommended Git Process
 
-  - First milestone is read compatibility, not full schema replacement.
-  - The rebuild must include a DB adapter that can query:
-      - option_chain_snapshots: historical option chains, quotes, greeks, symbols, spot-at-snapshot.
-      - spot_prices: underlying/VIX spot history.
-      - daily_bars: daily OHLCV for regime and prior-close context.
-  - Current historical data must be backtestable without migration.
-  - New runtime state should initially write to new or namespaced tables to avoid corrupting existing butterfly_trades,
-    daily_risk_state, decision_log, or candidate records.
-  - Full same-schema write compatibility can be considered later after the rebuilt system proves parity.
+Use a long-lived rebuild branch in a separate Git worktree:
 
-  ## Test Plan
+- Branch: `fable5/rebuild-core`
+- Worktree: sibling directory such as `../ButterflyGuy-fable5`
+- Base: updated `origin/main`
+- Current repo: reference implementation and schema source
 
-  - First milestone:
-      - Connect to existing TimescaleDB.
-      - Load one historical SPX day from option_chain_snapshots.
-      - Load matching spot and daily bar context.
-      - Run a deterministic backtest/replay without modifying current tables.
-  - Acceptance coverage should include:
-      - Candidate construction and selection.
-      - VIX width/center behavior.
-      - Gap/regime direction behavior.
-      - Paper fill pricing.
-      - Profit state machine exits.
-      - Daily trade count and loss-limit blocking.
-      - Backtest/live parity for shared strategy decisions.
-  - Before any live-capable branch merges:
-      - Unit tests pass.
-      - DB-backed backtest smoke test passes on existing data.
-      - Paper/replay mode proves end-to-end flow.
-      - Live mode remains disabled by default.
+Merge finished slices back through pull requests only after tests and DB-backed smoke
+checks pass. Keep each slice small enough to review independently.
 
-  ## Assumptions
+## Implementation Phases
 
-  - The rebuild should be clean-room: no implementation copying from the current repo.
-  - Branch + worktree is the default Git strategy.
-  - Existing historical DB data is valuable and must remain directly usable.
-  - The first DB compatibility target is read-only access to chains, spot prices, and daily bars.
-  - New runtime writes should avoid the current production tables until compatibility is deliberately promoted.
-  -
-  -
-  
-  
-  
-  
-  
-  
-  
-  Execution notes
-  
-  5. Execution Strategy for Fable 5
+### Phase 1: Database Adapter And Historical Ingestion
 
-When you feed this package to the agent, don't ask it to build the entire app in a single prompt. Take advantage of its structured tool usage by directing it to build system slices in a strict topological order:
+Primary reference: `DATABASE_COMPATIBILITY.md`
 
-    Phase 1: Database Adapter & Historical Ingestion Layer (Must pass basic read validation).
+Build a read-only adapter for:
 
-    Phase 2: Mathematical Context & Candidate Selection Engine (Wing width logic and VIX anchoring).
+- `option_chain_snapshots`
+- `spot_prices`
+- `daily_bars`
 
-    Phase 3: Paper Execution Engine & State Machine (Property-based validation using simulated data streams).
+Required outcomes:
 
-    Phase 4: Gated Live Integration Broker Framework.
+- Connect to existing TimescaleDB.
+- Load one historical SPX 0-DTE chain by underlying, expiration, and snapshot time.
+- Load nearest-at-or-before spot and daily-bar context.
+- Convert row-oriented option-chain data into typed in-memory quote objects.
+- Prove the adapter does not write to current production tables.
 
-Instruct the model to write its own comprehensive property-based test suite for Phase 2 and 3 before it moves on to integration. Fable 5 has a native capacity for proactive self-verification and will happily run its own testing loop to verify that candidate filters behave flawlessly against edge-case inputs.  
+Acceptance checks:
 
-Are you leaning toward keeping the core in Python to ensure frictionless database adapter reuse, or are you considering a system-level language shift (like Rust) to squeeze the absolute minimum latency out of your 0-DTE execution loop?
+- A deterministic replay fixture can load the same chain twice with identical typed
+  output.
+- Nullable quote fields, Decimal precision, timestamp zones, and row-oriented chain
+  shape are handled explicitly.
+- Fable does not assume the database has JSON chain blobs, `id`, or `chain_data`
+  columns.
+
+### Phase 2: Domain Model And Candidate Selection
+
+Primary references: `DOMAIN_MODEL.md`, `CONFIG_MATRIX.md`, then the strategy sections
+in `BEHAVIORAL_SPEC.md`
+
+Build the typed domain layer and deterministic butterfly selection engine:
+
+- `OptionContract`
+- `ButterflySpread`
+- `ButterflyCandidateModel`
+- trade and lifecycle records
+- chain snapshot and replay context objects
+- VIX width bucket and target-center behavior
+- optional dynamic-width policy only if it is explicit and test-covered
+
+Required outcomes:
+
+- Preserve SPX, NDX, and XSP strike-grid and symbol-root behavior.
+- Keep broker mark, computed mid, and model valuation fields separate.
+- Reject malformed quotes and missing legs before ranking candidates.
+- Keep research/audit modes separate from normal backtest and paper execution modes.
+
+Acceptance checks:
+
+- Candidate construction is symmetric unless an explicit asymmetric mode exists.
+- CALL centers are above spot and PUT centers are below spot.
+- Reward/risk, debit floor, width cost ceiling, and complete-leg constraints are tested.
+- Property-based tests cover bad quotes, missing strikes, zero/negative costs, invalid
+  VIX values, and DTE edge cases.
+
+### Phase 3: Paper Execution And Position State Machine
+
+Primary reference: `BEHAVIORAL_SPEC.md`
+
+Build the paper execution engine and lifecycle model:
+
+- Mark-based paper entry and exit fills.
+- Bid/ask spread penalty and hard-block policy.
+- Profit regime classification.
+- Peak tracking and drawdown exit confirmation.
+- Explicit trade lifecycle states.
+- Cash-settlement path for cash-settled index positions.
+- SPX, NDX, and XSP profile-specific quote-quality and timing behavior.
+
+Required outcomes:
+
+- Profit regime and order lifecycle are modeled as separate concerns.
+- Exit attempts are idempotent and retryable.
+- `CLOSED` is terminal.
+- Paper execution cannot call broker order-placement code.
+
+Acceptance checks:
+
+- State-machine tests cover `LOSS`, `NEAR_LONG`, and `PROFIT_TENT`.
+- Lifecycle tests cover `OPEN_MONITORING`, `EXIT_SIGNALLED`, `EXITING`,
+  `EXIT_FAILED_RETRYABLE`, `CASH_SETTLING`, and `CLOSED`.
+- Spread-quality tests prove warning penalties, hard blocks, forced exits, and audit
+  fields.
+- Backtest, replay, and live-paper paths use the same fill-quality policy.
+
+### Phase 4: Gated Broker Integration
+
+Primary reference: the double-factor live gating section in `BEHAVIORAL_SPEC.md`
+
+Build the live broker boundary after the paper/replay system is stable:
+
+- Separate paper and live execution modules behind a narrow execution interface.
+- No shared code path that lets paper mode place Schwab orders.
+- Config gate plus exact environment confirmation.
+- Gate checked at construction time and immediately before each `place_order` call.
+- Typed failure for missing or malformed approvals.
+
+Acceptance checks:
+
+- Config-only approval fails.
+- Environment-only approval fails.
+- Typo approval fails.
+- Paper mode cannot import or call live order placement.
+- Live mode can submit only when both independent approvals are present.
+
+## System Acceptance Path
+
+The rebuild is usable only after these checks pass in order:
+
+1. Read-only DB adapter smoke test passes on existing SPX data.
+2. Typed domain conversion passes for SPX, NDX, and XSP sample chains.
+3. Candidate selection produces deterministic results for fixed chain, spot, VIX, and
+   config inputs.
+4. Paper execution records realistic fills or explicit fill blocks.
+5. Open-position monitoring can replay mark updates and exit signals without broker
+   writes.
+6. Runtime writes go only to rebuilt or namespaced tables.
+7. Live mode remains disabled by default.
+
+`ACCEPTANCE_TESTS.md` is the authoritative checklist for the full acceptance suite and
+golden replay package.
+
+## Fable Prompting Guidance
+
+Do not ask Fable to build the entire application in one pass. Give it this package and
+instruct it to implement one phase at a time, writing tests before moving to the next
+phase.
+
+Suggested first prompt:
+
+```text
+Use FABLE_REFACTOR_PLAN.md as the project entry point. Start Phase 1 only.
+Read DATABASE_COMPATIBILITY.md, ACCEPTANCE_TESTS.md, CONFIG_MATRIX.md, and
+FIXTURE_MANIFEST.md. Implement a read-only historical data adapter for
+option_chain_snapshots, spot_prices, and daily_bars. Do not implement strategy,
+execution, live broker routing, runtime writes, or Schwab order code yet. Add
+deterministic tests for exact snapshot loading, nearest-at-or-before spot lookup,
+timestamp/timezone handling, row-oriented option-chain loading, Decimal conversion,
+nullable columns, and read-only enforcement for SPX, NDX, and XSP fixtures. Use
+ACCEPTANCE_TESTS.md Phase 1 as the gate.
+```
+
+Suggested second prompt after Phase 1 passes:
+
+```text
+Phase 1 is complete. Now read DOMAIN_MODEL.md and the candidate-selection sections
+of BEHAVIORAL_SPEC.md, plus CONFIG_MATRIX.md for asset profiles. Implement typed
+immutable domain objects and deterministic candidate construction against the Phase 1
+adapter output. Add property-based tests for invalid quotes, missing legs, bad VIX
+inputs, DTE floors, reward/risk bounds, and asset-specific strike grids. Use
+ACCEPTANCE_TESTS.md Phase 2 as the gate.
+```
+
+Suggested third prompt after Phase 2 passes:
+
+```text
+Phase 2 is complete. Now read BEHAVIORAL_SPEC.md in full. Implement paper execution,
+profit-regime classification, peak tracking, drawdown exits, lifecycle states, and
+cash settlement. Do not implement live broker routing yet. Add tests for state
+transitions, spread-quality penalties, hard fill blocks, idempotent exits, and
+CLOSED as a terminal state. Use CONFIG_MATRIX.md for SPX, NDX, and XSP profile
+differences, and use ACCEPTANCE_TESTS.md Phase 3 and Phase 4 as the gate.
+```
+
+Suggested fourth prompt after Phase 3 passes:
+
+```text
+Phase 3 is complete. Implement the live broker boundary only. Keep paper and live
+execution separated behind a narrow interface. Require config approval plus the
+exact environment confirmation before any broker order submission, and verify both
+immediately before every place_order call. Add tests proving all partial approval
+cases fail closed. Use ACCEPTANCE_TESTS.md Phase 5 as the gate.
+```
+
+## Closed Design Decisions
+
+These decisions are fixed for the first Fable implementation pass:
+
+- Phase 1-3 target language and runtime: Python, to minimize friction with the current
+  DB adapter, Decimal, Pydantic-style config, and pytest ecosystem.
+- Property-based testing framework: Hypothesis.
+- Dynamic wing-width selection: deferred until the current configured VIX bucket
+  behavior is reproduced by deterministic SPX, NDX, and XSP fixtures.
+- Early runtime writes: use a new namespace/schema in the existing database, not the
+  current production tables. Early milestones should remain read-only until that write
+  namespace is deliberately designed and tested.
+
+## Completion Definition
+
+The refactor package has done its job when a new agent can start from this file, follow
+the linked documents in order, build the platform in phases, and prove each phase with
+tests before any live-capable broker code exists.

@@ -326,6 +326,11 @@ paired with `execution.allow_live_trading=true` or an `ALLOW_LIVE_TRADING`
 environment override. The refactor must harden this into an isolated live
 execution boundary.
 
+This is intentional new target behavior, not a description of the current Python
+implementation. The current loader accepts loose truthy environment strings including
+`ALLOW_LIVE_TRADING=true`, `ALLOW_LIVE_TRADING=1`, and `ALLOW_LIVE_TRADING=yes`.
+Fable must not copy that permissive behavior.
+
 Live broker order routing must be impossible unless two independent approvals
 are present and verified by the live execution module immediately before order
 submission.

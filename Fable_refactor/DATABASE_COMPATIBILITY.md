@@ -22,7 +22,7 @@ are part of the compatibility contract.
 - Purpose: raw option-chain rows collected at snapshot cadence.
 - Time column: `snapshot_time TIMESTAMPTZ NOT NULL`.
 - TimescaleDB: hypertable on `snapshot_time`.
-- Live row count at verification: `42,911,315`.
+- Live row count at verification: `43,314,675`.
 - Important query pattern: filter by `underlying`, `expiration`, and nearest
   `snapshot_time <= target_time`; for ET calendar filtering, convert
   `snapshot_time AT TIME ZONE 'America/New_York'`.
@@ -135,11 +135,12 @@ CREATE UNIQUE INDEX daily_bars_pkey
     ON public.daily_bars USING btree (date, underlying);
 ```
 
-## Explicit Relational Contracts for Fable 5
+## Explicit Adapter Contracts for Fable 5
 
 The live TimescaleDB tables above are the authoritative schema for this repository.
-The following block is an explicit ingestion-layer reference shape for Fable 5 when it
-needs to map a compact raw-snapshot contract onto this project.
+Fable 5 should read those tables directly for the first milestone. The following block
+is not the live schema; it is an optional compact adapter-output shape for a future
+ingestion layer that wants to expose one JSON document per chain snapshot.
 
 Important mapping notes:
 
@@ -153,7 +154,7 @@ Important mapping notes:
   `option_chain_snapshots.chain_data`.
 
 ```sql
--- Provide this exact reference block for Fable 5 to write its ingestion layer
+-- Optional compact adapter-output shape, not the live ButterflyGuy schema.
 CREATE TABLE option_chain_snapshots (
     id BIGSERIAL PRIMARY KEY,
     underlying VARCHAR(10) NOT NULL,
