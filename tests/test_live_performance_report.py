@@ -136,8 +136,11 @@ def test_render_report_html_contains_sections() -> None:
     assert "Paper Trading" in html_doc
     assert "drawdownChart" in html_doc
     assert "returnDistributionChart" in html_doc
+    assert 'data-bucket="100"' in html_doc
     assert 'data-bucket="250"' in html_doc
     assert "Fit curve" in html_doc
+    assert "hideNoTradesToggle" in html_doc
+    assert "<details class=\"panel trade-log-panel\" open>" in html_doc
     assert "max_trades_reached (1)" in html_doc
 
 
@@ -147,6 +150,8 @@ def test_render_trade_table_rows_include_no_trade_day() -> None:
     rows = render_trade_table_rows(trades, no_trade_days)
     assert "Daily loss limit reached" in rows
     assert "Halted" in rows
+    assert "data-row-type='trade'" in rows
+    assert "class='muted no-trade-row'" in rows
 
 
 def test_render_placeholder_html() -> None:

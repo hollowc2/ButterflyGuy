@@ -1,5 +1,8 @@
 """Live trading performance report — stats, drawdown, and HTML rendering."""
 
+# Generated HTML/CSS/JS strings in this module intentionally exceed 100 columns.
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import datetime as dt
@@ -236,7 +239,7 @@ def render_trade_table_rows(trades: list[TradePoint], no_trade_days: list[NoTrad
         rows.append((
             day.trade_date,
             (
-                "<tr class='muted'>"
+                "<tr class='muted no-trade-row' data-row-type='no-trade'>"
                 f"<td>{day.trade_date.isoformat()}</td>"
                 f"<td>{html.escape(day.status)}</td>"
                 "<td>—</td><td>—</td><td>—</td><td>—</td>"
@@ -258,7 +261,7 @@ def _render_trade_row(trade: TradePoint) -> str:
     vix_cell = f"{trade.vix:.1f}" if trade.vix is not None else "—"
     spot_cell = f"{trade.entry_spot:.0f}" if trade.entry_spot is not None else "—"
     return (
-        "<tr>"
+        "<tr data-row-type='trade'>"
         f"<td>{trade.trade_date.isoformat()}</td>"
         "<td>Trade</td>"
         f"<td>{html.escape(trade.direction)}</td>"
@@ -361,6 +364,7 @@ def render_report_html(
   <section class="panel chart-panel">
     <div class="chart-tools" aria-label="Return distribution controls">
       <div class="segmented" role="group" aria-label="Bucket size">
+        <button type="button" class="bucket-control" data-bucket="100">$100</button>
         <button type="button" class="bucket-control active" data-bucket="250">$250</button>
         <button type="button" class="bucket-control" data-bucket="500">$500</button>
       </div>
@@ -369,8 +373,14 @@ def render_report_html(
     <canvas id="returnDistributionChart" height="95"></canvas>
   </section>
 
-  <h2>Trade Log</h2>
-  <section class="panel">
+  <details class="panel trade-log-panel" open>
+    <summary class="section-summary">
+      <span>Trade Log</span>
+      <span class="summary-meta">{stats.trade_count} trades</span>
+    </summary>
+    <div class="table-tools">
+      <label class="toggle"><input type="checkbox" id="hideNoTradesToggle"> Hide no trades</label>
+    </div>
     <table>
       <thead>
         <tr>
@@ -381,7 +391,7 @@ def render_report_html(
       </thead>
       <tbody>{table_rows}</tbody>
     </table>
-  </section>
+  </details>
 </main>
 <script>
 const chartData = {chart_json};
@@ -693,6 +703,13 @@ document.getElementById('fitCurveToggle').addEventListener('change', (event) => 
   showFitCurve = event.target.checked;
   updateReturnDistribution();
 }});
+
+document.getElementById('hideNoTradesToggle').addEventListener('change', (event) => {{
+  const hideNoTrades = event.target.checked;
+  document.querySelectorAll('.no-trade-row').forEach((row) => {{
+    row.hidden = hideNoTrades;
+  }});
+}});
 </script>
 </body>
 </html>"""
@@ -791,6 +808,47 @@ h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 500
   font-size: 13px;
 }
 .toggle input { accent-color: var(--accent); }
+.trade-log-panel {
+  padding-top: 10px;
+}
+.section-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 15px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.section-summary::-webkit-details-marker { display: none; }
+.section-summary::before {
+  content: "▾";
+  color: var(--accent);
+  font-size: 13px;
+  margin-right: 8px;
+}
+.trade-log-panel:not([open]) .section-summary::before {
+  content: "▸";
+}
+.section-summary > span:first-child {
+  display: inline-flex;
+  align-items: center;
+}
+.summary-meta {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.table-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0 10px;
+}
 .empty { padding: 40px; text-align: center; color: var(--muted); }
 table {
   width: 100%;
