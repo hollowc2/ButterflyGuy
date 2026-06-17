@@ -11,6 +11,30 @@
   },
   "timepicker": {},
   "timezone": "browser",
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Equity Curve Symbols",
+        "multi": true,
+        "name": "equity_symbols",
+        "options": [
+          { "selected": false, "text": "SPX", "value": "SPX" },
+          { "selected": false, "text": "NDX", "value": "NDX" },
+          { "selected": false, "text": "XSP", "value": "XSP" }
+        ],
+        "query": "SPX,NDX,XSP",
+        "type": "custom"
+      }
+    ]
+  },
   "panels": [
     {
       "id": 30,
@@ -1448,21 +1472,21 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"SPX\" FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX' AND $__timeFilter(exit_time) ORDER BY exit_time",
+          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"SPX\" FROM butterfly_trades WHERE status='CLOSED' AND underlying='SPX' AND underlying IN (${equity_symbols:singlequote}) AND $__timeFilter(exit_time) ORDER BY exit_time",
           "format": "time_series",
           "refId": "A"
         },
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"NDX\" FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX' AND $__timeFilter(exit_time) ORDER BY exit_time",
+          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"NDX\" FROM butterfly_trades WHERE status='CLOSED' AND underlying='NDX' AND underlying IN (${equity_symbols:singlequote}) AND $__timeFilter(exit_time) ORDER BY exit_time",
           "format": "time_series",
           "refId": "B"
         },
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"XSP\" FROM butterfly_trades WHERE status='CLOSED' AND underlying='XSP' AND $__timeFilter(exit_time) ORDER BY exit_time",
+          "rawSql": "SELECT exit_time AS time, SUM(pnl) OVER (ORDER BY exit_time) AS \"XSP\" FROM butterfly_trades WHERE status='CLOSED' AND underlying='XSP' AND underlying IN (${equity_symbols:singlequote}) AND $__timeFilter(exit_time) ORDER BY exit_time",
           "format": "time_series",
           "refId": "C"
         }
