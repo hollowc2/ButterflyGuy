@@ -17,6 +17,8 @@ from butterfly_guy.core.metrics import (
 )
 from butterfly_guy.core.time_utils import (
     EASTERN,
+    MARKET_CLOSE,
+    MARKET_OPEN,
     get_0dte_expiration,
     is_market_open,
     now_eastern,
@@ -47,6 +49,30 @@ from butterfly_guy.strategy.exit_mark_parity import (
 )
 
 log = get_logger(__name__)
+
+
+def final_regular_session_close_from_candles(
+    candles: list[dict],
+    session_date: dt.date,
+) -> tuple[dt.datetime, float] | None:
+    """Return the latest Schwab 1-minute close in the regular session."""
+    closes: list[tuple[dt.datetime, float]] = []
+    for candle in candles:
+        ts_ms = candle.get("datetime")
+        close = candle.get("close")
+        if ts_ms is None or close is None:
+            continue
+        ts = dt.datetime.fromtimestamp(ts_ms / 1000, tz=dt.timezone.utc).astimezone(EASTERN)
+        if ts.date() != session_date:
+            continue
+        if MARKET_OPEN <= ts.time() <= MARKET_CLOSE:
+            closes.append((ts, float(close)))
+
+    if not closes:
+        return None
+
+    closes.sort(key=lambda item: item[0])
+    return closes[-1]
 
 
 class PositionService:
@@ -337,18 +363,20 @@ class PositionService:
         # Use the underlying index close to compute the actual cash-settlement value.
         log.info("market_closed_cash_settle", trade_id=trade.trade_id)
         settlement_value = 0.0
+        settlement_spot: float | None = None
+        settlement_source = "unknown"
+        settlement_ts: dt.datetime | None = None
         peak = max(self._last_persisted_peak, trade.peak_value or 0.0)
         try:
-            spot_symbol = SCHWAB_SPOT_SYMBOLS.get(
+            settlement_spot, settlement_source, settlement_ts = await self._settlement_spot_price(
                 self.config.strategy.underlying,
-                f"${self.config.strategy.underlying}",
+                trade.trade_date,
             )
-            spot_price = await self.schwab.get_spot_price(spot_symbol)
-            if spot_price is None:
-                raise ValueError(f"missing_spot_price_for_{self.config.strategy.underlying}")
-            settlement_value = fly_settlement_value(candidate, spot_price)
+            settlement_value = fly_settlement_value(candidate, settlement_spot)
         except Exception as e:
             log.error("eod_settlement_valuation_failed", error=str(e))
+            settlement_source = "option_chain_mark_fallback"
+            settlement_ts = None
             try:
                 expiration = get_0dte_expiration()
                 chain_data = await self.schwab.get_option_chain(
@@ -358,6 +386,7 @@ class PositionService:
                     ),
                     expiration,
                 )
+                settlement_spot = _chain_spot_price(chain_data)
                 quotes = self._extract_quotes(chain_data, expiration, candidate)
                 pos_state = self.position_manager.update_position_value(candidate, quotes)
                 settlement_value = pos_state.current_value
@@ -377,6 +406,9 @@ class PositionService:
                 "exit_ladder_steps": [],
                 "exit_signal_reason": "cash_settled",
                 "exit_mark_at_signal": settlement_value,
+                "settlement_source": settlement_source,
+                "settlement_spot": settlement_spot,
+                "settlement_spot_time": settlement_ts.isoformat() if settlement_ts else None,
             },
         )
         await self._record_exit_metrics(pnl, trade)
@@ -403,6 +435,35 @@ class PositionService:
             settlement_value=settlement_value,
             pnl=pnl,
         )
+
+    async def _settlement_spot_price(
+        self,
+        underlying: str,
+        session_date: dt.date,
+    ) -> tuple[float, str, dt.datetime | None]:
+        """Use Schwab's final regular-session 1-minute close for cash settlement."""
+        spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+        candles = await self.schwab.get_intraday_bars(spot_symbol, days_back=1)
+        final_close = final_regular_session_close_from_candles(candles, session_date)
+        if final_close is not None:
+            close_ts, close_price = final_close
+            log.info(
+                "cash_settlement_final_1m_close",
+                underlying=underlying,
+                spot=close_price,
+                bar_time=close_ts.isoformat(),
+            )
+            return close_price, "schwab_final_regular_session_1m_close", close_ts
+
+        spot_price = await self.schwab.get_spot_price(spot_symbol)
+        if spot_price is None:
+            raise ValueError(f"missing_spot_price_for_{underlying}")
+        log.warning(
+            "cash_settlement_spot_quote_fallback",
+            underlying=underlying,
+            spot=spot_price,
+        )
+        return spot_price, "schwab_spot_quote_fallback", None
 
     async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:
         """Record trade exit metrics and update risk engine."""

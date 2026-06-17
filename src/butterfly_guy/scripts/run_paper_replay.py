@@ -13,11 +13,13 @@ Usage:
     uv run python -m butterfly_guy.scripts.run_paper_replay
 """
 
+# Console report strings in this standalone diagnostic script intentionally exceed 100 columns.
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import math
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -35,8 +37,8 @@ from butterfly_guy.core.config import StrategySettings, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
-    ButterflyBuilder,
     VIX_SIGMA_BY_WIDTH,
+    ButterflyBuilder,
     vix_expected_move,
     vix_target_center,
 )
@@ -71,7 +73,7 @@ RETRY_INTERVAL_SECONDS = 20      # mirrors ExecutionSettings.retry_interval_seco
 MORNING_DD = 0.60        # 0–120 min after open
 LATE_MORNING_DD = 0.60   # 120–240 min after open
 AFTERNOON_DD = 0.40      # 240+ min after open
-EXIT_BEFORE_CLOSE_MINUTES = 5
+EXIT_BEFORE_CLOSE_MINUTES = 0
 MAX_LOSS_FROM_COST = 0.50   # exit if position loses 50% of cost (no prior profit required)
 
 # Print a monitoring update every N snapshots during position hold (~30s each)
@@ -572,8 +574,8 @@ def monitor_position(
         regime_changed = regime != prev_regime
         at_print_interval = snap_counter % MONITOR_PRINT_EVERY == 0
 
-        # End-of-day exit
-        if mins_close <= EXIT_BEFORE_CLOSE_MINUTES:
+        # Optional pre-close exit; disabled by default for cash-settled indexes.
+        if EXIT_BEFORE_CLOSE_MINUTES > 0 and mins_close <= EXIT_BEFORE_CLOSE_MINUTES:
             steps.append(step)
             _print_monitor_step(step, trigger="EOD EXIT")
             return MonitorResult(
@@ -734,7 +736,7 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
     gap_sign = "+" if gap_pts >= 0 else ""
     dir_reason = "above prev close → bullish bias → CALL fly" if direction == "CALL" \
         else "below prev close → bearish bias → PUT fly"
-    print(f"\n  DIRECTION")
+    print("\n  DIRECTION")
     print(f"    Prev close : SPX {prev_close:.2f}")
     print(f"    Open spot  : SPX {spot:.2f}  ({gap_sign}{gap_pts:.2f}pts, {gap_sign}{gap_pct:.2f}%)")
     print(f"    Decision   : {direction}  [{dir_reason}]")
@@ -746,7 +748,7 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
         em = decision.expected_move
         sf = decision.sigma_fraction
         tc = decision.target_center
-        print(f"\n  VIX & CENTER TARGETING")
+        print("\n  VIX & CENTER TARGETING")
         print(f"    VIX        : {vix:.2f}")
         print(f"    Exp. move  : ±{em:.1f}pts  (SPX × VIX/100 ÷ √252)")
         print(f"    Sigma frac : {sf:.2f}  (from VIX_SIGMA_BY_WIDTH[{WING_WIDTH}])")
@@ -760,8 +762,6 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
         best = decision.candidate
         tc = decision.target_center
         tol = 15.0
-        in_window = [c for c in all_c if abs(c.center_strike - tc) <= tol]
-        out_window = [c for c in all_c if abs(c.center_strike - tc) > tol]
 
         print(f"\n  CANDIDATE POOL  ({len(all_c)} total, {WING_WIDTH}-wide {direction}, RR≥{RR_MIN})")
         print(f"    {'Strike':>8}  {'Cost':>5}  {'RR':>6}  {'Dist':>5}  {'|Δ ctr|':>7}  Note")
@@ -803,8 +803,8 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
     replay.seek_to_time(decision.entry_ts)
 
     print(f"\n  ENTRY LADDER  (starting {_et(decision.entry_ts)} ET)")
-    print(f"    Logic: offer at mark+0, mark+0.05, mark+0.10, mark+0.15")
-    print(f"           fill when limit ≥ ask; ratchets mark floor up if spread moves")
+    print("    Logic: offer at mark+0, mark+0.05, mark+0.10, mark+0.15")
+    print("           fill when limit ≥ ask; ratchets mark floor up if spread moves")
     entry_fill, entry_steps = replay_entry_ladder(replay, decision.candidate)
 
     for s in entry_steps:
@@ -824,7 +824,10 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
     print(f"    Regimes: morning DD≥{MORNING_DD*100:.0f}%  |"
           f"  late_morning DD≥{LATE_MORNING_DD*100:.0f}%  |"
           f"  afternoon DD≥{AFTERNOON_DD*100:.0f}%")
-    print(f"    EOD exit {EXIT_BEFORE_CLOSE_MINUTES}min before 16:00 ET")
+    if EXIT_BEFORE_CLOSE_MINUTES > 0:
+        print(f"    EOD exit {EXIT_BEFORE_CLOSE_MINUTES}min before 16:00 ET")
+    else:
+        print("    EOD pre-close exit disabled; monitor runs to 16:00 ET")
     print(f"    (printing every ~{MONITOR_PRINT_EVERY*30//60}min; regime changes always shown)")
     print()
 
@@ -837,8 +840,8 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
 
     # ── EXIT LADDER ──────────────────────────────────────────────────────── #
     print(f"\n  EXIT LADDER  (starting {trigger_et} ET)")
-    print(f"    Logic: bid at mark+0.15, mark+0.10, mark+0.05, mark+0")
-    print(f"           fill when limit ≤ bid; ratchets mark ceiling down if spread moves")
+    print("    Logic: bid at mark+0.15, mark+0.10, mark+0.05, mark+0")
+    print("           fill when limit ≤ bid; ratchets mark ceiling down if spread moves")
     exit_fill, exit_steps = replay_exit_ladder(replay, decision.candidate, entry_fill["fill_price"])
 
     for s in exit_steps:
@@ -855,11 +858,11 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
     pnl_contract = pnl * 100
 
     print(f"\n  EXIT FILLED:  ${exit_fill['fill_price']:.2f}  (step {exit_fill['step']}, {elapsed_exit}){exit_et}")
-    print(f"\n  ─── RESULT ─────────────────────────────────────────────────────────────")
+    print("\n  ─── RESULT ─────────────────────────────────────────────────────────────")
     print(f"  Entry  : ${entry_fill['fill_price']:.2f}   Exit: ${exit_fill['fill_price']:.2f}")
     print(f"  PnL    : ${pnl:+.2f} / spread   ${pnl_contract:+.2f} / contract")
     print(f"  Reason : {monitor.exit_reason}")
-    print(f"  ────────────────────────────────────────────────────────────────────────")
+    print("  ────────────────────────────────────────────────────────────────────────")
 
 
 # ─── Main ────────────────────────────────────────────────────────────────── #
