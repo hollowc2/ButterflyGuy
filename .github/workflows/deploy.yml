@@ -10,15 +10,27 @@ env:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Deploy
-        working-directory: /opt/butterflyguy
-        run: |
-          git pull --ff-only origin main
-          docker compose -f infra/docker-compose.yml --profile ndx --profile xsp up --build -d app_spx app_ndx app_xsp
-          docker image prune -f
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_TAILSCALE_IP }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            cd /opt/butterflyguy
+            git pull --ff-only origin main
+            docker compose -f infra/docker-compose.yml --profile ndx --profile xsp up --build -d app_spx app_ndx app_xsp
+            docker image prune -f
