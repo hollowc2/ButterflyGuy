@@ -136,6 +136,8 @@ def test_render_report_html_contains_sections() -> None:
     assert "Paper Trading" in html_doc
     assert "drawdownChart" in html_doc
     assert "returnDistributionChart" in html_doc
+    assert "Standard exit" in html_doc
+    assert "Drawdown exit" in html_doc
     assert 'data-bucket="100"' in html_doc
     assert 'data-bucket="250"' in html_doc
     assert "Fit curve" in html_doc

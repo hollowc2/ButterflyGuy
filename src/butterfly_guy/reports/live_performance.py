@@ -355,7 +355,13 @@ def render_report_html(
   </section>
 
   <h2>Equity Curve</h2>
-  <section class="panel chart-panel"><canvas id="equityChart" height="120"></canvas></section>
+  <section class="panel chart-panel">
+    <canvas id="equityChart" height="120"></canvas>
+    <div class="chart-legend" aria-label="Equity curve marker legend">
+      <span class="legend-item"><span class="legend-dot legend-dot-standard"></span> Standard exit</span>
+      <span class="legend-item"><span class="legend-dot legend-dot-drawdown"></span> Drawdown exit</span>
+    </div>
+  </section>
 
   <h2>Portfolio Drawdown</h2>
   <section class="panel chart-panel"><canvas id="drawdownChart" height="90"></canvas></section>
@@ -777,6 +783,34 @@ h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 500
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.legend-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+.legend-dot-standard {
+  width: 8px;
+  height: 8px;
+  background: #c8922a;
+}
+.legend-dot-drawdown {
+  width: 12px;
+  height: 12px;
+  background: #cc5555;
 }
 .segmented {
   display: inline-flex;
