@@ -94,6 +94,17 @@ jobs:
             echo "has_issues=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Post review findings
+        if: always() && steps.combined.outputs.has_issues == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ISSUES=$(cat /tmp/all_issues.txt)
+          echo "**Code Review Results**" > /tmp/pr_comment.txt
+          echo "" >> /tmp/pr_comment.txt
+          cat /tmp/all_issues.txt >> /tmp/pr_comment.txt
+          gh pr review ${{ github.event.pull_request.number }} --comment --body "$(cat /tmp/pr_comment.txt)"
+
       - name: Codex fixes issues
         if: steps.guard.outputs.skip_fix == 'false' && steps.combined.outputs.has_issues == 'true'
         run: |
