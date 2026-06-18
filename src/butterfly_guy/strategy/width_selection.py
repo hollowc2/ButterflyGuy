@@ -20,5 +20,6 @@ def select_cross_width_candidate(
     if not per_width_bests:
         return None
     if prefer_first_width:
-        return per_width_bests[0]
+        # XSP optimization: prefer wider widths for better liquidity
+        return per_width_bests[1]
     return ButterflySelector().select_best(per_width_bests)
