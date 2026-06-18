@@ -34,12 +34,20 @@ jobs:
             exit 0
           fi
           cat /tmp/pr_diff.txt | codex -a never exec --skip-git-repo-check -o /tmp/review_result.txt \
-            "Review this PR diff. Check for bugs, logic errors, missing edge cases, security issues, and code quality problems.
-             Output your feedback in this format:
-             ISSUES FOUND:
-             - (list each issue)
+            "Review this PR diff line by line. Be strict and thorough. Check for ALL of the following:
+             1. YAML/JSON config files — parse them mentally. Are the keys at the wrong indent level? Would Python's yaml.safe_load() throw an error?
+             2. List index bugs — does the code access index [1] or [N] on a list that might have only 1 element?
+             3. Python syntax — unused imports, undefined variables, type mismatches in function calls
+             4. Logic errors — flipped comparisons (>= vs <=), wrong variable used, off-by-one
+             5. Config value sanity — does a changed value make sense in context (e.g. min_buying_power 5000 vs 200)?
 
-             Or if the code looks good with no issues, output exactly: NO ISSUES"
+             If you find ANY issues, output:
+             ISSUES FOUND:
+             - file:line — description of the actual bug and why it's wrong
+
+             If the code truly has zero bugs or issues, output exactly: NO ISSUES
+
+             Do NOT say NO ISSUES if you find ANY of the bug types listed above. Be harsh — this is production trading code."
 
       - name: Codex fixes issues
         if: steps.guard.outputs.skip_fix == 'false'
