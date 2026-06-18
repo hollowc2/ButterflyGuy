@@ -1,5 +1,5 @@
-# Daily report card — 4:30 PM Eastern, weekdays.
+# Daily report card — 6:00 PM Eastern / 22:00 UTC, weekdays.
+# Vixie cron ignores CRON_TZ in user crontabs; use UTC slot.
 # Install:
 #   crontab -l 2>/dev/null | grep -v send_daily_report_card | cat - infra/cron/daily_report_card.cron | crontab -
-CRON_TZ=America/New_York
-30 16 * * 1-5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_daily_report_card.py >> /opt/butterflyguy/daily_report_card.log 2>&1
+0 22 * * 1-5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_daily_report_card.py >> /opt/butterflyguy/daily_report_card.log 2>&1

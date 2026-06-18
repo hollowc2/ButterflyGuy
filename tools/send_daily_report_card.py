@@ -1,8 +1,7 @@
 """Send daily margin-account report card to Discord #daily-report-card.
 
-Cron: weekdays 4:30 PM ET
-  CRON_TZ=America/New_York
-  30 16 * * 1-5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_daily_report_card.py >> /opt/butterflyguy/daily_report_card.log 2>&1
+Cron: weekdays 6:00 PM Eastern / 22:00 UTC
+  0 22 * * 1-5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_daily_report_card.py >> /opt/butterflyguy/daily_report_card.log 2>&1
 """
 
 from __future__ import annotations

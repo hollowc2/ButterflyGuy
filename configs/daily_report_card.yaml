@@ -1,6 +1,6 @@
 # Daily Report Card — post-market Discord summary for margin account.
 # Webhook: DISCORD_DAILY_REPORT_CARD_WEBHOOK in .env
-# Cron: infra/cron/daily_report_card.cron (weekdays 4:30 PM ET)
+# Cron: infra/cron/daily_report_card.cron (weekdays 6:00 PM Eastern / 22:00 UTC)
 
 thresholds:
   large_loss_day_pct: 2.0       # flag if day down more than this % of start balance
