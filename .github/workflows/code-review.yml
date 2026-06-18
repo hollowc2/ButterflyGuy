@@ -19,47 +19,88 @@ jobs:
           LAST_AUTHOR=$(git log -1 --format='%an')
           if [ "$LAST_AUTHOR" = "AI Code Reviewer" ]; then
             echo "skip_fix=true" >> "$GITHUB_OUTPUT"
-            echo "Last commit is from AI — will re-review and merge instead"
           else
             echo "skip_fix=false" >> "$GITHUB_OUTPUT"
-            echo "Fresh PR — will review and fix"
           fi
 
-      - name: Codex reviews the diff
+      - name: Fetch main for diff
+        run: git fetch origin main
+
+      - name: Automated syntax checks
+        id: syntax
         run: |
-          git fetch origin main
+          ISSUES=""
+          # Check all changed YAML files
+          for f in $(git diff origin/main...HEAD --name-only -- '*.yaml' '*.yml'); do
+            if ! python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>/dev/null; then
+              ISSUES="$ISSUES\n- $f — YAML syntax error (invalid indentation or structure)"
+            fi
+          done
+          # Check all changed Python files
+          for f in $(git diff origin/main...HEAD --name-only -- '*.py'); do
+            if ! python3 -c "import ast; ast.parse(open('$f').read())" 2>/dev/null; then
+              ISSUES="$ISSUES\n- $f — Python syntax error"
+            fi
+          done
+          if [ -n "$ISSUES" ]; then
+            echo -e "$ISSUES" > /tmp/auto_issues.txt
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            cat /tmp/auto_issues.txt
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "All YAML and Python files parse cleanly"
+          fi
+
+      - name: Codex reviews logic
+        id: review
+        run: |
           git diff origin/main...HEAD > /tmp/pr_diff.txt
           if [ ! -s /tmp/pr_diff.txt ]; then
             echo "NO ISSUES" > /tmp/review_result.txt
             exit 0
           fi
           cat /tmp/pr_diff.txt | codex -a never exec --skip-git-repo-check -o /tmp/review_result.txt \
-            "Review this PR diff line by line. Be strict and thorough. Check for ALL of the following:
-             1. YAML/JSON config files — parse them mentally. Are the keys at the wrong indent level? Would Python's yaml.safe_load() throw an error?
-             2. List index bugs — does the code access index [1] or [N] on a list that might have only 1 element?
-             3. Python syntax — unused imports, undefined variables, type mismatches in function calls
-             4. Logic errors — flipped comparisons (>= vs <=), wrong variable used, off-by-one
-             5. Config value sanity — does a changed value make sense in context (e.g. min_buying_power 5000 vs 200)?
+            "Review this PR diff. Be critical — this is production trading code.
 
-             If you find ANY issues, output:
+             Check EACH of these specific patterns in EVERY file:
+             1. LIST INDEXING — does any line access list[N] where N > 0 without checking the list length? Would it crash if list has only 1 element?
+             2. YAML/JSON STRUCTURE — are there indentation mismatches or keys at wrong depth?
+             3. CONFIG VALUES — do the numbers make sense? (e.g. min_buying_power jumping from 200 to 5000)
+             4. LOGIC — any flipped comparisons, wrong variables, off-by-one errors?
+
+             For each bug found, output:
              ISSUES FOUND:
-             - file:line — description of the actual bug and why it's wrong
+             - path:line — description of the bug and why it's wrong
 
-             If the code truly has zero bugs or issues, output exactly: NO ISSUES
+             If ALL of the above checks pass with zero issues, output exactly: NO ISSUES
 
-             Do NOT say NO ISSUES if you find ANY of the bug types listed above. Be harsh — this is production trading code."
+             IMPORTANT: Do NOT say NO ISSUES if you find ANY actual bug or error, even a small one."
+
+      - name: Combine results
+        id: combined
+        run: |
+          echo "" > /tmp/all_issues.txt
+          if [ "${{ steps.syntax.outputs.found }}" = "true" ]; then
+            echo "=== SYNTAX ISSUES ===" >> /tmp/all_issues.txt
+            cat /tmp/auto_issues.txt >> /tmp/all_issues.txt
+            echo "" >> /tmp/all_issues.txt
+            cat /tmp/review_result.txt >> /tmp/all_issues.txt
+            echo "has_issues=true" >> "$GITHUB_OUTPUT"
+          elif grep -q "ISSUES FOUND" /tmp/review_result.txt; then
+            cat /tmp/review_result.txt > /tmp/all_issues.txt
+            echo "has_issues=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "NO ISSUES" > /tmp/all_issues.txt
+            echo "has_issues=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Codex fixes issues
-        if: steps.guard.outputs.skip_fix == 'false'
+        if: steps.guard.outputs.skip_fix == 'false' && steps.combined.outputs.has_issues == 'true'
         run: |
-          REVIEW=$(cat /tmp/review_result.txt)
-          if echo "$REVIEW" | grep -q "NO ISSUES"; then
-            echo "Code review found no issues — skipping fix phase"
-            exit 0
-          fi
-          echo "$REVIEW" | codex -a never exec --skip-git-repo-check \
+          ISSUES=$(cat /tmp/all_issues.txt)
+          echo "$ISSUES" | codex -a never exec --skip-git-repo-check \
             "The code review found these issues on the current branch:
-             $REVIEW
+             $ISSUES
              Fix all of them directly in the codebase. Make minimal, focused changes.
              Do NOT add new features. Only fix the issues listed above."
 
@@ -75,20 +116,21 @@ jobs:
           fi
           git commit -m "fix: auto-fix issues found in code review"
           git push origin HEAD:${{ github.head_ref }}
-          echo "Fixes pushed — re-review will trigger automatically"
 
       - name: Auto-merge when clean
-        if: steps.guard.outputs.skip_fix == 'true'
+        if: steps.guard.outputs.skip_fix == 'true' && steps.combined.outputs.has_issues == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          REVIEW=$(cat /tmp/review_result.txt)
-          if echo "$REVIEW" | grep -q "NO ISSUES"; then
-            echo "✅ Review clean — auto-merging"
-            gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch
-          else
-            echo "⚠️  Issues remain after auto-fix:"
-            echo "$REVIEW"
-            gh pr review ${{ github.event.pull_request.number }} --comment --body \
-              "**Re-review:** issues still found after auto-fix — needs human review."
-          fi
+          echo "✅ All checks passed — auto-merging"
+          gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch
+
+      - name: Report remaining issues
+        if: steps.guard.outputs.skip_fix == 'true' && steps.combined.outputs.has_issues == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "⚠️  Issues remain after auto-fix:"
+          cat /tmp/all_issues.txt
+          gh pr review ${{ github.event.pull_request.number }} --comment --body \
+            "**Issues still found after auto-fix — needs human review.**"
