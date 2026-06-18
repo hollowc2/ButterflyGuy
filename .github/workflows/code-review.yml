@@ -1,27 +1,86 @@
-name: AI Code Review
+name: AI Code Review & Fix
 
 on:
   pull_request:
     types: [opened, synchronize]
 
 jobs:
-  review:
+  review-and-fix:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Get PR diff
-        run: git diff origin/main...HEAD > /tmp/pr_diff.txt
+      - name: Prevent infinite loop
+        id: guard
+        run: |
+          LAST_AUTHOR=$(git log -1 --format='%an')
+          if [ "$LAST_AUTHOR" = "AI Code Reviewer" ]; then
+            echo "skip_fix=true" >> "$GITHUB_OUTPUT"
+            echo "Last commit is from AI — will re-review and merge instead"
+          else
+            echo "skip_fix=false" >> "$GITHUB_OUTPUT"
+            echo "Fresh PR — will review and fix"
+          fi
 
       - name: Codex reviews the diff
         run: |
-          cat /tmp/pr_diff.txt | codex -a never exec --skip-git-repo-check -o /tmp/codex_review.txt \
-            "Review this PR diff for bugs, logic errors, missing edge cases, and security issues. Be concise and actionable."
+          git fetch origin main
+          git diff origin/main...HEAD > /tmp/pr_diff.txt
+          if [ ! -s /tmp/pr_diff.txt ]; then
+            echo "NO ISSUES" > /tmp/review_result.txt
+            exit 0
+          fi
+          cat /tmp/pr_diff.txt | codex -a never exec --skip-git-repo-check -o /tmp/review_result.txt \
+            "Review this PR diff. Check for bugs, logic errors, missing edge cases, security issues, and code quality problems.
+             Output your feedback in this format:
+             ISSUES FOUND:
+             - (list each issue)
 
-      - name: Post review comment
+             Or if the code looks good with no issues, output exactly: NO ISSUES"
+
+      - name: Codex fixes issues
+        if: steps.guard.outputs.skip_fix == 'false'
+        run: |
+          REVIEW=$(cat /tmp/review_result.txt)
+          if echo "$REVIEW" | grep -q "NO ISSUES"; then
+            echo "Code review found no issues — skipping fix phase"
+            exit 0
+          fi
+          echo "$REVIEW" | codex -a never exec --skip-git-repo-check \
+            "The code review found these issues on the current branch:
+             $REVIEW
+             Fix all of them directly in the codebase. Make minimal, focused changes.
+             Do NOT add new features. Only fix the issues listed above."
+
+      - name: Commit and push fixes
+        if: steps.guard.outputs.skip_fix == 'false'
+        run: |
+          git config user.name "AI Code Reviewer"
+          git config user.email "ai-reviewer@butterflyguy.actions"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix: auto-fix issues found in code review"
+          git push origin HEAD:${{ github.head_ref }}
+          echo "Fixes pushed — re-review will trigger automatically"
+
+      - name: Auto-merge when clean
+        if: steps.guard.outputs.skip_fix == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr review ${{ github.event.pull_request.number }} --comment --body "$(cat /tmp/codex_review.txt)"
+          REVIEW=$(cat /tmp/review_result.txt)
+          if echo "$REVIEW" | grep -q "NO ISSUES"; then
+            echo "✅ Review clean — auto-merging"
+            gh pr merge ${{ github.event.pull_request.number }} --squash --delete-branch
+          else
+            echo "⚠️  Issues remain after auto-fix:"
+            echo "$REVIEW"
+            gh pr review ${{ github.event.pull_request.number }} --comment --body \
+              "**Re-review:** issues still found after auto-fix — needs human review."
+          fi
