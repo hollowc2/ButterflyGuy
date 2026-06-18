@@ -1,0 +1,27 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        run: git diff origin/main...HEAD > /tmp/pr_diff.txt
+
+      - name: Codex reviews the diff
+        run: |
+          cat /tmp/pr_diff.txt | codex -a never exec --skip-git-repo-check -o /tmp/codex_review.txt \
+            "Review this PR diff for bugs, logic errors, missing edge cases, and security issues. Be concise and actionable."
+
+      - name: Post review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr review ${{ github.event.pull_request.number }} --comment --body "$(cat /tmp/codex_review.txt)"
