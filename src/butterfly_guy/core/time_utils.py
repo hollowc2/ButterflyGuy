@@ -26,6 +26,63 @@ HOLIDAYS_2026 = {
     dt.date(2026, 12, 25), # Christmas
 }
 
+def _observed_date(holiday: dt.date) -> dt.date:
+    if holiday.weekday() == 5:
+        return holiday - dt.timedelta(days=1)
+    if holiday.weekday() == 6:
+        return holiday + dt.timedelta(days=1)
+    return holiday
+
+
+def _nth_weekday(year: int, month: int, weekday: int, occurrence: int) -> dt.date:
+    first = dt.date(year, month, 1)
+    offset = (weekday - first.weekday()) % 7
+    return first + dt.timedelta(days=offset + (occurrence - 1) * 7)
+
+
+def _last_weekday(year: int, month: int, weekday: int) -> dt.date:
+    if month == 12:
+        next_month = dt.date(year + 1, 1, 1)
+    else:
+        next_month = dt.date(year, month + 1, 1)
+    last = next_month - dt.timedelta(days=1)
+    return last - dt.timedelta(days=(last.weekday() - weekday) % 7)
+
+
+def _easter_sunday(year: int) -> dt.date:
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4; e = b % 4
+    f = (b + 8) // 25; g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4; k = c % 4
+    line = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * line) // 451
+    month = (h + line - 7 * m + 114) // 31
+    day = (h + line - 7 * m + 114) % 31 + 1
+    return dt.date(year, month, day)
+
+
+def get_us_market_holidays(year: int) -> set[dt.date]:
+    holidays = {
+        _observed_date(dt.date(year, 1, 1)),
+        _observed_date(dt.date(year, 7, 4)),
+        _observed_date(dt.date(year, 12, 25)),
+        _nth_weekday(year, 1, 0, 3),
+        _nth_weekday(year, 2, 0, 3),
+        _last_weekday(year, 5, 0),
+        _nth_weekday(year, 9, 0, 1),
+        _nth_weekday(year, 11, 3, 4),
+        _easter_sunday(year) - dt.timedelta(days=2),
+    }
+if year >= 2022:
+    holidays.add(_observed_date(dt.date(year, 6, 19)))
+    next_nyny = _observed_date(dt.date(year + 1, 1, 1))
+if next_nyny.year == year:
+        holidays.add(next_nyny)
+    return holidays
+
 
 def now_utc() -> dt.datetime:
     """Current time in UTC."""
@@ -64,7 +121,7 @@ def is_trading_day(d: dt.date | None = None) -> bool:
     d = d or now_eastern().date()
     if d.weekday() >= 5:
         return False
-    if d in HOLIDAYS_2026:
+    if d in get_us_market_holidays(d.year):
         return False
     return True
 
