@@ -1,5 +1,7 @@
 # Butterfly Guy
 
+![Butterfly Guy Logo](data/images/butterflyguy_logo2.png)
+
 Butterfly Guy is an automated 0-DTE butterfly options trading system and research platform for Schwab + TimescaleDB.
 
 SPX is the primary product and the main runtime path.
