@@ -59,7 +59,7 @@ On startup: runs DB migrations, classifies market regime (BULL/BEAR/CHOP), recov
 | `risk/` | Daily trade count, daily loss limit, halt logic |
 | `services/` | `TradeService` (entry orchestration), `PositionService` (monitor loop), Discord notifier |
 | `quant_engine/` | Black-Scholes pricer, IV skew model, `SyntheticChainGenerator` |
-| `backtest/` | `SimulationEngine`, `ParameterSweeper`, data loaders (DB, yfinance, CSV) |
+| `backtest/` | `SimulationEngine`, shared market-data models, and DB/CSV/Schwab loaders |
 | `scripts/` | All runnable entry points |
 
 ### Strategy Pipeline (Entry)

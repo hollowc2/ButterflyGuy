@@ -7,11 +7,7 @@ import asyncio
 import datetime as dt
 import json
 import subprocess
-import sys
-from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 import asyncpg
 

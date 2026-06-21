@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import sys
 from pathlib import Path
-
-root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(root))
 
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging

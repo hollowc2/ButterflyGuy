@@ -159,7 +159,8 @@ uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep \
   --profit-strategy peakvaluetrailer,profitprotector
 ```
 
-Sweep mode runs the `ParameterSweeper`, which tries every combination of wing widths, drawdown thresholds, and other strategy parameters, then ranks results by Sharpe ratio so you can compare configurations objectively.
+Sweep mode tries every requested combination of wing widths, drawdown thresholds, and
+other strategy parameters, then ranks results by Sharpe ratio.
 
 ### Smoke Test in Docker
 

@@ -20,14 +20,10 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import sys
 from collections import defaultdict
 from dataclasses import dataclass
-from pathlib import Path
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 import asyncpg
 import yfinance as yf

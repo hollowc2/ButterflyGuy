@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from butterfly_guy.core.config import AppConfig
 from butterfly_guy.data.schemas import ButterflyCandidate
-from butterfly_guy.strategy.entry_selection import EntrySelectionResult, select_entry_candidate
+from butterfly_guy.strategy.entry_selection import EntrySelectionResult
 
 RR_TARGET = 10.0
 
@@ -108,23 +107,3 @@ def build_entry_selection_parity(
         "live_pick_rr_distance": live_pick_distance,
         "db_pick_rr_distance": db_pick_distance,
     }
-
-
-def select_entry_from_db_quotes(
-    *,
-    quotes: list,
-    spot: float,
-    direction: str,
-    vix: float | None,
-    config: AppConfig,
-    asset: str,
-) -> EntrySelectionResult:
-    """Run the shared selector against DB snapshot quotes."""
-    return select_entry_candidate(
-        quotes=quotes,
-        spot=spot,
-        direction=direction,
-        vix=vix,
-        config=config,
-        asset=asset,
-    )

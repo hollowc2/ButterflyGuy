@@ -13,8 +13,6 @@ import datetime as dt
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from dotenv import dotenv_values
 
 from butterfly_guy.backtest._cache_utils import day_cache_path, save_day
@@ -91,7 +89,7 @@ async def main() -> None:
 
     await loader.close()
 
-    print(f"\n--- Summary ---")
+    print("\n--- Summary ---")
     print(f"  Saved:   {saved}")
     print(f"  Skipped: {skipped}")
     print(f"  Failed:  {failed}")

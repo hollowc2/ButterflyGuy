@@ -12,11 +12,7 @@ import argparse
 import asyncio
 import datetime as dt
 import json
-import sys
-from pathlib import Path
 from zoneinfo import ZoneInfo
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 import asyncpg
 
@@ -298,7 +294,7 @@ async def _compare_snapshots(
                 strikes=strikes,
             )
             _print_leg_table(
-                f"  snapshot",
+                "  snapshot",
                 snapshot_time=snap_ts,
                 lag_seconds=(at - snap_ts).total_seconds(),
                 by_strike=quotes,

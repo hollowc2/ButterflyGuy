@@ -26,6 +26,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 try:
     import yaml
@@ -49,25 +51,7 @@ _shutdown = False
 
 def _now_et() -> str:
     """Return current time as Eastern Time, handling DST correctly."""
-    from datetime import datetime, timezone, timedelta
-
-    now = datetime.now(timezone.utc)
-    year = now.year
-
-    # Compute second Sunday of March (DST start: 2am ET = 7am UTC)
-    march_1 = datetime(year, 3, 1, tzinfo=timezone.utc)
-    first_sun = march_1 + timedelta(days=(6 - march_1.weekday()))
-    dst_start = first_sun + timedelta(days=7)
-    dst_start = dst_start.replace(hour=7, minute=0, second=0, microsecond=0)
-
-    # Compute first Sunday of November (DST end: 2am ET -> 1am ET = 6am UTC)
-    nov_1 = datetime(year, 11, 1, tzinfo=timezone.utc)
-    dst_end = nov_1 + timedelta(days=(6 - nov_1.weekday()))
-    dst_end = dst_end.replace(hour=6, minute=0, second=0, microsecond=0)
-
-    offset = timedelta(hours=-4) if dst_start <= now < dst_end else timedelta(hours=-5)
-    et = now + offset
-    return et.strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def load_config(config_path: str | None) -> dict:
@@ -88,9 +72,17 @@ def load_config(config_path: str | None) -> dict:
 
     return {
         "urls": urls,
-        "discord_webhook": os.environ.get("DISCORD_WEBHOOK_URL", cfg.get("discord_webhook_url", "")),
-        "check_interval": int(os.environ.get("CHECK_INTERVAL", cfg.get("check_interval", DEFAULT_CHECK_INTERVAL))),
-        "failure_threshold": int(os.environ.get("FAILURE_THRESHOLD", cfg.get("failure_threshold", DEFAULT_FAILURE_THRESHOLD))),
+        "discord_webhook": os.environ.get(
+            "DISCORD_WEBHOOK_URL", cfg.get("discord_webhook_url", "")
+        ),
+        "check_interval": int(
+            os.environ.get("CHECK_INTERVAL", cfg.get("check_interval", DEFAULT_CHECK_INTERVAL))
+        ),
+        "failure_threshold": int(
+            os.environ.get(
+                "FAILURE_THRESHOLD", cfg.get("failure_threshold", DEFAULT_FAILURE_THRESHOLD)
+            )
+        ),
     }
 
 

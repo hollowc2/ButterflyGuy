@@ -29,12 +29,9 @@ import datetime as dt
 import html
 import itertools
 import math
-import sys
 from collections import defaultdict
 from pathlib import Path
 from zoneinfo import ZoneInfo
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 import asyncpg
 import yfinance as yf

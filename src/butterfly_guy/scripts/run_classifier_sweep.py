@@ -1,6 +1,6 @@
 """Sweep classifier thresholds to optimize regime-adaptive trading over 25 years.
 
-Per-regime SimulationParams are fixed to known-optimal values from run_regime_sweep.py:
+Per-regime SimulationParams are fixed to the historical regime-sweep winners:
   BULL:    PUT  gap_dir  rr_min=10  vix_max=20.0  (TODO: revisit — CALL may be more intuitive)
   BEAR:    auto gap_dir  rr_min=8   vix_max=20.0
   CHOP:    auto gap_dir  rr_min=10  vix_max=None
@@ -31,13 +31,10 @@ import itertools
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from butterfly_guy.backtest.csv_loader import CsvDataLoader
 from butterfly_guy.backtest.data_loader import DayData
 from butterfly_guy.backtest.metrics import profit_factor, sharpe, win_pct
 from butterfly_guy.backtest.simulation_engine import (
-    RegimeDispatch,
     SimulationEngine,
     SimulationParams,
 )
@@ -50,7 +47,7 @@ log = get_logger("run_classifier_sweep")
 SPX_PATH = Path("data/spx_1min.csv")
 VIX_PATH = Path("data/vix_1min.csv")
 
-# Fixed per-regime params — known-optimal from run_regime_sweep.py
+# Fixed per-regime params from the historical regime sweep.
 # TODO: revisit BULL direction (PUT vs CALL) before deploying live
 BULL_PARAMS = SimulationParams(
     wing_width=10, rr_min=10.0,

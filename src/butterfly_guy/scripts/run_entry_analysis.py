@@ -9,18 +9,11 @@ Usage:
     uv run python -m butterfly_guy.scripts.run_entry_analysis
 """
 
-from __future__ import annotations
-
-import asyncio
 import argparse
+import asyncio
 import datetime as dt
-import math
-import sys
 from collections import defaultdict
-from pathlib import Path
 from zoneinfo import ZoneInfo
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 import asyncpg
 import yfinance as yf
@@ -31,7 +24,6 @@ from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.data.schemas import OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
-    VIX_SIGMA_BY_WIDTH,
     vix_expected_move,
     vix_target_center,
 )
@@ -254,11 +246,11 @@ def scan_entry_window(
     cfg: dict,
 ) -> list[dict]:
     """Walk the 10:00-10:30 ET window and record every bar's entry signals."""
+    from butterfly_guy.core.config import StrategySettings
+    from butterfly_guy.strategy.bias_filter import BiasScoreFilter
     from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
     from butterfly_guy.strategy.butterfly_selector import ButterflySelector
     from butterfly_guy.strategy.direction_filter import DirectionFilter
-    from butterfly_guy.strategy.bias_filter import BiasScoreFilter
-    from butterfly_guy.core.config import StrategySettings
 
     ENTRY_START = dt.time(10, 0)
     ENTRY_END = dt.time(10, 30)
@@ -407,17 +399,17 @@ def print_entry_scan(records: list[dict], wing_widths: list[int], asset: str = "
             if v and g and v.center_strike != g.center_strike:
                 print(f"          vix-ctr  :{fmt_candidate(v, rec['gap_dir'])}")
             elif v:
-                print(f"          vix-ctr  : (same as gap-dir)")
+                print("          vix-ctr  : (same as gap-dir)")
             if b:
                 print(f"          bias-dir :{fmt_candidate(b)}")
             elif rec["bias_dir"] is None:
-                print(f"          bias-dir : NO SIGNAL (score between -1 and +1)")
+                print("          bias-dir : NO SIGNAL (score between -1 and +1)")
         print()
 
 
 def print_results_table(results_by_strat: dict, wing_widths: list[int]) -> None:
     print(f"\n{'─'*80}")
-    print(f"  SIMULATION RESULTS")
+    print("  SIMULATION RESULTS")
     print(f"{'─'*80}")
     hdr = f"  {'Strategy':<12}  {'W':>3}  {'Direction':>9}  {'Entry':>6}  {'Exit':>6}  {'Peak':>6}  {'PnL':>8}  {'Reason'}"
     print(hdr)
@@ -435,7 +427,6 @@ def print_results_table(results_by_strat: dict, wing_widths: list[int]) -> None:
                 exit_et = r.exit_time.astimezone(EASTERN) if r.exit_time else None
                 t_entry = entry_et.strftime("%H:%M") if entry_et else "--"
                 t_exit = exit_et.strftime("%H:%M") if exit_et else "--"
-                struct = f"{r.center_strike-w:.0f}/{r.center_strike:.0f}/{r.center_strike+w:.0f}"
                 print(
                     f"  {strat_label:<12}  {w:>3}  {r.direction:>9}  "
                     f"{t_entry:>6}@{r.entry_price:>.2f}  "
@@ -455,7 +446,7 @@ async def main() -> None:
     dates = resolve_dates(args)
 
     print(f"\n{'#'*72}")
-    print(f"  ENTRY ANALYSIS BACKTEST")
+    print("  ENTRY ANALYSIS BACKTEST")
     print(f"  Assets: {args.asset}")
     print(f"  Dates: {dates[0]} to {dates[-1]}  ({len(dates)} days)")
     print(f"  Width override: {args.width if args.width else '(per-asset defaults)'}")
@@ -524,7 +515,7 @@ async def main() -> None:
     # Grand summary across all days
     # ---------------------------------------------------------------------------
     print(f"\n\n{'#'*72}")
-    print(f"  AGGREGATE SUMMARY — ALL DAYS × ALL ASSETS × ALL STRATEGIES × ALL WIDTHS")
+    print("  AGGREGATE SUMMARY — ALL DAYS × ALL ASSETS × ALL STRATEGIES × ALL WIDTHS")
     print(f"{'#'*72}")
 
     from collections import defaultdict as ddict
@@ -565,7 +556,7 @@ async def main() -> None:
                 )
 
     # Exit reason breakdown
-    print(f"\n  Exit reasons across all trades:")
+    print("\n  Exit reasons across all trades:")
     from collections import Counter
     reason_counts: Counter = Counter()
     for _, _, _, _, r in all_trade_results:
@@ -574,7 +565,7 @@ async def main() -> None:
         print(f"    {reason:<28} {cnt:>3}  ({cnt/len(all_trade_results)*100:.0f}%)")
 
     # Per-day direction summary
-    print(f"\n  Per-day direction and entry time:")
+    print("\n  Per-day direction and entry time:")
     print(f"  {'Asset':<5} {'Date':>12}  {'VIX':>5}  {'Gap%':>7}  {'Dir':>4}  {'Entry':>5}  {'Struct':>18}  {'PnL':>8}")
     print(f"  {'─'*5} {'─'*12}  {'─'*5}  {'─'*7}  {'─'*4}  {'─'*5}  {'─'*18}  {'─'*8}")
     for date, strat, w, asst, r in all_trade_results:

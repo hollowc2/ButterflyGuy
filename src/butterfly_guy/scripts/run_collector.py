@@ -3,11 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
-from pathlib import Path
-
-# Allow running as script
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import setup_logging

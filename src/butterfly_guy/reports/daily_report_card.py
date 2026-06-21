@@ -212,29 +212,6 @@ def _instrument_label(instrument: dict[str, Any]) -> str:
     return symbol
 
 
-def _trade_label_from_items(transfer_items: list[dict[str, Any]]) -> str:
-    labels: list[str] = []
-    effects: list[str] = []
-    for item in transfer_items:
-        instrument = item.get("instrument", {})
-        if not instrument or _is_currency_instrument(instrument):
-            continue
-        label = _instrument_label(instrument)
-        if not label:
-            continue
-        effect = item.get("positionEffect")
-        if effect and effect not in effects:
-            effects.append(effect)
-        if label not in labels:
-            labels.append(label)
-    if not labels:
-        return "Trade"
-    base = labels[0] if len(labels) == 1 else " / ".join(labels[:3])
-    if len(effects) == 1:
-        return f"{base} ({effects[0].lower()})"
-    return base
-
-
 def _extract_order_id(txn: dict[str, Any], transfer_items: list[dict[str, Any]]) -> str | None:
     order_id = txn.get("orderId")
     if order_id:

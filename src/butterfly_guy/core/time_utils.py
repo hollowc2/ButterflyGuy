@@ -53,10 +53,13 @@ def _easter_sunday(year: int) -> dt.date:
     a = year % 19
     b = year // 100
     c = year % 100
-    d = b // 4; e = b % 4
-    f = (b + 8) // 25; g = (b - f + 1) // 3
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
     h = (19 * a + b - d - g + 15) % 30
-    i = c // 4; k = c % 4
+    i = c // 4
+    k = c % 4
     line = (32 + 2 * e + 2 * i - h - k) % 7
     m = (a + 11 * h + 22 * line) // 451
     month = (h + line - 7 * m + 114) // 31
@@ -76,10 +79,10 @@ def get_us_market_holidays(year: int) -> set[dt.date]:
         _nth_weekday(year, 11, 3, 4),
         _easter_sunday(year) - dt.timedelta(days=2),
     }
-if year >= 2022:
-    holidays.add(_observed_date(dt.date(year, 6, 19)))
+    if year >= 2022:
+        holidays.add(_observed_date(dt.date(year, 6, 19)))
     next_nyny = _observed_date(dt.date(year + 1, 1, 1))
-if next_nyny.year == year:
+    if next_nyny.year == year:
         holidays.add(next_nyny)
     return holidays
 

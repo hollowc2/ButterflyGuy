@@ -134,10 +134,6 @@ def load_sector_map(universe_dir: str | Path) -> dict[str, str]:
     return sectors
 
 
-def lookup_sector(symbol: str, sector_map: dict[str, str]) -> str:
-    return sector_map.get(symbol.upper(), "Unknown")
-
-
 def refresh_builtin_universes(universe_dir: str | Path) -> dict[str, int]:
     """Refresh sp500.txt, nq100.txt, and sectors.json from public sources."""
     base = Path(universe_dir)
@@ -239,11 +235,6 @@ def fetch_exchange_seed_map() -> dict[str, str]:
     for symbol in fetch_nyse_listed_symbols():
         seed_map.setdefault(symbol, "NYSE")
     return dict(sorted(seed_map.items()))
-
-
-def fetch_exchange_seed_symbols() -> list[str]:
-    """Union of NASDAQ + NYSE seed symbols, sorted."""
-    return sorted(fetch_exchange_seed_map())
 
 
 def _as_float(value: Any) -> float | None:

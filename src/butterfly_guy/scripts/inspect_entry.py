@@ -17,8 +17,6 @@ import sys
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
 from butterfly_guy.backtest.csv_loader import CsvDataLoader
 from butterfly_guy.backtest.db_loader import DbDataLoader
 from butterfly_guy.core.config import StrategySettings, load_config

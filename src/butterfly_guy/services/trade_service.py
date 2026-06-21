@@ -54,7 +54,6 @@ from butterfly_guy.strategy.entry_selection import (
 )
 from butterfly_guy.strategy.entry_selection_parity import (
     build_entry_selection_parity,
-    select_entry_from_db_quotes,
 )
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime
@@ -710,7 +709,7 @@ class TradeService:
             return {"available": False, "reason": "empty_db_snapshot"}
 
         db_spot = snapshot["spot_price"] if snapshot["spot_price"] is not None else spot_price
-        db_selection = select_entry_from_db_quotes(
+        db_selection = select_entry_candidate(
             quotes=db_quotes,
             spot=db_spot,
             direction=direction,

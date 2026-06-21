@@ -4,13 +4,8 @@ from __future__ import annotations
 
 import logging
 import sys
-import uuid
 
 import structlog
-
-
-def generate_correlation_id() -> str:
-    return uuid.uuid4().hex[:12]
 
 
 def setup_logging(log_level: str = "INFO", json_output: bool = True) -> None:
