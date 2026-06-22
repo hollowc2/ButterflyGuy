@@ -371,10 +371,10 @@ class RiskQueries:
         )
 
     async def get_weekly_pnl(self, underlying: str) -> float:
-        """Sum of realized PnL for the rolling 7-day window (closed trades only)."""
+        """Dollar PnL for the rolling 7-day window (closed trades only)."""
         val = await self.db.pool.fetchval(
             """
-            SELECT COALESCE(SUM(pnl), 0)
+            SELECT COALESCE(SUM(pnl * 100 * quantity), 0)
             FROM butterfly_trades
             WHERE underlying = $1
               AND trade_date >= CURRENT_DATE - INTERVAL '7 days'
@@ -385,10 +385,10 @@ class RiskQueries:
         return float(val)
 
     async def get_recent_closed_pnls(self, underlying: str, n: int) -> list[float]:
-        """PnL of the last N closed trades (most recent first), for consecutive loss detection."""
+        """Dollar PnL of the last N closed trades, most recent first."""
         rows = await self.db.pool.fetch(
             """
-            SELECT pnl FROM butterfly_trades
+            SELECT pnl * 100 * quantity AS pnl FROM butterfly_trades
             WHERE underlying = $1 AND status = 'CLOSED' AND pnl IS NOT NULL
             ORDER BY exit_time DESC
             LIMIT $2

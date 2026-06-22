@@ -12,6 +12,7 @@ from dotenv import dotenv_values
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.db.connection import DatabasePool
+from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.services.chart_data import load_spot_series
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import (
@@ -45,13 +46,17 @@ async def _load_trade(db: DatabasePool, trade_id: int | None) -> dict | None:
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Send historic trade charts to Discord")
     parser.add_argument("--config", default="configs/config.yaml")
-    parser.add_argument("--trade-id", type=int, default=None, help="Trade ID (default: latest closed)")
+    parser.add_argument(
+        "--trade-id", type=int, default=None, help="Trade ID (default: latest closed)"
+    )
     args = parser.parse_args()
 
     setup_logging()
     config = load_config(args.config)
 
-    webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get("DISCORD_WEBHOOK_URL", "")
+    webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get(
+        "DISCORD_WEBHOOK_URL", ""
+    )
     if not webhook:
         raise SystemExit("DISCORD_WEBHOOK_URL not configured")
 
@@ -107,14 +112,21 @@ async def main() -> None:
 
         notifier = DiscordNotifier(webhook)
         tent_label = "HIT" if tent_hit else "MISSED" if tent_hit is not None else "N/A"
+        pnl_dollars = trade_pnl_dollars(
+            float(trade.get("pnl") or 0), int(trade.get("quantity") or 1)
+        )
         header = (
             f"🧪 **TEST CHART** — historic trade #{trade['id']} ({session_date})\n"
             f"> {underlying} {trade['direction']} {trade['wing_width']}-wide | "
-            f"P&L ${float(trade.get('pnl') or 0):.2f} | Tent: {tent_label}"
+            f"P&L ${pnl_dollars:.2f} | Tent: {tent_label}"
         )
 
         if entry_png:
-            await notifier._post(header + "\n> **Entry window chart**", image_png=entry_png, image_name="test_entry.png")
+            await notifier._post(
+                header + "\n> **Entry window chart**",
+                image_png=entry_png,
+                image_name="test_entry.png",
+            )
             log.info("test_entry_chart_sent", trade_id=trade["id"], bytes=len(entry_png))
         else:
             log.warning("test_entry_chart_skipped", trade_id=trade["id"])

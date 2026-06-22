@@ -3,7 +3,7 @@
   "uid": "butterfly-trade-detail",
   "tags": ["options", "trading", "index", "postmortem"],
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": {
     "from": "now-1d",
@@ -34,8 +34,8 @@
         "label": "Trade",
         "type": "query",
         "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "query": "SELECT to_char(trade_date, 'YYYY-MM-DD') || ' #' || id || ' ' || status || ' ' || direction || ' ' || center_strike::text || 'w' || wing_width::text || ' P&L ' || COALESCE(ROUND(pnl::numeric, 2)::text, 'open') AS __text, id::text AS __value FROM butterfly_trades WHERE underlying = '$underlying' ORDER BY entry_time DESC LIMIT 250",
-        "definition": "SELECT to_char(trade_date, 'YYYY-MM-DD') || ' #' || id || ' ' || status || ' ' || direction || ' ' || center_strike::text || 'w' || wing_width::text || ' P&L ' || COALESCE(ROUND(pnl::numeric, 2)::text, 'open') AS __text, id::text AS __value FROM butterfly_trades WHERE underlying = '$underlying' ORDER BY entry_time DESC LIMIT 250",
+        "query": "SELECT to_char(trade_date, 'YYYY-MM-DD') || ' #' || id || ' ' || status || ' ' || direction || ' ' || center_strike::text || 'w' || wing_width::text || ' P&L $' || COALESCE(ROUND((pnl * 100 * quantity)::numeric, 2)::text, 'open') AS __text, id::text AS __value FROM butterfly_trades WHERE underlying = '$underlying' ORDER BY entry_time DESC LIMIT 250",
+        "definition": "SELECT to_char(trade_date, 'YYYY-MM-DD') || ' #' || id || ' ' || status || ' ' || direction || ' ' || center_strike::text || 'w' || wing_width::text || ' P&L $' || COALESCE(ROUND((pnl * 100 * quantity)::numeric, 2)::text, 'open') AS __text, id::text AS __value FROM butterfly_trades WHERE underlying = '$underlying' ORDER BY entry_time DESC LIMIT 250",
         "current": {},
         "refresh": 1,
         "sort": 0,
@@ -60,7 +60,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT id AS trade_id, underlying, trade_date, status, direction, lower_strike::float AS lower_strike, center_strike::float AS center_strike, upper_strike::float AS upper_strike, wing_width, entry_time, exit_time, entry_price::float AS entry_price, exit_price::float AS exit_price, pnl::float AS pnl, peak_value::float AS peak_value, exit_reason, quantity, (metadata->>'entry_spot')::float AS entry_spot, (metadata->>'vix')::float AS vix, metadata->>'selection_method' AS selection_method, lower_symbol, center_symbol, upper_symbol FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id",
+          "rawSql": "SELECT id AS trade_id, underlying, trade_date, status, direction, lower_strike::float AS lower_strike, center_strike::float AS center_strike, upper_strike::float AS upper_strike, wing_width, entry_time, exit_time, entry_price::float AS entry_price, exit_price::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, peak_value::float AS peak_value, exit_reason, quantity, (metadata->>'entry_spot')::float AS entry_spot, (metadata->>'vix')::float AS vix, metadata->>'selection_method' AS selection_method, lower_symbol, center_symbol, upper_symbol FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id",
           "format": "table",
           "refId": "A"
         }
@@ -224,7 +224,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, event_type, COALESCE(data->>'from', '') AS from_state, COALESCE(data->>'to', '') AS to_state, COALESCE(data->>'reason', data->>'exit_reason', '') AS reason, NULLIF(data->>'mark_value', '')::float AS mark_value, NULLIF(data->>'peak_value', '')::float AS peak_value, NULLIF(data->>'drawdown_pct', '')::float AS drawdown_pct, NULLIF(data->>'pnl', '')::float AS pnl FROM decision_log WHERE underlying = '$underlying' AND data->>'trade_id' = '$trade_id' AND event_type IN ('profit_state_transition', 'exit_signal_fired', 'trade_exited', 'exit_order_failed') ORDER BY ts",
+          "rawSql": "SELECT d.ts AS time, d.event_type, COALESCE(d.data->>'from', '') AS from_state, COALESCE(d.data->>'to', '') AS to_state, COALESCE(d.data->>'reason', d.data->>'exit_reason', '') AS reason, NULLIF(d.data->>'mark_value', '')::float AS mark_value, NULLIF(d.data->>'peak_value', '')::float AS peak_value, NULLIF(d.data->>'drawdown_pct', '')::float AS drawdown_pct, (NULLIF(d.data->>'pnl', '')::float * 100 * t.quantity) AS pnl FROM decision_log d JOIN butterfly_trades t ON t.id = $trade_id AND t.underlying = '$underlying' WHERE d.underlying = '$underlying' AND d.data->>'trade_id' = '$trade_id' AND d.event_type IN ('profit_state_transition', 'exit_signal_fired', 'trade_exited', 'exit_order_failed') ORDER BY d.ts",
           "format": "table",
           "refId": "A"
         }

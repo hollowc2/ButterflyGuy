@@ -1,9 +1,16 @@
 """Tests for cash-settlement spot selection."""
 
 import datetime as dt
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from butterfly_guy.core.time_utils import EASTERN
-from butterfly_guy.services.position_service import final_regular_session_close_from_candles
+from butterfly_guy.data.schemas import TradeRecord
+from butterfly_guy.services.position_service import (
+    PositionService,
+    final_regular_session_close_from_candles,
+)
 
 
 def _candle(ts: dt.datetime, close: float) -> dict:
@@ -52,3 +59,16 @@ def test_final_regular_session_close_returns_none_without_session_bar() -> None:
     ]
 
     assert final_regular_session_close_from_candles(candles, session_date) is None
+
+
+@pytest.mark.asyncio
+async def test_record_exit_metrics_converts_contract_pnl_to_dollars() -> None:
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.strategy.underlying = "SPX"
+    service.risk_engine = MagicMock()
+    service.risk_engine.record_pnl = AsyncMock()
+
+    await service._record_exit_metrics(-1.25, TradeRecord(direction="CALL", quantity=2))
+
+    service.risk_engine.record_pnl.assert_awaited_once_with(-250.0)

@@ -131,7 +131,7 @@ class RiskEngine:
         await self.risk_queries.increment_trade_count(today, self.underlying)
 
     async def record_pnl(self, pnl: float, trade_date: dt.date | None = None) -> None:
-        """Record realized PnL."""
+        """Record realized dollar PnL."""
         today = trade_date or dt.date.today()
         await self.risk_queries.update_pnl(today, pnl, self.underlying)
 
@@ -143,7 +143,7 @@ class RiskEngine:
 
     async def sync_realized_pnl(self, pnl: float, trade_date: dt.date | None = None) -> None:
         """
-        Overwrite realized_pnl in risk state (SET, not ADD).
+        Overwrite dollar realized_pnl in risk state (SET, not ADD).
         Used at startup to restore correct state, including worst-case open trade exposure.
         """
         today = trade_date or dt.date.today()

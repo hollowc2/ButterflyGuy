@@ -110,7 +110,9 @@ def _parse_metadata(raw: Any) -> dict[str, Any]:
 
 def format_trade_recap(row: dict[str, Any], *, tent_hit: bool | None) -> str:
     trade_date = _trade_date(row)
-    pnl_dollars = trade_pnl_dollars(float(row.get("pnl") or 0))
+    pnl_dollars = trade_pnl_dollars(
+        float(row.get("pnl") or 0), int(row.get("quantity") or 1)
+    )
     pnl_str = f"+${pnl_dollars:.2f}" if pnl_dollars >= 0 else f"-${abs(pnl_dollars):.2f}"
     tent_label = "HIT" if tent_hit else "MISSED" if tent_hit is not None else "N/A"
     exit_reason = row.get("exit_reason") or "unknown"
@@ -118,7 +120,8 @@ def format_trade_recap(row: dict[str, Any], *, tent_hit: bool | None) -> str:
         f"🦋 **SPX #{row['id']}** ({trade_date})\n"
         f"> **{row['direction']}** {row['wing_width']}-wide | "
         f"{row['lower_strike']:.0f} / **{row['center_strike']:.0f}** / {row['upper_strike']:.0f}\n"
-        f"> Entry ${float(row['entry_price']):.2f} → Exit ${float(row.get('exit_price') or 0):.2f}\n"
+        f"> Entry ${float(row['entry_price']):.2f} → "
+        f"Exit ${float(row.get('exit_price') or 0):.2f}\n"
         f"> P&L: **{pnl_str}** | Exit: `{exit_reason}` | Tent: **{tent_label}**"
     )
 

@@ -3,7 +3,7 @@
   "uid": "butterfly-trading",
   "tags": ["options", "trading", "index"],
   "schemaVersion": 38,
-  "version": 1,
+  "version": 5,
   "refresh": "10s",
   "templating": {
     "list": [
@@ -36,10 +36,59 @@
         "x": 0,
         "y": 0
       },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Profit" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Loss" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "mappings": [
+              { "fieldName": "Max", "handlerKey": "max" }
+            ],
+            "applyTo": { "id": "byRegexp", "options": "Profit|Loss" }
+          }
+        }
+      ],
       "targets": [
         {
-          "expr": "butterfly_daily_pnl_dollars{underlying=\"$underlying\"}",
-          "legendFormat": "Daily P&L ($)"
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "rawQuery": true,
+          "rawSql": "WITH totals AS (SELECT COALESCE(SUM(pnl * 100 * quantity), 0)::float AS pnl_dollars FROM butterfly_trades WHERE status='CLOSED' AND trade_date=CURRENT_DATE AND underlying='$underlying') SELECT NOW() AS time, CASE WHEN pnl_dollars >= 0 THEN 'Profit' ELSE 'Loss' END AS metric, ABS(pnl_dollars) AS value FROM totals",
+          "format": "time_series",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(SUM((wing_width - entry_price) * 100 * quantity), 1)::float AS \"Max\" FROM butterfly_trades WHERE status='CLOSED' AND trade_date=CURRENT_DATE AND underlying='$underlying'",
+          "format": "table",
+          "refId": "B"
         }
       ]
     },

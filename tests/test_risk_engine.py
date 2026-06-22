@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from butterfly_guy.core.config import RiskSettings
+from butterfly_guy.db.queries import RiskQueries
 from butterfly_guy.risk.risk_engine import RiskEngine
 
 
@@ -161,9 +162,32 @@ async def test_record_trade_increments():
 @pytest.mark.asyncio
 async def test_record_pnl_halts_on_max_loss():
     engine, queries = make_risk_engine(realized_pnl=-450.0)
-    # After recording -100 pnl, total = -550 → should halt
+    # After recording -$100, total = -$550 → should halt
     queries.get_or_create = AsyncMock(
         return_value={"trade_count": 1, "realized_pnl": -550.0, "halted": False}
     )
     await engine.record_pnl(-100.0, dt.date.today())
+    queries.update_pnl.assert_called_once_with(dt.date.today(), -100.0, "SPX")
     queries.set_halted.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_weekly_pnl_query_converts_points_and_quantity_to_dollars():
+    db = MagicMock()
+    db.pool.fetchval = AsyncMock(return_value=-881.0)
+    queries = RiskQueries(db)
+
+    assert await queries.get_weekly_pnl("SPX") == -881.0
+    sql = db.pool.fetchval.await_args.args[0]
+    assert "pnl * 100 * quantity" in sql
+
+
+@pytest.mark.asyncio
+async def test_recent_pnl_query_converts_points_and_quantity_to_dollars():
+    db = MagicMock()
+    db.pool.fetch = AsyncMock(return_value=[{"pnl": -125.0}])
+    queries = RiskQueries(db)
+
+    assert await queries.get_recent_closed_pnls("SPX", 1) == [-125.0]
+    sql = db.pool.fetch.await_args.args[0]
+    assert "pnl * 100 * quantity AS pnl" in sql

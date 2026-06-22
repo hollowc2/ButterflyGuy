@@ -144,9 +144,13 @@ class DiscordNotifier:
         pnl: float,
         peak_value: float,
         entry_time: "dt.datetime | None" = None,
+        quantity: int = 1,
     ) -> None:
         emoji = "✅" if pnl > 0 else "❌"
-        pnl_str = f"+${pnl:.2f}" if pnl > 0 else f"-${abs(pnl):.2f}"
+        pnl_dollars = pnl * 100.0 * quantity
+        pnl_str = (
+            f"+${pnl_dollars:.2f}" if pnl > 0 else f"-${abs(pnl_dollars):.2f}"
+        )
         pnl_pct = (pnl / entry_price * 100) if entry_price > 0 else 0
         pnl_pct_str = f"+{pnl_pct:.0f}%" if pnl_pct >= 0 else f"{pnl_pct:.0f}%"
         now_et = dt.datetime.now()
@@ -176,11 +180,15 @@ class DiscordNotifier:
         direction: str,
         exit_reason: str,
         pnl: float,
+        quantity: int,
         tent_hit: bool | None,
         chart_png: bytes,
     ) -> None:
         tent_label = "HIT" if tent_hit else "MISSED" if tent_hit is not None else "N/A"
-        pnl_str = f"+${pnl:.2f}" if pnl > 0 else f"-${abs(pnl):.2f}"
+        pnl_dollars = pnl * 100.0 * quantity
+        pnl_str = (
+            f"+${pnl_dollars:.2f}" if pnl > 0 else f"-${abs(pnl_dollars):.2f}"
+        )
         msg = (
             f"📈 **{underlying} EOD CHART** #{trade_id} ({trade_date})\n"
             f"> **{direction}** | Exit: `{exit_reason}` | P&L: **{pnl_str}**\n"

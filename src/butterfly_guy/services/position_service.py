@@ -40,6 +40,7 @@ from butterfly_guy.db.queries import (
 from butterfly_guy.execution.order_manager import OrderManager
 from butterfly_guy.position.position_manager import PositionManager, fly_settlement_value
 from butterfly_guy.position.state_machine import ProfitStateMachine
+from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, summarize_exit_chart
@@ -339,6 +340,7 @@ class PositionService:
                                     pnl=pnl,
                                     peak_value=pos_state.peak_value,
                                     entry_time=trade.entry_time,
+                                    quantity=trade.quantity,
                                 )
                             except Exception as e:
                                 log.warning("notify_exit_failed", error=str(e))
@@ -425,6 +427,7 @@ class PositionService:
                     pnl=pnl,
                     peak_value=peak,
                     entry_time=trade.entry_time,
+                    quantity=trade.quantity,
                 )
             except Exception as e:
                 log.warning("notify_exit_failed", error=str(e))
@@ -468,7 +471,8 @@ class PositionService:
     async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:
         """Record trade exit metrics and update risk engine."""
         underlying = self.config.strategy.underlying
-        await self.risk_engine.record_pnl(pnl)
+        pnl_dollars = trade_pnl_dollars(pnl, trade.quantity)
+        await self.risk_engine.record_pnl(pnl_dollars)
 
         # Update prometheus metrics
         trades_active.labels(underlying=underlying).set(0)
@@ -480,7 +484,7 @@ class PositionService:
             direction=trade.direction,
             outcome="win" if pnl > 0 else "loss",
         ).inc()
-        daily_pnl.labels(underlying=underlying).inc(pnl)
+        daily_pnl.labels(underlying=underlying).inc(pnl_dollars)
 
     async def send_pending_eod_charts(self, trade_date: dt.date) -> int:
         """Send full-session EOD charts for closed trades after market close."""
@@ -506,6 +510,7 @@ class PositionService:
                     direction=row["direction"],
                     exit_reason=row.get("exit_reason") or "unknown",
                     pnl=float(row.get("pnl") or 0),
+                    quantity=int(row.get("quantity") or 1),
                     tent_hit=tent_hit,
                     chart_png=chart_png,
                 )

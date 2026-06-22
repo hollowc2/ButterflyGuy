@@ -69,8 +69,8 @@ class DrawdownPoint:
     peak_equity: float
 
 
-def trade_pnl_dollars(pnl: float | int) -> float:
-    return float(pnl) * 100.0
+def trade_pnl_dollars(pnl: float | int, quantity: int = 1) -> float:
+    return float(pnl) * 100.0 * quantity
 
 
 def is_drawdown_exit(exit_reason: str | None) -> bool:
@@ -180,7 +180,11 @@ def trade_point_from_row(row: dict[str, Any]) -> TradePoint:
         exit_price=float(row["exit_price"]) if row.get("exit_price") is not None else None,
         exit_time=row.get("exit_time"),
         exit_reason=row.get("exit_reason"),
-        pnl_dollars=trade_pnl_dollars(float(pnl)) if pnl is not None else 0.0,
+        pnl_dollars=(
+            trade_pnl_dollars(float(pnl), int(row.get("quantity") or 1))
+            if pnl is not None
+            else 0.0
+        ),
         peak_value=float(row["peak_value"]) if row.get("peak_value") is not None else None,
         vix=float(metadata["vix"]) if metadata.get("vix") is not None else None,
         entry_spot=float(metadata["entry_spot"]) if metadata.get("entry_spot") is not None else None,

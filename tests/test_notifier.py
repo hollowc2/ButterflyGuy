@@ -64,3 +64,27 @@ async def test_notify_entry_includes_trade_stats():
     assert "Ladder step: 1" in msg
     assert "Method: VIX" in msg
     assert "Entry: 06:15:30 ET" in msg
+
+
+@pytest.mark.asyncio
+async def test_notify_exit_formats_contract_pnl_as_dollars():
+    notifier = DiscordNotifier("https://example.com/webhook")
+    posted: list[str] = []
+
+    async def capture(content: str, **kwargs: object) -> None:
+        posted.append(content)
+
+    with patch.object(notifier, "_post", side_effect=capture):
+        await notifier.notify_exit(
+            trade_id=42,
+            underlying="SPX",
+            direction="CALL",
+            exit_reason="cash_settled",
+            entry_price=2.0,
+            exit_price=3.5,
+            pnl=1.5,
+            peak_value=4.0,
+            quantity=2,
+        )
+
+    assert "P&L: **+$300.00** (+75%)" in posted[0]

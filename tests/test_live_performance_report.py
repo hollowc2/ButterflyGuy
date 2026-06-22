@@ -51,6 +51,7 @@ def _trade(
 
 def test_trade_pnl_dollars_multiplies_by_contract_size() -> None:
     assert trade_pnl_dollars(-2.29) == -229.0
+    assert trade_pnl_dollars(-2.29, 2) == -458.0
 
 
 def test_compute_stats() -> None:

@@ -37,6 +37,7 @@ from butterfly_guy.db.queries import (
 )
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 from butterfly_guy.execution.order_manager import OrderManager
+from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier, TelegramNotifier
 from butterfly_guy.services.position_service import PositionService
@@ -343,17 +344,24 @@ async def main() -> None:
     today_trades = await trade_q.get_trades_for_date(today, underlying)
     daily_trade_count.labels(underlying=underlying).set(len(today_trades))
     await risk_engine.sync_trade_count(len(today_trades), today)
-    realized_pnl = sum(float(t["pnl"]) for t in today_trades if t.get("pnl") is not None)
+    realized_pnl = sum(
+        trade_pnl_dollars(t["pnl"], int(t.get("quantity") or 1))
+        for t in today_trades
+        if t.get("pnl") is not None
+    )
 
     # Sync risk state PnL — if an open trade was recovered, include its entry cost as
     # worst-case committed exposure so the daily loss budget is correctly consumed.
     if recovered_trade is not None:
-        worst_case_pnl = realized_pnl - recovered_trade.entry_price
+        open_trade_entry = trade_pnl_dollars(
+            recovered_trade.entry_price, recovered_trade.quantity
+        )
+        worst_case_pnl = realized_pnl - open_trade_entry
         await risk_engine.sync_realized_pnl(worst_case_pnl, today)
         log.info(
             "startup_pnl_sync_with_open_trade",
             realized_pnl=realized_pnl,
-            open_trade_entry=recovered_trade.entry_price,
+            open_trade_entry=open_trade_entry,
             worst_case_pnl=worst_case_pnl,
         )
     else:
