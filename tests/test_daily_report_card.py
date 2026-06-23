@@ -16,9 +16,13 @@ from butterfly_guy.reports.daily_report_card import (
 from butterfly_guy.reports.daily_report_card_config import DailyReportCardSettings
 from butterfly_guy.reports.daily_report_card_format import build_report_messages
 from butterfly_guy.reports.equity_trade_chart import (
+    _format_trade_stats,
+    _price_limits,
+    _slice_series,
     build_equity_trade_chart_png,
     candles_to_series,
     chartable_equity_trades,
+    two_minute_candles,
 )
 
 EASTERN = ZoneInfo("America/New_York")
@@ -331,6 +335,95 @@ def test_equity_chart_window_rejects_prior_day_same_times():
 
     series = candles_to_series(candles, dt.date(2026, 6, 9))
     assert [item["time"].date() for item in series] == [dt.date(2026, 6, 9)]
+
+
+def test_equity_chart_aggregates_to_two_minute_candles():
+    candles = []
+    for i, close in enumerate((10.5, 11.5, 12.5)):
+        ts = dt.datetime(2026, 6, 9, 9, 30 + i, tzinfo=EASTERN)
+        candles.append(
+            {
+                "datetime": int(ts.timestamp() * 1000),
+                "open": 10 + i,
+                "high": 11 + i,
+                "low": 9 + i,
+                "close": close,
+                "volume": 100 + i,
+            }
+        )
+
+    series = two_minute_candles(candles_to_series(candles, dt.date(2026, 6, 9)))
+    assert [item["time"].time() for item in series] == [dt.time(9, 30), dt.time(9, 32)]
+    assert series[0]["open"] == 10
+    assert series[0]["high"] == 12
+    assert series[0]["low"] == 9
+    assert series[0]["close"] == 11.5
+    assert series[0]["volume"] == 201
+
+
+def test_equity_chart_zoom_slice_is_independent():
+    base = dt.datetime(2026, 6, 9, 9, 30, tzinfo=EASTERN)
+    series = [
+        {"time": base, "open": 100.0, "high": 101.0, "low": 99.5, "close": 100.5, "volume": 100},
+        {
+            "time": base + dt.timedelta(minutes=30),
+            "open": 110.0,
+            "high": 111.0,
+            "low": 109.5,
+            "close": 110.5,
+            "volume": 100,
+        },
+        {
+            "time": base + dt.timedelta(minutes=90),
+            "open": 140.0,
+            "high": 141.0,
+            "low": 139.5,
+            "close": 140.5,
+            "volume": 100,
+        },
+    ]
+
+    zoom = _slice_series(series, base + dt.timedelta(minutes=20), base + dt.timedelta(minutes=40))
+    assert [candle["time"] for candle in zoom] == [base + dt.timedelta(minutes=30)]
+    assert _price_limits(series) != _price_limits(zoom)
+
+
+def test_equity_chart_stats_text_includes_key_fields():
+    trade = parse_trade_transactions(
+        [
+            {
+                "type": "TRADE",
+                "time": "2026-06-09T09:31:00-0400",
+                "netAmount": -100.0,
+                "transferItems": [
+                    {
+                        "instrument": {"symbol": "AAPL", "assetType": "EQUITY"},
+                        "amount": 1.0,
+                        "positionEffect": "OPENING",
+                    }
+                ],
+            },
+            {
+                "type": "TRADE",
+                "time": "2026-06-09T09:33:00-0400",
+                "netAmount": 101.0,
+                "transferItems": [
+                    {
+                        "instrument": {"symbol": "AAPL", "assetType": "EQUITY"},
+                        "amount": -1.0,
+                        "positionEffect": "CLOSING",
+                    }
+                ],
+            },
+        ]
+    )[0]
+
+    lines = _format_trade_stats(trade, entry_price=100.25, exit_price=101.75)
+    assert any(line.startswith("Symbol: AAPL") for line in lines)
+    assert any(line.startswith("Entry: 09:31:00 ET @ $100.25") for line in lines)
+    assert any(line.startswith("Exit: 09:33:00 ET @ $101.75") for line in lines)
+    assert any(line.startswith("Size: 1") for line in lines)
+    assert any(line.startswith("P&L: +$1.00") for line in lines)
 
 
 def test_rank_trades():
