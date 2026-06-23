@@ -1,7 +1,7 @@
 """Send daily margin-account report card to Discord #daily-report-card.
 
 Cron: weekdays 6:00 PM Eastern / 22:00 UTC
-  0 22 * * 1-5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_daily_report_card.py >> /opt/butterflyguy/daily_report_card.log 2>&1
+  See infra/cron/daily_report_card.cron.
 """
 
 from __future__ import annotations
@@ -19,13 +19,15 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
-from butterfly_guy.core.config import load_config
-from butterfly_guy.core.logging import get_logger, setup_logging
-from butterfly_guy.core.time_utils import EASTERN, is_trading_day, now_eastern
-from butterfly_guy.data.schwab_client import SchwabClientWrapper
-from butterfly_guy.reports.daily_report_card_config import load_daily_report_card_config
-from butterfly_guy.services.daily_report_card import send_daily_report_card
-from butterfly_guy.services.notifier import DiscordNotifier
+from butterfly_guy.core.config import load_config  # noqa: E402
+from butterfly_guy.core.logging import get_logger, setup_logging  # noqa: E402
+from butterfly_guy.core.time_utils import is_trading_day, now_eastern  # noqa: E402
+from butterfly_guy.data.schwab_client import SchwabClientWrapper  # noqa: E402
+from butterfly_guy.reports.daily_report_card_config import (  # noqa: E402
+    load_daily_report_card_config,
+)
+from butterfly_guy.services.daily_report_card import send_daily_report_card  # noqa: E402
+from butterfly_guy.services.notifier import DiscordNotifier  # noqa: E402
 
 log = get_logger(__name__)
 
@@ -100,12 +102,13 @@ async def main() -> int:
     if args.dry_run:
         print(
             f"Dry run complete: {result.trade_count} trades, "
-            f"{result.messages_sent} messages, archived under {card_config.report_dir}"
+            f"{result.messages_sent} messages, {result.charts_sent} charts, "
+            f"archived under {card_config.report_dir}"
         )
     else:
         print(
             f"OK: sent daily report card ({result.trade_count} trades, "
-            f"{result.messages_sent} messages)"
+            f"{result.messages_sent} messages, {result.charts_sent} charts)"
         )
     return 0
 

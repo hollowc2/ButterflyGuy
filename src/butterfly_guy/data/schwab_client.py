@@ -11,6 +11,7 @@ import httpx
 from butterfly_guy.core.config import SchwabSettings
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import schwab_api_calls, schwab_api_errors
+from butterfly_guy.core.time_utils import EASTERN, MARKET_CLOSE, now_eastern
 
 log = get_logger(__name__)
 
@@ -179,6 +180,26 @@ class SchwabClientWrapper:
             frequency=self.client.PriceHistory.Frequency.EVERY_MINUTE,
             start_datetime=dt.datetime.combine(start, dt.time.min),
             end_datetime=dt.datetime.combine(today, dt.time.max),
+            endpoint="get_price_history",
+        )
+        data = resp.json()
+        return data.get("candles", [])
+
+    async def get_intraday_bars_for_day(self, symbol: str, day: dt.date) -> list[dict]:
+        """Fetch 1-minute bars for one session."""
+        start = dt.datetime.combine(day, dt.time(6, 0), tzinfo=EASTERN)
+        close = dt.datetime.combine(day, MARKET_CLOSE, tzinfo=EASTERN)
+        now = now_eastern()
+        end = min(now, close) if now.date() == day else close
+        resp = await self._retry(
+            self.client.get_price_history,
+            symbol,
+            period_type=self.client.PriceHistory.PeriodType.DAY,
+            period=1,
+            frequency_type=self.client.PriceHistory.FrequencyType.MINUTE,
+            frequency=self.client.PriceHistory.Frequency.EVERY_MINUTE,
+            start_datetime=start,
+            end_datetime=end,
             endpoint="get_price_history",
         )
         data = resp.json()

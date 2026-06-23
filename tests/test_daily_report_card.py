@@ -15,6 +15,11 @@ from butterfly_guy.reports.daily_report_card import (
 )
 from butterfly_guy.reports.daily_report_card_config import DailyReportCardSettings
 from butterfly_guy.reports.daily_report_card_format import build_report_messages
+from butterfly_guy.reports.equity_trade_chart import (
+    build_equity_trade_chart_png,
+    candles_to_series,
+    chartable_equity_trades,
+)
 
 EASTERN = ZoneInfo("America/New_York")
 
@@ -171,6 +176,161 @@ def test_parse_trade_transactions_matches_round_trips():
     assert len(trades) == 1
     assert trades[0].label == "TQQQ"
     assert trades[0].pnl == pytest.approx(1.07)
+    assert trades[0].symbol == "TQQQ"
+    assert trades[0].asset_type == "COLLECTIVE_INVESTMENT"
+    assert trades[0].entry_time == dt.datetime(2026, 6, 9, 19, 50, 30, tzinfo=EASTERN)
+    assert trades[0].exit_time == dt.datetime(2026, 6, 9, 19, 59, 44, tzinfo=EASTERN)
+
+
+def test_chartable_equity_trades_skips_options():
+    equity, option = parse_trade_transactions(
+        [
+            {
+                "type": "TRADE",
+                "time": "2026-06-09T09:50:30-0400",
+                "netAmount": -72.62,
+                "transferItems": [
+                    {
+                        "instrument": {
+                            "symbol": "TQQQ",
+                            "assetType": "COLLECTIVE_INVESTMENT",
+                        },
+                        "amount": 1.0,
+                        "positionEffect": "OPENING",
+                    }
+                ],
+            },
+            {
+                "type": "TRADE",
+                "time": "2026-06-09T09:59:44-0400",
+                "netAmount": 73.69,
+                "transferItems": [
+                    {
+                        "instrument": {
+                            "symbol": "TQQQ",
+                            "assetType": "COLLECTIVE_INVESTMENT",
+                        },
+                        "amount": -1.0,
+                        "positionEffect": "CLOSING",
+                    }
+                ],
+            },
+            {
+                "type": "TRADE",
+                "time": "2026-06-09T10:00:00-0400",
+                "netAmount": 10.0,
+                "transferItems": [
+                    {
+                        "instrument": {
+                            "symbol": "SPXW  260609C06010000",
+                            "assetType": "OPTION",
+                        },
+                        "amount": -1.0,
+                        "positionEffect": "CLOSING",
+                    }
+                ],
+            },
+        ]
+    )
+    assert chartable_equity_trades([equity, option]) == [equity]
+
+
+def test_build_equity_trade_chart_png_returns_png_bytes():
+    trade = parse_trade_transactions(
+        [
+            {
+                "type": "TRADE",
+                "time": "2026-06-09T09:31:00-0400",
+                "netAmount": -100.0,
+                "transferItems": [
+                    {
+                        "instrument": {"symbol": "AAPL", "assetType": "EQUITY"},
+                        "amount": 1.0,
+                        "positionEffect": "OPENING",
+                    }
+                ],
+            },
+            {
+                "type": "TRADE",
+                "time": "2026-06-09T09:33:00-0400",
+                "netAmount": 101.0,
+                "transferItems": [
+                    {
+                        "instrument": {"symbol": "AAPL", "assetType": "EQUITY"},
+                        "amount": -1.0,
+                        "positionEffect": "CLOSING",
+                    }
+                ],
+            },
+        ]
+    )[0]
+    candles = []
+    start = dt.datetime(2026, 6, 9, 7, 30, tzinfo=EASTERN)
+    for i in range(5):
+        ts = start + dt.timedelta(minutes=i)
+        candles.append(
+            {
+                "datetime": int(ts.timestamp() * 1000),
+                "open": 200.0 + i,
+                "high": 201.0 + i,
+                "low": 199.0 + i,
+                "close": 200.5 + i,
+                "volume": 1000 + i,
+            }
+        )
+
+    png = build_equity_trade_chart_png(trade, candles)
+    assert png is not None
+    assert png.startswith(b"\x89PNG")
+
+
+def test_equity_chart_window_keeps_6am_premarket_and_regular_session():
+    candles = []
+    for ts in (
+        dt.datetime(2026, 6, 9, 5, 59, tzinfo=EASTERN),
+        dt.datetime(2026, 6, 9, 6, 0, tzinfo=EASTERN),
+        dt.datetime(2026, 6, 9, 9, 30, tzinfo=EASTERN),
+        dt.datetime(2026, 6, 9, 16, 0, tzinfo=EASTERN),
+        dt.datetime(2026, 6, 9, 16, 1, tzinfo=EASTERN),
+    ):
+        candles.append(
+            {
+                "datetime": int(ts.timestamp() * 1000),
+                "open": 10,
+                "high": 11,
+                "low": 9,
+                "close": 10.5,
+                "volume": 100,
+            }
+        )
+
+    series = candles_to_series(candles, dt.date(2026, 6, 9))
+    assert [item["time"].time() for item in series] == [
+        dt.time(6, 0),
+        dt.time(9, 30),
+        dt.time(16, 0),
+    ]
+
+
+def test_equity_chart_window_rejects_prior_day_same_times():
+    candles = []
+    for ts in (
+        dt.datetime(2026, 6, 8, 6, 0, tzinfo=EASTERN),
+        dt.datetime(2026, 6, 9, 6, 0, tzinfo=EASTERN),
+    ):
+        candles.append(
+            {
+                "datetime": int(ts.timestamp() * 1000),
+                "open": 10,
+                "high": 11,
+                "low": 9,
+                "close": 10.5,
+                "volume": 100,
+            }
+        )
+
+    series = candles_to_series(candles, dt.date(2026, 6, 9))
+    assert [item["time"].date() for item in series] == [dt.date(2026, 6, 9)]
 
 
 def test_rank_trades():

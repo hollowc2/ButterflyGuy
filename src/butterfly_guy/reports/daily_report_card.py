@@ -51,6 +51,11 @@ class TradeResult:
     pnl: float
     order_id: str | None = None
     time: dt.datetime | None = None
+    symbol: str | None = None
+    asset_type: str | None = None
+    quantity: float = 0.0
+    entry_time: dt.datetime | None = None
+    exit_time: dt.datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,7 @@ class TradeLeg:
     position_effect: str | None
     time: dt.datetime | None
     order_id: str | None
+    asset_type: str | None
 
 
 @dataclass(frozen=True)
@@ -96,6 +102,7 @@ class DailyReportCard:
     generated_at: dt.datetime
     balances: AccountBalances
     activity: ActivitySummary
+    trades: list[TradeResult]
     top_winners: list[TradeResult]
     top_losers: list[TradeResult]
     open_positions: list[OpenPosition]
@@ -247,6 +254,7 @@ def _extract_trade_leg(txn: dict[str, Any]) -> TradeLeg | None:
         position_effect=instrument_item.get("positionEffect"),
         time=_parse_time(txn.get("time") or txn.get("tradeDate")),
         order_id=_extract_order_id(txn, transfer_items),
+        asset_type=instrument.get("assetType"),
     )
 
 
@@ -268,6 +276,11 @@ def _parse_trades_without_position_effect(
                 pnl=existing.pnl + leg.net_amount,
                 order_id=leg.order_id,
                 time=existing.time or leg.time,
+                symbol=existing.symbol or leg.symbol,
+                asset_type=existing.asset_type or leg.asset_type,
+                quantity=existing.quantity + leg.quantity,
+                entry_time=existing.entry_time or leg.time,
+                exit_time=leg.time or existing.exit_time,
             )
         elif leg.order_id:
             by_order[leg.order_id] = TradeResult(
@@ -275,10 +288,24 @@ def _parse_trades_without_position_effect(
                 pnl=leg.net_amount,
                 order_id=leg.order_id,
                 time=leg.time,
+                symbol=leg.symbol,
+                asset_type=leg.asset_type,
+                quantity=leg.quantity,
+                entry_time=leg.time,
+                exit_time=leg.time,
             )
         else:
             trades.append(
-                TradeResult(label=leg.label, pnl=leg.net_amount, time=leg.time)
+                TradeResult(
+                    label=leg.label,
+                    pnl=leg.net_amount,
+                    time=leg.time,
+                    symbol=leg.symbol,
+                    asset_type=leg.asset_type,
+                    quantity=leg.quantity,
+                    entry_time=leg.time,
+                    exit_time=leg.time,
+                )
             )
 
     trades.extend(by_order.values())
@@ -287,7 +314,7 @@ def _parse_trades_without_position_effect(
 
 def _match_round_trips_fifo(legs: list[TradeLeg]) -> list[TradeResult]:
     """Pair OPENING and CLOSING legs into round-trip realized P&L."""
-    open_queues: dict[str, deque[dict[str, float]]] = {}
+    open_queues: dict[str, deque[dict[str, Any]]] = {}
     round_trips: list[TradeResult] = []
     sorted_legs = sorted(
         legs,
@@ -299,7 +326,12 @@ def _match_round_trips_fifo(legs: list[TradeLeg]) -> list[TradeResult]:
             if leg.quantity <= 0:
                 continue
             open_queues.setdefault(leg.symbol, deque()).append(
-                {"qty": leg.quantity, "net_amount": leg.net_amount}
+                {
+                    "qty": leg.quantity,
+                    "net_amount": leg.net_amount,
+                    "time": leg.time,
+                    "asset_type": leg.asset_type,
+                }
             )
             continue
 
@@ -309,11 +341,13 @@ def _match_round_trips_fifo(legs: list[TradeLeg]) -> list[TradeResult]:
         remaining = leg.quantity
         pnl = leg.net_amount
         queue = open_queues.setdefault(leg.symbol, deque())
+        entry_time: dt.datetime | None = None
 
         while remaining > 0 and queue:
             lot = queue[0]
             matched = min(remaining, lot["qty"])
             if lot["qty"] > 0:
+                entry_time = entry_time or lot.get("time")
                 fraction = matched / lot["qty"]
                 pnl += lot["net_amount"] * fraction
                 lot["qty"] -= matched
@@ -328,6 +362,11 @@ def _match_round_trips_fifo(legs: list[TradeLeg]) -> list[TradeResult]:
                 pnl=pnl,
                 order_id=leg.order_id,
                 time=leg.time,
+                symbol=leg.symbol,
+                asset_type=leg.asset_type,
+                quantity=leg.quantity,
+                entry_time=entry_time,
+                exit_time=leg.time,
             )
         )
 
@@ -455,7 +494,11 @@ def detect_problems(
         trading_pnl = activity.realized_pnl
     else:
         xfer = sum(m.amount for m in cash_movements)
-        eff_start = balances.starting_liquidation + xfer if cash_movements else balances.starting_liquidation
+        eff_start = (
+            balances.starting_liquidation + xfer
+            if cash_movements
+            else balances.starting_liquidation
+        )
         trading_pnl = balances.ending_liquidation - eff_start
     trading_pct = trading_pnl / eff_start * 100.0 if eff_start > 0 else 0.0
     if trading_pct <= -thresholds.large_loss_day_pct:
@@ -541,6 +584,7 @@ def build_daily_report_card(
         generated_at=generated_at,
         balances=balances,
         activity=activity,
+        trades=trades,
         top_winners=top_winners,
         top_losers=top_losers,
         open_positions=open_positions,
