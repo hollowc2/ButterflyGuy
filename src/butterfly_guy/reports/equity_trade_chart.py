@@ -156,73 +156,63 @@ def _draw_candles(ax: plt.Axes, series: list[dict]) -> None:
         )
 
 
-def _mark_trade(ax: plt.Axes, trade: TradeResult, series: list[dict]) -> None:
+def _mark_trade_levels(ax: plt.Axes, trade: TradeResult, series: list[dict]) -> None:
     entry = _nearest_price(series, trade.entry_time)
     if entry:
-        for size, alpha in ((420, 0.08), (230, 0.14)):
-            ax.scatter(
-                [entry[0]], [entry[1]], color=_ENTRY, s=size, alpha=alpha, linewidths=0, zorder=6
-            )
+        ax.axhline(entry[1], color=_ENTRY, alpha=0.5, linewidth=0.8, linestyle="-", zorder=6)
         ax.scatter(
             [entry[0]],
             [entry[1]],
-            facecolors="none",
+            facecolors=_BG,
             edgecolors=_ENTRY,
-            linewidths=1.8,
+            linewidths=1.6,
             marker="o",
-            s=105,
-            zorder=8,
+            s=42,
+            zorder=10,
         )
     exit_mark = _nearest_price(series, trade.exit_time or trade.time)
     if exit_mark:
-        for size, alpha in ((420, 0.08), (230, 0.14)):
-            ax.scatter(
-                [exit_mark[0]],
-                [exit_mark[1]],
-                color=_EXIT,
-                s=size,
-                alpha=alpha,
-                linewidths=0,
-                zorder=6,
-            )
+        ax.axhline(exit_mark[1], color=_EXIT, alpha=0.5, linewidth=0.8, linestyle="-", zorder=6)
         ax.scatter(
             [exit_mark[0]],
             [exit_mark[1]],
-            facecolors="none",
+            facecolors=_BG,
             edgecolors=_EXIT,
-            linewidths=1.8,
+            linewidths=1.6,
             marker="o",
-            s=105,
-            zorder=8,
+            s=42,
+            zorder=10,
         )
 
 
-def _mark_zoom_trade_line(
+def _mark_zoom_trade_level(
     ax: plt.Axes,
     mark: tuple[dt.datetime, float] | None,
     color: str,
-    *,
-    from_top: bool,
+    label: str,
 ) -> None:
     if mark is None:
         return
-    y0, y1 = ax.get_ylim()
-    spread = y1 - y0
-    line_start = y1 - spread * 0.08 if from_top else y0 + spread * 0.08
-    ax.axvline(mark[0], color=color, alpha=0.35, linewidth=0.8, linestyle="--", zorder=7)
-    ax.annotate(
-        "",
-        xy=mark,
-        xytext=(mark[0], line_start),
-        arrowprops={
-            "arrowstyle": "-|>",
-            "color": color,
-            "lw": 1.1,
-            "alpha": 0.95,
-            "shrinkA": 0,
-            "shrinkB": 4,
+    ax.axhline(mark[1], color=color, alpha=0.95, linewidth=1.2, zorder=9)
+    ax.axhspan(mark[1] * 0.999, mark[1] * 1.001, color=color, alpha=0.08, zorder=1)
+    ax.text(
+        0.985,
+        mark[1],
+        f"{label} {mark[1]:.3f}",
+        transform=ax.get_yaxis_transform(),
+        ha="right",
+        va="center",
+        color=color,
+        fontsize=7,
+        fontweight="bold",
+        bbox={
+            "boxstyle": "round,pad=0.22",
+            "facecolor": _PANEL_2,
+            "edgecolor": color,
+            "alpha": 0.86,
+            "linewidth": 0.7,
         },
-        zorder=10,
+        zorder=11,
     )
 
 
@@ -422,28 +412,28 @@ def _render_trade_panel(
         f"{trade.quantity:.0f}" if float(trade.quantity).is_integer() else f"{trade.quantity:.2f}"
     )
 
-    _panel_text(ax, 0.08, 0.955, "TRADE ANALYSIS", size=8, color=_MUTED, weight="bold")
-    _panel_text(ax, 0.08, 0.895, trade.symbol or trade.label, size=22, color=_TEXT, weight="bold")
+    _panel_text(ax, 0.08, 0.955, "TRADE ANALYSIS", size=8.2, color=_MUTED, weight="bold")
+    _panel_text(ax, 0.08, 0.895, trade.symbol or trade.label, size=23, color=_TEXT, weight="bold")
     _panel_text(
         ax,
         0.08,
-        0.82,
+        0.825,
         f"Entry: {entry.strftime('%H:%M:%S.%f')[:-3]} ET @ ${entry_price:.3f}"
         if entry and entry_price
         else "Entry: n/a",
-        size=7.6,
+        size=8.4,
     )
     _panel_text(
         ax,
         0.08,
-        0.775,
+        0.792,
         f"Exit: {exit_.strftime('%H:%M:%S.%f')[:-3]} ET @ ${exit_price:.3f}"
         if exit_ and exit_price
         else "Exit: n/a",
-        size=7.6,
+        size=8.4,
     )
-    _panel_text(ax, 0.08, 0.73, f"Size: {size}", size=7.6)
-    _panel_text(ax, 0.08, 0.69, f"Duration: {_duration(trade)}", size=7.6)
+    _panel_text(ax, 0.08, 0.759, f"Size: {size}", size=8.4)
+    _panel_text(ax, 0.08, 0.727, f"Duration: {_duration(trade)}", size=8.4)
 
     _glass_box(ax, (0.06, 0.47), 0.88, 0.16)
     _panel_text(ax, 0.10, 0.605, "PERFORMANCE", size=7.6, color=_MUTED, weight="bold")
@@ -657,8 +647,8 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
         color=_MUTED,
         fontsize=7,
     )
-    _mark_trade(day_ax, trade, series)
-    _mark_trade(zoom_ax, trade, zoom_series)
+    _mark_trade_levels(day_ax, trade, series)
+    _mark_trade_levels(zoom_ax, trade, zoom_series)
     _draw_viewfinder(day_ax, zoom_start, zoom_end, series)
 
     day_ax.set_xlim(times[0], times[-1])
@@ -668,8 +658,8 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
     day_ax.set_ylim(*_price_limits(series))
     zoom_ax.set_ylim(*_price_limits(zoom_series))
     rsi_ax.set_ylim(0, 100)
-    _mark_zoom_trade_line(zoom_ax, entry_mark, _ENTRY, from_top=False)
-    _mark_zoom_trade_line(zoom_ax, exit_mark, _EXIT, from_top=True)
+    _mark_zoom_trade_level(zoom_ax, entry_mark, _ENTRY, "ENTRY")
+    _mark_zoom_trade_level(zoom_ax, exit_mark, _EXIT, "EXIT")
 
     market_open_dt = dt.datetime.combine(times[-1].date(), MARKET_OPEN, tzinfo=EASTERN)
     day_ax.axvline(market_open_dt, color=_TEXT, alpha=0.35, linewidth=0.9, linestyle="--")
