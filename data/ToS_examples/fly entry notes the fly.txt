@@ -1,5 +1,0 @@
-fly entry notes
-the fly may change , be flexible to moving strikes during entry attempts, if price moves a different fly may now become valid, be flexible.
-us the ask to place limit orders , schwab allows create a spread and submitting as a single order ,  price the fly as one unit 
-retry the ask if it updates, add acouple cents  to make the offer more appealing to the buyers
-
