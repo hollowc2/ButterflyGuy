@@ -126,6 +126,14 @@ def test_xsp_config_uses_independent_noisy_product_controls():
     assert config.profit_management.peak_tracking.require_quote_quality is True
 
 
+def test_ndx_config_uses_larger_weekly_loss_limit():
+    config = load_config(config_path="configs/config_ndx.yaml")
+
+    assert config.strategy.underlying == "NDX"
+    assert config.risk.max_daily_loss == 500.0
+    assert config.risk.max_weekly_loss == 5000.0
+
+
 def test_spx_goldilocks_width_bucket_uses_20_30_40():
     config = load_config(config_path="configs/config.yaml")
 

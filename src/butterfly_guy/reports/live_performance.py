@@ -362,7 +362,7 @@ def render_report_html(
   <section class="panel chart-panel">
     <canvas id="equityChart" height="120"></canvas>
     <div class="chart-legend" aria-label="Equity curve marker legend">
-      <span class="legend-item"><span class="legend-dot legend-dot-standard"></span> Standard exit</span>
+      <span class="legend-item"><span class="legend-dot legend-dot-standard"></span> End of Day exit</span>
       <span class="legend-item"><span class="legend-dot legend-dot-drawdown"></span> Drawdown exit</span>
     </div>
   </section>

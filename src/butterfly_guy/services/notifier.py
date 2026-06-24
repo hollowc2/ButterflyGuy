@@ -6,7 +6,6 @@ import datetime as dt
 import json
 
 import aiohttp
-from notify import send as send_telegram
 
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.time_utils import EASTERN, now_eastern
@@ -20,7 +19,13 @@ class DiscordNotifier:
     def __init__(self, webhook_url: str) -> None:
         self.webhook_url = webhook_url
 
-    async def _post(self, content: str, *, image_png: bytes | None = None, image_name: str = "chart.png") -> None:
+    async def _post(
+        self,
+        content: str,
+        *,
+        image_png: bytes | None = None,
+        image_name: str = "chart.png",
+    ) -> None:
         try:
             async with aiohttp.ClientSession() as session:
                 if image_png:
@@ -270,5 +275,10 @@ class TelegramNotifier:
             "Suggested action: review strategy health and decide whether to pause, "
             "reset, or adjust risk manually."
         )
+        try:
+            from notify import send as send_telegram
+        except ModuleNotFoundError:
+            log.warning("telegram_notify_unavailable")
+            return
         if not send_telegram(msg):
             log.warning("telegram_post_failed", context="consecutive_loss_warning")
