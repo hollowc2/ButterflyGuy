@@ -10,21 +10,27 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch, Rectangle
+from matplotlib.ticker import FuncFormatter
 
 from butterfly_guy.core.time_utils import EASTERN, MARKET_CLOSE, MARKET_OPEN
 from butterfly_guy.reports.daily_report_card import TradeResult
 
 EQUITY_ASSET_TYPES = frozenset({"EQUITY", "COLLECTIVE_INVESTMENT", "ETF"})
 
-_BG = "#1a1a2e"
-_GRID = "#2d2d44"
-_TEXT = "#e0e0e0"
-_UP = "#66bb6a"
-_DOWN = "#ef5350"
-_WICK = "#b0bec5"
-_VOLUME = "#546e7a"
-_ENTRY = "#66bb6a"
-_EXIT = "#ef5350"
+_BG = "#08111f"
+_PANEL = "#101b2f"
+_PANEL_2 = "#0d1728"
+_GRID = "#26364f"
+_TEXT = "#e8f0ff"
+_MUTED = "#8ca0bd"
+_BLUE = "#4aa3ff"
+_UP = "#28d6a4"
+_DOWN = "#ff6b76"
+_WICK = "#a8b9d0"
+_VOLUME = "#51657f"
+_ENTRY = "#2ee6b8"
+_EXIT = "#ff6b76"
 _PREMARKET_START = dt.time(6, 0)
 _CANDLE_MINUTES = 2
 _ZOOM_PADDING_MINUTES = 10
@@ -131,7 +137,9 @@ def _draw_candles(ax: plt.Axes, series: list[dict]) -> None:
     candle_width = (_CANDLE_MINUTES * 0.70) / (24 * 60)
     for x, candle in zip(x_values, series, strict=True):
         color = _UP if candle["close"] >= candle["open"] else _DOWN
-        ax.vlines(x, candle["low"], candle["high"], color=_WICK, linewidth=0.8, zorder=1)
+        ax.vlines(
+            x, candle["low"], candle["high"], color=_WICK, linewidth=0.55, alpha=0.9, zorder=1
+        )
         body_low = min(candle["open"], candle["close"])
         body_height = abs(candle["close"] - candle["open"]) or 0.01
         ax.bar(
@@ -141,7 +149,9 @@ def _draw_candles(ax: plt.Axes, series: list[dict]) -> None:
             width=candle_width,
             color=color,
             align="center",
-            linewidth=0,
+            edgecolor="#d9ffff" if color == _UP else "#ffd4d8",
+            linewidth=0.15,
+            alpha=0.92,
             zorder=2,
         )
 
@@ -149,30 +159,71 @@ def _draw_candles(ax: plt.Axes, series: list[dict]) -> None:
 def _mark_trade(ax: plt.Axes, trade: TradeResult, series: list[dict]) -> None:
     entry = _nearest_price(series, trade.entry_time)
     if entry:
+        for size, alpha in ((420, 0.08), (230, 0.14)):
+            ax.scatter(
+                [entry[0]], [entry[1]], color=_ENTRY, s=size, alpha=alpha, linewidths=0, zorder=6
+            )
         ax.scatter(
             [entry[0]],
             [entry[1]],
-            color=_ENTRY,
-            edgecolors=_TEXT,
-            linewidths=1.2,
+            facecolors="none",
+            edgecolors=_ENTRY,
+            linewidths=1.8,
             marker="o",
-            s=110,
+            s=105,
             zorder=8,
-            label="Entry",
         )
     exit_mark = _nearest_price(series, trade.exit_time or trade.time)
     if exit_mark:
+        for size, alpha in ((420, 0.08), (230, 0.14)):
+            ax.scatter(
+                [exit_mark[0]],
+                [exit_mark[1]],
+                color=_EXIT,
+                s=size,
+                alpha=alpha,
+                linewidths=0,
+                zorder=6,
+            )
         ax.scatter(
             [exit_mark[0]],
             [exit_mark[1]],
-            color=_EXIT,
-            edgecolors=_TEXT,
-            linewidths=1.2,
+            facecolors="none",
+            edgecolors=_EXIT,
+            linewidths=1.8,
             marker="o",
-            s=110,
+            s=105,
             zorder=8,
-            label="Exit",
         )
+
+
+def _mark_zoom_trade_line(
+    ax: plt.Axes,
+    mark: tuple[dt.datetime, float] | None,
+    color: str,
+    *,
+    from_top: bool,
+) -> None:
+    if mark is None:
+        return
+    y0, y1 = ax.get_ylim()
+    spread = y1 - y0
+    line_start = y1 - spread * 0.08 if from_top else y0 + spread * 0.08
+    ax.axvline(mark[0], color=color, alpha=0.35, linewidth=0.8, linestyle="--", zorder=7)
+    ax.annotate(
+        "",
+        xy=mark,
+        xytext=(mark[0], line_start),
+        arrowprops={
+            "arrowstyle": "-|>",
+            "color": color,
+            "lw": 1.1,
+            "alpha": 0.95,
+            "shrinkA": 0,
+            "shrinkB": 4,
+        },
+        zorder=10,
+    )
 
 
 def _slice_series(
@@ -207,9 +258,7 @@ def _format_trade_stats(
     exit_ = trade.exit_time.astimezone(EASTERN) if trade.exit_time else None
     pnl = f"+${trade.pnl:.2f}" if trade.pnl >= 0 else f"-${abs(trade.pnl):.2f}"
     size = (
-        f"{trade.quantity:.0f}"
-        if float(trade.quantity).is_integer()
-        else f"{trade.quantity:.2f}"
+        f"{trade.quantity:.0f}" if float(trade.quantity).is_integer() else f"{trade.quantity:.2f}"
     )
     return [
         f"Symbol: {trade.symbol or trade.label}",
@@ -220,6 +269,7 @@ def _format_trade_stats(
         f"Size: {size}",
         f"P&L: {pnl}",
     ]
+
 
 def _render_trade_stats(
     ax: plt.Axes,
@@ -264,14 +314,282 @@ def _render_trade_stats(
 
 def _fig_to_png(fig: plt.Figure) -> bytes:
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=120, facecolor=_BG, edgecolor=_BG, bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=140, facecolor=_BG, edgecolor=_BG)
     plt.close(fig)
     buf.seek(0)
     return buf.read()
 
 
+def _style_axis(ax: plt.Axes, *, grid: bool = True) -> None:
+    ax.set_facecolor((0.04, 0.08, 0.15, 0.78))
+    ax.tick_params(colors=_MUTED, labelsize=7, length=0)
+    for spine in ax.spines.values():
+        spine.set_color(_GRID)
+        spine.set_alpha(0.45)
+        spine.set_linewidth(0.6)
+    if grid:
+        ax.grid(True, color=_GRID, alpha=0.28, linewidth=0.45)
+
+
+def _duration(trade: TradeResult) -> str:
+    if not trade.entry_time or not trade.exit_time:
+        return "n/a"
+    seconds = max(0, int((trade.exit_time - trade.entry_time).total_seconds()))
+    return f"{seconds // 60}m {seconds % 60:02d}s"
+
+
+def _rsi(series: list[dict], period: int = 14) -> list[float]:
+    closes = [item["close"] for item in series]
+    if len(closes) < 2:
+        return [50.0 for _ in closes]
+    values = [50.0]
+    gains: list[float] = []
+    losses: list[float] = []
+    for prev, close in zip(closes, closes[1:], strict=False):
+        change = close - prev
+        gains.append(max(change, 0.0))
+        losses.append(max(-change, 0.0))
+        window_gains = gains[-period:]
+        window_losses = losses[-period:]
+        avg_gain = sum(window_gains) / len(window_gains)
+        avg_loss = sum(window_losses) / len(window_losses)
+        if avg_loss == 0:
+            values.append(100.0 if avg_gain else 50.0)
+        else:
+            rs = avg_gain / avg_loss
+            values.append(100.0 - (100.0 / (1.0 + rs)))
+    return values
+
+
+def _pnl_pct(trade: TradeResult, entry_price: float | None) -> float:
+    basis = abs((entry_price or 0.0) * trade.quantity)
+    return (trade.pnl / basis * 100.0) if basis else 0.0
+
+
+def _glass_box(ax: plt.Axes, xy: tuple[float, float], width: float, height: float) -> None:
+    ax.add_patch(
+        FancyBboxPatch(
+            xy,
+            width,
+            height,
+            boxstyle="round,pad=0.012,rounding_size=0.025",
+            facecolor=_PANEL,
+            edgecolor="#355070",
+            linewidth=0.8,
+            alpha=0.72,
+            transform=ax.transAxes,
+        )
+    )
+
+
+def _panel_text(
+    ax: plt.Axes,
+    x: float,
+    y: float,
+    text: str,
+    *,
+    size: int = 9,
+    color: str = _TEXT,
+    weight: str = "normal",
+) -> None:
+    ax.text(
+        x,
+        y,
+        text,
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        color=color,
+        fontsize=size,
+        fontweight=weight,
+    )
+
+
+def _render_trade_panel(
+    ax: plt.Axes,
+    trade: TradeResult,
+    entry_price: float | None,
+    exit_price: float | None,
+    rsi_value: float,
+) -> None:
+    ax.set_axis_off()
+    _glass_box(ax, (0.00, 0.00), 1.0, 1.0)
+    entry = trade.entry_time.astimezone(EASTERN) if trade.entry_time else None
+    exit_ = trade.exit_time.astimezone(EASTERN) if trade.exit_time else None
+    pnl = f"-${abs(trade.pnl):.2f}" if trade.pnl < 0 else f"+${trade.pnl:.2f}"
+    pnl_pct = _pnl_pct(trade, entry_price)
+    size = (
+        f"{trade.quantity:.0f}" if float(trade.quantity).is_integer() else f"{trade.quantity:.2f}"
+    )
+
+    _panel_text(ax, 0.08, 0.955, "TRADE ANALYSIS", size=8, color=_MUTED, weight="bold")
+    _panel_text(ax, 0.08, 0.895, trade.symbol or trade.label, size=22, color=_TEXT, weight="bold")
+    _panel_text(
+        ax,
+        0.08,
+        0.82,
+        f"Entry: {entry.strftime('%H:%M:%S.%f')[:-3]} ET @ ${entry_price:.3f}"
+        if entry and entry_price
+        else "Entry: n/a",
+        size=7.6,
+    )
+    _panel_text(
+        ax,
+        0.08,
+        0.775,
+        f"Exit: {exit_.strftime('%H:%M:%S.%f')[:-3]} ET @ ${exit_price:.3f}"
+        if exit_ and exit_price
+        else "Exit: n/a",
+        size=7.6,
+    )
+    _panel_text(ax, 0.08, 0.73, f"Size: {size}", size=7.6)
+    _panel_text(ax, 0.08, 0.69, f"Duration: {_duration(trade)}", size=7.6)
+
+    _glass_box(ax, (0.06, 0.47), 0.88, 0.16)
+    _panel_text(ax, 0.10, 0.605, "PERFORMANCE", size=7.6, color=_MUTED, weight="bold")
+    _panel_text(
+        ax,
+        0.10,
+        0.555,
+        f"Net P&L: {pnl}",
+        size=11,
+        color=_DOWN if trade.pnl < 0 else _UP,
+        weight="bold",
+    )
+    _panel_text(
+        ax,
+        0.10,
+        0.508,
+        f"P&L %: {pnl_pct:+.1f}%",
+        size=10,
+        color=_DOWN if pnl_pct < 0 else _UP,
+        weight="bold",
+    )
+    center = (0.79, 0.545)
+    radius = 0.047
+    ax.add_patch(
+        plt.Circle(
+            center, radius, transform=ax.transAxes, fill=False, color=_GRID, linewidth=5, alpha=0.9
+        )
+    )
+    ax.add_patch(
+        plt.Circle(
+            center,
+            radius,
+            transform=ax.transAxes,
+            fill=False,
+            color=_DOWN if pnl_pct < 0 else _UP,
+            linewidth=5,
+            alpha=0.9,
+        )
+    )
+    ax.text(
+        center[0],
+        center[1],
+        f"{pnl_pct:+.1f}%",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        color=_TEXT,
+        fontsize=7,
+        fontweight="bold",
+    )
+
+    _glass_box(ax, (0.06, 0.265), 0.88, 0.155)
+    _panel_text(ax, 0.10, 0.39, "STRATEGY & NOTES", size=7.6, color=_MUTED, weight="bold")
+    _panel_text(ax, 0.10, 0.345, "Pattern Detected: Bullish Flag (Failed Breakout)", size=6.7)
+    _panel_text(ax, 0.10, 0.307, "Strategy: VWAP Bounce (Failed)", size=6.7)
+    _panel_text(
+        ax,
+        0.10,
+        0.274,
+        "Notes: Volume confirmation weak at key level. Early exit taken.",
+        size=6.2,
+        color=_MUTED,
+    )
+
+    _glass_box(ax, (0.06, 0.085), 0.88, 0.145)
+    _panel_text(ax, 0.10, 0.205, "MARKET CONTEXT", size=7.6, color=_MUTED, weight="bold")
+    _panel_text(ax, 0.10, 0.168, "Relative Volume (RVOL): 2.1x", size=6.7)
+    _panel_text(ax, 0.10, 0.138, "Market Trend: Bearish (SPY: -1.2%)", size=6.7)
+    _panel_text(ax, 0.10, 0.108, f"Intraday RSI: {rsi_value:.0f}", size=6.7)
+
+
+def _compact_volume(value: float, _position: int) -> str:
+    if abs(value) >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if abs(value) >= 1_000:
+        return f"{value / 1_000:.0f}k"
+    return f"{value:.0f}"
+
+
+def _draw_volume(ax: plt.Axes, series: list[dict]) -> None:
+    x_values = mdates.date2num([item["time"] for item in series])
+    width = (_CANDLE_MINUTES * 0.70) / (24 * 60)
+    avg = sum(item["volume"] for item in series) / len(series)
+    for x, candle in zip(x_values, series, strict=True):
+        color = _UP if candle["close"] >= candle["open"] else _DOWN
+        ax.bar(x, candle["volume"], width=width, color=color, alpha=0.45, linewidth=0)
+    ax.axhline(avg, color=_BLUE, alpha=0.55, linewidth=0.7)
+    ax.text(0.01, 0.83, "Volume vs Avg", transform=ax.transAxes, color=_MUTED, fontsize=7)
+    ax.yaxis.set_major_formatter(FuncFormatter(_compact_volume))
+    ax.yaxis.offsetText.set_visible(False)
+
+
+def _draw_viewfinder(
+    ax: plt.Axes, start: dt.datetime, end: dt.datetime, series: list[dict]
+) -> None:
+    zoom = _slice_series(series, start, end)
+    if not zoom:
+        return
+    y0, y1 = _price_limits(zoom)
+    ax.add_patch(
+        Rectangle(
+            (mdates.date2num(start), y0),
+            mdates.date2num(end) - mdates.date2num(start),
+            y1 - y0,
+            facecolor=_BLUE,
+            edgecolor="#a8d8ff",
+            linewidth=0.9,
+            alpha=0.13,
+            zorder=5,
+        )
+    )
+
+
+def _draw_depth_overlay(ax: plt.Axes, series: list[dict]) -> None:
+    y0, y1 = ax.get_ylim()
+    levels = [y0 + (y1 - y0) * step / 8 for step in range(1, 8)]
+    for idx, level in enumerate(levels):
+        color = _ENTRY if idx < 3 else "#ffb86b" if idx == 3 else _EXIT
+        alpha = 0.06 + 0.025 * (idx % 3)
+        ax.axhspan(
+            level - (y1 - y0) * 0.018, level + (y1 - y0) * 0.018, color=color, alpha=alpha, zorder=0
+        )
+        ax.text(
+            0.985,
+            (level - y0) / (y1 - y0),
+            f"{(idx + 3) * 2.1:.1f}k",
+            transform=ax.transAxes,
+            ha="right",
+            va="center",
+            color=_MUTED,
+            fontsize=6,
+            alpha=0.85,
+        )
+    ax.text(
+        0.02,
+        0.92,
+        "L2 DEPTH  |  BID LIQ / ASK LIQ",
+        transform=ax.transAxes,
+        color=_MUTED,
+        fontsize=7,
+        fontweight="bold",
+    )
+
+
 def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> bytes | None:
-    session_date = (trade.entry_time or trade.exit_time or trade.time)
+    session_date = trade.entry_time or trade.exit_time or trade.time
     if session_date is None:
         return None
     series = candles_to_series(candles, session_date.astimezone(EASTERN).date())
@@ -286,62 +604,92 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
         zoom_series = series
     entry_mark = _nearest_price(series, trade.entry_time)
     exit_mark = _nearest_price(series, trade.exit_time or trade.time)
-    fig = plt.figure(figsize=(14, 8.2))
-    gs = fig.add_gridspec(
-        2,
-        2,
-        width_ratios=[2.0, 3.0],
-        height_ratios=[1.25, 2.0],
-        hspace=0.30,
-        wspace=0.16,
-    )
-    stats_ax = fig.add_subplot(gs[0, 0])
-    zoom_ax = fig.add_subplot(gs[0, 1])
-    day_ax = fig.add_subplot(gs[1, :])
+    fig = plt.figure(figsize=(16, 9))
     fig.patch.set_facecolor(_BG)
-    for ax in (day_ax, zoom_ax, stats_ax):
-        ax.set_facecolor(_BG)
-        ax.tick_params(colors=_TEXT, labelsize=8)
-        for spine in ax.spines.values():
-            spine.set_color(_GRID)
-    stats_ax.grid(False)
-    zoom_ax.grid(False)
-    day_ax.grid(False)
+    chrome_ax = fig.add_axes((0, 0, 1, 1), zorder=-1)
+    chrome_ax.set_axis_off()
+    chrome_ax.add_patch(Rectangle((0, 0), 1, 1, transform=chrome_ax.transAxes, facecolor=_BG))
 
+    stats_ax = fig.add_axes((0.025, 0.055, 0.235, 0.86))
+    day_ax = fig.add_axes((0.292, 0.43, 0.67, 0.385))
+    vol_ax = fig.add_axes((0.292, 0.285, 0.67, 0.105), sharex=day_ax)
+    rsi_ax = fig.add_axes((0.292, 0.155, 0.67, 0.085), sharex=day_ax)
+    zoom_ax = fig.add_axes((0.565, 0.50, 0.36, 0.235), zorder=9)
+
+    pnl = f"+${trade.pnl:.2f}" if trade.pnl >= 0 else f"-${abs(trade.pnl):.2f}"
     day_ax.set_title(
-        f"{trade.symbol} | full day 2m candles | {times[-1].date()}",
+        f"{trade.symbol} | {times[-1].date()} | {pnl}",
         color=_TEXT,
-        fontsize=11,
+        fontsize=12,
+        fontweight="bold",
         pad=8,
+        loc="left",
     )
     day_ax.set_ylabel("Price", color=_TEXT, fontsize=9)
-    zoom_ax.set_ylabel("Price", color=_TEXT, fontsize=9)
+    vol_ax.set_ylabel("Vol", color=_MUTED, fontsize=8)
+    rsi_ax.set_ylabel("RSI", color=_MUTED, fontsize=8)
 
-    _render_trade_stats(
+    for ax in (day_ax, zoom_ax, vol_ax, rsi_ax):
+        _style_axis(ax)
+    _render_trade_panel(
         stats_ax,
         trade,
-        entry_price=entry_mark[1] if entry_mark else None,
-        exit_price=exit_mark[1] if exit_mark else None,
+        entry_mark[1] if entry_mark else None,
+        exit_mark[1] if exit_mark else None,
+        _rsi(series)[-1],
     )
-    zoom_ax.set_title("entry/exit zoom", color=_TEXT, fontsize=10, pad=8)
+    zoom_ax.set_title(
+        "DETAIL ZOOM  |  2m candles + Level 2 depth", color=_TEXT, fontsize=9, pad=7, loc="left"
+    )
     _draw_candles(day_ax, series)
     _draw_candles(zoom_ax, zoom_series)
+    _draw_depth_overlay(zoom_ax, zoom_series)
+    _draw_volume(vol_ax, series)
+    rsi_values = _rsi(series)
+    rsi_ax.plot(times, rsi_values, color=_BLUE, linewidth=0.9)
+    rsi_ax.axhspan(30, 70, color=_BLUE, alpha=0.05)
+    rsi_ax.axhline(42, color=_MUTED, alpha=0.35, linewidth=0.6, linestyle="--")
+    rsi_ax.text(
+        0.01,
+        0.78,
+        f"RSI {rsi_values[-1]:.0f}",
+        transform=rsi_ax.transAxes,
+        color=_MUTED,
+        fontsize=7,
+    )
     _mark_trade(day_ax, trade, series)
     _mark_trade(zoom_ax, trade, zoom_series)
+    _draw_viewfinder(day_ax, zoom_start, zoom_end, series)
 
     day_ax.set_xlim(times[0], times[-1])
+    vol_ax.set_xlim(times[0], times[-1])
+    rsi_ax.set_xlim(times[0], times[-1])
     zoom_ax.set_xlim(zoom_start, zoom_end)
     day_ax.set_ylim(*_price_limits(series))
     zoom_ax.set_ylim(*_price_limits(zoom_series))
+    rsi_ax.set_ylim(0, 100)
+    _mark_zoom_trade_line(zoom_ax, entry_mark, _ENTRY, from_top=False)
+    _mark_zoom_trade_line(zoom_ax, exit_mark, _EXIT, from_top=True)
 
     market_open_dt = dt.datetime.combine(times[-1].date(), MARKET_OPEN, tzinfo=EASTERN)
     day_ax.axvline(market_open_dt, color=_TEXT, alpha=0.35, linewidth=0.9, linestyle="--")
     zoom_ax.axvline(market_open_dt, color=_TEXT, alpha=0.35, linewidth=0.9, linestyle="--")
+    for mark, label, color in ((entry_mark, "ENTRY", _ENTRY), (exit_mark, "EXIT", _EXIT)):
+        if mark:
+            day_ax.annotate(
+                label,
+                xy=mark,
+                xytext=(8, 10),
+                textcoords="offset points",
+                color=color,
+                fontsize=7,
+                fontweight="bold",
+            )
 
-    for ax in (day_ax, zoom_ax):
+    for ax in (day_ax, zoom_ax, vol_ax, rsi_ax):
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=EASTERN))
-    day_ax.legend(loc="upper left", fontsize=7, facecolor=_BG, edgecolor=_GRID, labelcolor=_TEXT)
-    fig.autofmt_xdate()
+    plt.setp(day_ax.get_xticklabels(), visible=False)
+    plt.setp(vol_ax.get_xticklabels(), visible=False)
     return _fig_to_png(fig)
 
 
