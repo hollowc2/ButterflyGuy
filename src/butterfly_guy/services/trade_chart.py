@@ -13,7 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 
-from butterfly_guy.core.time_utils import EASTERN, MARKET_CLOSE, MARKET_OPEN
+from butterfly_guy.core.time_utils import EASTERN, MARKET_OPEN, market_close_time
 
 # Dark terminal-style palette
 _BG = "#1a1a2e"
@@ -98,7 +98,11 @@ def _filter_series(
 ) -> list[tuple[dt.datetime, float]]:
     start_utc = window_start.astimezone(dt.timezone.utc)
     end_utc = window_end.astimezone(dt.timezone.utc)
-    return [(ts, price) for ts, price in series if start_utc <= ts.astimezone(dt.timezone.utc) <= end_utc]
+    return [
+        (ts, price)
+        for ts, price in series
+        if start_utc <= ts.astimezone(dt.timezone.utc) <= end_utc
+    ]
 
 
 def _setup_axes(ax: plt.Axes, title: str, y_label: str = "Price") -> None:
@@ -178,9 +182,12 @@ def build_entry_chart_png(
     return _fig_to_png(fig)
 
 
-def _session_series(series: list[tuple[dt.datetime, float]], session_date: dt.date) -> list[tuple[dt.datetime, float]]:
+def _session_series(
+    series: list[tuple[dt.datetime, float]],
+    session_date: dt.date,
+) -> list[tuple[dt.datetime, float]]:
     open_dt = dt.datetime.combine(session_date, MARKET_OPEN, tzinfo=EASTERN)
-    close_dt = dt.datetime.combine(session_date, MARKET_CLOSE, tzinfo=EASTERN)
+    close_dt = dt.datetime.combine(session_date, market_close_time(session_date), tzinfo=EASTERN)
     return [(ts, price) for ts, price in series if open_dt <= ts <= close_dt]
 
 
@@ -195,7 +202,11 @@ def _tent_hit_stats(
 
 def _exit_window_end(spec: ButterflyChartSpec, *, full_session: bool) -> dt.datetime:
     entry_et = spec.entry_time.astimezone(EASTERN)
-    close_dt = dt.datetime.combine(entry_et.date(), MARKET_CLOSE, tzinfo=EASTERN)
+    close_dt = dt.datetime.combine(
+        entry_et.date(),
+        market_close_time(entry_et.date()),
+        tzinfo=EASTERN,
+    )
     if full_session:
         return close_dt
     exit_et = (spec.exit_time or dt.datetime.now(dt.timezone.utc)).astimezone(EASTERN)
@@ -245,7 +256,6 @@ def build_exit_chart_png(
     if series is None:
         return None
 
-    entry_et = spec.entry_time.astimezone(EASTERN)
     tent_hit, tent_bars = _tent_hit_stats(series, spec.lower_be, spec.upper_be)
     hit_label = "YES" if tent_hit else "NO"
     title = (

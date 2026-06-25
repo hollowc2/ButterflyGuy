@@ -19,7 +19,12 @@ from butterfly_guy.core.metrics import (
     start_metrics_server,
     trades_active,
 )
-from butterfly_guy.core.time_utils import is_market_open, is_trading_day, now_eastern
+from butterfly_guy.core.time_utils import (
+    is_market_open,
+    is_trading_day,
+    market_close_time,
+    now_eastern,
+)
 from butterfly_guy.data.collector import OptionChainCollector
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
@@ -221,7 +226,11 @@ async def eod_chart_loop(position_service: PositionService) -> None:
         if not is_trading_day(now.date()):
             continue
 
-        eod_ready = (now.hour, now.minute) >= (16, EOD_CHART_DELAY_MINUTES)
+        close = market_close_time(now.date())
+        eod_at = dt.datetime.combine(now.date(), close, tzinfo=now.tzinfo) + dt.timedelta(
+            minutes=EOD_CHART_DELAY_MINUTES
+        )
+        eod_ready = now >= eod_at
         if not eod_ready:
             continue
 

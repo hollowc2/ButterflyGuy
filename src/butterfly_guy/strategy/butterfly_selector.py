@@ -62,8 +62,8 @@ class ButterflySelector:
                     "no_candidates_near_target_center",
                     target_center=target_center,
                     tolerance=center_tolerance,
-                    falling_back_to="all candidates",
                 )
+                return None
 
         # Filter out unrealistically high R/R (too far OTM, nearly worthless)
         filtered = [c for c in pool if c.reward_risk <= self.settings.rr_max] or pool

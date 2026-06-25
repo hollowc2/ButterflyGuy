@@ -91,3 +91,18 @@ def test_vix_selection_rejects_cheap_extreme_rr_tail_candidate():
     assert best is not None
     assert best.center_strike == 7530
     assert best.wing_width == 30
+
+
+def test_vix_centered_selection_blocks_when_no_candidate_near_target():
+    selector = ButterflySelector(StrategySettings(rr_target=10.0, rr_max=12.0))
+    candidates = [
+        make_candidate(center=29220, distance=152.7, reward_risk=11.65),
+    ]
+
+    best = selector.select_best(
+        candidates,
+        target_center=29400,
+        center_tolerance=15,
+    )
+
+    assert best is None

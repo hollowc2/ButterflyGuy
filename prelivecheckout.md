@@ -2,7 +2,7 @@
 
 Audit date: 2026-06-25
 Scope: `/opt/butterflyguy` source, configs, tests, Docker/monitoring files, live container status, and read-only aggregate TimescaleDB queries.
-Mode: original audit was read-only; remediation updates in this document modified local source, tests, config comments, and graphify artifacts. No broker order APIs, restarts, DB writes, commits, or pushes were performed.
+Mode: original audit was read-only; remediation updates modified local source, tests, config comments, graphify artifacts, and documentation. No broker order APIs, restarts, or DB writes were performed. The safety-gate remediation was committed and pushed as `47eacd0`.
 
 ## 1. Executive Summary
 
@@ -21,6 +21,26 @@ Operationally, the platform is still not ready to trade real money today. The sy
 **NO-GO**
 
 This recommendation permits continued broker paper trading, read-only shadow mode, historical replay, and deterministic simulations. It does not permit live-money automated order placement. A limited live pilot should wait until the release-blocking findings are fixed and verified with failure-injection tests.
+
+## 2A. What Is Left
+
+These are the remaining blockers after commit `47eacd0`:
+
+| Priority | Remaining work | Why it still blocks live money | Done when |
+|---|---|---|---|
+| P0 | Continuous broker reconciliation loop | Startup checks are not enough; the app still needs to detect positions/orders that drift during runtime. | Runtime loop polls Schwab positions/open orders, compares them to DB state, halts entries on mismatch, and has fault-injection tests. |
+| P0 | Durable order intent and broker order ID persistence | A crash after broker accept but before DB insert can still lose local awareness of a live order. | Entry and exit intents are written before submit, broker order IDs are persisted immediately after submit, and ambiguous submit windows reconcile before any retry. |
+| P0 | Restart reconciliation of broker-filled/flat states | Restart currently blocks unsafe mismatch, but does not automatically repair DB `OPEN` rows from broker truth. | Startup can close/reconcile DB rows or halt with an actionable reason based on broker positions/orders/transactions. |
+| P0 | Full Schwab complex-order status mapping | Known partial-fill statuses fail closed, but real Schwab paper/live complex-spread statuses are not fully observed or mapped. | Paper/shadow runs collect statuses; partial, cancel-pending, rejected, expired, filled, and child-order cases have explicit tests and handling. |
+| P1 | Deeper `/health` readiness | Current health is process-level plus deploy smoke, not DB/broker/data/risk readiness. | `/health` or a readiness endpoint reports DB, Schwab auth, fresh chain/VIX, broker/DB reconciliation, and risk-state status. |
+| P1 | Tested operator drills | A first-pass runbook exists, but flatten/restart/outage procedures have not been exercised. | Startup, manual flatten, restart recovery, broker outage, DB outage, and rollback are tabletop-tested and updated with exact commands. |
+| P1 | Account-level live confirmation | Live mode is SPX-only and env-gated, but not yet tied to an explicit account/risk confirmation. | Live startup verifies the expected Schwab account, $20,000 allocation assumption, and $500 daily account-loss cap before enabling entries. |
+
+Resolved locally after that commit:
+
+* VIX center tolerance now blocks selection when no candidate is within tolerance instead of falling back to all candidates.
+* 2026 NYSE early-close dates currently listed by NYSE are represented in market-open, minutes-to-close, session chart, intraday-bar, and EOD-chart timing paths.
+* `PositionService.monitor_loop()` docstring now matches the 2-second poll interval.
 
 ## 3. Release-Blocking Findings
 
@@ -120,16 +140,16 @@ This recommendation permits continued broker paper trading, read-only shadow mod
 | BLOCKER-006 | Resolved in source | Design risk | Live entry uses an advisory lock and risk re-check; migration `008_one_open_trade_per_underlying_day.sql` adds DB-level open-trade uniqueness. |
 | HIGH-001 | Resolved | Documentation/behavior mismatch | Owner confirmed consecutive losses are warning-only; config comments now match behavior. |
 | HIGH-002 | Mitigated | Data freshness | VIX-based entries now age-gate `$VIX`; live entries also require a recent collector chain snapshot. Broker response timestamp freshness remains unverified. |
-| HIGH-003 | High | Strategy rule mismatch | VIX center tolerance falls back to all candidates instead of blocking. |
+| HIGH-003 | Resolved in source | Strategy rule mismatch | VIX center tolerance now blocks when no candidate is within tolerance. |
 | HIGH-004 | High | Observability | `/health` is process-only, not DB/broker/data/trading health. |
 | HIGH-005 | Resolved in source | Deployment | Deploy workflow now runs pytest, ruff, compose config validation, and SPX health check. |
 | HIGH-006 | Mitigated | Config safety | Live enablement now fails closed for non-SPX configs; account confirmation remains config/env owned. |
 | MED-001 | Medium | Documentation mismatch | AGENTS/CLAUDE paper-fill description conflicts with ask/bid-based paper code. |
 | MED-002 | Medium | Historical data quality | Older trade rows have missing leg symbols: NDX 10, SPX 16, XSP 6. |
 | MED-003 | Medium | Backtest parity | Backtest still has separate/default paths that can drift from runtime selection. |
-| MED-004 | Medium | Time/calendar | Market calendar is computed for holidays but early closes are not represented. |
+| MED-004 | Resolved for 2026 | Time/calendar | 2026 NYSE early closes currently listed by NYSE are represented; future-year calendars still need annual updates. |
 | MED-005 | Medium | Security | Shared `tokens.json` is mounted into all app containers without `:ro`. |
-| LOW-001 | Low | Documentation | `PositionService.monitor_loop()` docstring says 10s but code polls every 2s. |
+| LOW-001 | Resolved | Documentation | `PositionService.monitor_loop()` docstring now says 2s. |
 | INFO-001 | Informational | Strength | Local suite passes: `311 passed in 5.33s`. |
 
 ## 5. Strategy-versus-Implementation Matrix
@@ -333,12 +353,16 @@ Mitigated, but not fully complete:
 * P1 runbooks: Added `docs/live-runbook.md` covering startup, session watch, manual flatten, and rollback.
 * Partial-fill safety: Known partial-fill statuses now raise a hard unknown-state error and stop entry retries instead of continuing the order ladder.
 * Config safety: Live-money mode now refuses non-SPX configs.
+* HIGH-003: VIX center-tolerance selection now fails closed when no candidate is near the VIX target; the shared entry-selection fallback no longer bypasses that VIX rule.
+* MED-004: Added 2026 NYSE early-close handling for market-open checks, minutes-to-close, Schwab intraday bar windows, position settlement close selection, trade charts, and deferred EOD chart timing.
+* LOW-001: Corrected the position monitor docstring from 10s to 2s.
 
 Verification completed:
 
 * `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_order_manager.py tests/test_schwab_client.py tests/test_run_live.py -q` passed: 51 tests.
 * `UV_CACHE_DIR=/tmp/uv-cache uv run pytest -q` passed: `311 passed in 5.33s`.
 * `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_trade_service.py tests/test_config.py -q` passed: 16 tests.
+* `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_butterfly_selector.py tests/test_entry_selection.py tests/test_time_utils.py tests/test_trade_chart.py tests/test_position_service_settlement.py -q` passed: 33 tests.
 * Focused Ruff check on current touched source/test files passed.
 * `/home/billy/.local/bin/graphify update .` completed.
 
@@ -349,37 +373,32 @@ Still left before live-money trading:
 * Automatic reconciliation of DB `OPEN` rows against broker-filled/flat states after restart.
 * Real Schwab complex-order status observation and full status mapping.
 * Health endpoint depth beyond process/startup health.
-* Tested runbook drills and account-level live confirmation.
+* Tested runbook drills.
+* Account-level live confirmation for expected Schwab account, $20,000 allocation, and $500 daily account loss.
 
 ### Before any live order
 
 | Priority | Item | Risk reduction | Affected files/services | Approach | Verification |
 |---|---|---|---|---|---|
-| P0 | Move duplicate-order guard to actual live entry path | Prevent duplicate entries | `trade_service.py`, `order_manager.py` | Guard before every live order placement | Unit test on `attempt_entry()` |
-| P0 | Make order placement idempotent or reconciliation-gated | Prevent duplicate broker accepts | `schwab_client.py`, `order_builder.py` | No blind retry for non-idempotent submit; add client ID if supported | Ambiguous timeout test |
-| P0 | Broker reconciliation at startup | Prevent unknown positions | `run_live.py`, Schwab client | Compare broker orders/positions with DB before entries | Startup mismatch tests |
-| P0 | Restart-safe exit lifecycle | Prevent duplicate close/reversal | `position_service.py`, DB schema | Persist order intent/order ID before submit; reconcile after restart | Crash-window tests |
-| P0 | Exit post-cancel fill check | Prevent duplicate exits | `order_manager.py` | Reuse entry post-cancel logic for exits | Cancel/fill race test |
-| P0 | Atomic entry admission | Prevent same-day concurrency race | DB migration, `RiskEngine`/`TradeService` | Done in source: advisory lock plus partial unique index migration | Concurrent entry test |
+| P0 | Continuous broker reconciliation | Prevent unknown live exposure during runtime | `run_live.py`, Schwab client, DB queries | Poll broker positions/open orders and compare to DB while app runs | Fault-injection mismatch tests |
+| P0 | Durable order intent/order IDs | Prevent lost broker-accepted orders after crash | DB schema, `order_manager.py`, `trade_service.py`, `position_service.py` | Persist intent before submit and broker order ID immediately after submit | Accepted-order crash-window tests |
+| P0 | Restart reconcile broker-filled/flat states | Prevent duplicate close or unmanaged open position after restart | `run_live.py`, `TradeQueries`, Schwab client | Reconcile DB `OPEN` rows against broker positions/orders/transactions or halt with action | Broker-flat and broker-filled restart tests |
+| P0 | Full complex-order status mapping | Prevent unsafe behavior on broker edge statuses | `order_manager.py`, Schwab client | Observe real Schwab statuses and map partial/cancel/reject/child-order cases | Status-matrix unit tests and paper/shadow evidence |
 
 ### Before limited-capital pilot
 
 | Priority | Item | Risk reduction | Affected files/services | Approach | Verification |
 |---|---|---|---|---|---|
-| P1 | Enforce VIX freshness | Avoid stale width/center decisions | `trade_service.py`, `config.py` | Done: `$VIX` max-age gate before VIX-based entries | Stale-VIX test |
-| P1 | Enforce spot/chain freshness | Avoid stale strike/price decisions | `trade_service.py`, collector metadata | Live entries now require a recent collector chain snapshot | Stale-input tests |
-| P1 | Resolve consecutive-loss semantics | Align risk docs/code | `config.py`, configs/tests | Done: warning-only policy documented | Existing risk tests |
 | P1 | Improve `/health` | Operator safety | `metrics.py`, app services | DB/broker/data/risk readiness checks | Health endpoint tests |
-| P1 | Add deploy gates | Avoid bad rollout | `.github/workflows/deploy.yml` | Done in source: pytest, ruff, compose config, post-health | CI/deploy dry run |
-| P1 | Write live runbooks | Operator readiness | docs | First pass in `docs/live-runbook.md` | Tabletop exercise |
+| P1 | Test live runbooks | Operator readiness | docs, operator process | Exercise startup, flatten, outage, EOD, and rollback procedures | Tabletop exercise log |
+| P1 | Add account-level live confirmation | Prevent wrong-account or wrong-capital live startup | `run_live.py`, config/env | Verify expected account, allocation, and daily account-loss cap before entries | Startup guard tests |
 
 ### Before unattended operation
 
 | Priority | Item | Risk reduction | Affected files/services | Approach | Verification |
 |---|---|---|---|---|---|
-| P2 | Continuous broker reconciliation | Detect drift during session | New service or loop in app | Poll open orders/positions and halt on mismatch | Fault-injection tests |
 | P2 | Alerting for exit failures and unknown state | Faster response | monitoring/notifier | Page/actionable alert, not log-only | Alert tests |
-| P2 | Early-close calendar support | Time safety | `time_utils.py` | Use exchange calendar or table | Early-close tests |
+| P2 | Future-year calendar maintenance | Time safety | `time_utils.py` | Keep annual holiday/early-close dates current or replace the table with a proven calendar source | Annual calendar tests |
 | P2 | Broker transaction reconciliation | P&L and fill authority | reports/services | Match DB to Schwab transactions | Reconciliation report |
 
 ### Longer-term improvements

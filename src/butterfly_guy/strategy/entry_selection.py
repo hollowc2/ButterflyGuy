@@ -139,7 +139,7 @@ def select_entry_candidate(
                 per_width_bests.append(best)
         candidate = selector.select_best(candidates, target_center=None)
 
-    if candidate is None:
+    if candidate is None and selection_method != "VIX":
         candidate = selector.select_best(candidates)
 
     return EntrySelectionResult(

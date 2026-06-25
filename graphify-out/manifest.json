@@ -68,8 +68,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/tests/test_butterfly_selector.py": {
-    "mtime": 1778778584.9101913,
-    "hash": "a64649a3d8d7eb413f75a1265c65d085"
+    "mtime": 1782405845.5919535,
+    "hash": "894eab434379aae13751bcaf3a3c01ba"
   },
   "/opt/butterflyguy/tests/test_equity_scan_volume.py": {
     "mtime": 1780859615.163055,
@@ -104,8 +104,8 @@
     "hash": "be78f89008b30cee3f76c3c358628f5d"
   },
   "/opt/butterflyguy/tests/test_entry_selection.py": {
-    "mtime": 1780076997.5996494,
-    "hash": "6c211b40540191b23cbc865ec09d26c3"
+    "mtime": 1782405888.2721634,
+    "hash": "1375d7880cd05dbe7a5bb06ea143cb57"
   },
   "/opt/butterflyguy/tests/test_trade_service.py": {
     "mtime": 1782404947.3656209,
@@ -132,8 +132,8 @@
     "hash": "a2a008cb86ef31b9a508b4296759c44d"
   },
   "/opt/butterflyguy/tests/test_time_utils.py": {
-    "mtime": 1773186977.9160578,
-    "hash": "b63876299ca35041fa46ab34040db1ed"
+    "mtime": 1782405877.7331116,
+    "hash": "88f942ea704f84cd2c9989e6728d4173"
   },
   "/opt/butterflyguy/tests/test_simulation_parity.py": {
     "mtime": 1781651169.8573635,
@@ -220,8 +220,8 @@
     "hash": "9d95e72d66d2734a6435bc1e0674ffdf"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/position_service.py": {
-    "mtime": 1782405040.3600562,
-    "hash": "a8541ac2f1f8c1726374257b35d5b3fa"
+    "mtime": 1782405878.1751137,
+    "hash": "e14797d289bb807dda6bd0cf281990b1"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/__init__.py": {
     "mtime": 1773186977.915058,
@@ -240,8 +240,8 @@
     "hash": "4def0c6d66f27e0475e5db56c8477344"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/trade_chart.py": {
-    "mtime": 1780722436.3233914,
-    "hash": "3ba69cd012f8c3f09fc3e1aefc4d4005"
+    "mtime": 1782405921.7913287,
+    "hash": "63dae0c0d9e2ef076b83df8da45816bf"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/forex_calendar.py": {
     "mtime": 1780855704.5259101,
@@ -284,8 +284,8 @@
     "hash": "5c1c3ce574663f06392f60d43d41c519"
   },
   "/opt/butterflyguy/src/butterfly_guy/data/schwab_client.py": {
-    "mtime": 1782360288.9818177,
-    "hash": "5db826f0fe46c7464429fb9503327aad"
+    "mtime": 1782405878.9511175,
+    "hash": "f11008f1d808f01bce953ecbfb60b907"
   },
   "/opt/butterflyguy/src/butterfly_guy/data/db_chain_quotes.py": {
     "mtime": 1780099084.069,
@@ -308,8 +308,8 @@
     "hash": "d60b21b464a331636e61e8b348987409"
   },
   "/opt/butterflyguy/src/butterfly_guy/core/time_utils.py": {
-    "mtime": 1782000074.6396744,
-    "hash": "1cbfa8bc6998fa3e81cca9012fa925e6"
+    "mtime": 1782405845.2379518,
+    "hash": "05c1fbf470f6c191dbf18aadd392e509"
   },
   "/opt/butterflyguy/src/butterfly_guy/core/metrics.py": {
     "mtime": 1781638525.0642264,
@@ -428,8 +428,8 @@
     "hash": "dca19a9fd794574d00b0ee68c42348f3"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1782405039.9980545,
-    "hash": "4e206d19ae577d13a3ddc08f7be44495"
+    "mtime": 1782405976.6585991,
+    "hash": "e2d8205b60fd87f8a3c073be1a452a58"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/download_schwab_cache.py": {
     "mtime": 1781999816.2914207,
@@ -588,12 +588,12 @@
     "hash": "37df214e3ed45752c8a5946fcf0b39b1"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/butterfly_selector.py": {
-    "mtime": 1780099278.0270581,
-    "hash": "5d413ac81aa85718622eccf8275cb770"
+    "mtime": 1782405844.306947,
+    "hash": "42589338da3d9f151be44b73b825ec48"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/entry_selection.py": {
-    "mtime": 1780076937.396366,
-    "hash": "126b528a3c39e386294860c0f8c4a81f"
+    "mtime": 1782405844.7469492,
+    "hash": "f0cd0f00ef6b9a0b70bdae91a28ada49"
   },
   "/opt/butterflyguy/src/butterfly_guy/strategy/regime_filter.py": {
     "mtime": 1773512698.5321512,
@@ -612,8 +612,8 @@
     "hash": "96a901e9d3f78f9f1ea6e98279bf3aec"
   },
   "/opt/butterflyguy/prelivecheckout.md": {
-    "mtime": 1782405093.697308,
-    "hash": "e638e4b9abc901ad829a7f365ea65628"
+    "mtime": 1782405969.9215658,
+    "hash": "de89a39cc5bfa60f4591598315ea724b"
   },
   "/opt/butterflyguy/AGENTS.md": {
     "mtime": 1780879224.0703495,

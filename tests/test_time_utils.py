@@ -1,20 +1,17 @@
 """Tests for market time utilities."""
 
 import datetime as dt
-from zoneinfo import ZoneInfo
-
-import pytest
 
 from butterfly_guy.core.time_utils import (
     EASTERN,
+    get_0dte_expiration,
     is_market_open,
     is_trading_day,
-    minutes_to_close,
+    market_close_time,
     minutes_since_open,
+    minutes_to_close,
     time_in_window,
-    get_0dte_expiration,
 )
-from zoneinfo import ZoneInfo
 
 
 def et(year, month, day, hour, minute) -> dt.datetime:
@@ -31,6 +28,12 @@ def test_market_closed_before_open():
 
 def test_market_closed_after_close():
     assert not is_market_open(at=et(2026, 3, 10, 16, 1))  # 4:01pm
+
+
+def test_market_closed_after_early_close():
+    assert market_close_time(dt.date(2026, 11, 27)) == dt.time(13, 0)
+    assert not is_market_open(at=et(2026, 11, 27, 13, 1))
+    assert minutes_to_close(at=et(2026, 11, 27, 12, 30)) == 30.0
 
 
 def test_market_closed_on_weekend():

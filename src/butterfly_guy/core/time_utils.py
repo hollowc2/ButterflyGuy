@@ -12,6 +12,7 @@ MARKET_OPEN = dt.time(9, 30)
 MARKET_CLOSE = dt.time(16, 0)
 PREMARKET_OPEN = dt.time(4, 0)
 AFTERHOURS_CLOSE = dt.time(20, 0)
+EARLY_CLOSE = dt.time(13, 0)
 
 # US market holidays (2026) — extend as needed
 HOLIDAYS_2026 = {
@@ -24,6 +25,11 @@ HOLIDAYS_2026 = {
     dt.date(2026, 9, 7),   # Labor Day
     dt.date(2026, 11, 26), # Thanksgiving
     dt.date(2026, 12, 25), # Christmas
+}
+
+EARLY_CLOSES_2026 = {
+    dt.date(2026, 11, 27),  # NYSE day after Thanksgiving
+    dt.date(2026, 12, 24),  # NYSE Christmas Eve
 }
 
 def _observed_date(holiday: dt.date) -> dt.date:
@@ -107,7 +113,7 @@ def is_market_open(at: dt.datetime | None = None) -> bool:
     now = (at or now_eastern()).astimezone(EASTERN)
     if not is_trading_day(now.date()):
         return False
-    return MARKET_OPEN <= now.time() < MARKET_CLOSE
+    return MARKET_OPEN <= now.time() < market_close_time(now.date())
 
 
 def is_premarket_window(at: dt.datetime | None = None, *, start: str = "04:00") -> bool:
@@ -149,9 +155,24 @@ def get_0dte_expiration(at: dt.datetime | None = None) -> dt.date:
 def minutes_to_close(at: dt.datetime | None = None) -> float:
     """Minutes remaining until market close."""
     now = (at or now_eastern()).astimezone(EASTERN)
-    close_dt = now.replace(hour=16, minute=0, second=0, microsecond=0)
+    close = market_close_time(now.date())
+    close_dt = now.replace(hour=close.hour, minute=close.minute, second=0, microsecond=0)
     delta = close_dt - now
     return max(0.0, delta.total_seconds() / 60.0)
+
+
+def market_close_time(d: dt.date | None = None) -> dt.time:
+    """Regular cash-market close for the date."""
+    d = d or now_eastern().date()
+    if d in get_us_market_early_closes(d.year):
+        return EARLY_CLOSE
+    return MARKET_CLOSE
+
+
+def get_us_market_early_closes(year: int) -> set[dt.date]:
+    if year == 2026:
+        return set(EARLY_CLOSES_2026)
+    return set()
 
 
 def get_time_regime(minutes_since_open: float) -> str:

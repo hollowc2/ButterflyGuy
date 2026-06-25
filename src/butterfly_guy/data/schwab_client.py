@@ -11,7 +11,7 @@ import httpx
 from butterfly_guy.core.config import SchwabSettings
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import schwab_api_calls, schwab_api_errors
-from butterfly_guy.core.time_utils import EASTERN, MARKET_CLOSE, now_eastern
+from butterfly_guy.core.time_utils import EASTERN, market_close_time, now_eastern
 
 log = get_logger(__name__)
 
@@ -202,7 +202,7 @@ class SchwabClientWrapper:
     async def get_intraday_bars_for_day(self, symbol: str, day: dt.date) -> list[dict]:
         """Fetch 1-minute bars for one session."""
         start = dt.datetime.combine(day, dt.time(6, 0), tzinfo=EASTERN)
-        close = dt.datetime.combine(day, MARKET_CLOSE, tzinfo=EASTERN)
+        close = dt.datetime.combine(day, market_close_time(day), tzinfo=EASTERN)
         now = now_eastern()
         end = min(now, close) if now.date() == day else close
         resp = await self._retry(

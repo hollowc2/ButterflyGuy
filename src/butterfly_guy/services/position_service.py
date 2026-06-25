@@ -17,10 +17,10 @@ from butterfly_guy.core.metrics import (
 )
 from butterfly_guy.core.time_utils import (
     EASTERN,
-    MARKET_CLOSE,
     MARKET_OPEN,
     get_0dte_expiration,
     is_market_open,
+    market_close_time,
     now_eastern,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
@@ -66,7 +66,7 @@ def final_regular_session_close_from_candles(
         ts = dt.datetime.fromtimestamp(ts_ms / 1000, tz=dt.timezone.utc).astimezone(EASTERN)
         if ts.date() != session_date:
             continue
-        if MARKET_OPEN <= ts.time() <= MARKET_CLOSE:
+        if MARKET_OPEN <= ts.time() <= market_close_time(session_date):
             closes.append((ts, float(close)))
 
     if not closes:
@@ -116,7 +116,7 @@ class PositionService:
         candidate: ButterflyCandidate,
         recovered_peak: float | None = None,
     ) -> None:
-        """Monitor position every 10s, evaluate state machine, trigger exit if needed."""
+        """Monitor position every 2s, evaluate state machine, trigger exit if needed."""
         self.position_manager.reset(trade.entry_price, peak_value=recovered_peak)
         self._last_persisted_peak = (
             recovered_peak if (recovered_peak and recovered_peak > 0) else trade.entry_price
