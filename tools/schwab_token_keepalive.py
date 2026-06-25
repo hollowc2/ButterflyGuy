@@ -13,6 +13,7 @@ import json
 import sys
 import time
 from pathlib import Path
+
 from dotenv import dotenv_values
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -49,14 +50,24 @@ seconds_remaining = expiry_ts - now
 hours_remaining = seconds_remaining / 3600
 
 if SUNDAY_REMINDER:
-    notify(f"📅 Weekly reminder: re-auth Schwab before market open tomorrow.\nRefresh token expires in {hours_remaining:.1f}h.\ncd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
+    notify(
+        "📅 Weekly reminder: re-auth Schwab before market open tomorrow.\n"
+        f"Refresh token expires in {hours_remaining:.1f}h.\n"
+        "cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py"
+    )
     print(f"SUNDAY REMINDER: sent, refresh token expires in {hours_remaining:.1f}h")
 
 if seconds_remaining <= 0:
-    notify(f"🚨 Schwab refresh token has EXPIRED. Re-auth required immediately: cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
+    notify(
+        "🚨 Schwab refresh token has EXPIRED. Re-auth required immediately: "
+        "cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py"
+    )
     print(f"ALERT: refresh token expired {abs(hours_remaining):.1f}h ago")
 elif seconds_remaining <= WARN_BEFORE:
-    notify(f"⏰ Schwab refresh token expires in {hours_remaining:.1f} hours. Re-auth soon: cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
+    notify(
+        f"⏰ Schwab refresh token expires in {hours_remaining:.1f} hours. "
+        "Re-auth soon: cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py"
+    )
     print(f"ALERT: refresh token expires in {hours_remaining:.1f}h")
 
 # Always try to refresh the access token
@@ -71,7 +82,10 @@ try:
     )
     resp = client.get_quote("$SPX")
     resp.raise_for_status()
-    print(f"OK: token refreshed, SPX quote fetched (status {resp.status_code}), refresh token expires in {hours_remaining:.1f}h")
+    print(
+        "OK: token refreshed, SPX quote fetched "
+        f"(status {resp.status_code}), refresh token expires in {hours_remaining:.1f}h"
+    )
 except Exception as e:
     print(f"ERROR: {e}")
     sys.exit(1)

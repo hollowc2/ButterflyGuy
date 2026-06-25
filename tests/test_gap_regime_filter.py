@@ -1,9 +1,7 @@
 """Unit tests for GapRegimeFilter.apply()."""
 
-import pytest
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import Regime
-
 
 # Helpers
 SPOT = 5500.0

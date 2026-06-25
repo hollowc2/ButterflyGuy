@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import time
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
 # Chain collection
 chain_snapshots_total = Counter(
@@ -53,10 +53,16 @@ entry_expected_move = Gauge(
     "butterfly_entry_expected_move_pts", "VIX-implied 1σ daily move in index points",
     ["underlying"],
 )
-entry_center_strike = Gauge("butterfly_entry_center_strike", "Selected center strike", ["underlying"])
+entry_center_strike = Gauge(
+    "butterfly_entry_center_strike", "Selected center strike",
+    ["underlying"],
+)
 entry_wing_width = Gauge("butterfly_entry_wing_width", "Selected wing width", ["underlying"])
 entry_cost = Gauge("butterfly_entry_cost", "Entry cost per spread", ["underlying"])
-entry_max_profit = Gauge("butterfly_entry_max_profit", "Max profit per spread at expiry", ["underlying"])
+entry_max_profit = Gauge(
+    "butterfly_entry_max_profit", "Max profit per spread at expiry",
+    ["underlying"],
+)
 entry_lower_be = Gauge("butterfly_entry_lower_be", "Lower breakeven strike", ["underlying"])
 entry_upper_be = Gauge("butterfly_entry_upper_be", "Upper breakeven strike", ["underlying"])
 
