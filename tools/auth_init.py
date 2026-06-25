@@ -1,6 +1,6 @@
 """Run once to generate tokens.json via Schwab OAuth flow."""
-from schwab.auth import easy_client
 from dotenv import dotenv_values
+from schwab.auth import easy_client
 
 env = dotenv_values(".env")
 c = easy_client(

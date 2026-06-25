@@ -1,7 +1,7 @@
 """Send SPX weekend review to Discord #weekend-review.
 
-Cron: Saturday 9:00 AM PT
-  0 16 * * 6 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_weekend_review.py >> /opt/butterflyguy/weekend_review.log 2>&1
+Cron example:
+  0 16 * * 6 cd /opt/butterflyguy && .venv/bin/python tools/send_weekend_review.py
 """
 
 from __future__ import annotations

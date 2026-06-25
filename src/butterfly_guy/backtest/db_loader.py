@@ -18,8 +18,8 @@ from zoneinfo import ZoneInfo
 import asyncpg
 
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
-from butterfly_guy.data.schemas import OptionQuote
 from butterfly_guy.core.logging import get_logger
+from butterfly_guy.data.schemas import OptionQuote
 
 log = get_logger(__name__)
 

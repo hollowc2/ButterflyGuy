@@ -9,10 +9,10 @@ Requires env vars:
     TELEGRAM_CHAT_ID
 """
 
-import os
-import urllib.request
-import urllib.parse
 import json
+import os
+import urllib.parse
+import urllib.request
 
 
 def send(message: str) -> bool:

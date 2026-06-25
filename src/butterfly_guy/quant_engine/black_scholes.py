@@ -44,7 +44,9 @@ def bs_put_price(S: float, K: float, T: float, r: float, sigma: float) -> float:
     return K * math.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
 
 
-def bs_delta(S: float, K: float, T: float, r: float, sigma: float, option_type: str = "CALL") -> float:
+def bs_delta(
+    S: float, K: float, T: float, r: float, sigma: float, option_type: str = "CALL"
+) -> float:
     """Delta — rate of change of price wrt spot."""
     if T <= 0:
         if option_type == "CALL":

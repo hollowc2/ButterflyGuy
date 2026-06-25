@@ -32,9 +32,24 @@ VALID_ASSETS = ["SPX", "NDX", "XSP"]
 ALL_WING_WIDTHS = [10, 20, 30, 50, 75]
 
 ASSET_CONFIGS: dict[str, dict] = {
-    "SPX": {"wing_widths": [10, 20, 30], "spot_range": 100, "center_tolerance": 50, "yfinance_index": "^GSPC"},
-    "NDX": {"wing_widths": [80, 100, 150], "spot_range": 250, "center_tolerance": 100, "yfinance_index": "^NDX"},
-    "XSP": {"wing_widths": [10, 20, 30], "spot_range": 100, "center_tolerance": 50, "yfinance_index": "SPX"},
+    "SPX": {
+        "wing_widths": [10, 20, 30],
+        "spot_range": 100,
+        "center_tolerance": 50,
+        "yfinance_index": "^GSPC",
+    },
+    "NDX": {
+        "wing_widths": [80, 100, 150],
+        "spot_range": 250,
+        "center_tolerance": 100,
+        "yfinance_index": "^NDX",
+    },
+    "XSP": {
+        "wing_widths": [10, 20, 30],
+        "spot_range": 100,
+        "center_tolerance": 50,
+        "yfinance_index": "SPX",
+    },
 }
 
 
@@ -59,7 +74,10 @@ def parse_args() -> argparse.Namespace:
         nargs="?",
         default=None,
         metavar="DATE_END",
-        help="End date for range (YYYY-MM-DD). If omitted and DATE is given, treats DATE as a single day.",
+        help=(
+            "End date for range (YYYY-MM-DD). If omitted and DATE is given, "
+            "treats DATE as a single day."
+        ),
     )
     parser.add_argument(
         "--width", "-w",
@@ -129,7 +147,15 @@ FULL_DATA_DATES = [
 
 # Strategies to run (label, params)
 STRATEGIES = [
-    ("gap-auto", dict(direction_override=None, use_bias_filter=False, use_vix_center=False, use_absolute_loss_stop=False)),
+    (
+        "gap-auto",
+        dict(
+            direction_override=None,
+            use_bias_filter=False,
+            use_vix_center=False,
+            use_absolute_loss_stop=False,
+        ),
+    ),
 ]
 
 BASE_PARAMS = dict(
@@ -252,8 +278,8 @@ def scan_entry_window(
     from butterfly_guy.strategy.butterfly_selector import ButterflySelector
     from butterfly_guy.strategy.direction_filter import DirectionFilter
 
-    ENTRY_START = dt.time(10, 0)
-    ENTRY_END = dt.time(10, 30)
+    entry_start = dt.time(10, 0)
+    entry_end = dt.time(10, 30)
 
     direction_filter = DirectionFilter()
     bias_filter = BiasScoreFilter()
@@ -262,7 +288,7 @@ def scan_entry_window(
 
     for bar in bars:
         bar_et = bar.ts.astimezone(EASTERN)
-        if not (ENTRY_START <= bar_et.time() <= ENTRY_END):
+        if not (entry_start <= bar_et.time() <= entry_end):
             continue
 
         bars_so_far = [b for b in bars if b.ts <= bar.ts]
@@ -341,15 +367,21 @@ def fmt_candidate(c, direction: str = "") -> str:
     lo_delta = c.lower_quote.delta if c.lower_quote else float("nan")
     ctr_delta = c.center_quote.delta if c.center_quote else float("nan")
     return (
-        f"  {direction or c.direction:>4}  {c.lower_strike:.0f}/{c.center_strike:.0f}/{c.upper_strike:.0f}"
+        f"  {direction or c.direction:>4}  "
+        f"{c.lower_strike:.0f}/{c.center_strike:.0f}/{c.upper_strike:.0f}"
         f"  cost=${c.cost:.2f}  R/R={rr:.1f}x  BE=[{c.lower_be:.1f},{c.upper_be:.1f}]"
         f"  δlo={lo_delta:.3f} δctr={ctr_delta:.3f}"
     )
 
 
-def print_day_header(date: dt.date, vix: float, prev_close: float, bars: list[MinuteBar], asset: str = "SPX") -> None:
+def print_day_header(
+    date: dt.date, vix: float, prev_close: float, bars: list[MinuteBar], asset: str = "SPX"
+) -> None:
     open_bar = next((b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(9, 30)), None)
-    first_entry_bar = next((b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(10, 0)), None)
+    first_entry_bar = next(
+        (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(10, 0)),
+        None,
+    )
 
     open_spx = open_bar.close if open_bar else 0
     entry_spx = first_entry_bar.close if first_entry_bar else 0
@@ -383,8 +415,11 @@ def print_entry_scan(records: list[dict], wing_widths: list[int], asset: str = "
         bias_arrow = "▲" if bias_str == "CALL" else ("▼" if bias_str == "PUT" else " ")
         vwap_str = f"VWAP={rec['vwap']:.2f}  {'ABOVE' if rec['above_vwap'] else 'BELOW'}"
 
-        print(f"  ── {rec['time_et']} ET  {asset}={rec['spx']:.2f}  gap={rec['gap_pct']:+.3f}% {gap_arrow}  "
-              f"bias={bias_str} {bias_arrow}  {vwap_str}")
+        print(
+            f"  ── {rec['time_et']} ET  {asset}={rec['spx']:.2f}  "
+            f"gap={rec['gap_pct']:+.3f}% {gap_arrow}  "
+            f"bias={bias_str} {bias_arrow}  {vwap_str}"
+        )
 
         for w in wing_widths:
             cw = rec["candidates_by_width"].get(w, {})
@@ -411,7 +446,10 @@ def print_results_table(results_by_strat: dict, wing_widths: list[int]) -> None:
     print(f"\n{'─'*80}")
     print("  SIMULATION RESULTS")
     print(f"{'─'*80}")
-    hdr = f"  {'Strategy':<12}  {'W':>3}  {'Direction':>9}  {'Entry':>6}  {'Exit':>6}  {'Peak':>6}  {'PnL':>8}  {'Reason'}"
+    hdr = (
+        f"  {'Strategy':<12}  {'W':>3}  {'Direction':>9}  {'Entry':>6}  "
+        f"{'Exit':>6}  {'Peak':>6}  {'PnL':>8}  {'Reason'}"
+    )
     print(hdr)
     print(f"  {'─'*12}  {'─'*3}  {'─'*9}  {'─'*6}  {'─'*6}  {'─'*6}  {'─'*8}  {'─'*22}")
 
@@ -419,7 +457,10 @@ def print_results_table(results_by_strat: dict, wing_widths: list[int]) -> None:
         for w in wing_widths:
             r = by_width.get(w)
             if r is None:
-                print(f"  {strat_label:<12}  {w:>3}  {'N/A':>9}  {'--':>6}  {'--':>6}  {'--':>6}  {'--':>8}  --")
+                print(
+                    f"  {strat_label:<12}  {w:>3}  {'N/A':>9}  "
+                    f"{'--':>6}  {'--':>6}  {'--':>6}  {'--':>8}  --"
+                )
             elif not r.traded:
                 print(f"  {strat_label:<12}  {w:>3}  {'NO TRADE':>9}")
             else:
@@ -566,12 +607,18 @@ async def main() -> None:
 
     # Per-day direction summary
     print("\n  Per-day direction and entry time:")
-    print(f"  {'Asset':<5} {'Date':>12}  {'VIX':>5}  {'Gap%':>7}  {'Dir':>4}  {'Entry':>5}  {'Struct':>18}  {'PnL':>8}")
+    print(
+        f"  {'Asset':<5} {'Date':>12}  {'VIX':>5}  {'Gap%':>7}  "
+        f"{'Dir':>4}  {'Entry':>5}  {'Struct':>18}  {'PnL':>8}"
+    )
     print(f"  {'─'*5} {'─'*12}  {'─'*5}  {'─'*7}  {'─'*4}  {'─'*5}  {'─'*18}  {'─'*8}")
     for date, strat, w, asst, r in all_trade_results:
         et = r.entry_time.astimezone(EASTERN).strftime("%H:%M") if r.entry_time else "--"
         struct = f"{r.center_strike-w:.0f}/{r.center_strike:.0f}/{r.center_strike+w:.0f}"
-        print(f"  {asst:<5} {str(date):>12}  {'?':>5}  {'?':>7}  {r.direction:>4}  {et:>5}  {struct:>18}  {r.pnl*100:>+7.2f}$")
+        print(
+            f"  {asst:<5} {str(date):>12}  {'?':>5}  {'?':>7}  "
+            f"{r.direction:>4}  {et:>5}  {struct:>18}  {r.pnl*100:>+7.2f}$"
+        )
 
     print()
 

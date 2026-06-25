@@ -1,7 +1,7 @@
 """Send the upcoming week's USD economic calendar to Discord #upcoming-week-prep.
 
-Cron: Sunday 7:00 PM PDT
-  0 2 * * 1 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/send_weekly_calendar.py >> /opt/butterflyguy/weekly_calendar.log 2>&1
+Cron example:
+  0 2 * * 1 cd /opt/butterflyguy && .venv/bin/python tools/send_weekly_calendar.py
 """
 
 from __future__ import annotations
