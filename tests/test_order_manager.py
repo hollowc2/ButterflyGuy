@@ -239,6 +239,39 @@ async def test_single_attempt_raises_on_partial_fill_status():
 
 
 @pytest.mark.asyncio
+async def test_single_attempt_creates_intent_before_live_submit_and_saves_order_id():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    schwab.get_order_status = AsyncMock(return_value={"status": "FILLED"})
+
+    result = await om.execute_single_attempt(candidate, limit_price=2.50)
+
+    assert result["intent_id"] == 42
+    om.intent_queries.create_intent.assert_awaited_once()
+    schwab.place_order.assert_awaited_once()
+    om.intent_queries.mark_broker_order_id.assert_awaited_once_with(42, "ORD1")
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_ambiguous_submit_leaves_unsafe_intent_without_retry():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    schwab.place_order = AsyncMock(side_effect=RuntimeError("missing Location"))
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+
+    result = await om.execute_single_attempt(candidate, limit_price=2.50)
+
+    assert result is None
+    schwab.place_order.assert_awaited_once()
+    om.intent_queries.mark_unknown.assert_awaited_once_with(42, "missing Location")
+
+
+@pytest.mark.asyncio
 async def test_fetch_live_spread_returns_none_on_missing_strikes():
     settings = make_settings()
     om, schwab = make_order_manager(settings)

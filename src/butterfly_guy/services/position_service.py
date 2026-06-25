@@ -265,6 +265,7 @@ class PositionService:
                         pos_state.current_value,
                         trade.quantity,
                         exit_reason=signal.reason,
+                        trade_id=trade.trade_id,
                     )
 
                     if fill is None:

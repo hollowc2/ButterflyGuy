@@ -337,6 +337,149 @@ class TradeQueries:
         )
 
 
+class OrderIntentQueries:
+    """Queries for durable broker order intents."""
+
+    TERMINAL_STATUSES = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+
+    def __init__(self, db: DatabasePool) -> None:
+        self.db = db
+
+    async def create_intent(
+        self,
+        *,
+        underlying: str,
+        trade_date: dt.date,
+        side: str,
+        limit_price: float | None,
+        quantity: int,
+        order_spec: dict[str, Any],
+        candidate_snapshot: dict[str, Any],
+        trade_id: int | None = None,
+        status: str = "SUBMITTING",
+    ) -> int:
+        return await self.db.pool.fetchval(
+            """
+            INSERT INTO broker_order_intents (
+                underlying, trade_date, trade_id, side, status,
+                limit_price, quantity, order_spec, candidate_snapshot
+            )
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb)
+            RETURNING id
+            """,
+            underlying,
+            trade_date,
+            trade_id,
+            side,
+            status,
+            limit_price,
+            quantity,
+            json.dumps(order_spec),
+            json.dumps(candidate_snapshot),
+        )
+
+    async def mark_broker_order_id(self, intent_id: int, broker_order_id: str) -> None:
+        await self.db.pool.execute(
+            """
+            UPDATE broker_order_intents
+            SET broker_order_id = $2, status = 'SUBMITTED', updated_at = NOW()
+            WHERE id = $1
+            """,
+            intent_id,
+            broker_order_id,
+        )
+
+    async def update_broker_status(
+        self,
+        intent_id: int,
+        broker_status: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        await self.db.pool.execute(
+            """
+            UPDATE broker_order_intents
+            SET status = $2,
+                last_broker_status = $2,
+                raw_broker_payload = COALESCE($3::jsonb, raw_broker_payload),
+                updated_at = NOW()
+            WHERE id = $1
+            """,
+            intent_id,
+            broker_status,
+            json.dumps(payload) if payload is not None else None,
+        )
+
+    async def mark_unknown(self, intent_id: int, error: str) -> None:
+        await self.db.pool.execute(
+            """
+            UPDATE broker_order_intents
+            SET status = 'UNKNOWN_ABORTED',
+                raw_broker_payload = $2::jsonb,
+                updated_at = NOW()
+            WHERE id = $1
+            """,
+            intent_id,
+            json.dumps({"error": error}),
+        )
+
+    async def link_trade(self, intent_id: int, trade_id: int) -> None:
+        await self.db.pool.execute(
+            """
+            UPDATE broker_order_intents
+            SET trade_id = $2, updated_at = NOW()
+            WHERE id = $1
+            """,
+            intent_id,
+            trade_id,
+        )
+
+    async def active_intents(
+        self, underlying: str, trade_date: dt.date
+    ) -> list[dict[str, Any]]:
+        rows = await self.db.pool.fetch(
+            """
+            SELECT *
+            FROM broker_order_intents
+            WHERE underlying = $1
+              AND trade_date = $2
+              AND status NOT IN ('FILLED', 'CANCELED', 'REJECTED', 'EXPIRED')
+            ORDER BY created_at
+            """,
+            underlying,
+            trade_date,
+        )
+        return [dict(row) for row in rows]
+
+    async def intents_for_day(
+        self, underlying: str, trade_date: dt.date
+    ) -> list[dict[str, Any]]:
+        rows = await self.db.pool.fetch(
+            """
+            SELECT *
+            FROM broker_order_intents
+            WHERE underlying = $1 AND trade_date = $2
+            ORDER BY created_at
+            """,
+            underlying,
+            trade_date,
+        )
+        return [dict(row) for row in rows]
+
+    async def active_broker_order_ids(
+        self,
+        underlying: str,
+        trade_date: dt.date,
+        *,
+        exclude_intent_id: int | None = None,
+    ) -> set[str]:
+        rows = await self.active_intents(underlying, trade_date)
+        return {
+            str(row["broker_order_id"])
+            for row in rows
+            if row.get("broker_order_id") and row.get("id") != exclude_intent_id
+        }
+
+
 class RiskQueries:
     """Queries for daily_risk_state table."""
 

@@ -10,7 +10,8 @@ has no Critical/High safety blockers.
 3. Run `docker compose -f infra/docker-compose.yml config >/dev/null`.
 4. Check the SPX service health: `curl --fail http://127.0.0.1:8000/health`.
 5. Confirm there are no OPEN DB trades unless the broker shows the same SPX legs.
-6. Confirm there are no same-day working SPX opening or closing orders.
+6. Confirm there are no same-day unknown working SPX opening or closing orders.
+   Bot-owned working orders must have a matching `broker_order_intents` row.
 
 ## During Session
 
@@ -21,8 +22,9 @@ docker logs -f --tail=100 butterfly_spx_app
 curl --fail http://127.0.0.1:8000/health
 ```
 
-Any unknown broker position, stale chain snapshot, DB outage, rejected order, or
-partial fill means stop entries and reconcile manually before continuing.
+Any unknown broker position/order, stale chain snapshot, DB outage, rejected
+order, cancel-pending state, or partial fill means stop entries and reconcile
+manually before continuing.
 
 ## Manual Flatten
 
@@ -38,4 +40,5 @@ There is no tested in-repo auto-flatten command yet.
 
 1. Revert the deployed commit.
 2. Rebuild only the affected service.
-3. Re-check `/health`, logs, broker positions, broker working orders, and OPEN DB rows.
+3. Re-check `/health`, logs, broker positions, unknown broker working orders,
+   `broker_order_intents`, and OPEN DB rows.

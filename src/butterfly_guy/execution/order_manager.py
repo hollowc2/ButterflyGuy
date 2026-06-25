@@ -17,12 +17,15 @@ from butterfly_guy.core.time_utils import get_0dte_expiration, now_utc
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
+from butterfly_guy.db.queries import OrderIntentQueries
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 
 log = get_logger(__name__)
 
 WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
 PARTIAL_FILL_STATUSES = {"PARTIAL", "PARTIAL_FILL", "PARTIALLY_FILLED"}
+CANCEL_PENDING_STATUSES = {"CANCEL_PENDING", "PENDING_CANCEL", "CANCEL_REQUESTED"}
+TERMINAL_ORDER_STATUSES = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
 
 
 class PartialFillError(RuntimeError):
@@ -44,11 +47,27 @@ class OrderManager:
         schwab: SchwabClientWrapper,
         builder: ButterflyOrderBuilder,
         underlying: str = "SPX",
+        intent_queries: OrderIntentQueries | None = None,
     ) -> None:
         self.settings = settings
         self.schwab = schwab
         self.builder = builder
         self.underlying = underlying
+        self.intent_queries = intent_queries
+
+    def _candidate_snapshot(self, candidate: ButterflyCandidate) -> dict[str, object]:
+        return {
+            "direction": candidate.direction,
+            "wing_width": candidate.wing_width,
+            "center_strike": candidate.center_strike,
+            "lower_strike": candidate.lower_strike,
+            "upper_strike": candidate.upper_strike,
+            "cost": candidate.cost,
+            "ask": candidate.ask,
+            "lower_symbol": candidate.lower_symbol,
+            "center_symbol": candidate.center_symbol,
+            "upper_symbol": candidate.upper_symbol,
+        }
 
     async def _fetch_live_spread(self, candidate: ButterflyCandidate) -> LiveSpread | None:
         """Fetch current butterfly bid/mark/ask from live chain, or None on failure."""
@@ -130,16 +149,31 @@ class OrderManager:
             return current_value
         return bid_floor
 
-    async def _entry_blocked_by_working_orders(self) -> bool:
+    async def _entry_blocked_by_working_orders(
+        self, exclude_intent_id: int | None = None
+    ) -> bool:
         try:
             todays_orders = await self.schwab.get_todays_orders()
         except Exception as e:
             log.warning("open_orders_check_failed", error=str(e))
             return True
 
+        known_order_ids: set[str] = set()
+        if self.intent_queries is not None:
+            try:
+                known_order_ids = await self.intent_queries.active_broker_order_ids(
+                    self.underlying,
+                    dt.date.today(),
+                    exclude_intent_id=exclude_intent_id,
+                )
+            except Exception as e:
+                log.warning("open_order_intent_check_failed", error=str(e))
+                return True
+
         working = [
             o for o in todays_orders
-            if o.get("status") in WORKING_ORDER_STATUSES
+            if o.get("status") in WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES
+            and str(o.get("orderId") or "") not in known_order_ids
         ]
         if not working:
             return False
@@ -152,7 +186,11 @@ class OrderManager:
         return True
 
     async def execute_single_attempt(
-        self, candidate: ButterflyCandidate, limit_price: float, quantity: int = 1
+        self,
+        candidate: ButterflyCandidate,
+        limit_price: float,
+        quantity: int = 1,
+        intent_id: int | None = None,
     ) -> dict | None:
         """
         Place one butterfly order at limit_price. Wait for fill; cancel if unfilled.
@@ -200,16 +238,36 @@ class OrderManager:
             )
             return None
 
-        if await self._entry_blocked_by_working_orders():
+        if await self._entry_blocked_by_working_orders(exclude_intent_id=intent_id):
             return None
 
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
+        if intent_id is None and self.intent_queries is not None:
+            intent_id = await self.intent_queries.create_intent(
+                underlying=self.underlying,
+                trade_date=(
+                    candidate.lower_quote.expiration
+                    if candidate.lower_quote is not None
+                    else get_0dte_expiration()
+                ),
+                side="ENTRY",
+                limit_price=limit_price,
+                quantity=quantity,
+                order_spec=order_spec,
+                candidate_snapshot=self._candidate_snapshot(candidate),
+            )
         orders_placed.labels(underlying=self.underlying, order_type="entry").inc()
         start_time = now_utc()
 
         try:
             order_id = await self.schwab.place_order(order_spec)
-            fill = await self._wait_for_fill(order_id, self.settings.retry_interval_seconds)
+            if intent_id is not None and self.intent_queries is not None:
+                await self.intent_queries.mark_broker_order_id(intent_id, order_id)
+            fill = await self._wait_for_fill(
+                order_id,
+                self.settings.retry_interval_seconds,
+                intent_id=intent_id,
+            )
 
             if fill:
                 elapsed = (now_utc() - start_time).total_seconds()
@@ -220,17 +278,26 @@ class OrderManager:
                     "order_id": order_id,
                     "fill_price": limit_price,
                     "fill_time": now_utc(),
+                    "intent_id": intent_id,
                 }
 
+            if intent_id is not None and self.intent_queries is not None:
+                await self.intent_queries.update_broker_status(
+                    intent_id, "CANCEL_REQUESTED"
+                )
             await self.schwab.cancel_order(order_id)
             log.info("entry_unfilled_cancelled", price=limit_price)
-            post_fill = await self._check_post_cancel_fill(order_id, limit_price)
+            post_fill = await self._check_post_cancel_fill(
+                order_id, limit_price, intent_id=intent_id
+            )
             if post_fill:
                 return post_fill
 
         except PartialFillError:
             raise
         except Exception as e:
+            if intent_id is not None and self.intent_queries is not None:
+                await self.intent_queries.mark_unknown(intent_id, str(e))
             log.error("entry_attempt_failed", error=str(e))
 
         return None
@@ -362,6 +429,7 @@ class OrderManager:
         current_value: float,
         quantity: int = 1,
         exit_reason: str | None = None,
+        trade_id: int | None = None,
     ) -> dict | None:
         """
         Execute exit with reverse price ladder: reprice from live mark each step,
@@ -505,12 +573,34 @@ class OrderManager:
                 })
 
                 order_spec = self.builder.build_butterfly_close(candidate, limit_price, quantity)
+                intent_id: int | None = None
+                if self.intent_queries is not None:
+                    snapshot = self._candidate_snapshot(candidate)
+                    snapshot["exit_reason"] = exit_reason
+                    intent_id = await self.intent_queries.create_intent(
+                        underlying=self.underlying,
+                        trade_date=(
+                            candidate.lower_quote.expiration
+                            if candidate.lower_quote is not None
+                            else get_0dte_expiration()
+                        ),
+                        trade_id=trade_id,
+                        side="EXIT",
+                        limit_price=limit_price,
+                        quantity=quantity,
+                        order_spec=order_spec,
+                        candidate_snapshot=snapshot,
+                    )
                 orders_placed.labels(underlying=self.underlying, order_type="exit").inc()
                 start_time = now_utc()
 
                 try:
                     order_id = await self.schwab.place_order(order_spec)
-                    fill = await self._wait_for_fill(order_id, retry_interval)
+                    if intent_id is not None and self.intent_queries is not None:
+                        await self.intent_queries.mark_broker_order_id(intent_id, order_id)
+                    fill = await self._wait_for_fill(
+                        order_id, retry_interval, intent_id=intent_id
+                    )
 
                     if fill:
                         elapsed = (now_utc() - start_time).total_seconds()
@@ -521,6 +611,7 @@ class OrderManager:
                             "order_id": order_id,
                             "fill_price": limit_price,
                             "fill_time": now_utc(),
+                            "intent_id": intent_id,
                             "spread_bid": spread.bid if spread is not None else None,
                             "spread_mark": spread.mark if spread is not None else None,
                             "spread_ask": spread.ask if spread is not None else None,
@@ -537,9 +628,13 @@ class OrderManager:
                             }],
                         }
 
+                    if intent_id is not None and self.intent_queries is not None:
+                        await self.intent_queries.update_broker_status(
+                            intent_id, "CANCEL_REQUESTED"
+                        )
                     await self.schwab.cancel_order(order_id)
                     post_fill = await self._check_post_cancel_fill(
-                        order_id, limit_price, order_type="exit"
+                        order_id, limit_price, order_type="exit", intent_id=intent_id
                     )
                     if post_fill:
                         return {
@@ -556,17 +651,26 @@ class OrderManager:
                 except PartialFillError:
                     raise
                 except Exception as e:
+                    if intent_id is not None and self.intent_queries is not None:
+                        await self.intent_queries.mark_unknown(intent_id, str(e))
                     log.error("exit_step_failed", step=i, error=str(e))
 
             log.warning("exit_ladder_exhausted")
 
     async def _check_post_cancel_fill(
-        self, order_id: str, limit_price: float, order_type: str = "entry"
+        self,
+        order_id: str,
+        limit_price: float,
+        order_type: str = "entry",
+        intent_id: int | None = None,
     ) -> dict | None:
         """After a cancel, confirm the order didn't sneak through as filled."""
         try:
             status = await self.schwab.get_order_status(order_id)
-            if status.get("status") == "FILLED":
+            order_status = status.get("status")
+            if intent_id is not None and self.intent_queries is not None and order_status:
+                await self.intent_queries.update_broker_status(intent_id, order_status, status)
+            if order_status == "FILLED":
                 log.warning(
                     "post_cancel_fill_detected",
                     order_id=order_id,
@@ -579,8 +683,9 @@ class OrderManager:
                     "fill_price": limit_price,
                     "fill_time": now_utc(),
                     "post_cancel": True,
+                    "intent_id": intent_id,
                 }
-            if status.get("status") in PARTIAL_FILL_STATUSES:
+            if order_status in PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES:
                 raise PartialFillError(
                     f"Order {order_id} is partially filled after cancel; reconcile broker state"
                 )
@@ -590,7 +695,9 @@ class OrderManager:
             log.warning("post_cancel_check_failed", error=str(e))
         return None
 
-    async def _wait_for_fill(self, order_id: str, timeout: int) -> bool:
+    async def _wait_for_fill(
+        self, order_id: str, timeout: int, intent_id: int | None = None
+    ) -> bool:
         """Poll order status until filled or timeout."""
         elapsed = 0
         poll_interval = 2
@@ -599,14 +706,18 @@ class OrderManager:
             try:
                 status = await self.schwab.get_order_status(order_id)
                 order_status = status.get("status", "")
+                if intent_id is not None and self.intent_queries is not None:
+                    await self.intent_queries.update_broker_status(
+                        intent_id, order_status, status
+                    )
 
                 if order_status == "FILLED":
                     return True
-                if order_status in PARTIAL_FILL_STATUSES:
+                if order_status in PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES:
                     raise PartialFillError(
                         f"Order {order_id} is partially filled; reconcile broker state"
                     )
-                if order_status in ("CANCELED", "REJECTED", "EXPIRED"):
+                if order_status in TERMINAL_ORDER_STATUSES - {"FILLED"}:
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False
 

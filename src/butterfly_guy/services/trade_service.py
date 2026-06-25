@@ -565,6 +565,15 @@ class TradeService:
                 }
                 try:
                     trade_id = await self.trade_queries.insert_trade(trade_data)
+                    if (
+                        not self.config.execution.paper_trading
+                        and fill.get("intent_id")
+                        and self.order_manager.intent_queries is not None
+                    ):
+                        await self.order_manager.intent_queries.link_trade(
+                            int(fill["intent_id"]),
+                            trade_id,
+                        )
                     await self.risk_engine.record_trade()
                 except Exception:
                     if entry_lock is not None:
