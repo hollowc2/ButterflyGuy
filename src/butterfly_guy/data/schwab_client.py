@@ -133,12 +133,26 @@ class SchwabClientWrapper:
         return float(price)
 
     async def place_order(self, order_spec: dict[str, Any]) -> str:
-        """Place an order and return the order ID."""
-        resp = await self._retry(
-            self.client.place_order, self.account_hash, order_spec, endpoint="place_order"
-        )
+        """Place an order once and return the order ID.
+
+        Order placement is not retried because Schwab may accept the first submit
+        even if the response is lost.
+        """
+        endpoint = "place_order"
+        schwab_api_calls.labels(endpoint=endpoint).inc()
+        try:
+            resp = await self.client.place_order(self.account_hash, order_spec)
+            resp.raise_for_status()
+        except Exception:
+            schwab_api_errors.labels(endpoint=endpoint).inc()
+            raise
+
         # Order ID is in the Location header
         location = resp.headers.get("Location", "")
+        if not location:
+            raise RuntimeError(
+                "Order placement response missing Location; refusing to retry submit"
+            )
         order_id = location.split("/")[-1] if location else ""
         log.info("order_placed", order_id=order_id)
         return order_id

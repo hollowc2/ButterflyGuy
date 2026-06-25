@@ -21,6 +21,8 @@ from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 
 log = get_logger(__name__)
 
+WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
+
 
 class LiveSpread(NamedTuple):
     bid: float   # lower_bid + upper_bid - 2 * center_ask  (market maker buys at this price)
@@ -44,7 +46,7 @@ class OrderManager:
         self.underlying = underlying
 
     async def _fetch_live_spread(self, candidate: ButterflyCandidate) -> LiveSpread | None:
-        """Fetch current butterfly bid/mark/ask from the live option chain. Returns None on any failure."""
+        """Fetch current butterfly bid/mark/ask from live chain, or None on failure."""
         try:
             chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(self.underlying, self.underlying)
             expiration = (
@@ -54,13 +56,19 @@ class OrderManager:
             )
             chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
 
-            target_strikes = {candidate.lower_strike, candidate.center_strike, candidate.upper_strike}
+            target_strikes = {
+                candidate.lower_strike,
+                candidate.center_strike,
+                candidate.upper_strike,
+            }
             bids: dict[float, float] = {}
             marks: dict[float, float] = {}
             asks: dict[float, float] = {}
             ois: dict[float, int] = {}
 
-            for strike, _, opt in iter_chain_options(chain_data, expiration, direction=candidate.direction):
+            for strike, _, opt in iter_chain_options(
+                chain_data, expiration, direction=candidate.direction
+            ):
                 if strike in target_strikes:
                     bids[strike] = opt.get("bid", 0)
                     marks[strike] = opt.get("mark", 0)
@@ -92,8 +100,8 @@ class OrderManager:
 
     def _commission(self, quantity: int) -> float:
         """Paper trading commission: 4 legs × quantity × rate."""
-        _LEGS = 4
-        return _LEGS * quantity * self.settings.paper_commission_per_contract / 100
+        legs = 4
+        return legs * quantity * self.settings.paper_commission_per_contract / 100
 
     def _paper_exit_fill_price(self, fill_ref: float, quantity: int) -> float:
         return round(
@@ -116,6 +124,27 @@ class OrderManager:
         if current_value > 0 and bid_floor < current_value * 0.5:
             return current_value
         return bid_floor
+
+    async def _entry_blocked_by_working_orders(self) -> bool:
+        try:
+            todays_orders = await self.schwab.get_todays_orders()
+        except Exception as e:
+            log.warning("open_orders_check_failed", error=str(e))
+            return True
+
+        working = [
+            o for o in todays_orders
+            if o.get("status") in WORKING_ORDER_STATUSES
+        ]
+        if not working:
+            return False
+
+        log.error(
+            "entry_blocked_open_orders_exist",
+            count=len(working),
+            order_ids=[o.get("orderId") for o in working],
+        )
+        return True
 
     async def execute_single_attempt(
         self, candidate: ButterflyCandidate, limit_price: float, quantity: int = 1
@@ -147,7 +176,9 @@ class OrderManager:
             )
             if limit_price >= fill_threshold:
                 fill_price = round(
-                    spread.ask + self.settings.paper_slippage_per_spread + self._commission(quantity),
+                    spread.ask
+                    + self.settings.paper_slippage_per_spread
+                    + self._commission(quantity),
                     2,
                 )
                 log.info("paper_entry_filled", limit=limit_price, fill_price=fill_price)
@@ -162,6 +193,9 @@ class OrderManager:
                 ask=spread.ask,
                 fill_threshold=fill_threshold,
             )
+            return None
+
+        if await self._entry_blocked_by_working_orders():
             return None
 
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
@@ -235,8 +269,18 @@ class OrderManager:
                     if spread is not None:
                         fill_threshold = spread.ask + self.settings.paper_fill_buffer
                         if limit_price >= fill_threshold:
-                            fill_price = round(limit_price + self.settings.paper_slippage_per_spread + self._commission(quantity), 2)
-                            log.info("paper_entry_filled", price=limit_price, fill_price=fill_price, step=i)
+                            fill_price = round(
+                                limit_price
+                                + self.settings.paper_slippage_per_spread
+                                + self._commission(quantity),
+                                2,
+                            )
+                            log.info(
+                                "paper_entry_filled",
+                                price=limit_price,
+                                fill_price=fill_price,
+                                step=i,
+                            )
                             return {
                                 "order_id": "PAPER",
                                 "fill_price": fill_price,
@@ -245,25 +289,12 @@ class OrderManager:
 
                     await asyncio.sleep(retry_interval)
 
-                log.debug("paper_entry_ladder_exhausted_repricing", candidate_center=candidate.center_strike)
-
-        # Guard: abort if any working entry orders already exist today (prevents duplicates
-        # from network-drop retries where Schwab accepted an order but we never got the ID).
-        try:
-            todays_orders = await self.schwab.get_todays_orders()
-            working = [
-                o for o in todays_orders
-                if o.get("status") in ("WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED")
-            ]
-            if working:
-                log.error(
-                    "entry_blocked_open_orders_exist",
-                    count=len(working),
-                    order_ids=[o.get("orderId") for o in working],
+                log.debug(
+                    "paper_entry_ladder_exhausted_repricing",
+                    candidate_center=candidate.center_strike,
                 )
-                return None
-        except Exception as e:
-            log.warning("open_orders_check_failed", error=str(e))
+
+        if await self._entry_blocked_by_working_orders():
             return None
 
         deadline = now_utc() + dt.timedelta(seconds=timeout)
@@ -413,7 +444,12 @@ class OrderManager:
                         fill_threshold = spread.bid - self.settings.paper_fill_buffer
                         if limit_price <= fill_threshold:
                             fill_price = self._paper_exit_fill_price(limit_price, quantity)
-                            log.info("paper_exit_filled", price=limit_price, fill_price=fill_price, step=i)
+                            log.info(
+                                "paper_exit_filled",
+                                price=limit_price,
+                                fill_price=fill_price,
+                                step=i,
+                            )
                             step_trace[-1]["filled"] = True
                             return {
                                 "order_id": "PAPER",
@@ -493,19 +529,40 @@ class OrderManager:
                         }
 
                     await self.schwab.cancel_order(order_id)
+                    post_fill = await self._check_post_cancel_fill(
+                        order_id, limit_price, order_type="exit"
+                    )
+                    if post_fill:
+                        return {
+                            **post_fill,
+                            "spread_bid": spread.bid if spread is not None else None,
+                            "spread_mark": spread.mark if spread is not None else None,
+                            "spread_ask": spread.ask if spread is not None else None,
+                            "ladder_steps": [
+                                *step_trace[:-1],
+                                {**step_trace[-1], "filled": True},
+                            ],
+                        }
 
                 except Exception as e:
                     log.error("exit_step_failed", step=i, error=str(e))
 
             log.warning("exit_ladder_exhausted")
 
-    async def _check_post_cancel_fill(self, order_id: str, limit_price: float) -> dict | None:
+    async def _check_post_cancel_fill(
+        self, order_id: str, limit_price: float, order_type: str = "entry"
+    ) -> dict | None:
         """After a cancel, confirm the order didn't sneak through as filled."""
         try:
             status = await self.schwab.get_order_status(order_id)
             if status.get("status") == "FILLED":
-                log.warning("post_cancel_fill_detected", order_id=order_id, price=limit_price)
-                orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
+                log.warning(
+                    "post_cancel_fill_detected",
+                    order_id=order_id,
+                    price=limit_price,
+                    order_type=order_type,
+                )
+                orders_filled.labels(underlying=self.underlying, order_type=order_type).inc()
                 return {
                     "order_id": order_id,
                     "fill_price": limit_price,

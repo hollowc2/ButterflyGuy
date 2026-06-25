@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Literal
+from typing import Any, Literal
 
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.core.config import AppConfig
@@ -122,6 +122,36 @@ class TradeService:
         self.notifier = notifier
         self.regime = regime
         self.gap_regime_filter = gap_regime_filter
+
+    async def _acquire_entry_lock(
+        self, underlying: str, trade_date: dt.date
+    ) -> tuple[Any, str] | None:
+        conn = await self.trade_queries.db.pool.acquire()
+        key = f"butterfly_entry:{underlying}:{trade_date.isoformat()}"
+        locked = await conn.fetchval(
+            "SELECT pg_try_advisory_lock(hashtext($1)::bigint)",
+            key,
+        )
+        if locked:
+            return conn, key
+
+        await self.trade_queries.db.pool.release(conn)
+        await self.decision_queries.log_event(
+            "entry_blocked",
+            {"reason": "entry_lock_held"},
+            underlying=underlying,
+        )
+        log.warning("entry_blocked", reason="entry_lock_held", underlying=underlying)
+        return None
+
+    async def _release_entry_lock(self, conn: Any, key: str) -> None:
+        try:
+            await conn.execute(
+                "SELECT pg_advisory_unlock(hashtext($1)::bigint)",
+                key,
+            )
+        finally:
+            await self.trade_queries.db.pool.release(conn)
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
         """Full entry flow from eligibility checks through entry fill."""
@@ -425,7 +455,32 @@ class TradeService:
                 limit=limit_price,
             )
 
-            fill = await self.order_manager.execute_single_attempt(best, limit_price)
+            entry_lock: tuple[Any, str] | None = None
+            if not self.config.execution.paper_trading:
+                entry_lock = await self._acquire_entry_lock(underlying, expiration)
+                if entry_lock is None:
+                    return None
+
+                allowed, reason = await self.risk_engine.can_trade(
+                    buying_power=buying_power
+                )
+                if not allowed:
+                    await self._release_entry_lock(*entry_lock)
+                    await self.decision_queries.log_event(
+                        "entry_blocked",
+                        {"reason": reason},
+                        underlying=underlying,
+                    )
+                    log.info("entry_blocked", reason=reason)
+                    return None
+
+            try:
+                fill = await self.order_manager.execute_single_attempt(best, limit_price)
+            except Exception:
+                if entry_lock is not None:
+                    await self._release_entry_lock(*entry_lock)
+                    entry_lock = None
+                raise
             if fill:
                 trade_data = {
                     "underlying": underlying,
@@ -464,8 +519,17 @@ class TradeService:
                         "selection_parity": selection_parity_report,
                     },
                 }
-                trade_id = await self.trade_queries.insert_trade(trade_data)
-                await self.risk_engine.record_trade()
+                try:
+                    trade_id = await self.trade_queries.insert_trade(trade_data)
+                    await self.risk_engine.record_trade()
+                except Exception:
+                    if entry_lock is not None:
+                        await self._release_entry_lock(*entry_lock)
+                        entry_lock = None
+                    raise
+                if entry_lock is not None:
+                    await self._release_entry_lock(*entry_lock)
+                    entry_lock = None
 
                 trades_active.labels(underlying=underlying).inc()
                 daily_trade_count.labels(underlying=underlying).inc()
@@ -568,6 +632,9 @@ class TradeService:
                     step=step,
                 )
                 return record, best
+
+            if entry_lock is not None:
+                await self._release_entry_lock(*entry_lock)
 
             await self.decision_queries.log_event(
                 "entry_step_unfilled",

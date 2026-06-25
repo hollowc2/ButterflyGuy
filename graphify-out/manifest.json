@@ -11,13 +11,17 @@
     "mtime": 1780099367.3885326,
     "hash": "db2813ffa63f72ddb86bf04508e74996"
   },
+  "/opt/butterflyguy/tests/test_schwab_client.py": {
+    "mtime": 1782360444.8335812,
+    "hash": "1df24eeb4153f6fc17ae1ab10f2882d3"
+  },
   "/opt/butterflyguy/tests/test_bias_filter.py": {
     "mtime": 1773353569.7187626,
     "hash": "5ff3b6ee060b5c529ecc049ccb9ed750"
   },
   "/opt/butterflyguy/tests/test_order_manager.py": {
-    "mtime": 1781131885.8119972,
-    "hash": "adbe2026578d06417ec17faed610b629"
+    "mtime": 1782360513.9519217,
+    "hash": "2fbd3b2184c870cbfbf5649e7e33fede"
   },
   "/opt/butterflyguy/tests/test_equity_scan_news.py": {
     "mtime": 1781535097.9220073,
@@ -78,6 +82,10 @@
   "/opt/butterflyguy/tests/test_position_manager.py": {
     "mtime": 1781651169.8573635,
     "hash": "51c7a2625ea6968f3cda14d12576f8dd"
+  },
+  "/opt/butterflyguy/tests/test_run_live.py": {
+    "mtime": 1782360462.2306669,
+    "hash": "75c8e082f1bcdf9e4aa384c7aac0aa08"
   },
   "/opt/butterflyguy/tests/test_equity_universes.py": {
     "mtime": 1780956395.7000413,
@@ -208,8 +216,8 @@
     "hash": "9d95e72d66d2734a6435bc1e0674ffdf"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/position_service.py": {
-    "mtime": 1782166006.065513,
-    "hash": "4cce5f2439c4d7262f2e0cbbdfc10a51"
+    "mtime": 1782360302.367883,
+    "hash": "4ff70c9936150060d7ff3cd3c655378c"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/__init__.py": {
     "mtime": 1773186977.915058,
@@ -240,8 +248,8 @@
     "hash": "8818624292111b9b9aba613bcdf5f7d5"
   },
   "/opt/butterflyguy/src/butterfly_guy/services/trade_service.py": {
-    "mtime": 1781999654.8806467,
-    "hash": "26dab7bcd75a902a0a0b122fe89d7314"
+    "mtime": 1782360371.4952211,
+    "hash": "60a2b94e1b8c4e44980fd05dce37559b"
   },
   "/opt/butterflyguy/src/butterfly_guy/quant_engine/__init__.py": {
     "mtime": 1773186977.914058,
@@ -272,8 +280,8 @@
     "hash": "5c1c3ce574663f06392f60d43d41c519"
   },
   "/opt/butterflyguy/src/butterfly_guy/data/schwab_client.py": {
-    "mtime": 1782233294.6146896,
-    "hash": "aa8c8227c7c370e236858d9f3b9dd230"
+    "mtime": 1782360288.9818177,
+    "hash": "5db826f0fe46c7464429fb9503327aad"
   },
   "/opt/butterflyguy/src/butterfly_guy/data/db_chain_quotes.py": {
     "mtime": 1780099084.069,
@@ -416,8 +424,8 @@
     "hash": "dca19a9fd794574d00b0ee68c42348f3"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1782165596.3724062,
-    "hash": "0156cafa18c3cbaf9d0e9439e371be21"
+    "mtime": 1782360396.4503434,
+    "hash": "01824a88c0adcb7c80d846464b7eaf15"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/download_schwab_cache.py": {
     "mtime": 1781999816.2914207,
@@ -472,8 +480,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/src/butterfly_guy/db/queries.py": {
-    "mtime": 1782161358.0118165,
-    "hash": "56ac96c965d171ce5ff4018ba076bac2"
+    "mtime": 1782360295.808851,
+    "hash": "97891de047ed5cbbb55f9ab861abee41"
   },
   "/opt/butterflyguy/src/butterfly_guy/db/connection.py": {
     "mtime": 1776718898.2178173,
@@ -520,8 +528,8 @@
     "hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "/opt/butterflyguy/src/butterfly_guy/execution/order_manager.py": {
-    "mtime": 1781131886.5930011,
-    "hash": "14b409fb8e495faaeb15516d307d38b4"
+    "mtime": 1782360494.6558266,
+    "hash": "62cf1c51a48d51570786d93806b8b1a1"
   },
   "/opt/butterflyguy/src/butterfly_guy/execution/order_builder.py": {
     "mtime": 1773186977.914058,
@@ -594,6 +602,10 @@
   "/opt/butterflyguy/README.md": {
     "mtime": 1782083366.1658044,
     "hash": "96a901e9d3f78f9f1ea6e98279bf3aec"
+  },
+  "/opt/butterflyguy/prelivecheckout.md": {
+    "mtime": 1782356580.9189835,
+    "hash": "92d2380f7e5bcb6af3a0b34bbf9ee1b8"
   },
   "/opt/butterflyguy/AGENTS.md": {
     "mtime": 1780879224.0703495,

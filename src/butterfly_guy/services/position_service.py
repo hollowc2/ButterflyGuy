@@ -249,6 +249,17 @@ class PositionService:
                         "exit_mark_parity": exit_mark_parity,
                     }, underlying=self.config.strategy.underlying)
 
+                    await self.trade_queries.merge_metadata(
+                        trade.trade_id,
+                        {
+                            "pending_exit": {
+                                "reason": signal.reason,
+                                "signal_time": now_eastern().isoformat(),
+                                "mark_at_signal": pos_state.current_value,
+                            }
+                        },
+                    )
+
                     fill = await self.order_manager.execute_exit(
                         candidate,
                         pos_state.current_value,

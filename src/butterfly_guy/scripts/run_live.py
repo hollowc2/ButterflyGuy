@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import datetime as dt
 import os
+from typing import Any
 
 from dotenv import dotenv_values
 
@@ -49,6 +50,88 @@ from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
 from butterfly_guy.strategy.regime_classifier import RegimeClassifier
 
 log = get_logger("run_live")
+
+WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
+
+
+def _matches_underlying(symbol: str, underlying: str) -> bool:
+    normalized = symbol.upper().lstrip("$")
+    return normalized.startswith(underlying.upper())
+
+
+def _broker_option_position_symbols(
+    account_snapshot: dict[str, Any], underlying: str
+) -> set[str]:
+    acct = account_snapshot.get("securitiesAccount", account_snapshot)
+    symbols: set[str] = set()
+    for pos in acct.get("positions") or []:
+        instrument = pos.get("instrument") or {}
+        if instrument.get("assetType") != "OPTION":
+            continue
+        qty = float(pos.get("longQuantity") or 0) + float(pos.get("shortQuantity") or 0)
+        if qty == 0:
+            continue
+        symbol = str(instrument.get("symbol") or "")
+        underlier = str(instrument.get("underlyingSymbol") or "")
+        if _matches_underlying(symbol, underlying) or _matches_underlying(underlier, underlying):
+            symbols.add(symbol)
+    return symbols
+
+
+def _order_symbols(order: dict[str, Any]) -> set[str]:
+    symbols: set[str] = set()
+    for leg in order.get("orderLegCollection") or []:
+        instrument = leg.get("instrument") or {}
+        symbol = instrument.get("symbol")
+        if symbol:
+            symbols.add(str(symbol))
+    for child in order.get("childOrderStrategies") or []:
+        symbols.update(_order_symbols(child))
+    return symbols
+
+
+def _open_trade_symbols(open_rows: list[dict]) -> set[str]:
+    symbols: set[str] = set()
+    for row in open_rows:
+        for key in ("lower_symbol", "center_symbol", "upper_symbol"):
+            if row.get(key):
+                symbols.add(str(row[key]))
+    return symbols
+
+
+async def _assert_broker_state_matches_db(
+    schwab: SchwabClientWrapper, underlying: str, open_rows: list[dict]
+) -> None:
+    account_snapshot = await schwab.get_account_snapshot()
+    broker_symbols = _broker_option_position_symbols(account_snapshot, underlying)
+    expected_symbols = _open_trade_symbols(open_rows)
+
+    todays_orders = await schwab.get_todays_orders()
+    working_orders = [
+        order for order in todays_orders
+        if order.get("status") in WORKING_ORDER_STATUSES
+        and any(_matches_underlying(sym, underlying) for sym in _order_symbols(order))
+    ]
+    if working_orders:
+        raise RuntimeError(
+            f"Broker has {len(working_orders)} working {underlying} order(s); "
+            "refusing live startup"
+        )
+
+    if broker_symbols and not open_rows:
+        raise RuntimeError(
+            f"Broker has {len(broker_symbols)} {underlying} option position(s) "
+            "but DB has no OPEN trade"
+        )
+    if open_rows and not broker_symbols:
+        raise RuntimeError(
+            f"DB has {len(open_rows)} OPEN {underlying} trade(s) but broker is flat"
+        )
+    if expected_symbols and not expected_symbols.issubset(broker_symbols):
+        missing = sorted(expected_symbols - broker_symbols)
+        raise RuntimeError(
+            f"Broker positions missing DB OPEN leg symbol(s): {', '.join(missing)}"
+        )
 
 
 async def entry_loop(
@@ -293,6 +376,9 @@ async def main() -> None:
     recovered_peak: float | None = None
 
     open_rows = await trade_q.get_open_trades(underlying)
+    if not config.execution.paper_trading:
+        await _assert_broker_state_matches_db(schwab, underlying, open_rows)
+
     if open_rows:
         row = open_rows[0]
         recovered_trade = TradeRecord(

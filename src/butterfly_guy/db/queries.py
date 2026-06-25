@@ -264,6 +264,17 @@ class TradeQueries:
             trade_id, peak_value,
         )
 
+    async def merge_metadata(self, trade_id: int, metadata: dict[str, Any]) -> None:
+        await self.db.pool.execute(
+            """
+            UPDATE butterfly_trades
+            SET metadata = metadata || $2::jsonb
+            WHERE id = $1
+            """,
+            trade_id,
+            json.dumps(metadata),
+        )
+
     async def get_open_trades(self, underlying: str) -> list[dict]:
         rows = await self.db.pool.fetch(
             """
