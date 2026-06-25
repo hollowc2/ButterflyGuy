@@ -4,10 +4,9 @@ Schwab refresh tokens have a hard 7-day expiry from issue date.
 This script sends a Telegram alert 8 hours before expiry and every hour after.
 Also sends a weekly Sunday evening reminder to re-auth before the new week.
 
-Cron examples:
-  0 * * * * cd /opt/butterflyguy && .venv/bin/python tools/schwab_token_keepalive.py
-  50 1 * * 1 cd /opt/butterflyguy && .venv/bin/python tools/schwab_token_keepalive.py
-  # add --sunday-reminder for the weekly reminder run
+Cron: run hourly + dedicated Sunday 6:50 PM PDT run
+  0 * * * * /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
+  50 1 * * 1 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py --sunday-reminder >> /opt/butterflyguy/keepalive.log 2>&1
 """
 
 import json

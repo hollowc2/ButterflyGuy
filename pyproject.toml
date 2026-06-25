@@ -41,7 +41,8 @@ select = ["E", "F", "I", "N", "W"]
 # Tests use descriptive UPPER_CASE for inputs mirroring the math notation.
 "tests/**/*.py" = ["N806", "N803"]
 # Scripts in tools/ do sys.path manipulation before imports - E402 is intentional.
-"tools/**/*.py" = ["E402"]
+# Cron docstrings may legitimately exceed line-length when documenting full paths and redirects.
+"tools/**/*.py" = ["E402", "E501"]
 # Protected service module; keep lint-only cleanup out of runtime orchestration code.
 "src/butterfly_guy/services/chart_data.py" = ["E501"]
 
