@@ -63,6 +63,14 @@ log = get_logger(__name__)
 DB_SELECTION_PARITY_MAX_LAG_SECONDS = 60
 
 
+def _age_seconds(ts: dt.datetime, now: dt.datetime) -> float:
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=dt.timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=dt.timezone.utc)
+    return (now.astimezone(dt.timezone.utc) - ts.astimezone(dt.timezone.utc)).total_seconds()
+
+
 def _session_open_from_intraday_candles(
     candles: list[dict],
     session_date: dt.date,
@@ -297,6 +305,39 @@ class TradeService:
         except Exception as e:
             log.warning("vix_fetch_failed", error=str(e))
 
+        if (
+            self.config.entry.strike_selection_method == "VIX"
+            and self.config.strategy.vix_width_buckets
+        ):
+            if vix_price is None or vix_ts is None:
+                await self.decision_queries.log_event(
+                    "entry_blocked",
+                    {"reason": "vix_unavailable"},
+                    underlying=underlying,
+                )
+                log.info("entry_blocked", reason="vix_unavailable")
+                return None
+
+            vix_age_seconds = _age_seconds(vix_ts, now_eastern())
+            if vix_age_seconds > self.config.entry.max_vix_age_seconds:
+                await self.decision_queries.log_event(
+                    "entry_blocked",
+                    {
+                        "reason": "vix_stale",
+                        "vix_timestamp": vix_ts.isoformat(),
+                        "vix_age_seconds": round(vix_age_seconds, 1),
+                        "max_vix_age_seconds": self.config.entry.max_vix_age_seconds,
+                    },
+                    underlying=underlying,
+                )
+                log.info(
+                    "entry_blocked",
+                    reason="vix_stale",
+                    vix_age_seconds=round(vix_age_seconds, 1),
+                    max_vix_age_seconds=self.config.entry.max_vix_age_seconds,
+                )
+                return None
+
         # Entry retry loop: re-scan chain each attempt so strikes flex with price movement.
         # Start at fly's composite ask, add price_step each retry to sweeten the offer.
         max_steps = self.config.execution.price_ladder_steps
@@ -324,7 +365,7 @@ class TradeService:
             if (
                 selection_method == "VIX"
                 and self.config.strategy.vix_width_buckets
-                and not vix_price
+                and vix_price is None
             ):
                 log.warning(
                     "vix_width_buckets configured but VIX unavailable — skipping entry"

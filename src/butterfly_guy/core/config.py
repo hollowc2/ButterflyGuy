@@ -46,6 +46,7 @@ class EntrySettings(BaseModel):
     use_bias_filter: bool = False  # if True, use BiasScoreFilter instead of simple gap
     strike_selection_method: Literal["VIX", "TARGET_COST", "BEST_RR"] = "TARGET_COST"
     center_tolerance: float = 15.0  # pts; how far a candidate's center can stray from VIX target
+    max_vix_age_seconds: int = 300  # VIX-based entries require a recent $VIX snapshot
     bull_call_bias: bool = False  # Override to CALL in BULL regime on gap-down days
     min_gap_pct: float | None = None  # Skip days where |gap| < this (e.g. 0.0025 = 0.25%)
 
@@ -116,7 +117,7 @@ class RiskSettings(BaseModel):
     max_trades_per_day: int = 1
     max_position_size: int = 1
     max_weekly_loss: float = 1500.0        # 3x daily default; halt for week if exceeded
-    max_consecutive_losses: int = 10        # halt after N consecutive losing trades (0 = disabled)
+    max_consecutive_losses: int = 10        # warn after N consecutive losing trades (0 = disabled)
     min_buying_power: float = 500.0        # minimum buying power required to enter
     fail_safe_on_balance_error: bool = True  # if True, block trading when balance API unavailable
 
