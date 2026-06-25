@@ -2,7 +2,7 @@
 
 Audit date: 2026-06-25
 Scope: `/opt/butterflyguy` source, configs, tests, Docker/monitoring files, live container status, and read-only aggregate TimescaleDB queries.
-Mode: original audit was read-only; remediation updates modified local source, tests, config comments, graphify artifacts, and documentation. No broker order APIs, restarts, or DB writes were performed. The safety-gate remediation was committed and pushed as `47eacd0`.
+Mode: original audit was read-only; remediation updates modified local source, tests, config comments, graphify artifacts, and documentation. No broker order APIs, restarts, or DB writes were performed. The safety-gate remediation was committed and pushed as `47eacd0`; the broker order-intent lifecycle layer was committed and pushed as `cb95d00`.
 
 ## 1. Executive Summary
 
@@ -10,11 +10,11 @@ Butterfly Guy is a Dockerized automated 0-DTE index-options butterfly system for
 
 The strongest parts are the paper-first default, structured decision logging, DB-backed risk state, persistent open-trade recovery from local `butterfly_trades`, a useful Prometheus/Grafana base, and a local test suite that currently passes (`311 passed in 5.33s`). There is also live/backtest parity tooling and stored metadata for newer trades.
 
-The original audit found serious weaknesses in live-order lifecycle safety, broker reconciliation, idempotency, and concurrency. The duplicate-working-order guard, single-submit order placement, exit post-cancel fill check, startup broker mismatch checks, live entry advisory lock, DB open-trade uniqueness migration, durable broker order-intent/order-ID persistence, known partial-fill fail-closed handling, runtime unknown-state entry gating, deploy gates, and first-pass runbook have since been added or mitigated. The remaining serious weaknesses are automatic restart reconciliation of broker-filled/flat states, full Schwab complex-order status mapping, deeper health readiness, and tested operational drills.
+The original audit found serious weaknesses in live-order lifecycle safety, broker reconciliation, idempotency, and concurrency. The duplicate-working-order guard, single-submit order placement, exit post-cancel fill check, startup broker mismatch checks, live entry advisory lock, DB open-trade uniqueness migration, durable broker order-intent/order-ID persistence, known partial-fill fail-closed handling, runtime unknown-state entry gating, conservative restart repair for unambiguous bot-owned filled states, deploy gates, and first-pass runbook have since been added or mitigated. The remaining serious weaknesses are unproven Schwab complex-order status mapping, deeper health readiness, tested operational drills, and account-level live confirmation.
 
 Historical performance is not enough to justify live trading. Stored closed trades show SPX positive over 58 trades (+$5,176), but only 12 wins and 46 losses; removing the best three SPX trades turns net P&L negative (-$1,452). NDX is materially negative over 48 trades (-$15,961.52), and XSP is slightly negative over 39 trades (-$93). These are small, regime-dependent samples with concentrated winners and incomplete metadata in older rows.
 
-Operationally, the platform is still not ready to trade real money today. The system has stronger entry/exit guards now, but can still lose durable awareness of broker-accepted orders during crash windows, lacks continuous broker reconciliation, and has not proven all real Schwab complex-order status edge cases.
+Operationally, the platform is still not ready to trade real money today. The system has durable broker-order intent tracking and runtime unknown-state gating now, but it has not proven all real Schwab complex-order status edge cases, health/readiness depth, account-level live confirmation, or operator drills.
 
 ## 2. Final Recommendation
 
@@ -24,18 +24,21 @@ This recommendation permits continued broker paper trading, read-only shadow mod
 
 ## 2A. What Is Left
 
-These are the remaining blockers after commit `47eacd0`:
+These are the remaining blockers after commit `cb95d00`:
 
 | Priority | Remaining work | Why it still blocks live money | Done when |
 |---|---|---|---|
-| P0 | Restart reconciliation of broker-filled/flat states | Restart currently blocks unsafe mismatch, but does not automatically repair DB `OPEN` rows from broker truth. | Startup can close/reconcile DB rows or halt with an actionable reason based on broker positions/orders/transactions. |
-| P0 | Full Schwab complex-order status mapping | Known partial-fill statuses fail closed, but real Schwab paper/live complex-spread statuses are not fully observed or mapped. | Paper/shadow runs collect statuses; partial, cancel-pending, rejected, expired, filled, and child-order cases have explicit tests and handling. |
+| P0 | Real Schwab complex-order status mapping | Known partial/cancel-pending statuses fail closed and a read-only status report exists, but real Schwab paper/live complex-spread payloads have not been observed enough to trust every status and child-order case. | Paper/shadow runs collect statuses; partial, cancel-pending, rejected, expired, filled, and child-order cases are mapped from observed payloads and covered by tests. |
+| P0 | Restart reconciliation proof drill | Startup has conservative repair for unambiguous bot-owned filled entry/exit intents, but it has not been exercised against real Schwab paper payloads or a tabletop crash drill. | Simulated and paper/shadow restart drills prove filled-entry, filled-exit, broker-flat, partial-fill, missing-fill-price, and mismatched-leg outcomes. |
 | P1 | Deeper `/health` readiness | Current health is process-level plus deploy smoke, not DB/broker/data/risk readiness. | `/health` or a readiness endpoint reports DB, Schwab auth, fresh chain/VIX, broker/DB reconciliation, and risk-state status. |
 | P1 | Tested operator drills | A first-pass runbook exists, but flatten/restart/outage procedures have not been exercised. | Startup, manual flatten, restart recovery, broker outage, DB outage, and rollback are tabletop-tested and updated with exact commands. |
 | P1 | Account-level live confirmation | Live mode is SPX-only and env-gated, but not yet tied to an explicit account/risk confirmation. | Live startup verifies the expected Schwab account, $20,000 allocation assumption, and $500 daily account-loss cap before enabling entries. |
 
 Resolved locally after that commit:
 
+* `broker_order_intents` now persists live entry/exit order intent before submit and records Schwab order IDs immediately after `Location`.
+* Runtime broker reconciliation now gates new entries on unknown positions/orders while allowing bot-owned intent-backed working orders.
+* Startup can conservatively repair bot-owned filled entry/exit states only when broker legs and fill price/time are unambiguous; otherwise it halts.
 * VIX center tolerance now blocks selection when no candidate is within tolerance instead of falling back to all candidates.
 * 2026 NYSE early-close dates currently listed by NYSE are represented in market-open, minutes-to-close, session chart, intraday-bar, and EOD-chart timing paths.
 * `PositionService.monitor_loop()` docstring now matches the 2-second poll interval.
@@ -313,7 +316,7 @@ Missing or not verified:
 | Historical trades reconcile to broker fill records | NOT VERIFIED |
 | Maximum risk calculations are correct | PARTIAL |
 | Risk limits survive restarts | PARTIAL |
-| Duplicate orders are prevented | PARTIAL |
+| Duplicate orders are prevented | PASS |
 | Partial fills and rejected orders handled safely | PARTIAL |
 | Broker positions/orders reconciled at startup and continuously | PARTIAL |
 | Unknown broker/app state stops entries | PASS |
@@ -367,8 +370,8 @@ Verification completed:
 
 Still left before live-money trading:
 
-* Automatic reconciliation of DB `OPEN` rows against broker-filled/flat states after restart.
-* Real Schwab complex-order status observation and full status mapping.
+* Real Schwab complex-order status observation and full mapping from paper/shadow payloads.
+* Restart reconciliation proof drill with real or replayed Schwab paper payloads.
 * Health endpoint depth beyond process/startup health.
 * Tested runbook drills.
 * Account-level live confirmation for expected Schwab account, $20,000 allocation, and $500 daily account loss.
@@ -377,8 +380,8 @@ Still left before live-money trading:
 
 | Priority | Item | Risk reduction | Affected files/services | Approach | Verification |
 |---|---|---|---|---|---|
-| P0 | Restart reconcile broker-filled/flat states | Prevent duplicate close or unmanaged open position after restart | `run_live.py`, `TradeQueries`, Schwab client | Reconcile DB `OPEN` rows against broker positions/orders/transactions or halt with action | Broker-flat and broker-filled restart tests |
-| P0 | Full complex-order status mapping | Prevent unsafe behavior on broker edge statuses | `order_manager.py`, Schwab client | Observe real Schwab statuses and map partial/cancel/reject/child-order cases | Status-matrix unit tests and paper/shadow evidence |
+| P0 | Prove restart reconciliation | Prevent duplicate close or unmanaged open position after restart | `run_live.py`, `OrderIntentQueries`, Schwab paper payloads | Tabletop/replay crash windows for filled entry, filled exit, broker flat, missing fill price, and mismatched legs | Restart drill notes plus focused tests using captured payloads |
+| P0 | Full complex-order status mapping | Prevent unsafe behavior on broker edge statuses | `order_manager.py`, Schwab status report script | Observe real Schwab statuses and map partial/cancel/reject/child-order cases | Status-matrix unit tests and paper/shadow evidence |
 
 ### Before limited-capital pilot
 
