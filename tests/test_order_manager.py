@@ -10,7 +10,7 @@ import pytest
 
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
-from butterfly_guy.execution.order_manager import LiveSpread, OrderManager
+from butterfly_guy.execution.order_manager import LiveSpread, OrderManager, PartialFillError
 
 # ---------------------------------------------------------------------------
 # Factories
@@ -223,6 +223,19 @@ async def test_single_attempt_blocks_when_working_order_exists():
 
     assert result is None
     schwab.place_order.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_raises_on_partial_fill_status():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=2)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    schwab.get_order_status = AsyncMock(return_value={"status": "PARTIALLY_FILLED"})
+
+    with pytest.raises(PartialFillError):
+        await om.execute_single_attempt(candidate, limit_price=2.50)
+
+    schwab.cancel_order.assert_not_called()
 
 
 @pytest.mark.asyncio

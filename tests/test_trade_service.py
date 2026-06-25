@@ -3,7 +3,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from butterfly_guy.core.config import AppConfig, EntrySettings, StrategySettings, VixWidthBucket
+from butterfly_guy.core.config import (
+    AppConfig,
+    EntrySettings,
+    ExecutionSettings,
+    StrategySettings,
+    VixWidthBucket,
+)
 from butterfly_guy.services.trade_service import (
     TradeService,
     _session_open_from_intraday_candles,
@@ -115,4 +121,51 @@ async def test_attempt_entry_blocks_stale_vix_before_chain_fetch():
         and payload["vix_age_seconds"] >= 600
         and payload["max_vix_age_seconds"] == 300
         for payload in event_payloads
+    )
+
+
+@pytest.mark.asyncio
+async def test_live_attempt_entry_blocks_stale_chain_snapshot_before_spot_fetch():
+    config = AppConfig(
+        execution=ExecutionSettings(
+            paper_trading=False,
+            allow_live_trading=True,
+        ),
+        entry=EntrySettings(max_chain_snapshot_age_seconds=120),
+    )
+    schwab = AsyncMock()
+    schwab.get_account_balances.return_value = {"buying_power": 10_000.0}
+    risk_engine = AsyncMock()
+    risk_engine.can_trade.return_value = (True, "ok")
+    chain_queries = MagicMock()
+    stale_snapshot = now_eastern() - dt.timedelta(minutes=5)
+    chain_queries.get_latest_snapshot_time = AsyncMock(return_value=stale_snapshot)
+    decision_queries = MagicMock()
+    decision_queries.log_event = AsyncMock()
+    service = TradeService(
+        config=config,
+        schwab=schwab,
+        risk_engine=risk_engine,
+        order_manager=AsyncMock(),
+        builder=MagicMock(),
+        selector=MagicMock(),
+        direction_filter=MagicMock(),
+        chain_queries=chain_queries,
+        trade_queries=MagicMock(),
+        candidate_queries=MagicMock(),
+        decision_queries=decision_queries,
+    )
+
+    with patch("butterfly_guy.services.trade_service.time_in_window", return_value=True), patch(
+        "butterfly_guy.services.trade_service.get_0dte_expiration",
+        return_value=dt.date(2026, 6, 25),
+    ):
+        result = await service.attempt_entry()
+
+    assert result is None
+    schwab.get_spot_price.assert_not_called()
+    schwab.get_option_chain.assert_not_called()
+    assert any(
+        call.args[1]["reason"] == "chain_snapshot_stale"
+        for call in decision_queries.log_event.await_args_list
     )

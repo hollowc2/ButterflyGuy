@@ -207,6 +207,9 @@ class TradeService:
         spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
         chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
 
+        if not await self._live_chain_snapshot_fresh(underlying, expiration):
+            return None
+
         # Get initial spot price for chain scanning and VIX anchoring
         try:
             spot_price = await self.schwab.get_spot_price(spot_symbol)
@@ -707,6 +710,61 @@ class TradeService:
         )
         log.warning("entry_exhausted", direction=direction)
         return None
+
+    async def _live_chain_snapshot_fresh(
+        self, underlying: str, expiration: dt.date
+    ) -> bool:
+        if self.config.execution.paper_trading:
+            return True
+
+        max_age = self.config.entry.max_chain_snapshot_age_seconds
+        if max_age <= 0:
+            return True
+
+        try:
+            snapshot_time = await self.chain_queries.get_latest_snapshot_time(
+                underlying,
+                expiration,
+            )
+        except Exception as e:
+            await self.decision_queries.log_event(
+                "entry_blocked",
+                {"reason": "chain_snapshot_check_failed", "error": str(e)},
+                underlying=underlying,
+            )
+            log.error("entry_blocked", reason="chain_snapshot_check_failed", error=str(e))
+            return False
+
+        if snapshot_time is None:
+            await self.decision_queries.log_event(
+                "entry_blocked",
+                {"reason": "chain_snapshot_unavailable"},
+                underlying=underlying,
+            )
+            log.info("entry_blocked", reason="chain_snapshot_unavailable")
+            return False
+
+        age = _age_seconds(snapshot_time, now_eastern())
+        if age > max_age:
+            await self.decision_queries.log_event(
+                "entry_blocked",
+                {
+                    "reason": "chain_snapshot_stale",
+                    "snapshot_time": snapshot_time.isoformat(),
+                    "age_seconds": round(age, 1),
+                    "max_age_seconds": max_age,
+                },
+                underlying=underlying,
+            )
+            log.info(
+                "entry_blocked",
+                reason="chain_snapshot_stale",
+                age_seconds=round(age, 1),
+                max_age_seconds=max_age,
+            )
+            return False
+
+        return True
 
     async def _build_entry_chart_png(
         self,

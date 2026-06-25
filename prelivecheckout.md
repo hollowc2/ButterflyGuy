@@ -10,11 +10,11 @@ Butterfly Guy is a Dockerized automated 0-DTE index-options butterfly system for
 
 The strongest parts are the paper-first default, structured decision logging, DB-backed risk state, persistent open-trade recovery from local `butterfly_trades`, a useful Prometheus/Grafana base, and a local test suite that currently passes (`311 passed in 5.33s`). There is also live/backtest parity tooling and stored metadata for newer trades.
 
-The original audit found serious weaknesses in live-order lifecycle safety, broker reconciliation, idempotency, and concurrency. The duplicate-working-order guard, single-submit order placement, exit post-cancel fill check, startup broker mismatch checks, and live entry advisory lock have since been added or mitigated. The remaining serious weaknesses are continuous broker reconciliation, durable broker order-intent/order-ID persistence, automatic restart reconciliation of broker-filled/flat states, partial-fill handling, DB-level open-trade uniqueness, and operational runbooks.
+The original audit found serious weaknesses in live-order lifecycle safety, broker reconciliation, idempotency, and concurrency. The duplicate-working-order guard, single-submit order placement, exit post-cancel fill check, startup broker mismatch checks, live entry advisory lock, DB open-trade uniqueness migration, known partial-fill fail-closed handling, deploy gates, and first-pass runbook have since been added or mitigated. The remaining serious weaknesses are continuous broker reconciliation, durable broker order-intent/order-ID persistence, automatic restart reconciliation of broker-filled/flat states, full Schwab complex-order status mapping, deeper health readiness, and tested operational drills.
 
 Historical performance is not enough to justify live trading. Stored closed trades show SPX positive over 58 trades (+$5,176), but only 12 wins and 46 losses; removing the best three SPX trades turns net P&L negative (-$1,452). NDX is materially negative over 48 trades (-$15,961.52), and XSP is slightly negative over 39 trades (-$93). These are small, regime-dependent samples with concentrated winners and incomplete metadata in older rows.
 
-Operationally, the platform is still not ready to trade real money today. The system has stronger entry/exit guards now, but can still lose durable awareness of broker-accepted orders during crash windows, lacks continuous broker reconciliation, and has not proven safe handling for partial fills or complex-order status edge cases.
+Operationally, the platform is still not ready to trade real money today. The system has stronger entry/exit guards now, but can still lose durable awareness of broker-accepted orders during crash windows, lacks continuous broker reconciliation, and has not proven all real Schwab complex-order status edge cases.
 
 ## 2. Final Recommendation
 
@@ -117,13 +117,13 @@ This recommendation permits continued broker paper trading, read-only shadow mod
 | BLOCKER-003 | Mitigated | Design risk | Startup now blocks broker/DB mismatches; continuous reconciliation still open. |
 | BLOCKER-004 | Mitigated | Design risk | Pending-exit metadata and startup broker-flat blocking reduce duplicate-close risk; automatic close reconciliation still open. |
 | BLOCKER-005 | Resolved | Confirmed defect | Exit cancel path now checks for post-cancel fills. |
-| BLOCKER-006 | Mitigated | Design risk | Live entry uses an advisory lock and risk re-check; DB-level uniqueness still open. |
+| BLOCKER-006 | Resolved in source | Design risk | Live entry uses an advisory lock and risk re-check; migration `008_one_open_trade_per_underlying_day.sql` adds DB-level open-trade uniqueness. |
 | HIGH-001 | Resolved | Documentation/behavior mismatch | Owner confirmed consecutive losses are warning-only; config comments now match behavior. |
-| HIGH-002 | Mitigated | Data freshness | VIX-based entries now age-gate `$VIX`; broader spot/chain freshness remains partial. |
+| HIGH-002 | Mitigated | Data freshness | VIX-based entries now age-gate `$VIX`; live entries also require a recent collector chain snapshot. Broker response timestamp freshness remains unverified. |
 | HIGH-003 | High | Strategy rule mismatch | VIX center tolerance falls back to all candidates instead of blocking. |
 | HIGH-004 | High | Observability | `/health` is process-only, not DB/broker/data/trading health. |
-| HIGH-005 | High | Deployment | Deploy workflow lacks test/config/health gates. |
-| HIGH-006 | High | Config safety | Live enablement lacks account/underlying hard confirmation beyond config/env. |
+| HIGH-005 | Resolved in source | Deployment | Deploy workflow now runs pytest, ruff, compose config validation, and SPX health check. |
+| HIGH-006 | Mitigated | Config safety | Live enablement now fails closed for non-SPX configs; account confirmation remains config/env owned. |
 | MED-001 | Medium | Documentation mismatch | AGENTS/CLAUDE paper-fill description conflicts with ask/bid-based paper code. |
 | MED-002 | Medium | Historical data quality | Older trade rows have missing leg symbols: NDX 10, SPX 16, XSP 6. |
 | MED-003 | Medium | Backtest parity | Backtest still has separate/default paths that can drift from runtime selection. |
@@ -228,10 +228,10 @@ Statistical limitations:
 | Duplicate open orders | Yes | `execute_single_attempt()` | Broker-derived | Yes | Fail-closed if open-order check fails | PASS |
 | Broker position reconciliation | Partial | Startup check | No | Yes | Fail-closed at startup, no runtime loop | PARTIAL |
 | Open DB trade recovery | Yes | `run_live.py:295-340` | DB | Partial | Local-only | PARTIAL |
-| Stale market data rejection | Partial | Missing quotes and stale VIX block some paths | No comprehensive spot/live chain age gate | Partial | Mixed | PARTIAL |
+| Stale market data rejection | Partial | Missing quotes, stale VIX, and stale collector chain snapshots block live entry | Broker payload timestamps unavailable | Partial | Mixed | PARTIAL |
 | Quote width/quality | Partial | Position drawdown exits for NDX/XSP | Config | Yes | Disabled for SPX | PARTIAL |
 | End-of-day handling | Yes | Cash settlement after close | DB | Partial | Depends on valuation fallback | PARTIAL |
-| Emergency flatten | Not verified | No tested runbook found | No | No | Unknown | FAIL |
+| Emergency flatten | Runbook only | `docs/live-runbook.md` | No | No | Manual fail-closed | PARTIAL |
 | Health endpoint | Yes | Metrics thread | No | No | Fail-open | FAIL |
 | Alerts | Partial | Logs, notify on collector failures, Discord/Telegram | External | Partial | Some failures log-only | PARTIAL |
 
@@ -264,7 +264,7 @@ Current coverage now includes the actual `execute_single_attempt()` entry path, 
 Critical missing tests before live:
 
 * Ambiguous `place_order()` timeout after broker acceptance.
-* Partial fill and rejected multi-leg order handling.
+* Full Schwab complex-order status mapping beyond known partial-fill fail-closed statuses.
 * Two simultaneous same-underlying entry attempts.
 * Spot and option-chain staleness rejection.
 * Early market close behavior.
@@ -278,7 +278,7 @@ Missing or not verified:
 * Startup checklist that reconciles DB, broker positions, broker open orders, data freshness, and risk state.
 * Pre-market go/no-go checklist.
 * Live supervision procedure with exact dashboards and alert expectations.
-* Manual flatten procedure and verification.
+* Manual flatten procedure verification.
 * Broker outage response.
 * Market-data outage response.
 * DB outage response.
@@ -296,7 +296,7 @@ Missing or not verified:
 | Maximum risk calculations are correct | PARTIAL |
 | Risk limits survive restarts | PARTIAL |
 | Duplicate orders are prevented | PARTIAL |
-| Partial fills and rejected orders handled safely | FAIL |
+| Partial fills and rejected orders handled safely | PARTIAL |
 | Broker positions/orders reconciled at startup and continuously | PARTIAL |
 | Unknown broker/app state stops entries | PARTIAL |
 | Market-data freshness enforced | PARTIAL |
@@ -325,9 +325,14 @@ Mitigated, but not fully complete:
 
 * BLOCKER-003: Added live startup broker-vs-DB fail-closed checks for same-underlying option positions and same-day working orders. This blocks unsafe startup mismatches but is not continuous broker reconciliation.
 * BLOCKER-004: Persisted `pending_exit` metadata before live exit submission and made startup block if DB says `OPEN` while broker is flat. This reduces duplicate-close risk but does not yet persist broker order IDs before submit or reconcile filled exits into closed DB rows automatically.
-* BLOCKER-006: Added a same-underlying/same-day PostgreSQL advisory lock around live entry submit and DB insert, with a risk re-check after lock acquisition. This prevents overlapping app processes from submitting concurrently when they use this code path, but there is no DB-level unique open-trade constraint yet.
+* BLOCKER-006: Added a same-underlying/same-day PostgreSQL advisory lock around live entry submit and DB insert, with a risk re-check after lock acquisition. Added migration `008_one_open_trade_per_underlying_day.sql` for DB-level uniqueness on one OPEN trade per underlying/date.
 * P1 VIX freshness: Added `entry.max_vix_age_seconds` and made VIX-based entries fail closed when `$VIX` is unavailable or stale before the option-chain scan.
 * P1 consecutive-loss semantics: Owner confirmed warning-only behavior; config comments now match the existing risk-engine behavior.
+* P1 chain freshness: Added live-only collector snapshot age gating before entry.
+* P1 deploy gates: Added pytest, ruff, compose config validation, and SPX `/health` check to the deploy workflow.
+* P1 runbooks: Added `docs/live-runbook.md` covering startup, session watch, manual flatten, and rollback.
+* Partial-fill safety: Known partial-fill statuses now raise a hard unknown-state error and stop entry retries instead of continuing the order ladder.
+* Config safety: Live-money mode now refuses non-SPX configs.
 
 Verification completed:
 
@@ -342,9 +347,9 @@ Still left before live-money trading:
 * Full broker reconciliation loop during runtime, not only startup.
 * Durable broker order-intent/order-ID persistence before live entry and exit submits.
 * Automatic reconciliation of DB `OPEN` rows against broker-filled/flat states after restart.
-* DB-level open-trade uniqueness or transactional admission stronger than the app advisory lock.
-* Partial-fill handling and Schwab complex-order status mapping.
-* P1 items below: broader spot/chain data freshness, health endpoint depth, deploy gates, and live runbooks.
+* Real Schwab complex-order status observation and full status mapping.
+* Health endpoint depth beyond process/startup health.
+* Tested runbook drills and account-level live confirmation.
 
 ### Before any live order
 
@@ -355,18 +360,18 @@ Still left before live-money trading:
 | P0 | Broker reconciliation at startup | Prevent unknown positions | `run_live.py`, Schwab client | Compare broker orders/positions with DB before entries | Startup mismatch tests |
 | P0 | Restart-safe exit lifecycle | Prevent duplicate close/reversal | `position_service.py`, DB schema | Persist order intent/order ID before submit; reconcile after restart | Crash-window tests |
 | P0 | Exit post-cancel fill check | Prevent duplicate exits | `order_manager.py` | Reuse entry post-cancel logic for exits | Cancel/fill race test |
-| P0 | Atomic entry admission | Prevent same-day concurrency race | DB migration, `RiskEngine`/`TradeService` | Advisory lock or unique open-trade constraint | Concurrent entry test |
+| P0 | Atomic entry admission | Prevent same-day concurrency race | DB migration, `RiskEngine`/`TradeService` | Done in source: advisory lock plus partial unique index migration | Concurrent entry test |
 
 ### Before limited-capital pilot
 
 | Priority | Item | Risk reduction | Affected files/services | Approach | Verification |
 |---|---|---|---|---|---|
 | P1 | Enforce VIX freshness | Avoid stale width/center decisions | `trade_service.py`, `config.py` | Done: `$VIX` max-age gate before VIX-based entries | Stale-VIX test |
-| P1 | Enforce spot/chain freshness | Avoid stale strike/price decisions | `trade_service.py`, collector metadata | Max-age checks for spot and option chain | Stale-input tests |
+| P1 | Enforce spot/chain freshness | Avoid stale strike/price decisions | `trade_service.py`, collector metadata | Live entries now require a recent collector chain snapshot | Stale-input tests |
 | P1 | Resolve consecutive-loss semantics | Align risk docs/code | `config.py`, configs/tests | Done: warning-only policy documented | Existing risk tests |
 | P1 | Improve `/health` | Operator safety | `metrics.py`, app services | DB/broker/data/risk readiness checks | Health endpoint tests |
-| P1 | Add deploy gates | Avoid bad rollout | `.github/workflows/deploy.yml` | pytest, ruff, compose config, post-health | CI/deploy dry run |
-| P1 | Write live runbooks | Operator readiness | docs | Startup, flatten, outage, EOD, rollback | Tabletop exercise |
+| P1 | Add deploy gates | Avoid bad rollout | `.github/workflows/deploy.yml` | Done in source: pytest, ruff, compose config, post-health | CI/deploy dry run |
+| P1 | Write live runbooks | Operator readiness | docs | First pass in `docs/live-runbook.md` | Tabletop exercise |
 
 ### Before unattended operation
 

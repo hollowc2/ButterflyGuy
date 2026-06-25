@@ -22,6 +22,11 @@ from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 log = get_logger(__name__)
 
 WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
+PARTIAL_FILL_STATUSES = {"PARTIAL", "PARTIAL_FILL", "PARTIALLY_FILLED"}
+
+
+class PartialFillError(RuntimeError):
+    """Broker reported a partial fill; operator reconciliation is required."""
 
 
 class LiveSpread(NamedTuple):
@@ -223,6 +228,8 @@ class OrderManager:
             if post_fill:
                 return post_fill
 
+        except PartialFillError:
+            raise
         except Exception as e:
             log.error("entry_attempt_failed", error=str(e))
 
@@ -342,6 +349,8 @@ class OrderManager:
                     if post_fill:
                         return post_fill
 
+                except PartialFillError:
+                    raise
                 except Exception as e:
                     log.error("entry_step_failed", step=i, error=str(e))
 
@@ -544,6 +553,8 @@ class OrderManager:
                             ],
                         }
 
+                except PartialFillError:
+                    raise
                 except Exception as e:
                     log.error("exit_step_failed", step=i, error=str(e))
 
@@ -569,7 +580,13 @@ class OrderManager:
                     "fill_time": now_utc(),
                     "post_cancel": True,
                 }
+            if status.get("status") in PARTIAL_FILL_STATUSES:
+                raise PartialFillError(
+                    f"Order {order_id} is partially filled after cancel; reconcile broker state"
+                )
         except Exception as e:
+            if isinstance(e, PartialFillError):
+                raise
             log.warning("post_cancel_check_failed", error=str(e))
         return None
 
@@ -585,11 +602,17 @@ class OrderManager:
 
                 if order_status == "FILLED":
                     return True
+                if order_status in PARTIAL_FILL_STATUSES:
+                    raise PartialFillError(
+                        f"Order {order_id} is partially filled; reconcile broker state"
+                    )
                 if order_status in ("CANCELED", "REJECTED", "EXPIRED"):
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False
 
             except Exception as e:
+                if isinstance(e, PartialFillError):
+                    raise
                 log.warning("order_poll_error", error=str(e))
 
             await asyncio.sleep(poll_interval)

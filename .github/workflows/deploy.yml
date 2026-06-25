@@ -16,9 +16,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Validate
+        working-directory: /opt/butterflyguy
+        run: |
+          uv run pytest -q
+          uv run ruff check .
+          docker compose -f infra/docker-compose.yml config >/dev/null
+
       - name: Deploy
         working-directory: /opt/butterflyguy
         run: |
           git pull --ff-only origin main
           docker compose -f infra/docker-compose.yml --profile ndx --profile xsp up --build -d app_spx app_ndx app_xsp
+          for i in {1..30}; do
+            curl --fail --silent --show-error http://127.0.0.1:8000/health >/dev/null && break
+            sleep 2
+          done
+          curl --fail --silent --show-error http://127.0.0.1:8000/health >/dev/null
           docker image prune -f

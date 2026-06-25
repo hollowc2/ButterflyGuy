@@ -10,7 +10,7 @@ from typing import Any
 
 from dotenv import dotenv_values
 
-from butterfly_guy.core.config import load_config
+from butterfly_guy.core.config import AppConfig, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.core.metrics import (
     butterfly_candidates_found,
@@ -37,7 +37,7 @@ from butterfly_guy.db.queries import (
     TradeQueries,
 )
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
-from butterfly_guy.execution.order_manager import OrderManager
+from butterfly_guy.execution.order_manager import OrderManager, PartialFillError
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier, TelegramNotifier
@@ -52,6 +52,7 @@ from butterfly_guy.strategy.regime_classifier import RegimeClassifier
 log = get_logger("run_live")
 
 WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
+LIVE_UNDERLYING = "SPX"
 
 
 def _matches_underlying(symbol: str, underlying: str) -> bool:
@@ -134,6 +135,20 @@ async def _assert_broker_state_matches_db(
         )
 
 
+def _assert_live_config_supported(config: AppConfig) -> None:
+    if config.execution.paper_trading:
+        return
+    if not config.execution.allow_live_trading:
+        raise RuntimeError(
+            "Live trading requires execution.allow_live_trading=true or ALLOW_LIVE_TRADING=true"
+        )
+    if config.strategy.underlying != LIVE_UNDERLYING:
+        raise RuntimeError(
+            f"Live trading is {LIVE_UNDERLYING}-only; "
+            f"{config.strategy.underlying} must stay paper/research until explicitly approved"
+        )
+
+
 async def entry_loop(
     trade_service: TradeService,
     position_service: PositionService,
@@ -166,6 +181,9 @@ async def entry_loop(
             exc = monitor_task.exception()
             if exc:
                 log.error("monitor_task_error", error=str(exc))
+                if isinstance(exc, PartialFillError):
+                    log.error("entry_loop_stopped_unknown_broker_state")
+                    return
             active_trade = None
             monitor_task = None
 
@@ -182,6 +200,9 @@ async def entry_loop(
                     )
             except Exception as e:
                 log.error("entry_loop_error", error=str(e))
+                if isinstance(e, PartialFillError):
+                    log.error("entry_loop_stopped_unknown_broker_state")
+                    return
 
         await asyncio.sleep(15)
 
@@ -234,10 +255,7 @@ async def main() -> None:
     config = load_config(args.config)
     setup_logging(config.monitoring.log_level, json_output=True)
 
-    if not config.execution.paper_trading and not config.execution.allow_live_trading:
-        raise RuntimeError(
-            "Live trading requires execution.allow_live_trading=true or ALLOW_LIVE_TRADING=true"
-        )
+    _assert_live_config_supported(config)
 
     log.info(
         "live_trading_starting",

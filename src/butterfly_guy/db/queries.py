@@ -135,6 +135,19 @@ class ChainQueries:
             "rows": [dict(row) for row in rows],
         }
 
+    async def get_latest_snapshot_time(
+        self, underlying: str, expiration: dt.date
+    ) -> dt.datetime | None:
+        return await self.db.pool.fetchval(
+            """
+            SELECT MAX(snapshot_time)
+            FROM option_chain_snapshots
+            WHERE underlying = $1 AND expiration = $2
+            """,
+            underlying,
+            expiration,
+        )
+
 
 class MonitoringLegQueries:
     """Queries for high-frequency live monitor quotes of open-position legs."""

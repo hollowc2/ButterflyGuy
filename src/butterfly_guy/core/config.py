@@ -47,6 +47,7 @@ class EntrySettings(BaseModel):
     strike_selection_method: Literal["VIX", "TARGET_COST", "BEST_RR"] = "TARGET_COST"
     center_tolerance: float = 15.0  # pts; how far a candidate's center can stray from VIX target
     max_vix_age_seconds: int = 300  # VIX-based entries require a recent $VIX snapshot
+    max_chain_snapshot_age_seconds: int = 180  # live entries require a recent collector snapshot
     bull_call_bias: bool = False  # Override to CALL in BULL regime on gap-down days
     min_gap_pct: float | None = None  # Skip days where |gap| < this (e.g. 0.0025 = 0.25%)
 

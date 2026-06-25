@@ -37,7 +37,7 @@ from butterfly_guy.db.queries import (
     TentQueries,
     TradeQueries,
 )
-from butterfly_guy.execution.order_manager import OrderManager
+from butterfly_guy.execution.order_manager import OrderManager, PartialFillError
 from butterfly_guy.position.position_manager import PositionManager, fly_settlement_value
 from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
@@ -363,6 +363,9 @@ class PositionService:
                             reason=signal.reason,
                         )
 
+            except PartialFillError:
+                log.error("monitor_stopped_unknown_broker_state", trade_id=trade.trade_id)
+                raise
             except Exception as e:
                 log.error("monitor_error", error=str(e))
 

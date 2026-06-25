@@ -4,8 +4,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from butterfly_guy.core.config import AppConfig, ExecutionSettings, StrategySettings
 from butterfly_guy.scripts.run_live import (
     _assert_broker_state_matches_db,
+    _assert_live_config_supported,
     _broker_option_position_symbols,
     _order_symbols,
 )
@@ -96,3 +98,22 @@ async def test_startup_reconciliation_blocks_open_trade_when_broker_flat():
             "SPX",
             [{"lower_symbol": "SPXW  260625C06000000"}],
         )
+
+
+def test_live_config_rejects_non_spx_live_money():
+    config = AppConfig(
+        strategy=StrategySettings(underlying="NDX"),
+        execution=ExecutionSettings(paper_trading=False, allow_live_trading=True),
+    )
+
+    with pytest.raises(RuntimeError, match="SPX-only"):
+        _assert_live_config_supported(config)
+
+
+def test_live_config_allows_spx_live_when_explicitly_enabled():
+    config = AppConfig(
+        strategy=StrategySettings(underlying="SPX"),
+        execution=ExecutionSettings(paper_trading=False, allow_live_trading=True),
+    )
+
+    _assert_live_config_supported(config)
