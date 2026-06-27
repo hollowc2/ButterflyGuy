@@ -624,8 +624,8 @@
     "hash": "96a901e9d3f78f9f1ea6e98279bf3aec"
   },
   "/opt/butterflyguy/prelivecheckout.md": {
-    "mtime": 1782407644.5989084,
-    "hash": "108a0fd3c67c88bef766fcecb9f2bdc8"
+    "mtime": 1782408092.2732983,
+    "hash": "ae2d6143ac1ae83dde24e9700246f339"
   },
   "/opt/butterflyguy/AGENTS.md": {
     "mtime": 1780879224.0703495,
@@ -727,6 +727,10 @@
     "mtime": 1781037028.379992,
     "hash": "50ef6f2ff98845371627c56f7934a77f"
   },
+  "/opt/butterflyguy/reports/equity_scans/2026-06-26.md": {
+    "mtime": 1782478830.2055426,
+    "hash": "74a28eb479bceb330a805f740bd0dbbd"
+  },
   "/opt/butterflyguy/reports/equity_scans/2026-06-18.md": {
     "mtime": 1781787629.421756,
     "hash": "103641d2fd04bc463e84abdff368fd95"
@@ -767,6 +771,10 @@
     "mtime": 1781906406.5947742,
     "hash": "5bb22dc31ef3e6173aaf248753e73577"
   },
+  "/opt/butterflyguy/reports/daily_report_card/2026-06-25.md": {
+    "mtime": 1782424869.8134687,
+    "hash": "91d9f0e7784c600b4952fb9e939aab27"
+  },
   "/opt/butterflyguy/reports/daily_report_card/2026-06-22.md": {
     "mtime": 1782165608.3574681,
     "hash": "63c5ca36ddcd9cfcdf09f4b8467f9ded"
@@ -778,6 +786,10 @@
   "/opt/butterflyguy/reports/daily_report_card/2026-06-09.md": {
     "mtime": 1781038684.7046828,
     "hash": "0aac84731673e084b3bbd172714adbcb"
+  },
+  "/opt/butterflyguy/reports/daily_report_card/2026-06-26.md": {
+    "mtime": 1782511208.266471,
+    "hash": "b32073a07edc39f95f50693d88ba342a"
   },
   "/opt/butterflyguy/reports/daily_report_card/2026-06-18.md": {
     "mtime": 1781800205.916548,
