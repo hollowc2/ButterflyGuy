@@ -12,6 +12,12 @@ from typing import Any
 
 from butterfly_guy.core.config import load_config
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
+from butterfly_guy.execution.order_manager import (
+    CANCEL_PENDING_STATUSES,
+    PARTIAL_FILL_STATUSES,
+    TERMINAL_ORDER_STATUSES,
+    WORKING_ORDER_STATUSES,
+)
 
 
 def _order_symbols(order: dict[str, Any]) -> list[str]:
@@ -25,11 +31,30 @@ def _order_symbols(order: dict[str, Any]) -> list[str]:
     return symbols
 
 
+def _status_category(status: Any) -> str:
+    if not status:
+        return "missing"
+    status = str(status)
+    if status == "FILLED":
+        return "filled"
+    if status in PARTIAL_FILL_STATUSES:
+        return "partial"
+    if status in CANCEL_PENDING_STATUSES:
+        return "cancel_pending"
+    if status in TERMINAL_ORDER_STATUSES:
+        return status.lower()
+    if status in WORKING_ORDER_STATUSES:
+        return "working"
+    return "unknown"
+
+
 def _summarize(order: dict[str, Any]) -> dict[str, Any]:
     children = order.get("childOrderStrategies") or []
+    child_statuses = [child.get("status") for child in children]
     return {
         "order_id": order.get("orderId"),
         "status": order.get("status"),
+        "status_category": _status_category(order.get("status")),
         "entered_time": order.get("enteredTime"),
         "close_time": order.get("closeTime"),
         "order_strategy_type": order.get("orderStrategyType"),
@@ -38,7 +63,8 @@ def _summarize(order: dict[str, Any]) -> dict[str, Any]:
         "filled_quantity": order.get("filledQuantity"),
         "remaining_quantity": order.get("remainingQuantity"),
         "symbols": _order_symbols(order),
-        "child_statuses": [child.get("status") for child in children],
+        "child_statuses": child_statuses,
+        "child_status_categories": [_status_category(status) for status in child_statuses],
     }
 
 
@@ -63,6 +89,7 @@ async def main() -> None:
         "date": args.date,
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "status_counts": dict(Counter(s["status"] for s in summaries)),
+        "status_category_counts": dict(Counter(s["status_category"] for s in summaries)),
         "orders": summaries,
         "raw_orders": orders,
     }
