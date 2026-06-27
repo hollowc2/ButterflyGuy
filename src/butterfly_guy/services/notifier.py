@@ -235,14 +235,6 @@ class DiscordNotifier:
         )
         await self._post(msg)
 
-    async def notify_startup(self) -> None:
-        await self._post(
-            "🚀 Butterfly Guy starting up!\n\n"
-            "✅ Updated auth token\n"
-            "📅 Ready for the trading week\n"
-            "🍀 Good luck traders"
-        )
-
     async def notify_weekly_calendar(self, calendar_text: str) -> None:
         await self._post(calendar_text)
 

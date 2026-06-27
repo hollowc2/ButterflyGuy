@@ -637,9 +637,6 @@ async def main() -> None:
         daily_bar_queries=daily_bar_q,
     )
 
-    if notifier:
-        await notifier.notify_startup()
-
     # Recover any open trade and initialize daily metrics from DB
     underlying = config.strategy.underlying
     recovered_trade: TradeRecord | None = None
