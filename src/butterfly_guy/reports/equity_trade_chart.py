@@ -329,29 +329,6 @@ def _duration(trade: TradeResult) -> str:
     return f"{seconds // 60}m {seconds % 60:02d}s"
 
 
-def _rsi(series: list[dict], period: int = 14) -> list[float]:
-    closes = [item["close"] for item in series]
-    if len(closes) < 2:
-        return [50.0 for _ in closes]
-    values = [50.0]
-    gains: list[float] = []
-    losses: list[float] = []
-    for prev, close in zip(closes, closes[1:], strict=False):
-        change = close - prev
-        gains.append(max(change, 0.0))
-        losses.append(max(-change, 0.0))
-        window_gains = gains[-period:]
-        window_losses = losses[-period:]
-        avg_gain = sum(window_gains) / len(window_gains)
-        avg_loss = sum(window_losses) / len(window_losses)
-        if avg_loss == 0:
-            values.append(100.0 if avg_gain else 50.0)
-        else:
-            rs = avg_gain / avg_loss
-            values.append(100.0 - (100.0 / (1.0 + rs)))
-    return values
-
-
 def _pnl_pct(trade: TradeResult, entry_price: float | None) -> float:
     basis = abs((entry_price or 0.0) * trade.quantity)
     return (trade.pnl / basis * 100.0) if basis else 0.0
@@ -401,7 +378,6 @@ def _render_trade_panel(
     trade: TradeResult,
     entry_price: float | None,
     exit_price: float | None,
-    rsi_value: float,
 ) -> None:
     ax.set_axis_off()
     _glass_box(ax, (0.00, 0.00), 1.0, 1.0)
@@ -473,7 +449,6 @@ def _render_trade_panel(
     _panel_text(ax, 0.10, 0.205, "MARKET CONTEXT", size=7.6, color=_MUTED, weight="bold")
     _panel_text(ax, 0.10, 0.168, "Relative Volume (RVOL): 2.1x", size=6.7)
     _panel_text(ax, 0.10, 0.138, "Market Trend: Bearish (SPY: -1.2%)", size=6.7)
-    _panel_text(ax, 0.10, 0.108, f"Intraday RSI: {rsi_value:.0f}", size=6.7)
 
 
 def _compact_volume(value: float, _position: int) -> str:
@@ -495,6 +470,17 @@ def _draw_volume(ax: plt.Axes, series: list[dict]) -> None:
     ax.text(0.01, 0.83, "Volume vs Avg", transform=ax.transAxes, color=_MUTED, fontsize=7)
     ax.yaxis.set_major_formatter(FuncFormatter(_compact_volume))
     ax.yaxis.offsetText.set_visible(False)
+
+
+def _draw_volume_overlay(ax: plt.Axes, series: list[dict]) -> None:
+    vol_ax = ax.twinx()
+    vol_ax.patch.set_alpha(0)
+    vol_ax.set_ylim(0, max(item["volume"] for item in series) * 4)
+    vol_ax.set_yticks([])
+    vol_ax.tick_params(length=0)
+    for spine in vol_ax.spines.values():
+        spine.set_visible(False)
+    _draw_volume(vol_ax, series)
 
 
 def _draw_viewfinder(
@@ -572,10 +558,8 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
     chrome_ax.add_patch(Rectangle((0, 0), 1, 1, transform=chrome_ax.transAxes, facecolor=_BG))
 
     stats_ax = fig.add_axes((0.025, 0.055, 0.235, 0.86))
-    day_ax = fig.add_axes((0.292, 0.535, 0.67, 0.325))
-    zoom_ax = fig.add_axes((0.292, 0.245, 0.67, 0.225))
-    vol_ax = fig.add_axes((0.292, 0.13, 0.67, 0.075), sharex=day_ax)
-    rsi_ax = fig.add_axes((0.292, 0.055, 0.67, 0.045), sharex=day_ax)
+    day_ax = fig.add_axes((0.292, 0.47, 0.67, 0.39))
+    zoom_ax = fig.add_axes((0.292, 0.10, 0.67, 0.28))
 
     pnl = f"+${trade.pnl:.2f}" if trade.pnl >= 0 else f"-${abs(trade.pnl):.2f}"
     day_ax.set_title(
@@ -587,48 +571,30 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
         loc="left",
     )
     day_ax.set_ylabel("Price", color=_TEXT, fontsize=9)
-    vol_ax.set_ylabel("Vol", color=_MUTED, fontsize=8)
-    rsi_ax.set_ylabel("RSI", color=_MUTED, fontsize=8)
 
-    for ax in (day_ax, zoom_ax, vol_ax, rsi_ax):
+    for ax in (day_ax, zoom_ax):
         _style_axis(ax)
     _render_trade_panel(
         stats_ax,
         trade,
         entry_mark[1] if entry_mark else None,
         exit_mark[1] if exit_mark else None,
-        _rsi(series)[-1],
     )
     zoom_ax.set_title(
         "DETAIL ZOOM  |  2m candles + Level 2 depth", color=_TEXT, fontsize=9, pad=7, loc="left"
     )
+    _draw_volume_overlay(day_ax, series)
     _draw_candles(day_ax, series)
     _draw_candles(zoom_ax, zoom_series)
     _draw_depth_overlay(zoom_ax, zoom_series)
-    _draw_volume(vol_ax, series)
-    rsi_values = _rsi(series)
-    rsi_ax.plot(times, rsi_values, color=_BLUE, linewidth=0.9)
-    rsi_ax.axhspan(30, 70, color=_BLUE, alpha=0.05)
-    rsi_ax.axhline(42, color=_MUTED, alpha=0.35, linewidth=0.6, linestyle="--")
-    rsi_ax.text(
-        0.01,
-        0.78,
-        f"RSI {rsi_values[-1]:.0f}",
-        transform=rsi_ax.transAxes,
-        color=_MUTED,
-        fontsize=7,
-    )
     _mark_trade_levels(day_ax, trade, series)
     _mark_trade_levels(zoom_ax, trade, zoom_series)
     _draw_viewfinder(day_ax, zoom_start, zoom_end, series)
 
     day_ax.set_xlim(times[0], times[-1])
-    vol_ax.set_xlim(times[0], times[-1])
-    rsi_ax.set_xlim(times[0], times[-1])
     zoom_ax.set_xlim(zoom_start, zoom_end)
     day_ax.set_ylim(*_price_limits(series))
     zoom_ax.set_ylim(*_price_limits(zoom_series))
-    rsi_ax.set_ylim(0, 100)
     _mark_zoom_trade_level(zoom_ax, entry_mark, _ENTRY, "ENTRY")
     _mark_zoom_trade_level(zoom_ax, exit_mark, _EXIT, "EXIT")
 
@@ -647,10 +613,9 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
                 fontweight="bold",
             )
 
-    for ax in (day_ax, zoom_ax, vol_ax, rsi_ax):
+    for ax in (day_ax, zoom_ax):
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=EASTERN))
     plt.setp(day_ax.get_xticklabels(), visible=False)
-    plt.setp(vol_ax.get_xticklabels(), visible=False)
     return _fig_to_png(fig)
 
 
