@@ -107,6 +107,7 @@ class DailyReportCard:
     top_losers: list[TradeResult]
     open_positions: list[OpenPosition]
     rejected_order_count: int
+    rejected_order_details: list[str]
     cash_movements: list[CashMovement]
     problems: list[str] = field(default_factory=list)
 
@@ -467,8 +468,41 @@ def summarize_activity(trades: list[TradeResult]) -> ActivitySummary:
     )
 
 
+def _order_symbols(order: dict[str, Any]) -> list[str]:
+    symbols = [
+        str((leg.get("instrument") or {}).get("symbol"))
+        for leg in order.get("orderLegCollection") or []
+        if (leg.get("instrument") or {}).get("symbol")
+    ]
+    for child in order.get("childOrderStrategies") or []:
+        symbols.extend(_order_symbols(child))
+    return symbols
+
+
+def _rejection_reason(order: dict[str, Any]) -> str:
+    for key in ("statusDescription", "rejectionReason", "rejectReason", "reason", "message"):
+        if order.get(key):
+            return str(order[key])
+    for activity in order.get("orderActivityCollection") or []:
+        for key in ("statusDescription", "rejectionReason", "rejectReason", "reason", "message"):
+            if activity.get(key):
+                return str(activity[key])
+    return "reason unavailable"
+
+
+def rejected_order_details(orders: list[dict[str, Any]]) -> list[str]:
+    details: list[str] = []
+    for order in orders:
+        if order.get("status") == "REJECTED":
+            order_id = order.get("orderId", "?")
+            symbols = ", ".join(_order_symbols(order)[:3]) or "unknown symbol"
+            details.append(f"Order {order_id} ({symbols}): {_rejection_reason(order)}")
+        details.extend(rejected_order_details(order.get("childOrderStrategies") or []))
+    return details
+
+
 def count_rejected_orders(orders: list[dict[str, Any]]) -> int:
-    return sum(1 for o in orders if o.get("status") == "REJECTED")
+    return len(rejected_order_details(orders))
 
 
 def detect_problems(
@@ -478,6 +512,7 @@ def detect_problems(
     trades: list[TradeResult],
     open_positions: list[OpenPosition],
     rejected_order_count: int,
+    rejected_order_details: list[str],
     cash_movements: list[CashMovement],
     settings: DailyReportCardSettings,
 ) -> list[str]:
@@ -523,7 +558,13 @@ def detect_problems(
 
     if rejected_order_count:
         noun = "order" if rejected_order_count == 1 else "orders"
-        problems.append(f"{rejected_order_count} {noun} REJECTED today")
+        if rejected_order_details:
+            problems.append(
+                f"{rejected_order_count} {noun} REJECTED today: {rejected_order_details[0]}"
+            )
+            problems.extend(rejected_order_details[1:3])
+        else:
+            problems.append(f"{rejected_order_count} {noun} REJECTED today")
 
     if not cash_movements and activity.trade_count:
         unexplained = balances.net_change - activity.realized_pnl
@@ -569,13 +610,15 @@ def build_daily_report_card(
     )
     open_positions = parse_open_positions(account_data, report_date)
     cash_movements = parse_cash_movements(transactions)
-    rejected_order_count = count_rejected_orders(orders)
+    rejected_details = rejected_order_details(orders)
+    rejected_order_count = len(rejected_details)
     problems = detect_problems(
         balances=balances,
         activity=activity,
         trades=trades,
         open_positions=open_positions,
         rejected_order_count=rejected_order_count,
+        rejected_order_details=rejected_details,
         cash_movements=cash_movements,
         settings=settings,
     )
@@ -589,6 +632,7 @@ def build_daily_report_card(
         top_losers=top_losers,
         open_positions=open_positions,
         rejected_order_count=rejected_order_count,
+        rejected_order_details=rejected_details,
         cash_movements=cash_movements,
         problems=problems,
     )

@@ -196,11 +196,11 @@ def _mark_zoom_trade_level(
     ax.axhline(mark[1], color=color, alpha=0.95, linewidth=1.2, zorder=9)
     ax.axhspan(mark[1] * 0.999, mark[1] * 1.001, color=color, alpha=0.08, zorder=1)
     ax.text(
-        0.985,
+        1.01,
         mark[1],
         f"{label} {mark[1]:.3f}",
         transform=ax.get_yaxis_transform(),
-        ha="right",
+        ha="left",
         va="center",
         color=color,
         fontsize=7,
@@ -213,6 +213,7 @@ def _mark_zoom_trade_level(
             "linewidth": 0.7,
         },
         zorder=11,
+        clip_on=False,
     )
 
 
@@ -455,36 +456,6 @@ def _render_trade_panel(
         color=_DOWN if pnl_pct < 0 else _UP,
         weight="bold",
     )
-    center = (0.79, 0.545)
-    radius = 0.047
-    ax.add_patch(
-        plt.Circle(
-            center, radius, transform=ax.transAxes, fill=False, color=_GRID, linewidth=5, alpha=0.9
-        )
-    )
-    ax.add_patch(
-        plt.Circle(
-            center,
-            radius,
-            transform=ax.transAxes,
-            fill=False,
-            color=_DOWN if pnl_pct < 0 else _UP,
-            linewidth=5,
-            alpha=0.9,
-        )
-    )
-    ax.text(
-        center[0],
-        center[1],
-        f"{pnl_pct:+.1f}%",
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        color=_TEXT,
-        fontsize=7,
-        fontweight="bold",
-    )
-
     _glass_box(ax, (0.06, 0.265), 0.88, 0.155)
     _panel_text(ax, 0.10, 0.39, "STRATEGY & NOTES", size=7.6, color=_MUTED, weight="bold")
     _panel_text(ax, 0.10, 0.345, "Pattern Detected: Bullish Flag (Failed Breakout)", size=6.7)
@@ -601,10 +572,10 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
     chrome_ax.add_patch(Rectangle((0, 0), 1, 1, transform=chrome_ax.transAxes, facecolor=_BG))
 
     stats_ax = fig.add_axes((0.025, 0.055, 0.235, 0.86))
-    day_ax = fig.add_axes((0.292, 0.43, 0.67, 0.385))
-    vol_ax = fig.add_axes((0.292, 0.285, 0.67, 0.105), sharex=day_ax)
-    rsi_ax = fig.add_axes((0.292, 0.155, 0.67, 0.085), sharex=day_ax)
-    zoom_ax = fig.add_axes((0.565, 0.50, 0.36, 0.235), zorder=9)
+    day_ax = fig.add_axes((0.292, 0.535, 0.67, 0.325))
+    zoom_ax = fig.add_axes((0.292, 0.245, 0.67, 0.225))
+    vol_ax = fig.add_axes((0.292, 0.13, 0.67, 0.075), sharex=day_ax)
+    rsi_ax = fig.add_axes((0.292, 0.055, 0.67, 0.045), sharex=day_ax)
 
     pnl = f"+${trade.pnl:.2f}" if trade.pnl >= 0 else f"-${abs(trade.pnl):.2f}"
     day_ax.set_title(

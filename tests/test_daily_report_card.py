@@ -12,6 +12,7 @@ from butterfly_guy.reports.daily_report_card import (
     parse_account_balances,
     parse_trade_transactions,
     rank_trades,
+    rejected_order_details,
 )
 from butterfly_guy.reports.daily_report_card_config import DailyReportCardSettings
 from butterfly_guy.reports.daily_report_card_format import build_report_messages
@@ -122,7 +123,12 @@ TRANSACTION_FIXTURE = [
 ]
 
 ORDERS_FIXTURE = [
-    {"orderId": 8001, "status": "REJECTED"},
+    {
+        "orderId": 8001,
+        "status": "REJECTED",
+        "statusDescription": "This order may exceed your buying power.",
+        "orderLegCollection": [{"instrument": {"symbol": "AAPL"}}],
+    },
     {"orderId": 8002, "status": "FILLED"},
 ]
 
@@ -450,8 +456,29 @@ def test_build_daily_report_card_detects_problems():
     assert card.activity.winners == 2
     assert card.activity.losers == 1
     assert card.rejected_order_count == 1
+    assert card.rejected_order_details == [
+        "Order 8001 (AAPL): This order may exceed your buying power."
+    ]
     assert any("0-DTE" in p for p in card.problems)
-    assert any("REJECTED" in p for p in card.problems)
+    assert any("may exceed your buying power" in p for p in card.problems)
+
+
+def test_rejected_order_details_reads_child_reason():
+    orders = [
+        {
+            "orderId": 1,
+            "status": "FILLED",
+            "childOrderStrategies": [
+                {
+                    "orderId": 2,
+                    "status": "REJECTED",
+                    "reason": "price outside collars",
+                    "orderLegCollection": [{"instrument": {"symbol": "MSFT"}}],
+                }
+            ],
+        }
+    ]
+    assert rejected_order_details(orders) == ["Order 2 (MSFT): price outside collars"]
 
 
 def test_report_separates_trading_pnl_from_transfers():
