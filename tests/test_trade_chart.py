@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from butterfly_guy.services.trade_chart import (
     ButterflyChartSpec,
     _exit_chart_series,
+    _exit_marker_point,
     build_entry_chart_png,
     build_exit_chart_png,
     candles_to_series,
@@ -126,6 +127,7 @@ def test_full_session_extends_chart_to_market_close() -> None:
     full = _exit_chart_series(spec, candles, full_session=True)
     assert partial is not None and full is not None
     assert len(full) > len(partial)
+    assert _exit_marker_point(spec, full)[0] == early_exit
 
 
 def test_summarize_exit_chart_detects_tent_hit() -> None:
