@@ -389,35 +389,31 @@ def _render_trade_panel(
         f"{trade.quantity:.0f}" if float(trade.quantity).is_integer() else f"{trade.quantity:.2f}"
     )
 
-    _panel_text(ax, 0.08, 0.955, "TRADE ANALYSIS", size=8.2, color=_MUTED, weight="bold")
-    _panel_text(ax, 0.08, 0.895, trade.symbol or trade.label, size=23, color=_TEXT, weight="bold")
+    _panel_text(ax, 0.08, 0.90, "TRADE ANALYSIS", size=8.2, color=_MUTED, weight="bold")
+    _panel_text(ax, 0.08, 0.76, trade.symbol or trade.label, size=22, color=_TEXT, weight="bold")
     _panel_text(
         ax,
         0.08,
-        0.825,
+        0.58,
         f"Entry: {entry.strftime('%H:%M:%S.%f')[:-3]} ET @ ${entry_price:.3f}"
         if entry and entry_price
         else "Entry: n/a",
-        size=8.4,
+        size=8.2,
     )
     _panel_text(
         ax,
         0.08,
-        0.792,
+        0.48,
         f"Exit: {exit_.strftime('%H:%M:%S.%f')[:-3]} ET @ ${exit_price:.3f}"
         if exit_ and exit_price
         else "Exit: n/a",
-        size=8.4,
+        size=8.2,
     )
-    _panel_text(ax, 0.08, 0.759, f"Size: {size}", size=8.4)
-    _panel_text(ax, 0.08, 0.727, f"Duration: {_duration(trade)}", size=8.4)
-
-    _glass_box(ax, (0.06, 0.47), 0.88, 0.16)
-    _panel_text(ax, 0.10, 0.605, "PERFORMANCE", size=7.6, color=_MUTED, weight="bold")
+    _panel_text(ax, 0.08, 0.38, f"Size: {size}   Duration: {_duration(trade)}", size=8.2)
     _panel_text(
         ax,
-        0.10,
-        0.555,
+        0.08,
+        0.22,
         f"Net P&L: {pnl}",
         size=11,
         color=_DOWN if trade.pnl < 0 else _UP,
@@ -425,30 +421,13 @@ def _render_trade_panel(
     )
     _panel_text(
         ax,
+        0.08,
         0.10,
-        0.508,
         f"P&L %: {pnl_pct:+.1f}%",
         size=10,
         color=_DOWN if pnl_pct < 0 else _UP,
         weight="bold",
     )
-    _glass_box(ax, (0.06, 0.265), 0.88, 0.155)
-    _panel_text(ax, 0.10, 0.39, "STRATEGY & NOTES", size=7.6, color=_MUTED, weight="bold")
-    _panel_text(ax, 0.10, 0.345, "Pattern Detected: Bullish Flag (Failed Breakout)", size=6.7)
-    _panel_text(ax, 0.10, 0.307, "Strategy: VWAP Bounce (Failed)", size=6.7)
-    _panel_text(
-        ax,
-        0.10,
-        0.274,
-        "Notes: Volume confirmation weak at key level. Early exit taken.",
-        size=6.2,
-        color=_MUTED,
-    )
-
-    _glass_box(ax, (0.06, 0.085), 0.88, 0.145)
-    _panel_text(ax, 0.10, 0.205, "MARKET CONTEXT", size=7.6, color=_MUTED, weight="bold")
-    _panel_text(ax, 0.10, 0.168, "Relative Volume (RVOL): 2.1x", size=6.7)
-    _panel_text(ax, 0.10, 0.138, "Market Trend: Bearish (SPY: -1.2%)", size=6.7)
 
 
 def _compact_volume(value: float, _position: int) -> str:
@@ -557,9 +536,9 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
     chrome_ax.set_axis_off()
     chrome_ax.add_patch(Rectangle((0, 0), 1, 1, transform=chrome_ax.transAxes, facecolor=_BG))
 
-    stats_ax = fig.add_axes((0.025, 0.055, 0.235, 0.86))
-    day_ax = fig.add_axes((0.292, 0.47, 0.67, 0.39))
-    zoom_ax = fig.add_axes((0.292, 0.10, 0.67, 0.28))
+    day_ax = fig.add_axes((0.045, 0.54, 0.91, 0.38), zorder=1)
+    stats_ax = fig.add_axes((0.045, 0.075, 0.31, 0.38), zorder=8)
+    zoom_ax = fig.add_axes((0.385, 0.075, 0.57, 0.38), zorder=8)
 
     pnl = f"+${trade.pnl:.2f}" if trade.pnl >= 0 else f"-${abs(trade.pnl):.2f}"
     day_ax.set_title(
