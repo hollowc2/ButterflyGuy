@@ -485,6 +485,87 @@
       ]
     },
     {
+      "id": 47,
+      "type": "stat",
+      "title": "XSP Loss Limit Remaining",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 16, "y": 5, "w": 5, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 15 },
+              { "color": "green", "value": 35 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, COALESCE((SELECT (50 + realized_pnl)::float FROM daily_risk_state WHERE underlying='XSP' AND trade_date = CURRENT_DATE LIMIT 1), 50) AS value",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "type": "stat",
+      "title": "XSP Halted",
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "gridPos": { "x": 21, "y": 5, "w": 3, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "ACTIVE", "color": "green", "index": 0 },
+                "1": { "text": "HALTED", "color": "red", "index": 1 }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "rawQuery": true,
+          "rawSql": "SELECT NOW() AS time, COALESCE((SELECT (halted::int)::float FROM daily_risk_state WHERE underlying='XSP' AND trade_date = CURRENT_DATE LIMIT 1), 0) AS value",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "id": 41,
       "type": "stat",
       "title": "Best Trade Today",
@@ -596,21 +677,21 @@
             "matcher": { "id": "byName", "options": "entry_price" },
             "properties": [
               { "id": "unit", "value": "currencyUSD" },
-              { "id": "decimals", "value": 4 }
+              { "id": "decimals", "value": 2 }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "exit_price" },
             "properties": [
               { "id": "unit", "value": "currencyUSD" },
-              { "id": "decimals", "value": 4 }
+              { "id": "decimals", "value": 2 }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "peak_value" },
             "properties": [
               { "id": "unit", "value": "currencyUSD" },
-              { "id": "decimals", "value": 4 }
+              { "id": "decimals", "value": 2 }
             ]
           },
           {
@@ -641,7 +722,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT id AS trade_id, entry_time, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 60.0)::float AS duration_min FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY entry_time DESC",
+          "rawSql": "SELECT id AS trade_id, entry_time, underlying, direction, wing_width, center_strike::float AS center_strike, (entry_price * 100 * quantity)::float AS entry_price, (exit_price * 100 * quantity)::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, (peak_value * 100 * quantity)::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 60.0)::float AS duration_min FROM butterfly_trades WHERE status='CLOSED' AND trade_date = CURRENT_DATE AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY entry_time DESC",
           "format": "table",
           "refId": "A"
         }
@@ -1646,21 +1727,21 @@
             "matcher": { "id": "byName", "options": "entry_price" },
             "properties": [
               { "id": "unit", "value": "currencyUSD" },
-              { "id": "decimals", "value": 4 }
+              { "id": "decimals", "value": 2 }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "exit_price" },
             "properties": [
               { "id": "unit", "value": "currencyUSD" },
-              { "id": "decimals", "value": 4 }
+              { "id": "decimals", "value": 2 }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "peak_value" },
             "properties": [
               { "id": "unit", "value": "currencyUSD" },
-              { "id": "decimals", "value": 4 }
+              { "id": "decimals", "value": 2 }
             ]
           },
           {
@@ -1691,7 +1772,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT id AS trade_id, trade_date, underlying, direction, wing_width, center_strike::float AS center_strike, entry_price::float AS entry_price, exit_price::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, peak_value::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 3600.0, 1)::float AS duration_hrs FROM butterfly_trades WHERE status='CLOSED' AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY trade_date DESC, entry_time DESC",
+          "rawSql": "SELECT id AS trade_id, trade_date, underlying, direction, wing_width, center_strike::float AS center_strike, (entry_price * 100 * quantity)::float AS entry_price, (exit_price * 100 * quantity)::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, (peak_value * 100 * quantity)::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 3600.0, 1)::float AS duration_hrs FROM butterfly_trades WHERE status='CLOSED' AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY trade_date DESC, entry_time DESC",
           "format": "table",
           "refId": "A"
         }
