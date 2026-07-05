@@ -43,6 +43,9 @@ def test_market_closed_on_weekend():
 def test_market_closed_on_holiday():
     # Good Friday 2026 = April 3
     assert not is_market_open(at=et(2026, 4, 3, 10, 0))
+    # Independence Day 2026 is observed on Friday, July 3.
+    assert not is_trading_day(dt.date(2026, 7, 3))
+    assert not is_market_open(at=et(2026, 7, 3, 10, 0))
 
 
 def test_is_trading_day_monday():
