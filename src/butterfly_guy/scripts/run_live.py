@@ -65,6 +65,8 @@ from butterfly_guy.strategy.regime_classifier import RegimeClassifier
 log = get_logger("run_live")
 
 LIVE_UNDERLYING = "SPX"
+LIVE_ACCOUNT_ALLOCATION = 20_000.0
+LIVE_MAX_ACCOUNT_DAILY_LOSS = 500.0
 
 
 def _matches_underlying(symbol: str, underlying: str) -> bool:
@@ -381,6 +383,14 @@ async def broker_reconciler_loop(
 
 
 def _assert_live_config_supported(config: AppConfig) -> None:
+    def confirmed_float(name: str, expected: float) -> None:
+        try:
+            value = float(os.getenv(name, ""))
+        except ValueError as e:
+            raise RuntimeError(f"Live trading requires {name}={expected:g}") from e
+        if value != expected:
+            raise RuntimeError(f"Live trading requires {name}={expected:g}")
+
     if config.execution.paper_trading:
         return
     if not config.execution.allow_live_trading:
@@ -392,6 +402,15 @@ def _assert_live_config_supported(config: AppConfig) -> None:
             f"Live trading is {LIVE_UNDERLYING}-only; "
             f"{config.strategy.underlying} must stay paper/research until explicitly approved"
         )
+    expected_account = os.getenv("LIVE_EXPECTED_SCHWAB_ACCOUNT_ID", "")
+    if not expected_account or expected_account != config.schwab.account_id:
+        raise RuntimeError(
+            "Live trading requires LIVE_EXPECTED_SCHWAB_ACCOUNT_ID matching SCHWAB_ACCOUNT_ID"
+        )
+    confirmed_float("LIVE_ACCOUNT_ALLOCATION", LIVE_ACCOUNT_ALLOCATION)
+    confirmed_float("LIVE_MAX_ACCOUNT_DAILY_LOSS", LIVE_MAX_ACCOUNT_DAILY_LOSS)
+    if config.risk.max_daily_loss != LIVE_MAX_ACCOUNT_DAILY_LOSS:
+        raise RuntimeError("Live trading requires risk.max_daily_loss=500")
 
 
 async def entry_loop(

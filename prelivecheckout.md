@@ -10,11 +10,11 @@ Butterfly Guy is a Dockerized automated 0-DTE index-options butterfly system for
 
 The strongest parts are the paper-first default, structured decision logging, DB-backed risk state, persistent open-trade recovery from local `butterfly_trades`, a useful Prometheus/Grafana base, and a local test suite that currently passes (`311 passed in 5.33s`). There is also live/backtest parity tooling and stored metadata for newer trades.
 
-The original audit found serious weaknesses in live-order lifecycle safety, broker reconciliation, idempotency, and concurrency. The duplicate-working-order guard, single-submit order placement, exit post-cancel fill check, startup broker mismatch checks, live entry advisory lock, DB open-trade uniqueness migration, durable broker order-intent/order-ID persistence, known partial-fill fail-closed handling, runtime unknown-state entry gating, conservative restart repair for unambiguous bot-owned filled states, deploy gates, and first-pass runbook have since been added or mitigated. The remaining serious weaknesses are unproven Schwab complex-order status mapping, deeper health readiness, tested operational drills, and account-level live confirmation.
+The original audit found serious weaknesses in live-order lifecycle safety, broker reconciliation, idempotency, and concurrency. The duplicate-working-order guard, single-submit order placement, exit post-cancel fill check, startup broker mismatch checks, live entry advisory lock, DB open-trade uniqueness migration, durable broker order-intent/order-ID persistence, known partial-fill fail-closed handling, runtime unknown-state entry gating, conservative restart repair for unambiguous bot-owned filled states, deploy gates, first-pass runbook, and account-level live confirmation have since been added or mitigated. The remaining serious weaknesses are unproven Schwab complex-order status mapping, deeper health readiness, and tested operational drills.
 
 Historical performance is not enough to justify live trading. Stored closed trades show SPX positive over 58 trades (+$5,176), but only 12 wins and 46 losses; removing the best three SPX trades turns net P&L negative (-$1,452). NDX is materially negative over 48 trades (-$15,961.52), and XSP is slightly negative over 39 trades (-$93). These are small, regime-dependent samples with concentrated winners and incomplete metadata in older rows.
 
-Operationally, the platform is still not ready to trade real money today. The system has durable broker-order intent tracking and runtime unknown-state gating now, but it has not proven all real Schwab complex-order status edge cases, health/readiness depth, account-level live confirmation, or operator drills.
+Operationally, the platform is still not ready to trade real money today. The system has durable broker-order intent tracking and runtime unknown-state gating now, but it has not proven all real Schwab complex-order status edge cases, health/readiness depth, or operator drills.
 
 ## 2. Final Recommendation
 
@@ -32,12 +32,12 @@ These are the remaining blockers after commit `cb95d00`:
 | P0 | Restart reconciliation proof drill | Startup has conservative repair for unambiguous bot-owned filled entry/exit intents, but it has not been exercised against real Schwab paper payloads or a tabletop crash drill. | Simulated and paper/shadow restart drills prove filled-entry, filled-exit, broker-flat, partial-fill, missing-fill-price, and mismatched-leg outcomes. |
 | P1 | Deeper `/health` readiness | Current health is process-level plus deploy smoke, not DB/broker/data/risk readiness. | `/health` or a readiness endpoint reports DB, Schwab auth, fresh chain/VIX, broker/DB reconciliation, and risk-state status. |
 | P1 | Tested operator drills | A first-pass runbook exists, but flatten/restart/outage procedures have not been exercised. | Startup, manual flatten, restart recovery, broker outage, DB outage, and rollback are tabletop-tested and updated with exact commands. |
-| P1 | Account-level live confirmation | Live mode is SPX-only and env-gated, but not yet tied to an explicit account/risk confirmation. | Live startup verifies the expected Schwab account, $20,000 allocation assumption, and $500 daily account-loss cap before enabling entries. |
 
 Resolved locally after that commit:
 
 * `broker_order_intents` now persists live entry/exit order intent before submit and records Schwab order IDs immediately after `Location`.
 * Runtime broker reconciliation now gates new entries on unknown positions/orders while allowing bot-owned intent-backed working orders.
+* Live startup now requires explicit `LIVE_EXPECTED_SCHWAB_ACCOUNT_ID`, `LIVE_ACCOUNT_ALLOCATION=20000`, `LIVE_MAX_ACCOUNT_DAILY_LOSS=500`, and `risk.max_daily_loss=500` confirmations before enabling live entries.
 * Startup can conservatively repair bot-owned filled entry/exit states only when broker legs and fill price/time are unambiguous; otherwise it halts.
 * VIX center tolerance now blocks selection when no candidate is within tolerance instead of falling back to all candidates.
 * 2026 NYSE early-close dates currently listed by NYSE are represented in market-open, minutes-to-close, session chart, intraday-bar, and EOD-chart timing paths.
@@ -144,7 +144,7 @@ Resolved locally after that commit:
 | HIGH-003 | Resolved in source | Strategy rule mismatch | VIX center tolerance now blocks when no candidate is within tolerance. |
 | HIGH-004 | High | Observability | `/health` is process-only, not DB/broker/data/trading health. |
 | HIGH-005 | Resolved in source | Deployment | Deploy workflow now runs pytest, ruff, compose config validation, and SPX health check. |
-| HIGH-006 | Mitigated | Config safety | Live enablement now fails closed for non-SPX configs; account confirmation remains config/env owned. |
+| HIGH-006 | Resolved in source | Config safety | Live enablement now fails closed for non-SPX configs and requires explicit account/allocation/daily-loss confirmation. |
 | MED-001 | Medium | Documentation mismatch | AGENTS/CLAUDE paper-fill description conflicts with ask/bid-based paper code. |
 | MED-002 | Medium | Historical data quality | Older trade rows have missing leg symbols: NDX 10, SPX 16, XSP 6. |
 | MED-003 | Medium | Backtest parity | Backtest still has separate/default paths that can drift from runtime selection. |
@@ -374,7 +374,6 @@ Still left before live-money trading:
 * Restart reconciliation proof drill with real or replayed Schwab paper payloads.
 * Health endpoint depth beyond process/startup health.
 * Tested runbook drills.
-* Account-level live confirmation for expected Schwab account, $20,000 allocation, and $500 daily account loss.
 
 ### Before any live order
 
@@ -389,7 +388,6 @@ Still left before live-money trading:
 |---|---|---|---|---|---|
 | P1 | Improve `/health` | Operator safety | `metrics.py`, app services | DB/broker/data/risk readiness checks | Health endpoint tests |
 | P1 | Test live runbooks | Operator readiness | docs, operator process | Exercise startup, flatten, outage, EOD, and rollback procedures | Tabletop exercise log |
-| P1 | Add account-level live confirmation | Prevent wrong-account or wrong-capital live startup | `run_live.py`, config/env | Verify expected account, allocation, and daily account-loss cap before entries | Startup guard tests |
 
 ### Before unattended operation
 
@@ -451,7 +449,7 @@ Owner answers recorded 2026-06-25:
 | Is cash settlement after close intended for all SPX/NDX/XSP cases, or should any products flatten before close? | Cash settlement is intended for all SPX, NDX, and XSP cases. | Keep post-close cash-settlement behavior unless later policy changes. |
 | Are stored `butterfly_trades` rows broker-confirmed fills, paper-model fills, or mixed? | Not sure; likely mixed. | Treat historical DB rows as mixed evidence until reconciled against broker records. |
 | Are SPX, NDX, and XSP intended to trade simultaneously from the same Schwab account? | No. Only SPX is intended for live; NDX and XSP are research. | Live enablement should be SPX-only unless explicitly changed later. |
-| What exact capital allocation and max account-level loss should apply live? | Planned account size is $20,000; max account loss is $500 per day. | Add account-level risk gates before live-money operation. |
+| What exact capital allocation and max account-level loss should apply live? | Planned account size is $20,000; max account loss is $500 per day. | Live startup now requires explicit account, allocation, and daily-loss confirmations. |
 | Is there an existing manual flatten procedure outside this repo? | No. | A manual flatten runbook still needs to be written and tested. |
 | Should VIX be treated as SPX-only infrastructure, or should each service independently fetch/validate VIX freshness? | Each service needs access to fresh VIX data. | Add per-service VIX freshness validation before VIX-based entries. |
 | What Schwab order statuses are observed for complex option spreads in real paper/live runs? | Not sure. | Keep this as an open broker-observation gap; collect statuses during paper/shadow runs. |
