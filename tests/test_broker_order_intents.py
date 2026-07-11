@@ -177,6 +177,37 @@ async def test_filled_entry_intent_rejects_wrong_broker_ratio():
 
 
 @pytest.mark.asyncio
+async def test_filled_entry_intent_rejects_zero_quantity():
+    intent = {
+        "quantity": 0,
+        "raw_broker_payload": {
+            "status": "FILLED",
+            "filledPrice": 2.15,
+            "closeTime": "2026-06-25T14:31:00Z",
+        },
+        "candidate_snapshot": {
+            "lower_symbol": "SPXW  260625C06000000",
+            "center_symbol": "SPXW  260625C06050000",
+            "upper_symbol": "SPXW  260625C06100000",
+        },
+    }
+    trades = AsyncMock()
+
+    with pytest.raises(RuntimeError, match="invalid leg symbols or quantity"):
+        await _repair_filled_entry_intent(
+            intent,
+            {
+                "SPXW  260625C06000000": 1,
+                "SPXW  260625C06050000": -2,
+                "SPXW  260625C06100000": 1,
+            },
+            trades,
+        )
+
+    trades.insert_trade.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_filled_exit_intent_repairs_open_trade_only_when_broker_flat():
     schwab = AsyncMock()
     schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}

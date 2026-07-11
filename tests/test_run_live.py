@@ -166,6 +166,20 @@ async def test_startup_reconciliation_blocks_incomplete_db_butterfly():
 
 
 @pytest.mark.asyncio
+async def test_startup_reconciliation_blocks_zero_quantity_db_butterfly():
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = _synthetic_butterfly_snapshot()
+    schwab.get_todays_orders.return_value = []
+
+    with pytest.raises(RuntimeError, match="invalid leg symbols or quantity"):
+        await _assert_broker_state_matches_db(
+            schwab,
+            "SPX",
+            [{**OPEN_TRADE, "quantity": 0}],
+        )
+
+
+@pytest.mark.asyncio
 async def test_startup_reconciliation_blocks_extra_broker_leg():
     schwab = AsyncMock()
     schwab.get_account_snapshot.return_value = _synthetic_butterfly_snapshot(

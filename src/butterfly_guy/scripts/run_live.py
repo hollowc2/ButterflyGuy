@@ -108,7 +108,8 @@ def _order_symbols(order: dict[str, Any]) -> set[str]:
 def _open_trade_positions(open_rows: list[dict]) -> dict[str, float]:
     positions: dict[str, float] = {}
     for row in open_rows:
-        quantity = float(row.get("quantity") or 1)
+        raw_quantity = row.get("quantity")
+        quantity = float(1 if raw_quantity is None else raw_quantity)
         symbols = tuple(
             str(row.get(key) or "")
             for key in ("lower_symbol", "center_symbol", "upper_symbol")
@@ -185,8 +186,10 @@ async def _repair_filled_entry_intent(
     snapshot = _json_dict(intent.get("candidate_snapshot"))
     if fill is None:
         raise RuntimeError("filled entry intent missing explicit fill price/time")
+    quantity = intent.get("quantity")
+    quantity = 1 if quantity is None else quantity
     expected_positions = _open_trade_positions(
-        [{**snapshot, "quantity": intent.get("quantity") or 1}]
+        [{**snapshot, "quantity": quantity}]
     )
     if expected_positions != broker_positions:
         raise RuntimeError("filled entry intent legs/quantities do not match broker positions")
@@ -206,7 +209,7 @@ async def _repair_filled_entry_intent(
             "lower_symbol": snapshot.get("lower_symbol"),
             "center_symbol": snapshot.get("center_symbol"),
             "upper_symbol": snapshot.get("upper_symbol"),
-            "quantity": intent.get("quantity") or 1,
+            "quantity": quantity,
             "metadata": {"broker_reconciled_entry_intent_id": intent["id"]},
         }
     )

@@ -2,13 +2,13 @@
 
 ## Current Objective
 
-Completed one surgical SPX pre-live review/fix cycle: startup, runtime, and filled-entry repair reconciliation now require exact signed broker quantities and the DB-derived `+1/-2/+1` butterfly ratio.
+Completed one surgical follow-up SPX pre-live review/fix cycle: explicit zero DB/intent quantities now fail closed instead of being reconciled as one-lot `+1/-2/+1` butterflies.
 
 ## Current Cycle Checkpoints
 
-- **Review complete:** The shared startup/runtime reconciliation path currently reduces Schwab positions to a symbol set and adds `longQuantity + shortQuantity`, so matching symbols with a wrong sign, partial fill, or oversized ratio can pass. The existing daily report parser confirms the repo convention is signed `longQuantity - shortQuantity`. Planned fix: compare one shared broker quantity map against DB-derived lower `+quantity`, center `-2 * quantity`, and upper `+quantity`, including filled-entry repair. No broker, DB, service, or Docker commands were run.
-- **Implementation complete:** Added redacted synthetic Schwab payload coverage that first failed at import because the signed-position helper did not exist. Replaced symbol-only parsing with a net signed quantity map, derived exact lower/center/upper quantities from each OPEN trade, and made the shared startup/runtime assertion report missing, unexpected, and wrong-quantity legs. Filled-entry intent repair now requires the same exact ratio before inserting a recovered trade. The focused runner and broker-intent tests pass (`18 passed`).
-- **Verification complete:** Expanded the focused coverage to prove startup rejection of wrong-sign, partial, oversized, and incomplete butterflies; exact multi-lot acceptance; runtime gate closure; and filled-entry repair rejection. Final narrow verification passed (`21 passed`), targeted Ruff and `git diff --check` passed, and `graphify update .` rebuilt the code graph (3,429 nodes, 5,717 edges, 289 communities). The unrelated `run_backtest_db.py` worktree change remains untouched.
+- **Review complete:** The committed signed broker-position map and exact `+quantity/-2 * quantity/+quantity` comparison correctly cover startup, runtime, extra legs, and filled-entry repair, but `_open_trade_positions()` converts an explicit DB quantity of zero to one via `row.get("quantity") or 1`. That contradicts its non-positive-quantity guard and can let corrupt zero-quantity OPEN state reconcile as a one-lot butterfly. Planned fix: preserve the established default only when quantity is absent/`None`, then reject zero through the shared helper. No broker, DB, service, or Docker commands were run.
+- **Implementation complete:** Added redacted synthetic startup and filled-entry repair regressions that both failed before the fix. `_open_trade_positions()` now defaults only absent/`None` quantity to one and rejects explicit zero through its existing non-positive guard; filled-entry repair preserves the same quantity through validation and insertion. The focused reconciliation tests pass (`23 passed`).
+- **Verification complete:** Final narrow verification passed (`23 passed in 1.71s`), targeted Ruff and `git diff --check` passed, and `graphify update .` rebuilt the code graph (3,434 nodes, 5,725 edges, 276 communities). The unrelated `run_backtest_db.py` worktree change remains untouched.
 
 ## Non-Negotiable Rules
 
@@ -58,25 +58,22 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 
 ## Ranked Issues
 
-1. **Critical — execution/risk — change now:** Broker/DB reconciliation accepts extra unknown SPX option positions when all three DB legs are also present because it checks only `expected_symbols.issubset(broker_symbols)`. An unrelated or partially orphaned SPX position can therefore leave the entry gate clear. File: `scripts/run_live.py`. Fix: require exact leg-symbol equality and report extra/missing symbols; add a focused regression test.
-2. **High — execution/risk — completed:** Reconciliation now nets Schwab `longQuantity - shortQuantity` by symbol and compares the exact broker map with DB-derived lower `+quantity`, center `-2 * quantity`, and upper `+quantity` positions. Matching symbols with a wrong sign, partial fill, or oversized ratio fail closed at startup, runtime, and filled-entry repair. Files: `scripts/run_live.py`, focused redacted synthetic fixtures/tests.
-3. **High — execution/ops — later:** Complex-order status and child-order mappings remain based on anticipated status names rather than a completed paper/shadow evidence set. Files: `execution/order_manager.py`, `scripts/run_live.py`, `scripts/report_broker_order_statuses.py`. Fix: collect redacted read-only status reports, encode observed parent/child cases, and add fixtures for partial/cancel/reject/expire/fill transitions.
-4. **High — ops — later:** `/health` returns 200 based only on the metrics HTTP thread and does not expose DB, broker auth, data freshness, risk halt, or reconciliation gate readiness. Files: `core/metrics.py`, `scripts/run_live.py`, Docker health configuration. Fix as a separate PR with a small thread-safe readiness snapshot owned by the orchestrator.
-5. **Medium — backtest/tests — later:** Backtests share selection/profit-policy pieces but cannot prove broker execution parity; modeled fills can remain optimistic relative to complex-order queueing, partial fills, and cancel races. Files: `backtest/simulation_engine.py`, execution/parity reports. Fix: keep this explicit in reports and calibrate models only from observed paper/shadow order lifecycle data.
-6. **Medium — ops/tests — later:** Restart, broker outage, DB outage, manual flatten, and rollback procedures are documented but not yet demonstrated by repeatable drills. Files: `prelivecheckout.md` and operational runbook/tests. Fix: execute controlled paper/shadow drills and retain redacted evidence.
+1. **High — execution/ops — later:** Complex-order status and child-order mappings remain based on anticipated status names rather than a completed paper/shadow evidence set. Files: `execution/order_manager.py`, `scripts/run_live.py`, `scripts/report_broker_order_statuses.py`. Fix: collect redacted read-only status reports, encode observed parent/child cases, and add fixtures for partial/cancel/reject/expire/fill transitions.
+2. **High — ops — later:** `/health` returns 200 based only on the metrics HTTP thread and does not expose DB, broker auth, data freshness, risk halt, or reconciliation gate readiness. Files: `core/metrics.py`, `scripts/run_live.py`, Docker health configuration. Fix as a separate PR with a small thread-safe readiness snapshot owned by the orchestrator.
+3. **Medium — backtest/tests — later:** Backtests share selection/profit-policy pieces but cannot prove broker execution parity; modeled fills can remain optimistic relative to complex-order queueing, partial fills, and cancel races. Files: `backtest/simulation_engine.py`, execution/parity reports. Fix: keep this explicit in reports and calibrate models only from observed paper/shadow order lifecycle data.
+4. **Medium — ops/tests — later:** Restart, broker outage, DB outage, manual flatten, and rollback procedures are documented but not yet demonstrated by repeatable drills. Files: `prelivecheckout.md` and operational runbook/tests. Fix: execute controlled paper/shadow drills and retain redacted evidence.
+
+Completed execution/risk items: exact broker/DB leg-symbol equality, signed Schwab quantity normalization, DB-derived `+quantity/-2 * quantity/+quantity` comparison, and explicit zero-quantity rejection at startup, runtime, and filled-entry repair.
 
 ## Active Work Item
 
-Completed: exact signed broker-position quantity and `+1/-2/+1` butterfly-ratio reconciliation using redacted synthetic Schwab fixtures. The next unfinished item is observed complex-order parent/child status mapping and restart reconciliation evidence.
+Completed: exact signed broker-position quantity and `+1/-2/+1` butterfly-ratio reconciliation, including explicit zero-quantity rejection, using redacted synthetic Schwab fixtures. The next unfinished item is observed complex-order parent/child status mapping and restart reconciliation evidence.
 
 ## Changes Made This Session
 
-- Replaced broker symbol-set extraction with signed quantity normalization using `longQuantity - shortQuantity`, netted by option symbol.
-- Derived exact expected positions from each OPEN DB trade as lower `+quantity`, center `-2 * quantity`, and upper `+quantity`.
-- Made incomplete, duplicate-symbol, or non-positive-quantity DB butterflies fail closed instead of accepting a reduced leg map.
-- Made the shared startup/runtime assertion report missing, unexpected, and wrong-quantity legs and fail closed on any mismatch.
-- Applied the same exact ratio invariant before filled-entry intent repair can insert a recovered DB trade.
-- Added focused redacted synthetic fixtures/tests for exact multi-lot acceptance, wrong-sign/partial/oversized rejection, runtime gate closure, and repair rejection.
+- Fixed the shared expected-position parser so explicit zero quantity reaches the existing non-positive guard instead of defaulting to one.
+- Preserved that validated quantity through filled-entry repair and recovered-trade insertion.
+- Added focused redacted synthetic startup and filled-entry repair regressions for zero quantity.
 - Ran `graphify update .`; generated graph artifacts were refreshed as required by `AGENTS.md`.
 
 ## Commands Run
@@ -87,6 +84,7 @@ Completed: exact signed broker-position quantity and `+1/-2/+1` butterfly-ratio 
 - Queried graphify for the SPX live entry/order-intent/reconciliation path.
 - Read the required repo docs and traced the shared startup/runtime assertion, filled-entry repair, Schwab position fields, DB trade quantity, order-builder ratio, and focused callers/tests.
 - Checked git status and found a pre-existing unrelated modification to `src/butterfly_guy/scripts/run_backtest_db.py`; it will remain untouched.
+- Ran each new zero-quantity regression before implementation and confirmed it failed.
 - `UV_CACHE_DIR=/tmp/uv-cache uv run pytest tests/test_run_live.py tests/test_broker_order_intents.py -q`
 - `UV_CACHE_DIR=/tmp/uv-cache uv run ruff check src/butterfly_guy/scripts/run_live.py tests/test_run_live.py tests/test_broker_order_intents.py`
 - `/home/billy/.local/bin/graphify update .`
@@ -96,10 +94,10 @@ Completed: exact signed broker-position quantity and `+1/-2/+1` butterfly-ratio 
 
 ## Tests / Verification
 
-- PASS: 21 focused tests in `tests/test_run_live.py` and `tests/test_broker_order_intents.py` (`21 passed in 1.66s`).
+- PASS: 23 focused tests in `tests/test_run_live.py` and `tests/test_broker_order_intents.py` (`23 passed in 1.71s`).
 - PASS: targeted Ruff check for the changed live runner and focused tests.
 - PASS: `git diff --check`.
-- PASS: graphify AST update rebuilt the code graph (3,429 nodes, 5,717 edges, 289 communities).
+- PASS: graphify AST update rebuilt the code graph (3,434 nodes, 5,725 edges, 276 communities).
 - Not run: full test suite, Docker/runtime checks, DB queries, or Schwab calls; they were unnecessary for this isolated mocked reconciliation change and could expand operational risk/scope.
 
 ## Decisions Made
