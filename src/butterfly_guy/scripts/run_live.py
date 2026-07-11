@@ -47,9 +47,13 @@ from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 from butterfly_guy.execution.order_manager import (
     CANCEL_PENDING_STATUSES,
     PARTIAL_FILL_STATUSES,
+    TERMINAL_ORDER_STATUSES,
     WORKING_ORDER_STATUSES,
     OrderManager,
     PartialFillError,
+    order_ids,
+    order_statuses,
+    walk_orders,
 )
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
@@ -95,13 +99,11 @@ def _broker_option_positions(
 
 def _order_symbols(order: dict[str, Any]) -> set[str]:
     symbols: set[str] = set()
-    for leg in order.get("orderLegCollection") or []:
-        instrument = leg.get("instrument") or {}
-        symbol = instrument.get("symbol")
-        if symbol:
-            symbols.add(str(symbol))
-    for child in order.get("childOrderStrategies") or []:
-        symbols.update(_order_symbols(child))
+    for node in walk_orders(order):
+        for leg in node.get("orderLegCollection") or []:
+            symbol = (leg.get("instrument") or {}).get("symbol")
+            if symbol:
+                symbols.add(str(symbol))
     return symbols
 
 
@@ -121,10 +123,6 @@ def _open_trade_positions(open_rows: list[dict]) -> dict[str, float]:
         for symbol, multiplier in zip(symbols, (1, -2, 1), strict=True):
             positions[symbol] = positions.get(symbol, 0) + quantity * multiplier
     return {symbol: quantity for symbol, quantity in positions.items() if quantity}
-
-
-def _order_id(order: dict[str, Any]) -> str:
-    return str(order.get("orderId") or order.get("order_id") or "")
 
 
 def _intent_order_ids(intents: list[dict[str, Any]]) -> set[str]:
@@ -279,20 +277,45 @@ async def _assert_broker_state_matches_db(
             for intent in intents
             if intent.get("broker_order_id")
         }
-        for order in todays_orders:
-            intent = intent_by_order_id.get(_order_id(order))
-            if intent is not None and order.get("status"):
+        for top_order in todays_orders:
+            for order in walk_orders(top_order):
+                order_id = str(order.get("orderId") or order.get("order_id") or "")
+                intent = intent_by_order_id.get(order_id)
+                if intent is None or not order.get("status"):
+                    continue
                 intent["status"] = str(order["status"])
                 intent["raw_broker_payload"] = order
                 await intent_queries.update_broker_status(
                     int(intent["id"]), str(order["status"]), order
                 )
 
+    relevant_orders = [
+        order
+        for order in todays_orders
+        if any(_matches_underlying(sym, underlying) for sym in _order_symbols(order))
+    ]
+    if any(not node.get("status") for order in relevant_orders for node in walk_orders(order)):
+        raise RuntimeError(f"Broker has missing {underlying} order status")
+
+    known_statuses = (
+        WORKING_ORDER_STATUSES
+        | PARTIAL_FILL_STATUSES
+        | CANCEL_PENDING_STATUSES
+        | TERMINAL_ORDER_STATUSES
+    )
+    unmapped_statuses = set().union(
+        *(order_statuses(order) - known_statuses for order in relevant_orders)
+    )
+    if unmapped_statuses:
+        raise RuntimeError(
+            f"Broker has unmapped {underlying} order status(es): "
+            f"{', '.join(sorted(unmapped_statuses))}"
+        )
+
     working_orders = [
-        order for order in todays_orders
-        if order.get("status") in WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES
-        and any(_matches_underlying(sym, underlying) for sym in _order_symbols(order))
-        and _order_id(order) not in known_order_ids
+        order for order in relevant_orders
+        if order_statuses(order) & (WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES)
+        and order_ids(order).isdisjoint(known_order_ids)
     ]
     if working_orders:
         raise RuntimeError(
@@ -302,8 +325,8 @@ async def _assert_broker_state_matches_db(
 
     unsafe_known = [
         order for order in todays_orders
-        if _order_id(order) in known_order_ids
-        and order.get("status") in PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
+        if not order_ids(order).isdisjoint(known_order_ids)
+        and order_statuses(order) & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES)
     ]
     if unsafe_known:
         raise RuntimeError(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from collections.abc import Iterator
 from typing import NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
@@ -26,6 +27,24 @@ WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
 PARTIAL_FILL_STATUSES = {"PARTIAL", "PARTIAL_FILL", "PARTIALLY_FILLED"}
 CANCEL_PENDING_STATUSES = {"CANCEL_PENDING", "PENDING_CANCEL", "CANCEL_REQUESTED"}
 TERMINAL_ORDER_STATUSES = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+
+
+def walk_orders(order: dict) -> Iterator[dict]:
+    yield order
+    for child in order.get("childOrderStrategies") or []:
+        yield from walk_orders(child)
+
+
+def order_ids(order: dict) -> set[str]:
+    return {
+        str(order_id)
+        for node in walk_orders(order)
+        if (order_id := node.get("orderId") or node.get("order_id"))
+    }
+
+
+def order_statuses(order: dict) -> set[str]:
+    return {str(node["status"]) for node in walk_orders(order) if node.get("status")}
 
 
 class PartialFillError(RuntimeError):
@@ -172,8 +191,8 @@ class OrderManager:
 
         working = [
             o for o in todays_orders
-            if o.get("status") in WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES
-            and str(o.get("orderId") or "") not in known_order_ids
+            if order_statuses(o) & (WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES)
+            and order_ids(o).isdisjoint(known_order_ids)
         ]
         if not working:
             return False
@@ -670,6 +689,10 @@ class OrderManager:
             order_status = status.get("status")
             if intent_id is not None and self.intent_queries is not None and order_status:
                 await self.intent_queries.update_broker_status(intent_id, order_status, status)
+            if order_statuses(status) & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES):
+                raise PartialFillError(
+                    f"Order {order_id} is partially filled after cancel; reconcile broker state"
+                )
             if order_status == "FILLED":
                 log.warning(
                     "post_cancel_fill_detected",
@@ -685,10 +708,6 @@ class OrderManager:
                     "post_cancel": True,
                     "intent_id": intent_id,
                 }
-            if order_status in PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES:
-                raise PartialFillError(
-                    f"Order {order_id} is partially filled after cancel; reconcile broker state"
-                )
         except Exception as e:
             if isinstance(e, PartialFillError):
                 raise
@@ -711,12 +730,14 @@ class OrderManager:
                         intent_id, order_status, status
                     )
 
-                if order_status == "FILLED":
-                    return True
-                if order_status in PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES:
+                if order_statuses(status) & (
+                    PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
+                ):
                     raise PartialFillError(
                         f"Order {order_id} is partially filled; reconcile broker state"
                     )
+                if order_status == "FILLED":
+                    return True
                 if order_status in TERMINAL_ORDER_STATUSES - {"FILLED"}:
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False

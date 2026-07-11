@@ -226,11 +226,49 @@ async def test_single_attempt_blocks_when_working_order_exists():
 
 
 @pytest.mark.asyncio
+async def test_single_attempt_blocks_when_child_order_is_working():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    schwab.get_todays_orders = AsyncMock(
+        return_value=[
+            {
+                "status": "CANCELED",
+                "childOrderStrategies": [{"status": "WORKING", "orderId": "OPEN1"}],
+            }
+        ]
+    )
+
+    result = await om.execute_single_attempt(candidate, limit_price=2.50)
+
+    assert result is None
+    schwab.place_order.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_single_attempt_raises_on_partial_fill_status():
     settings = make_settings(paper_trading=False, retry_interval_seconds=2)
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     schwab.get_order_status = AsyncMock(return_value={"status": "PARTIALLY_FILLED"})
+
+    with pytest.raises(PartialFillError):
+        await om.execute_single_attempt(candidate, limit_price=2.50)
+
+    schwab.cancel_order.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_raises_on_partial_fill_child_status():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=2)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    schwab.get_order_status = AsyncMock(
+        return_value={
+            "status": "WORKING",
+            "childOrderStrategies": [{"status": "PARTIALLY_FILLED"}],
+        }
+    )
 
     with pytest.raises(PartialFillError):
         await om.execute_single_attempt(candidate, limit_price=2.50)
