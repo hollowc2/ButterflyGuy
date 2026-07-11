@@ -74,23 +74,23 @@ def _matches_underlying(symbol: str, underlying: str) -> bool:
     return normalized.startswith(underlying.upper())
 
 
-def _broker_option_position_symbols(
+def _broker_option_positions(
     account_snapshot: dict[str, Any], underlying: str
-) -> set[str]:
+) -> dict[str, float]:
     acct = account_snapshot.get("securitiesAccount", account_snapshot)
-    symbols: set[str] = set()
+    positions: dict[str, float] = {}
     for pos in acct.get("positions") or []:
         instrument = pos.get("instrument") or {}
         if instrument.get("assetType") != "OPTION":
             continue
-        qty = float(pos.get("longQuantity") or 0) + float(pos.get("shortQuantity") or 0)
-        if qty == 0:
-            continue
         symbol = str(instrument.get("symbol") or "")
         underlier = str(instrument.get("underlyingSymbol") or "")
         if _matches_underlying(symbol, underlying) or _matches_underlying(underlier, underlying):
-            symbols.add(symbol)
-    return symbols
+            quantity = float(pos.get("longQuantity") or 0) - float(
+                pos.get("shortQuantity") or 0
+            )
+            positions[symbol] = positions.get(symbol, 0) + quantity
+    return {symbol: quantity for symbol, quantity in positions.items() if quantity}
 
 
 def _order_symbols(order: dict[str, Any]) -> set[str]:
@@ -105,13 +105,21 @@ def _order_symbols(order: dict[str, Any]) -> set[str]:
     return symbols
 
 
-def _open_trade_symbols(open_rows: list[dict]) -> set[str]:
-    symbols: set[str] = set()
+def _open_trade_positions(open_rows: list[dict]) -> dict[str, float]:
+    positions: dict[str, float] = {}
     for row in open_rows:
-        for key in ("lower_symbol", "center_symbol", "upper_symbol"):
-            if row.get(key):
-                symbols.add(str(row[key]))
-    return symbols
+        quantity = float(row.get("quantity") or 1)
+        symbols = tuple(
+            str(row.get(key) or "")
+            for key in ("lower_symbol", "center_symbol", "upper_symbol")
+        )
+        if not all(symbols):
+            raise RuntimeError("DB OPEN butterfly is missing leg symbol(s)")
+        if len(set(symbols)) != 3 or quantity <= 0:
+            raise RuntimeError("DB OPEN butterfly has invalid leg symbols or quantity")
+        for symbol, multiplier in zip(symbols, (1, -2, 1), strict=True):
+            positions[symbol] = positions.get(symbol, 0) + quantity * multiplier
+    return {symbol: quantity for symbol, quantity in positions.items() if quantity}
 
 
 def _order_id(order: dict[str, Any]) -> str:
@@ -132,14 +140,6 @@ def _json_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
         return json.loads(value)
     return {}
-
-
-def _snapshot_symbols(snapshot: dict[str, Any]) -> set[str]:
-    return {
-        str(snapshot[key])
-        for key in ("lower_symbol", "center_symbol", "upper_symbol")
-        if snapshot.get(key)
-    }
 
 
 def _parse_broker_time(value: Any) -> dt.datetime | None:
@@ -177,7 +177,7 @@ def _explicit_fill_details(order: dict[str, Any]) -> tuple[float, dt.datetime] |
 
 async def _repair_filled_entry_intent(
     intent: dict[str, Any],
-    broker_symbols: set[str],
+    broker_positions: dict[str, float],
     trade_queries: TradeQueries,
 ) -> dict[str, Any]:
     payload = _json_dict(intent.get("raw_broker_payload"))
@@ -185,8 +185,11 @@ async def _repair_filled_entry_intent(
     snapshot = _json_dict(intent.get("candidate_snapshot"))
     if fill is None:
         raise RuntimeError("filled entry intent missing explicit fill price/time")
-    if _snapshot_symbols(snapshot) != broker_symbols:
-        raise RuntimeError("filled entry intent legs do not match broker positions")
+    expected_positions = _open_trade_positions(
+        [{**snapshot, "quantity": intent.get("quantity") or 1}]
+    )
+    if expected_positions != broker_positions:
+        raise RuntimeError("filled entry intent legs/quantities do not match broker positions")
 
     fill_price, fill_time = fill
     trade_id = await trade_queries.insert_trade(
@@ -257,8 +260,8 @@ async def _assert_broker_state_matches_db(
     trade_queries: TradeQueries | None = None,
 ) -> None:
     account_snapshot = await schwab.get_account_snapshot()
-    broker_symbols = _broker_option_position_symbols(account_snapshot, underlying)
-    expected_symbols = _open_trade_symbols(open_rows)
+    broker_positions = _broker_option_positions(account_snapshot, underlying)
+    expected_positions = _open_trade_positions(open_rows)
     intents = (
         await intent_queries.intents_for_day(underlying, dt.date.today())
         if intent_queries is not None
@@ -305,7 +308,7 @@ async def _assert_broker_state_matches_db(
             f"{underlying} order(s); manual reconciliation required"
         )
 
-    if broker_symbols and not open_rows:
+    if broker_positions and not open_rows:
         filled_entries = [
             intent for intent in intents
             if intent.get("side") == "ENTRY"
@@ -315,7 +318,7 @@ async def _assert_broker_state_matches_db(
         if trade_queries is not None and len(filled_entries) == 1:
             repaired = await _repair_filled_entry_intent(
                 filled_entries[0],
-                broker_symbols,
+                broker_positions,
                 trade_queries,
             )
             if intent_queries is not None:
@@ -327,10 +330,10 @@ async def _assert_broker_state_matches_db(
             )
             return
         raise RuntimeError(
-            f"Broker has {len(broker_symbols)} {underlying} option position(s) "
+            f"Broker has {len(broker_positions)} {underlying} option position(s) "
             "but DB has no OPEN trade"
         )
-    if open_rows and not broker_symbols:
+    if open_rows and not broker_positions:
         filled_exits = [
             intent for intent in intents
             if intent.get("side") == "EXIT"
@@ -348,10 +351,32 @@ async def _assert_broker_state_matches_db(
         raise RuntimeError(
             f"DB has {len(open_rows)} OPEN {underlying} trade(s) but broker is flat"
         )
-    if expected_symbols and not expected_symbols.issubset(broker_symbols):
+    if expected_positions != broker_positions:
+        expected_symbols = set(expected_positions)
+        broker_symbols = set(broker_positions)
         missing = sorted(expected_symbols - broker_symbols)
+        unexpected = sorted(broker_symbols - expected_symbols)
+        wrong_quantity = sorted(
+            symbol
+            for symbol in expected_symbols & broker_symbols
+            if expected_positions[symbol] != broker_positions[symbol]
+        )
+        details = []
+        if missing:
+            details.append(f"missing broker leg symbol(s): {', '.join(missing)}")
+        if unexpected:
+            details.append(f"unexpected broker leg symbol(s): {', '.join(unexpected)}")
+        if wrong_quantity:
+            details.append(
+                "quantity mismatch(es): "
+                + ", ".join(
+                    f"{symbol} expected {expected_positions[symbol]:g}, "
+                    f"broker {broker_positions[symbol]:g}"
+                    for symbol in wrong_quantity
+                )
+            )
         raise RuntimeError(
-            f"Broker positions missing DB OPEN leg symbol(s): {', '.join(missing)}"
+            f"Broker/DB OPEN {underlying} leg mismatch; {'; '.join(details)}"
         )
 
 

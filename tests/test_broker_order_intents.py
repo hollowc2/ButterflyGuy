@@ -7,6 +7,7 @@ import pytest
 from butterfly_guy.scripts.run_live import (
     BrokerStateGate,
     _assert_broker_state_matches_db,
+    _repair_filled_entry_intent,
 )
 
 
@@ -145,6 +146,37 @@ async def test_filled_entry_intent_repairs_open_trade_only_with_matching_legs_an
 
 
 @pytest.mark.asyncio
+async def test_filled_entry_intent_rejects_wrong_broker_ratio():
+    intent = {
+        "quantity": 1,
+        "raw_broker_payload": {
+            "status": "FILLED",
+            "filledPrice": 2.15,
+            "closeTime": "2026-06-25T14:31:00Z",
+        },
+        "candidate_snapshot": {
+            "lower_symbol": "SPXW  260625C06000000",
+            "center_symbol": "SPXW  260625C06050000",
+            "upper_symbol": "SPXW  260625C06100000",
+        },
+    }
+    trades = AsyncMock()
+
+    with pytest.raises(RuntimeError, match="legs/quantities"):
+        await _repair_filled_entry_intent(
+            intent,
+            {
+                "SPXW  260625C06000000": 1,
+                "SPXW  260625C06050000": -1,
+                "SPXW  260625C06100000": 1,
+            },
+            trades,
+        )
+
+    trades.insert_trade.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_filled_exit_intent_repairs_open_trade_only_when_broker_flat():
     schwab = AsyncMock()
     schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
@@ -173,7 +205,17 @@ async def test_filled_exit_intent_repairs_open_trade_only_when_broker_flat():
     await _assert_broker_state_matches_db(
         schwab,
         "SPX",
-        [{"id": 99, "entry_price": 2.00, "peak_value": 3.75}],
+        [
+            {
+                "id": 99,
+                "entry_price": 2.00,
+                "peak_value": 3.75,
+                "lower_symbol": "SPXW  260625C06000000",
+                "center_symbol": "SPXW  260625C06050000",
+                "upper_symbol": "SPXW  260625C06100000",
+                "quantity": 1,
+            }
+        ],
         intents,
         trades,
     )
