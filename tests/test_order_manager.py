@@ -277,6 +277,97 @@ async def test_single_attempt_raises_on_partial_fill_child_status():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("terminal_status", ["REJECTED", "EXPIRED"])
+async def test_single_attempt_aborts_terminal_failure_without_cancel(
+    terminal_status: str,
+):
+    settings = make_settings(paper_trading=False, retry_interval_seconds=2)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    payload = {"status": terminal_status, "orderId": "ORD1"}
+    schwab.get_order_status = AsyncMock(return_value=payload)
+
+    with patch("butterfly_guy.execution.order_manager.asyncio.sleep", new=AsyncMock()), \
+         pytest.raises(RuntimeError, match=terminal_status):
+        await om.execute_single_attempt(candidate, limit_price=2.50)
+
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_not_called()
+    om.intent_queries.update_broker_status.assert_awaited_once_with(
+        42, terminal_status, payload
+    )
+    om.intent_queries.mark_unknown.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_aborts_rejected_child_even_if_parent_is_filled():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=2)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    payload = {
+        "status": "FILLED",
+        "orderId": "ORD1",
+        "childOrderStrategies": [{"status": "REJECTED"}],
+    }
+    schwab.get_order_status = AsyncMock(return_value=payload)
+
+    with pytest.raises(RuntimeError, match="REJECTED"):
+        await om.execute_single_attempt(candidate, limit_price=2.50)
+
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_not_called()
+    om.intent_queries.update_broker_status.assert_awaited_once_with(
+        42, "REJECTED", payload
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal_status", ["REJECTED", "EXPIRED"])
+async def test_exit_ladder_aborts_terminal_failure_without_cancel_or_resubmit(
+    terminal_status: str,
+):
+    settings = make_settings(
+        paper_trading=False,
+        retry_interval_seconds=2,
+        price_ladder_steps=2,
+    )
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    payload = {"status": terminal_status, "orderId": "ORD1"}
+    schwab.get_order_status = AsyncMock(return_value=payload)
+
+    base = dt.datetime(2026, 7, 13, 14, 0, tzinfo=dt.timezone.utc)
+    now_calls = 0
+
+    def fake_now() -> dt.datetime:
+        nonlocal now_calls
+        now_calls += 1
+        return base if now_calls <= 4 else base + dt.timedelta(seconds=301)
+
+    with patch(
+        "butterfly_guy.execution.order_manager.now_utc", side_effect=fake_now
+    ), patch(
+        "butterfly_guy.execution.order_manager.asyncio.sleep", new=AsyncMock()
+    ), patch.object(
+        om, "_fetch_live_spread", new=AsyncMock(return_value=None)
+    ), pytest.raises(RuntimeError, match=terminal_status):
+        await om.execute_exit(candidate, current_value=3.00, quantity=1, trade_id=7)
+
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_not_called()
+    om.intent_queries.update_broker_status.assert_awaited_once_with(
+        42, terminal_status, payload
+    )
+    om.intent_queries.mark_unknown.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_single_attempt_creates_intent_before_live_submit_and_saves_order_id():
     settings = make_settings(paper_trading=False, retry_interval_seconds=0)
     om, schwab = make_order_manager(settings)

@@ -255,8 +255,39 @@ def test_live_config_rejects_non_spx_live_money(monkeypatch):
         execution=ExecutionSettings(paper_trading=False, allow_live_trading=True),
     )
 
-    with pytest.raises(RuntimeError, match="SPX-only"):
+    with pytest.raises(RuntimeError, match="SPX/XSP-canary-only"):
         _assert_live_config_supported(config)
+
+
+def test_live_config_rejects_xsp_without_canary_confirmation(monkeypatch):
+    monkeypatch.delenv("LIVE_XSP_CANARY", raising=False)
+    monkeypatch.setenv("LIVE_EXPECTED_SCHWAB_ACCOUNT_ID", "123")
+    monkeypatch.setenv("LIVE_ACCOUNT_ALLOCATION", "20000")
+    monkeypatch.setenv("LIVE_MAX_ACCOUNT_DAILY_LOSS", "50")
+    config = AppConfig(
+        schwab=SchwabSettings(account_id="123"),
+        strategy=StrategySettings(underlying="XSP"),
+        execution=ExecutionSettings(paper_trading=False, allow_live_trading=True),
+        risk=RiskSettings(max_daily_loss=50.0, max_position_size=1),
+    )
+
+    with pytest.raises(RuntimeError, match="LIVE_XSP_CANARY=true"):
+        _assert_live_config_supported(config)
+
+
+def test_live_config_allows_confirmed_xsp_canary(monkeypatch):
+    monkeypatch.setenv("LIVE_XSP_CANARY", "true")
+    monkeypatch.setenv("LIVE_EXPECTED_SCHWAB_ACCOUNT_ID", "123")
+    monkeypatch.setenv("LIVE_ACCOUNT_ALLOCATION", "20000")
+    monkeypatch.setenv("LIVE_MAX_ACCOUNT_DAILY_LOSS", "50")
+    config = AppConfig(
+        schwab=SchwabSettings(account_id="123"),
+        strategy=StrategySettings(underlying="XSP"),
+        execution=ExecutionSettings(paper_trading=False, allow_live_trading=True),
+        risk=RiskSettings(max_daily_loss=50.0, max_position_size=1),
+    )
+
+    _assert_live_config_supported(config)
 
 
 def test_live_config_rejects_spx_live_without_account_confirmation(monkeypatch):

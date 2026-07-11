@@ -68,9 +68,8 @@ from butterfly_guy.strategy.regime_classifier import RegimeClassifier
 
 log = get_logger("run_live")
 
-LIVE_UNDERLYING = "SPX"
 LIVE_ACCOUNT_ALLOCATION = 20_000.0
-LIVE_MAX_ACCOUNT_DAILY_LOSS = 500.0
+LIVE_MAX_DAILY_LOSS = {"SPX": 500.0, "XSP": 50.0}
 
 
 def _matches_underlying(symbol: str, underlying: str) -> bool:
@@ -448,20 +447,29 @@ def _assert_live_config_supported(config: AppConfig) -> None:
         raise RuntimeError(
             "Live trading requires execution.allow_live_trading=true or ALLOW_LIVE_TRADING=true"
         )
-    if config.strategy.underlying != LIVE_UNDERLYING:
+    underlying = config.strategy.underlying.upper()
+    if underlying not in LIVE_MAX_DAILY_LOSS:
         raise RuntimeError(
-            f"Live trading is {LIVE_UNDERLYING}-only; "
+            "Live trading is SPX/XSP-canary-only; "
             f"{config.strategy.underlying} must stay paper/research until explicitly approved"
         )
+    if underlying == "XSP":
+        if os.getenv("LIVE_XSP_CANARY", "").lower() not in {"1", "true", "yes"}:
+            raise RuntimeError("XSP live trading requires LIVE_XSP_CANARY=true")
+        if config.risk.max_position_size != 1:
+            raise RuntimeError("XSP live trading requires risk.max_position_size=1")
     expected_account = os.getenv("LIVE_EXPECTED_SCHWAB_ACCOUNT_ID", "")
     if not expected_account or expected_account != config.schwab.account_id:
         raise RuntimeError(
             "Live trading requires LIVE_EXPECTED_SCHWAB_ACCOUNT_ID matching SCHWAB_ACCOUNT_ID"
         )
     confirmed_float("LIVE_ACCOUNT_ALLOCATION", LIVE_ACCOUNT_ALLOCATION)
-    confirmed_float("LIVE_MAX_ACCOUNT_DAILY_LOSS", LIVE_MAX_ACCOUNT_DAILY_LOSS)
-    if config.risk.max_daily_loss != LIVE_MAX_ACCOUNT_DAILY_LOSS:
-        raise RuntimeError("Live trading requires risk.max_daily_loss=500")
+    max_daily_loss = LIVE_MAX_DAILY_LOSS[underlying]
+    confirmed_float("LIVE_MAX_ACCOUNT_DAILY_LOSS", max_daily_loss)
+    if config.risk.max_daily_loss != max_daily_loss:
+        raise RuntimeError(
+            f"Live trading requires risk.max_daily_loss={max_daily_loss:g}"
+        )
 
 
 async def entry_loop(

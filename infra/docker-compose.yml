@@ -70,7 +70,10 @@ services:
       dockerfile: Dockerfile
     container_name: butterfly_xsp_app
     restart: unless-stopped
-    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "configs/config_xsp.yaml"]
+    command:
+      - /bin/sh
+      - -c
+      - export LIVE_EXPECTED_SCHWAB_ACCOUNT_ID="$${SCHWAB_ACCOUNT_ID}"; exec python -m butterfly_guy.scripts.run_live --config configs/config_xsp.yaml
     env_file:
       - ../.env
     volumes:
@@ -82,6 +85,9 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
+      LIVE_ACCOUNT_ALLOCATION: "20000"
+      LIVE_MAX_ACCOUNT_DAILY_LOSS: "50"
+      LIVE_XSP_CANARY: "true"
     read_only: true
     tmpfs:
       - /tmp

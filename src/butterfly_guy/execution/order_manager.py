@@ -27,6 +27,7 @@ WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
 PARTIAL_FILL_STATUSES = {"PARTIAL", "PARTIAL_FILL", "PARTIALLY_FILLED"}
 CANCEL_PENDING_STATUSES = {"CANCEL_PENDING", "PENDING_CANCEL", "CANCEL_REQUESTED"}
 TERMINAL_ORDER_STATUSES = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+TERMINAL_FAILURE_STATUSES = {"REJECTED", "EXPIRED"}
 
 
 def walk_orders(order: dict) -> Iterator[dict]:
@@ -49,6 +50,15 @@ def order_statuses(order: dict) -> set[str]:
 
 class PartialFillError(RuntimeError):
     """Broker reported a partial fill; operator reconciliation is required."""
+
+
+class TerminalOrderError(RuntimeError):
+    """Broker rejected or expired an order; the ladder must stop."""
+
+    def __init__(self, status: str, order_id: str) -> None:
+        self.status = status
+        self.order_id = order_id
+        super().__init__(f"Order {order_id} reached terminal status {status}")
 
 
 class LiveSpread(NamedTuple):
@@ -312,7 +322,7 @@ class OrderManager:
             if post_fill:
                 return post_fill
 
-        except PartialFillError:
+        except (PartialFillError, TerminalOrderError):
             raise
         except Exception as e:
             if intent_id is not None and self.intent_queries is not None:
@@ -435,7 +445,7 @@ class OrderManager:
                     if post_fill:
                         return post_fill
 
-                except PartialFillError:
+                except (PartialFillError, TerminalOrderError):
                     raise
                 except Exception as e:
                     log.error("entry_step_failed", step=i, error=str(e))
@@ -667,7 +677,7 @@ class OrderManager:
                             ],
                         }
 
-                except PartialFillError:
+                except (PartialFillError, TerminalOrderError):
                     raise
                 except Exception as e:
                     if intent_id is not None and self.intent_queries is not None:
@@ -725,25 +735,35 @@ class OrderManager:
             try:
                 status = await self.schwab.get_order_status(order_id)
                 order_status = status.get("status", "")
+                statuses = order_statuses(status)
+                terminal_failure = next(
+                    (value for value in ("REJECTED", "EXPIRED") if value in statuses),
+                    None,
+                )
                 if intent_id is not None and self.intent_queries is not None:
                     await self.intent_queries.update_broker_status(
-                        intent_id, order_status, status
+                        intent_id, terminal_failure or order_status, status
                     )
 
-                if order_statuses(status) & (
-                    PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
-                ):
+                if statuses & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES):
                     raise PartialFillError(
                         f"Order {order_id} is partially filled; reconcile broker state"
                     )
+                if terminal_failure:
+                    log.warning(
+                        "order_terminal_status",
+                        status=terminal_failure,
+                        order_id=order_id,
+                    )
+                    raise TerminalOrderError(terminal_failure, order_id)
                 if order_status == "FILLED":
                     return True
-                if order_status in TERMINAL_ORDER_STATUSES - {"FILLED"}:
+                if order_status == "CANCELED":
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False
 
             except Exception as e:
-                if isinstance(e, PartialFillError):
+                if isinstance(e, (PartialFillError, TerminalOrderError)):
                     raise
                 log.warning("order_poll_error", error=str(e))
 

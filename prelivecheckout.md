@@ -454,6 +454,13 @@ Owner answers recorded 2026-06-25:
 | Should VIX be treated as SPX-only infrastructure, or should each service independently fetch/validate VIX freshness? | Each service needs access to fresh VIX data. | Add per-service VIX freshness validation before VIX-based entries. |
 | What Schwab order statuses are observed for complex option spreads in real paper/live runs? | Not sure. | Keep this as an open broker-observation gap; collect statuses during paper/shadow runs. |
 
+Owner exception recorded 2026-07-11: XSP is approved only for a supervised,
+one-contract live canary to collect broker lifecycle evidence. This does not
+clear XSP for unattended operation or remove the remaining Critical/High
+blockers. Startup requires the dedicated `LIVE_XSP_CANARY=true` confirmation,
+the existing account confirmation, `max_position_size=1`, and
+`max_daily_loss=50`; XSP remains paper mode outside the supervised session.
+
 ## 15. Evidence Appendix
 
 Files and functions reviewed:
