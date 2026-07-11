@@ -104,8 +104,8 @@
     "hash": "4e8adebce8ed592c1b977d64970674c0"
   },
   "/opt/butterflyguy/tests/test_run_backtest_db_defaults.py": {
-    "mtime": 1781651169.8573635,
-    "hash": "be78f89008b30cee3f76c3c358628f5d"
+    "mtime": 1783736256.8347747,
+    "hash": "8824c30a95a99151c30a949a2b940f37"
   },
   "/opt/butterflyguy/tests/test_entry_selection.py": {
     "mtime": 1782405888.2721634,
@@ -396,8 +396,8 @@
     "hash": "228cfcae71b47836bea25f8843ccdcc6"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/run_backtest_db.py": {
-    "mtime": 1781999816.8664234,
-    "hash": "4b684eafc2bc42d3ee9d6ef40ce5bb1d"
+    "mtime": 1783736242.4187012,
+    "hash": "69d24e26127f4703811fff910dd50631"
   },
   "/opt/butterflyguy/src/butterfly_guy/scripts/report_trade_ladders.py": {
     "mtime": 1781999705.5328887,
@@ -751,6 +751,22 @@
     "mtime": 1781787629.421756,
     "hash": "103641d2fd04bc463e84abdff368fd95"
   },
+  "/opt/butterflyguy/reports/equity_scans/2026-07-10.md": {
+    "mtime": 1783688426.2781868,
+    "hash": "e760a2c507f02a3a39c8858674107aac"
+  },
+  "/opt/butterflyguy/reports/equity_scans/2026-07-08.md": {
+    "mtime": 1783515631.8581114,
+    "hash": "33ccbb624be59b0d527a819dd5533ab5"
+  },
+  "/opt/butterflyguy/reports/equity_scans/2026-07-06.md": {
+    "mtime": 1783342832.1636863,
+    "hash": "2821f77d6c7c2b148aeae708e105ec01"
+  },
+  "/opt/butterflyguy/reports/equity_scans/2026-07-07.md": {
+    "mtime": 1783429238.0888054,
+    "hash": "4d4c14ef249eecb5223740259eaa735d"
+  },
   "/opt/butterflyguy/reports/equity_scans/2026-07-03.md": {
     "mtime": 1783083641.879867,
     "hash": "92d7a14cd08a9f8b0f51cf1f29e97b54"
@@ -758,6 +774,10 @@
   "/opt/butterflyguy/reports/equity_scans/2026-06-15.md": {
     "mtime": 1781528411.3767312,
     "hash": "16dec3ce5a63e64e8dfb0cfc8991688d"
+  },
+  "/opt/butterflyguy/reports/equity_scans/2026-07-09.md": {
+    "mtime": 1783602035.356057,
+    "hash": "ffbb8ea3e56519840e13f55599c87446"
   },
   "/opt/butterflyguy/reports/equity_scans/2026-06-08.md": {
     "mtime": 1780968259.3367295,
@@ -831,9 +851,29 @@
     "mtime": 1781800205.916548,
     "hash": "42adaac13e5fe701627a2409b95ff0a7"
   },
+  "/opt/butterflyguy/reports/daily_report_card/2026-07-10.md": {
+    "mtime": 1783720808.6436217,
+    "hash": "91d9ff7cce17ec3c4d3ba9784ed85dd5"
+  },
+  "/opt/butterflyguy/reports/daily_report_card/2026-07-08.md": {
+    "mtime": 1783548008.097725,
+    "hash": "8d31d5f32fbe9be971f676cec87a3247"
+  },
+  "/opt/butterflyguy/reports/daily_report_card/2026-07-06.md": {
+    "mtime": 1783375207.800798,
+    "hash": "60ff65663828ed4cc298c8bcaa5caad6"
+  },
+  "/opt/butterflyguy/reports/daily_report_card/2026-07-07.md": {
+    "mtime": 1783461607.827891,
+    "hash": "8f3a44671265abf0852ba0f7eaaf3c94"
+  },
   "/opt/butterflyguy/reports/daily_report_card/2026-06-15.md": {
     "mtime": 1781541009.6112356,
     "hash": "8f8c7f4921b32c597e39d41903259926"
+  },
+  "/opt/butterflyguy/reports/daily_report_card/2026-07-09.md": {
+    "mtime": 1783634409.525934,
+    "hash": "af0ecdd7c0830f9f109fa66aa378ea63"
   },
   "/opt/butterflyguy/reports/daily_report_card/2026-06-11.md": {
     "mtime": 1781195406.3222864,

@@ -140,6 +140,18 @@ def _sim_parity_fields(live_config: AppConfig) -> dict[str, float | int]:
     }
 
 
+def _sim_parity_fields_from_args(
+    live_config: AppConfig,
+    args: argparse.Namespace,
+) -> dict[str, float | int]:
+    """Parity fields, allowing CLI sweeps to override exit-arm knobs."""
+    fields = _sim_parity_fields(live_config)
+    fields["drawdown_confirmation_polls"] = args.drawdown_confirmation_polls[0]
+    fields["min_peak_profit_ratio"] = args.min_peak_profit_ratio[0]
+    fields["min_hold_minutes"] = args.min_hold_minutes[0]
+    return fields
+
+
 def _asset_drawdowns(
     config: AppConfig,
     fallback: tuple[float, float, float],
@@ -319,6 +331,18 @@ def parse_args() -> argparse.Namespace:
                         "times in --sweep mode to compare named policies. Use 'default' to include "
                         "the legacy morning/late-morning/afternoon thresholds. Example: "
                         "0-150:0.60:early,150-300:0.90:mid,300-330:0.75:noon,330-390:0.50:late")
+    p.add_argument("--min-hold-minutes", type=_floatlist, default=None,
+                   metavar="MIN[,MIN]",
+                   help="Minimum hold time before drawdown exits can fire. "
+                        "Use comma-separated values with --sweep.")
+    p.add_argument("--drawdown-confirmation-polls", type=_intlist, default=None,
+                   metavar="N[,N]",
+                   help="Consecutive drawdown hits required before exit. "
+                        "Use comma-separated values with --sweep.")
+    p.add_argument("--min-peak-profit-ratio", type=_floatlist, default=None,
+                   metavar="RATIO[,RATIO]",
+                   help="Minimum peak/entry ratio before drawdown exits arm. "
+                        "Use comma-separated values with --sweep.")
     p.add_argument("--profit-strategy", type=_strlist, default=None,
                    metavar="peakvaluetrailer|profitprotector[,..]",
                    help="Profit-management strategy for live/backtest parity. "
@@ -420,6 +444,13 @@ def parse_args() -> argparse.Namespace:
         args.entry_time = [_parse_config_time(live_config.entry.start_time)]
     if args.dd_schedule is None:
         args.dd_schedule = [None]
+    parity_defaults = _sim_parity_fields(live_config)
+    if args.min_hold_minutes is None:
+        args.min_hold_minutes = [parity_defaults["min_hold_minutes"]]
+    if args.drawdown_confirmation_polls is None:
+        args.drawdown_confirmation_polls = [parity_defaults["drawdown_confirmation_polls"]]
+    if args.min_peak_profit_ratio is None:
+        args.min_peak_profit_ratio = [parity_defaults["min_peak_profit_ratio"]]
     if args.profit_strategy is None:
         args.profit_strategy = [live_config.profit_management.strategy]
     if args.use_abs_stop is None:
@@ -1795,7 +1826,7 @@ async def run_live_pinned_replay(args: argparse.Namespace) -> None:
                 drawdown_schedule=dd_schedule,
                 profit_management_strategy=profit_strategy,
                 profitprotector=live_config.profit_management.profitprotector,
-                **_sim_parity_fields(live_config),
+                **_sim_parity_fields_from_args(live_config, args),
             )
             restore = _patch_chain_cache(monitoring, date)
             result = engine.simulate_day_from_entry(
@@ -2124,7 +2155,7 @@ async def run_single(args: argparse.Namespace) -> None:
                 drawdown_schedule=dd_schedule,
                 profit_management_strategy=profit_strategy,
                 profitprotector=live_config.profit_management.profitprotector,
-                **_sim_parity_fields(live_config),
+                **_sim_parity_fields_from_args(live_config, args),
             )
 
             restore = _patch_chain_cache(full_chains, date)
@@ -2262,6 +2293,9 @@ async def run_sweep(args: argparse.Namespace) -> None:
         args.afternoon_dd,
         args.dd_schedule,
         args.profit_strategy,
+        args.min_hold_minutes,
+        args.drawdown_confirmation_polls,
+        args.min_peak_profit_ratio,
         args.method,
         args.entry_time,
     ))
@@ -2287,6 +2321,11 @@ async def run_sweep(args: argparse.Namespace) -> None:
     )
     print(f"  dd_schedules: {[_dd_schedule_label(s) for s in args.dd_schedule]}")
     print(f"  profit_strategies: {args.profit_strategy}")
+    print(
+        f"  min_hold_minutes: {args.min_hold_minutes}  "
+        f"confirmation_polls: {args.drawdown_confirmation_polls}  "
+        f"min_peak_profit_ratio: {args.min_peak_profit_ratio}"
+    )
     print(f"{'='*72}\n")
 
     conn = await asyncpg.connect(resolve_db_dsn())
@@ -2330,6 +2369,9 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 afternoon_dd,
                 dd_schedule,
                 profit_strategy,
+                min_hold_minutes,
+                drawdown_confirmation_polls,
+                min_peak_profit_ratio,
                 method,
                 entry_pst,
             ) in param_grid:
@@ -2429,7 +2471,12 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         drawdown_schedule=dd_schedule,
                         profit_management_strategy=profit_strategy,
                         profitprotector=live_config.profit_management.profitprotector,
-                        **_sim_parity_fields(live_config),
+                        **{
+                            **_sim_parity_fields(live_config),
+                            "drawdown_confirmation_polls": drawdown_confirmation_polls,
+                            "min_peak_profit_ratio": min_peak_profit_ratio,
+                            "min_hold_minutes": min_hold_minutes,
+                        },
                     )
                 else:
                     sim_params = None
@@ -2480,6 +2527,9 @@ async def run_sweep(args: argparse.Namespace) -> None:
         afternoon_dd,
         dd_schedule,
         profit_strategy,
+        min_hold_minutes,
+        drawdown_confirmation_polls,
+        min_peak_profit_ratio,
         method,
         entry_pst,
     ) in enumerate(param_grid, 1):
@@ -2495,6 +2545,9 @@ async def run_sweep(args: argparse.Namespace) -> None:
             afternoon_dd=afternoon_dd,
             dd_schedule=dd_schedule_label,
             profit_strategy=profit_strategy,
+            min_hold_minutes=min_hold_minutes,
+            drawdown_confirmation_polls=drawdown_confirmation_polls,
+            min_peak_profit_ratio=min_peak_profit_ratio,
             method=method,
             entry_time_pst=entry_pst_str,
         )
@@ -2508,6 +2561,8 @@ async def run_sweep(args: argparse.Namespace) -> None:
                   f"profit={profit_strategy} "
                   f"dd={morning_dd}/{late_morning_dd}/{afternoon_dd}  "
                   f"schedule={dd_schedule_label}  "
+                  f"hold={min_hold_minutes:g} confirm={drawdown_confirmation_polls} "
+                  f"peak={min_peak_profit_ratio:g}  "
                   f"→ trades={row['trade_count']}  sharpe={row['sharpe']:.3f}  "
                   f"win={row['win_rate']*100:.0f}%")
 
@@ -2549,13 +2604,14 @@ async def run_sweep(args: argparse.Namespace) -> None:
     start_str = (args.start or dates[0]).strftime("%Y%m%d")
     end_str = (args.end or dates[-1]).strftime("%Y%m%d")
     results_dir = Path("data/results")
-    results_dir.mkdir(exist_ok=True)
+    results_dir.mkdir(parents=True, exist_ok=True)
     csv_path = args.csv or results_dir / f"sweep_{args.asset}_{start_str}_{end_str}_{ts_str}.csv"
 
     fieldnames = [
         "wing_width", "direction", "method", "profit_strategy", "entry_time_pst", "rr_min",
         "morning_dd", "late_morning_dd", "afternoon_dd",
-        "dd_schedule",
+        "dd_schedule", "min_hold_minutes", "drawdown_confirmation_polls",
+        "min_peak_profit_ratio",
         "trade_count", "win_rate", "total_pnl", "avg_pnl",
         "sharpe", "max_drawdown", "profit_factor", "max_consec_losses",
         "exit_morning_dd", "exit_late_morning_dd", "exit_afternoon_dd",
