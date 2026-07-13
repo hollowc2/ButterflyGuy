@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import time
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from threading import Thread
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Lock, Thread
 
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
 # Chain collection
 chain_snapshots_total = Counter(
@@ -53,10 +53,14 @@ entry_expected_move = Gauge(
     "butterfly_entry_expected_move_pts", "VIX-implied 1σ daily move in index points",
     ["underlying"],
 )
-entry_center_strike = Gauge("butterfly_entry_center_strike", "Selected center strike", ["underlying"])
+entry_center_strike = Gauge(
+    "butterfly_entry_center_strike", "Selected center strike", ["underlying"]
+)
 entry_wing_width = Gauge("butterfly_entry_wing_width", "Selected wing width", ["underlying"])
 entry_cost = Gauge("butterfly_entry_cost", "Entry cost per spread", ["underlying"])
-entry_max_profit = Gauge("butterfly_entry_max_profit", "Max profit per spread at expiry", ["underlying"])
+entry_max_profit = Gauge(
+    "butterfly_entry_max_profit", "Max profit per spread at expiry", ["underlying"]
+)
 entry_lower_be = Gauge("butterfly_entry_lower_be", "Lower breakeven strike", ["underlying"])
 entry_upper_be = Gauge("butterfly_entry_upper_be", "Upper breakeven strike", ["underlying"])
 
@@ -85,6 +89,20 @@ schwab_api_errors = Counter(
 
 _server_start_time: float | None = None
 _server_underlying: str = "unknown"
+_readiness_lock = Lock()
+_readiness_reason: str | None = "starting"
+
+
+def set_readiness(reason: str | None) -> None:
+    """Set readiness; ``None`` means the service is ready."""
+    global _readiness_reason
+    with _readiness_lock:
+        _readiness_reason = reason
+
+
+def readiness_snapshot() -> tuple[bool, str | None]:
+    with _readiness_lock:
+        return _readiness_reason is None, _readiness_reason
 
 
 class _MetricsHandler(BaseHTTPRequestHandler):
@@ -119,6 +137,12 @@ class _MetricsHandler(BaseHTTPRequestHandler):
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
                 "uptime_seconds": round(uptime, 1),
             })
+        elif self.path == "/ready":
+            ready, reason = readiness_snapshot()
+            self._send_json(
+                200 if ready else 503,
+                {"status": "ready" if ready else "not_ready", "reason": reason},
+            )
         elif self.path == "/metrics":
             self._send_text(200, generate_latest().decode("utf-8"), CONTENT_TYPE_LATEST)
         else:
@@ -133,6 +157,7 @@ def start_metrics_server(port: int = 8000, underlying: str = "unknown") -> None:
     global _server_start_time, _server_underlying
     _server_underlying = underlying
     _server_start_time = time.time()
+    set_readiness("starting")
 
     server = ThreadingHTTPServer(("0.0.0.0", port), _MetricsHandler)
     thread = Thread(target=server.serve_forever, daemon=True, name=f"metrics-{port}")

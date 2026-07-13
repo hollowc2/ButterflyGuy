@@ -122,6 +122,7 @@ def test_entry_strategy_snapshot_records_live_selection_profile() -> None:
             underlying="SPX",
             wing_widths=[20, 30, 40],
             rr_min=7.5,
+            max_cost_per_width={20: 2.0, 30: 3.0, 40: 4.0},
         ),
         entry=EntrySettings(
             strike_selection_method="VIX",

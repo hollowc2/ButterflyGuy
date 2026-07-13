@@ -11,6 +11,41 @@ from butterfly_guy.scripts.run_live import (
 )
 
 
+def broker_fill_payload(*, order_type: str = "NET_DEBIT") -> dict:
+    opening = order_type == "NET_DEBIT"
+    return {
+        "status": "FILLED",
+        "orderType": order_type,
+        "quantity": 1,
+        "filledQuantity": 1,
+        "remainingQuantity": 0,
+        "orderLegCollection": [
+            {
+                "legId": 1,
+                "instruction": "BUY_TO_OPEN" if opening else "SELL_TO_CLOSE",
+                "quantity": 1,
+            },
+            {
+                "legId": 2,
+                "instruction": "SELL_TO_OPEN" if opening else "BUY_TO_CLOSE",
+                "quantity": 2,
+            },
+            {
+                "legId": 3,
+                "instruction": "BUY_TO_OPEN" if opening else "SELL_TO_CLOSE",
+                "quantity": 1,
+            },
+        ],
+        "orderActivityCollection": [{
+            "executionLegs": [
+                {"legId": 1, "price": 0.05, "quantity": 1, "time": "2026-06-25T14:31:00Z"},
+                {"legId": 2, "price": 0.14, "quantity": 2, "time": "2026-06-25T14:31:00Z"},
+                {"legId": 3, "price": 0.64, "quantity": 1, "time": "2026-06-25T14:31:00Z"},
+            ]
+        }],
+    }
+
+
 @pytest.mark.asyncio
 async def test_startup_allows_bot_owned_working_order():
     schwab = AsyncMock()
@@ -109,13 +144,14 @@ async def test_startup_rejects_unknown_nested_working_order():
 
 
 @pytest.mark.asyncio
-async def test_startup_rejects_bot_owned_partial_order():
+@pytest.mark.parametrize("unsafe_status", ["PARTIALLY_FILLED", "CANCEL_PENDING"])
+async def test_startup_rejects_bot_owned_partial_or_cancel_pending_order(unsafe_status):
     schwab = AsyncMock()
     schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
     schwab.get_todays_orders.return_value = [
         {
             "orderId": "BOT1",
-            "status": "PARTIALLY_FILLED",
+            "status": unsafe_status,
             "orderLegCollection": [
                 {"instrument": {"symbol": "SPXW  260625C06000000"}}
             ],
@@ -131,7 +167,10 @@ async def test_startup_rejects_bot_owned_partial_order():
 
 
 @pytest.mark.asyncio
-async def test_startup_rejects_bot_owned_partial_child_order():
+@pytest.mark.parametrize("unsafe_status", ["PARTIALLY_FILLED", "CANCEL_PENDING"])
+async def test_startup_rejects_bot_owned_partial_or_cancel_pending_child_order(
+    unsafe_status,
+):
     schwab = AsyncMock()
     schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
     schwab.get_todays_orders.return_value = [
@@ -141,7 +180,7 @@ async def test_startup_rejects_bot_owned_partial_child_order():
             "orderLegCollection": [
                 {"instrument": {"symbol": "SPXW  260625C06000000"}}
             ],
-            "childOrderStrategies": [{"status": "PARTIALLY_FILLED"}],
+            "childOrderStrategies": [{"status": unsafe_status}],
         }
     ]
     intents = AsyncMock()
@@ -227,12 +266,7 @@ async def test_filled_entry_intent_repairs_open_trade_only_with_matching_legs_an
             ]
         }
     }
-    order = {
-        "orderId": "BOT1",
-        "status": "FILLED",
-        "filledPrice": 2.15,
-        "closeTime": "2026-06-25T14:31:00Z",
-    }
+    order = {**broker_fill_payload(), "orderId": "BOT1"}
     schwab.get_todays_orders.return_value = [order]
     intents = AsyncMock()
     intents.intents_for_day.return_value = [
@@ -270,11 +304,7 @@ async def test_filled_entry_intent_repairs_open_trade_only_with_matching_legs_an
 async def test_filled_entry_intent_rejects_wrong_broker_ratio():
     intent = {
         "quantity": 1,
-        "raw_broker_payload": {
-            "status": "FILLED",
-            "filledPrice": 2.15,
-            "closeTime": "2026-06-25T14:31:00Z",
-        },
+        "raw_broker_payload": broker_fill_payload(),
         "candidate_snapshot": {
             "lower_symbol": "SPXW  260625C06000000",
             "center_symbol": "SPXW  260625C06050000",
@@ -301,11 +331,7 @@ async def test_filled_entry_intent_rejects_wrong_broker_ratio():
 async def test_filled_entry_intent_rejects_zero_quantity():
     intent = {
         "quantity": 0,
-        "raw_broker_payload": {
-            "status": "FILLED",
-            "filledPrice": 2.15,
-            "closeTime": "2026-06-25T14:31:00Z",
-        },
+        "raw_broker_payload": broker_fill_payload(),
         "candidate_snapshot": {
             "lower_symbol": "SPXW  260625C06000000",
             "center_symbol": "SPXW  260625C06050000",
@@ -332,12 +358,7 @@ async def test_filled_entry_intent_rejects_zero_quantity():
 async def test_filled_exit_intent_repairs_open_trade_only_when_broker_flat():
     schwab = AsyncMock()
     schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
-    order = {
-        "orderId": "BOT2",
-        "status": "FILLED",
-        "filledPrice": 3.25,
-        "closeTime": "2026-06-25T19:45:00Z",
-    }
+    order = {**broker_fill_payload(order_type="NET_CREDIT"), "orderId": "BOT2"}
     schwab.get_todays_orders.return_value = [order]
     intents = AsyncMock()
     intents.intents_for_day.return_value = [
@@ -353,6 +374,7 @@ async def test_filled_exit_intent_repairs_open_trade_only_when_broker_flat():
         }
     ]
     trades = AsyncMock()
+    trades.close_trade.return_value = True
 
     await _assert_broker_state_matches_db(
         schwab,
@@ -374,7 +396,7 @@ async def test_filled_exit_intent_repairs_open_trade_only_when_broker_flat():
 
     trades.close_trade.assert_awaited_once()
     assert trades.close_trade.await_args.args[0] == 99
-    assert trades.close_trade.await_args.args[1] == 3.25
+    assert trades.close_trade.await_args.args[1] == 0.41
 
 
 def test_broker_state_gate_records_unsafe_reason():

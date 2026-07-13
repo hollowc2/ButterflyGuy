@@ -38,7 +38,7 @@ from butterfly_guy.data.schwab_client import (
     SchwabClientWrapper,
 )
 from butterfly_guy.db.queries import CandidateQueries, ChainQueries, DecisionQueries, TradeQueries
-from butterfly_guy.execution.order_manager import OrderManager
+from butterfly_guy.execution.order_manager import AmbiguousOrderError, OrderManager
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, build_entry_chart_png
@@ -561,6 +561,7 @@ class TradeService:
                         ],
                         "entry_attempts": entry_attempts,
                         "selection_parity": selection_parity_report,
+                        "broker_fill_evidence": fill.get("broker_fill_evidence"),
                     },
                 }
                 try:
@@ -575,11 +576,13 @@ class TradeService:
                             trade_id,
                         )
                     await self.risk_engine.record_trade()
-                except Exception:
+                except Exception as exc:
                     if entry_lock is not None:
                         await self._release_entry_lock(*entry_lock)
                         entry_lock = None
-                    raise
+                    raise AmbiguousOrderError(
+                        "broker fill was not fully persisted"
+                    ) from exc
                 if entry_lock is not None:
                     await self._release_entry_lock(*entry_lock)
                     entry_lock = None
@@ -590,7 +593,7 @@ class TradeService:
                 # Emit entry detail metrics for Grafana
                 entry_center_strike.labels(underlying=underlying).set(best.center_strike)
                 entry_wing_width.labels(underlying=underlying).set(best.wing_width)
-                entry_cost.labels(underlying=underlying).set(best.cost)
+                entry_cost.labels(underlying=underlying).set(fill["fill_price"])
                 entry_max_profit.labels(underlying=underlying).set(best.max_profit)
                 entry_lower_be.labels(underlying=underlying).set(best.lower_be)
                 entry_upper_be.labels(underlying=underlying).set(best.upper_be)
@@ -622,6 +625,8 @@ class TradeService:
                         "center": best.center_strike,
                         "width": best.wing_width,
                         "cost": fill["fill_price"],
+                        "fill_time": fill["fill_time"].isoformat(),
+                        "broker_fill_evidence": fill.get("broker_fill_evidence"),
                         "direction": direction,
                         "entry_step": step,
                     },
@@ -899,6 +904,7 @@ class TradeService:
             db_snapshot_time=snapshot["snapshot_time"].isoformat(),
             db_spot=db_spot,
             live_spot=spot_price,
+            rr_target=self.config.strategy.rr_target,
         )
         report["available"] = True
         return report

@@ -9,6 +9,22 @@ from butterfly_guy.data.schwab_client import SchwabClientWrapper
 
 
 @pytest.mark.asyncio
+async def test_initialize_does_not_log_account_identifiers(monkeypatch):
+    response = MagicMock(status_code=200)
+    response.json.return_value = [{"accountNumber": "123", "hashValue": "SECRET_HASH"}]
+    client = MagicMock(get_account_numbers=AsyncMock(return_value=response))
+    client_factory = MagicMock(return_value=client)
+    log_info = MagicMock()
+    monkeypatch.setattr("schwab.auth.client_from_token_file", client_factory)
+    monkeypatch.setattr("butterfly_guy.data.schwab_client.log.info", log_info)
+
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    await schwab.initialize()
+
+    log_info.assert_called_once_with("schwab_client_initialized")
+
+
+@pytest.mark.asyncio
 async def test_place_order_submits_once_without_retry_wrapper():
     schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
     schwab._account_hash = "HASH"

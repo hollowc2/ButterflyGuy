@@ -11,7 +11,7 @@ import httpx
 from butterfly_guy.core.config import SchwabSettings
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import schwab_api_calls, schwab_api_errors
-from butterfly_guy.core.time_utils import EASTERN, market_close_time, now_eastern
+from butterfly_guy.core.time_utils import EASTERN, market_close_time, now_eastern, session_date
 
 log = get_logger(__name__)
 
@@ -64,10 +64,7 @@ class SchwabClientWrapper:
         if not self._account_hash:
             raise RuntimeError("Configured SCHWAB_ACCOUNT_ID was not found in Schwab account list")
 
-        log.info(
-            "schwab_client_initialized",
-            account_hash=self._account_hash[:8] + "..." if self._account_hash else None,
-        )
+        log.info("schwab_client_initialized")
 
     @property
     def client(self) -> Any:
@@ -299,8 +296,8 @@ class SchwabClientWrapper:
         return data if isinstance(data, list) else []
 
     async def get_todays_orders(self) -> list[dict[str, Any]]:
-        """Fetch all orders entered today from Schwab."""
-        return await self.get_orders_for_day(dt.date.today())
+        """Fetch all orders entered on the current Eastern session date."""
+        return await self.get_orders_for_day(session_date())
 
     async def get_transactions_for_day(
         self,

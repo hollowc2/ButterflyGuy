@@ -254,19 +254,20 @@ class TradeQueries:
         self, trade_id: int, exit_price: float, exit_time: dt.datetime,
         exit_reason: str, pnl: float, peak_value: float,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
-        await self.db.pool.execute(
+    ) -> bool:
+        result = await self.db.pool.execute(
             """
             UPDATE butterfly_trades SET
                 exit_price = $2, exit_time = $3, exit_reason = $4,
                 pnl = $5, peak_value = $6,
                 metadata = metadata || COALESCE($7::jsonb, '{}'::jsonb),
                 status = 'CLOSED'
-            WHERE id = $1
+            WHERE id = $1 AND status = 'OPEN'
             """,
             trade_id, exit_price, exit_time, exit_reason, pnl, peak_value,
             json.dumps(metadata or {}),
         )
+        return result == "UPDATE 1"
 
     async def update_peak_value(self, trade_id: int, peak_value: float) -> None:
         await self.db.pool.execute(
@@ -537,17 +538,17 @@ class RiskQueries:
             trade_date, underlying,
         )
 
-    async def get_weekly_pnl(self, underlying: str) -> float:
+    async def get_weekly_pnl(self, underlying: str, session_date: dt.date) -> float:
         """Dollar PnL for the rolling 7-day window (closed trades only)."""
         val = await self.db.pool.fetchval(
             """
             SELECT COALESCE(SUM(pnl * 100 * quantity), 0)
             FROM butterfly_trades
             WHERE underlying = $1
-              AND trade_date >= CURRENT_DATE - INTERVAL '7 days'
+              AND trade_date >= $2 - INTERVAL '7 days'
               AND status = 'CLOSED'
             """,
-            underlying,
+            underlying, session_date,
         )
         return float(val)
 

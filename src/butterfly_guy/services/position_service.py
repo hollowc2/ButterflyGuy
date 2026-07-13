@@ -12,6 +12,7 @@ from butterfly_guy.core.metrics import (
     position_peak_value,
     position_pnl,
     position_value,
+    set_readiness,
     trades_active,
     trades_total,
 )
@@ -38,6 +39,8 @@ from butterfly_guy.db.queries import (
     TradeQueries,
 )
 from butterfly_guy.execution.order_manager import (
+    AmbiguousOrderError,
+    BrokerFillError,
     OrderManager,
     PartialFillError,
     TerminalOrderError,
@@ -54,6 +57,10 @@ from butterfly_guy.strategy.exit_mark_parity import (
 )
 
 log = get_logger(__name__)
+
+
+class SettlementEvidenceError(RuntimeError):
+    """Raised when an open trade cannot be valued safely after market close."""
 
 
 def final_regular_session_close_from_candles(
@@ -297,7 +304,10 @@ class PositionService:
                         pnl = exit_price - trade.entry_price
                         exit_ladder_steps = fill.get("ladder_steps", [])
 
-                        await self.trade_queries.close_trade(
+                        # A broker fill is irreversible: never submit another exit,
+                        # even if local persistence or secondary work fails.
+                        exited = True
+                        closed = await self.trade_queries.close_trade(
                             trade.trade_id,
                             exit_price,
                             exit_time,
@@ -309,14 +319,16 @@ class PositionService:
                                 "exit_signal_reason": signal.reason,
                                 "exit_mark_at_signal": pos_state.current_value,
                                 "exit_mark_parity": exit_mark_parity,
+                                "broker_fill_evidence": fill.get("broker_fill_evidence"),
+                                "exit_secondary_work_pending": True,
                             },
                         )
+                        if not closed:
+                            raise RuntimeError(
+                                "broker exit fill did not close exactly one OPEN trade"
+                            )
 
                         await self._record_exit_metrics(pnl, trade)
-
-                        # Mark exited before logging so any downstream exception
-                        # cannot cause the loop to re-trigger the exit path.
-                        exited = True
 
                         await self.decision_queries.log_event("trade_exited", {
                             "trade_id": trade.trade_id,
@@ -360,6 +372,11 @@ class PositionService:
                                 )
                             except Exception as e:
                                 log.warning("notify_exit_failed", error=str(e))
+                                raise
+
+                        await self.trade_queries.merge_metadata(
+                            trade.trade_id, {"exit_secondary_work_pending": False}
+                        )
 
                         log.info(
                             "trade_exited",
@@ -368,11 +385,31 @@ class PositionService:
                             reason=signal.reason,
                         )
 
-            except (PartialFillError, TerminalOrderError):
+            except (
+                AmbiguousOrderError,
+                BrokerFillError,
+                PartialFillError,
+                TerminalOrderError,
+            ):
+                set_readiness("broker_order_state_unsafe")
                 log.error("monitor_stopped_unknown_broker_state", trade_id=trade.trade_id)
                 raise
             except Exception as e:
                 log.error("monitor_error", error=str(e))
+                if exited:
+                    try:
+                        await self.trade_queries.merge_metadata(
+                            trade.trade_id,
+                            {
+                                "exit_secondary_work_pending": True,
+                                "exit_secondary_work_error": str(e),
+                            },
+                        )
+                    except Exception as metadata_error:
+                        log.error(
+                            "exit_secondary_work_error_persist_failed",
+                            error=str(metadata_error),
+                        )
 
             if not exited:
                 await asyncio.sleep(poll_interval)
@@ -414,9 +451,13 @@ class PositionService:
                 peak = pos_state.peak_value
             except Exception as fallback_error:
                 log.error("eod_valuation_failed", error=str(fallback_error))
+                set_readiness("settlement_evidence_unavailable")
+                raise SettlementEvidenceError(
+                    f"No settlement evidence for open trade {trade.trade_id}"
+                ) from fallback_error
 
         pnl = settlement_value - trade.entry_price
-        await self.trade_queries.close_trade(
+        closed = await self.trade_queries.close_trade(
             trade.trade_id,
             settlement_value,
             now_eastern(),
@@ -432,6 +473,9 @@ class PositionService:
                 "settlement_spot_time": settlement_ts.isoformat() if settlement_ts else None,
             },
         )
+        if not closed:
+            log.warning("cash_settlement_already_completed", trade_id=trade.trade_id)
+            return
         await self._record_exit_metrics(pnl, trade)
 
         if self.notifier:

@@ -177,6 +177,10 @@ uv run python src/butterfly_guy/scripts/generate_live_performance.py
 
 ## Backtesting
 
+> `run_entry_analysis.py` and `SimulationEngine.simulate_day()` are legacy research paths
+> with independent asset/selection defaults. Do not treat their output as live-parity
+> evidence; use `run_backtest_db.py` for config-backed shared entry selection.
+
 `run_backtest_db.py` replays historical data from TimescaleDB using the same strategy components the live system uses.
 
 Examples:

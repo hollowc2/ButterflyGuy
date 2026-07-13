@@ -1,6 +1,8 @@
 """Tests for configuration loading."""
 
+import pytest
 import yaml
+from pydantic import ValidationError
 
 from butterfly_guy.core.config import AppConfig, load_config
 
@@ -49,6 +51,26 @@ def test_database_dsn():
     dsn = config.database.dsn
     assert "postgresql://" in dsn
     assert "butterfly_guy" in dsn
+
+
+def test_config_rejects_unknown_keys():
+    with pytest.raises(ValidationError, match="extra_forbidden"):
+        AppConfig(risk={"max_daily_los": 500})
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"strategy": {"wing_widths": [10, 10]}},
+        {"strategy": {"rr_min": 12, "rr_target": 10}},
+        {"execution": {"price_ladder_steps": 0}},
+        {"risk": {"max_position_size": 0}},
+        {"entry": {"start_time": "08:00", "end_time": "07:00"}},
+    ],
+)
+def test_config_rejects_unsafe_trading_values(override):
+    with pytest.raises(ValidationError):
+        AppConfig(**override)
 
 
 def test_database_password_falls_back_to_compose_env(tmp_path, monkeypatch):

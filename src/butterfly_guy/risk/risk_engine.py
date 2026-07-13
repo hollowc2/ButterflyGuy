@@ -7,7 +7,7 @@ from typing import Protocol
 
 from butterfly_guy.core.config import RiskSettings
 from butterfly_guy.core.logging import get_logger
-from butterfly_guy.core.time_utils import is_market_open, is_trading_day
+from butterfly_guy.core.time_utils import is_market_open, is_trading_day, session_date
 from butterfly_guy.db.queries import RiskQueries
 
 log = get_logger(__name__)
@@ -52,7 +52,7 @@ class RiskEngine:
         buying_power is optional; pass it from a pre-fetched Schwab balance call.
         If None, the buying power check is skipped.
         """
-        today = trade_date or dt.date.today()
+        today = trade_date or session_date()
 
         if not is_trading_day(today):
             return False, "not_trading_day"
@@ -90,7 +90,7 @@ class RiskEngine:
                 return False, f"insufficient_buying_power ({buying_power:.2f})"
 
         # Weekly loss circuit breaker
-        weekly_pnl = await self.risk_queries.get_weekly_pnl(self.underlying)
+        weekly_pnl = await self.risk_queries.get_weekly_pnl(self.underlying, today)
         if weekly_pnl <= -self.settings.max_weekly_loss:
             log.warning("max_weekly_loss_hit", weekly_pnl=weekly_pnl)
             await self.risk_queries.set_halted(today, self.underlying)
@@ -126,13 +126,13 @@ class RiskEngine:
 
     async def record_trade(self, trade_date: dt.date | None = None) -> None:
         """Record that a trade was executed."""
-        today = trade_date or dt.date.today()
+        today = trade_date or session_date()
         await self.risk_queries.get_or_create(today, self.underlying)
         await self.risk_queries.increment_trade_count(today, self.underlying)
 
     async def record_pnl(self, pnl: float, trade_date: dt.date | None = None) -> None:
         """Record realized dollar PnL."""
-        today = trade_date or dt.date.today()
+        today = trade_date or session_date()
         await self.risk_queries.update_pnl(today, pnl, self.underlying)
 
         # Check if we just hit max loss
@@ -146,7 +146,7 @@ class RiskEngine:
         Overwrite dollar realized_pnl in risk state (SET, not ADD).
         Used at startup to restore correct state, including worst-case open trade exposure.
         """
-        today = trade_date or dt.date.today()
+        today = trade_date or session_date()
         await self.risk_queries.get_or_create(today, self.underlying)
         await self.risk_queries.db.pool.execute(
             """
@@ -163,7 +163,7 @@ class RiskEngine:
         Manually sync the trade count in the risk state table.
         Used at startup to ensure persistence matches reality.
         """
-        today = trade_date or dt.date.today()
+        today = trade_date or session_date()
         state = await self.risk_queries.get_or_create(today, self.underlying)
         if state["trade_count"] != count:
             log.info(

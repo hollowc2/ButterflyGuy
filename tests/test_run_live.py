@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -12,6 +12,12 @@ from butterfly_guy.core.config import (
     SchwabSettings,
     StrategySettings,
 )
+from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
+from butterfly_guy.execution.order_manager import (
+    AmbiguousOrderError,
+    BrokerFillError,
+    TerminalOrderError,
+)
 from butterfly_guy.scripts.run_live import (
     BrokerStateGate,
     _assert_broker_state_matches_db,
@@ -19,6 +25,7 @@ from butterfly_guy.scripts.run_live import (
     _broker_option_positions,
     _order_symbols,
     broker_reconciler_loop,
+    entry_loop,
 )
 
 LOWER = "SPXW  260625C06000000"
@@ -243,6 +250,83 @@ async def test_runtime_reconciliation_sets_gate_unsafe_for_wrong_ratio(monkeypat
 
     assert gate.unsafe
     assert "quantity mismatch" in gate.reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["broker authentication failed", "database unavailable"])
+async def test_runtime_reconciliation_degrades_readiness_on_dependency_failure(
+    monkeypatch, failure
+):
+    schwab = AsyncMock()
+    trades = AsyncMock()
+    intents = AsyncMock()
+    gate = BrokerStateGate()
+    if failure.startswith("broker"):
+        trades.get_open_trades.return_value = []
+        schwab.get_account_snapshot.side_effect = RuntimeError(failure)
+    else:
+        trades.get_open_trades.side_effect = RuntimeError(failure)
+
+    async def stop_after_one_iteration(_):
+        raise asyncio.CancelledError
+
+    set_readiness(None)
+    monkeypatch.setattr(asyncio, "sleep", stop_after_one_iteration)
+    with pytest.raises(asyncio.CancelledError):
+        await broker_reconciler_loop(schwab, "SPX", trades, intents, gate)
+
+    assert gate.reason == failure
+    assert readiness_snapshot() == (False, "broker_reconciliation_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [TerminalOrderError("REJECTED", "redacted"), AmbiguousOrderError("unknown")],
+)
+async def test_entry_loop_stops_after_unsafe_order_error(monkeypatch, error):
+    trade_service = Mock()
+    trade_service.attempt_entry = AsyncMock(side_effect=error)
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    await entry_loop(trade_service, Mock())
+
+    trade_service.attempt_entry.assert_awaited_once()
+    assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_entry_loop_stops_after_monitor_broker_fill_error(monkeypatch):
+    trade_service = Mock(attempt_entry=AsyncMock())
+    position_service = Mock()
+    position_service.monitor_loop.return_value = _never_awaited()
+    monitor_task = Mock()
+    monitor_task.done.return_value = True
+    monitor_task.exception.return_value = BrokerFillError("missing execution evidence")
+
+    def create_task(coro, **_kwargs):
+        coro.close()
+        return monitor_task
+
+    monkeypatch.setattr(asyncio, "create_task", create_task)
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    await entry_loop(
+        trade_service,
+        position_service,
+        recovered_trade=Mock(trade_id=7),
+        recovered_candidate=Mock(),
+    )
+
+    trade_service.attempt_entry.assert_not_awaited()
+    assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+async def _never_awaited():
+    pass
 
 
 def test_live_config_rejects_non_spx_live_money(monkeypatch):

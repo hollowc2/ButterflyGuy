@@ -14,7 +14,7 @@ from butterfly_guy.core.metrics import (
     orders_filled,
     orders_placed,
 )
-from butterfly_guy.core.time_utils import get_0dte_expiration, now_utc
+from butterfly_guy.core.time_utils import get_0dte_expiration, now_utc, session_date
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
@@ -59,6 +59,151 @@ class TerminalOrderError(RuntimeError):
         self.status = status
         self.order_id = order_id
         super().__init__(f"Order {order_id} reached terminal status {status}")
+
+
+class BrokerFillError(RuntimeError):
+    """Broker reported FILLED without complete, consistent execution evidence."""
+
+
+class AmbiguousOrderError(RuntimeError):
+    """A broker write may have succeeded; reconciliation is required."""
+
+
+class BrokerFill(NamedTuple):
+    order_id: str
+    net_fill_price: float
+    execution_time: dt.datetime
+    requested_quantity: float
+    filled_quantity: float
+    remaining_quantity: float
+    evidence: dict[str, object]
+
+
+def _broker_time(value: object) -> dt.datetime:
+    if not isinstance(value, str) or not value:
+        raise BrokerFillError("filled order is missing broker execution time")
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise BrokerFillError("filled order has invalid broker execution time") from exc
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+
+
+def parse_broker_fill(
+    order: dict,
+    requested_quantity: int | float,
+    order_id: str | None = None,
+) -> BrokerFill:
+    """Return a validated net butterfly fill derived only from broker executions."""
+    if order.get("status") != "FILLED":
+        raise BrokerFillError("order is not FILLED")
+
+    try:
+        requested = float(requested_quantity)
+        broker_requested = float(order["quantity"])
+        filled = float(order["filledQuantity"])
+        remaining = float(order["remainingQuantity"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise BrokerFillError("filled order is missing broker quantities") from exc
+    if requested <= 0 or broker_requested != requested or filled != requested or remaining != 0:
+        raise BrokerFillError("filled order quantity does not match the request")
+
+    legs: dict[int, tuple[str, float]] = {}
+    for node in walk_orders(order):
+        for leg in node.get("orderLegCollection") or []:
+            try:
+                leg_id = int(leg["legId"])
+                instruction = str(leg["instruction"])
+                quantity = float(leg["quantity"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise BrokerFillError("filled order has incomplete leg evidence") from exc
+            current = legs.setdefault(leg_id, (instruction, quantity))
+            if current != (instruction, quantity):
+                raise BrokerFillError("filled order has inconsistent leg evidence")
+
+    quantities = sorted(quantity for _, quantity in legs.values())
+    if len(quantities) != 3 or quantities != sorted([requested, requested, 2 * requested]):
+        raise BrokerFillError("filled order has an incorrect butterfly leg ratio")
+
+    execution_totals = {leg_id: 0.0 for leg_id in legs}
+    cash_flow = 0.0
+    execution_times: list[dt.datetime] = []
+    evidence_executions: list[dict[str, object]] = []
+    for node in walk_orders(order):
+        for activity in node.get("orderActivityCollection") or []:
+            for execution in activity.get("executionLegs") or []:
+                try:
+                    leg_id = int(execution["legId"])
+                    price = float(execution["price"])
+                    quantity = float(execution["quantity"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise BrokerFillError("filled order has incomplete execution evidence") from exc
+                if leg_id not in legs or price < 0 or quantity <= 0:
+                    raise BrokerFillError("filled order has invalid execution evidence")
+                instruction = legs[leg_id][0]
+                if instruction.startswith("SELL"):
+                    sign = 1
+                elif instruction.startswith("BUY"):
+                    sign = -1
+                else:
+                    raise BrokerFillError("filled order has unknown leg instruction")
+                execution_time = _broker_time(execution.get("time"))
+                execution_totals[leg_id] += quantity
+                cash_flow += sign * price * quantity
+                execution_times.append(execution_time)
+                evidence_executions.append(
+                    {
+                        "instruction": instruction,
+                        "quantity": quantity,
+                        "price": price,
+                        "time": execution_time.isoformat(),
+                    }
+                )
+
+    if not execution_times or execution_totals != {
+        leg_id: quantity for leg_id, (_, quantity) in legs.items()
+    }:
+        raise BrokerFillError("filled order executions do not match the butterfly legs")
+
+    order_type = order.get("orderType")
+    if order_type == "NET_DEBIT":
+        net_fill = -cash_flow / requested
+    elif order_type == "NET_CREDIT":
+        net_fill = cash_flow / requested
+    else:
+        raise BrokerFillError("filled order has unknown net order type")
+    if net_fill < 0:
+        raise BrokerFillError("filled order executions contradict its net order type")
+
+    return BrokerFill(
+        order_id=str(order_id or order.get("orderId") or ""),
+        net_fill_price=round(net_fill, 4),
+        execution_time=max(execution_times),
+        requested_quantity=requested,
+        filled_quantity=filled,
+        remaining_quantity=remaining,
+        evidence={
+            "status": "FILLED",
+            "order_type": order_type,
+            "requested_quantity": requested,
+            "filled_quantity": filled,
+            "remaining_quantity": remaining,
+            "executions": evidence_executions,
+        },
+    )
+
+
+def _fill_result(fill: BrokerFill, intent_id: int | None = None) -> dict[str, object]:
+    return {
+        "order_id": fill.order_id,
+        "fill_price": fill.net_fill_price,
+        "fill_time": fill.execution_time,
+        "requested_quantity": fill.requested_quantity,
+        "filled_quantity": fill.filled_quantity,
+        "remaining_quantity": fill.remaining_quantity,
+        "broker_fill_evidence": fill.evidence,
+        "intent_id": intent_id,
+    }
 
 
 class LiveSpread(NamedTuple):
@@ -181,6 +326,7 @@ class OrderManager:
     async def _entry_blocked_by_working_orders(
         self, exclude_intent_id: int | None = None
     ) -> bool:
+        today = session_date()
         try:
             todays_orders = await self.schwab.get_todays_orders()
         except Exception as e:
@@ -192,7 +338,7 @@ class OrderManager:
             try:
                 known_order_ids = await self.intent_queries.active_broker_order_ids(
                     self.underlying,
-                    dt.date.today(),
+                    today,
                     exclude_intent_id=exclude_intent_id,
                 )
             except Exception as e:
@@ -296,19 +442,15 @@ class OrderManager:
                 order_id,
                 self.settings.retry_interval_seconds,
                 intent_id=intent_id,
+                requested_quantity=quantity,
             )
 
             if fill:
                 elapsed = (now_utc() - start_time).total_seconds()
                 order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                 orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
-                log.info("entry_filled", order_id=order_id, price=limit_price)
-                return {
-                    "order_id": order_id,
-                    "fill_price": limit_price,
-                    "fill_time": now_utc(),
-                    "intent_id": intent_id,
-                }
+                log.info("entry_filled", order_id=order_id, price=fill.net_fill_price)
+                return _fill_result(fill, intent_id)
 
             if intent_id is not None and self.intent_queries is not None:
                 await self.intent_queries.update_broker_status(
@@ -317,17 +459,18 @@ class OrderManager:
             await self.schwab.cancel_order(order_id)
             log.info("entry_unfilled_cancelled", price=limit_price)
             post_fill = await self._check_post_cancel_fill(
-                order_id, limit_price, intent_id=intent_id
+                order_id, quantity, intent_id=intent_id
             )
             if post_fill:
                 return post_fill
 
-        except (PartialFillError, TerminalOrderError):
+        except (BrokerFillError, PartialFillError, TerminalOrderError):
             raise
         except Exception as e:
             if intent_id is not None and self.intent_queries is not None:
                 await self.intent_queries.mark_unknown(intent_id, str(e))
             log.error("entry_attempt_failed", error=str(e))
+            raise AmbiguousOrderError("entry order outcome is unknown") from e
 
         return None
 
@@ -426,29 +569,31 @@ class OrderManager:
 
                 try:
                     order_id = await self.schwab.place_order(order_spec)
-                    fill = await self._wait_for_fill(order_id, retry_interval)
+                    fill = await self._wait_for_fill(
+                        order_id, retry_interval, requested_quantity=quantity
+                    )
 
                     if fill:
                         elapsed = (now_utc() - start_time).total_seconds()
                         order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                         orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
-                        log.info("entry_filled", order_id=order_id, price=limit_price, step=i)
-                        return {
-                            "order_id": order_id,
-                            "fill_price": limit_price,
-                            "fill_time": now_utc(),
-                        }
+                        log.info(
+                            "entry_filled", order_id=order_id,
+                            price=fill.net_fill_price, step=i,
+                        )
+                        return _fill_result(fill)
 
                     await self.schwab.cancel_order(order_id)
                     log.debug("entry_step_cancelled", step=i, price=limit_price)
-                    post_fill = await self._check_post_cancel_fill(order_id, limit_price)
+                    post_fill = await self._check_post_cancel_fill(order_id, quantity)
                     if post_fill:
                         return post_fill
 
-                except (PartialFillError, TerminalOrderError):
+                except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
                     raise
                 except Exception as e:
                     log.error("entry_step_failed", step=i, error=str(e))
+                    raise AmbiguousOrderError("entry order outcome is unknown") from e
 
             log.info("entry_ladder_exhausted_repricing", candidate_center=candidate.center_strike)
 
@@ -628,19 +773,22 @@ class OrderManager:
                     if intent_id is not None and self.intent_queries is not None:
                         await self.intent_queries.mark_broker_order_id(intent_id, order_id)
                     fill = await self._wait_for_fill(
-                        order_id, retry_interval, intent_id=intent_id
+                        order_id,
+                        retry_interval,
+                        intent_id=intent_id,
+                        requested_quantity=quantity,
                     )
 
                     if fill:
                         elapsed = (now_utc() - start_time).total_seconds()
                         order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                         orders_filled.labels(underlying=self.underlying, order_type="exit").inc()
-                        log.info("exit_filled", order_id=order_id, price=limit_price, step=i)
+                        log.info(
+                            "exit_filled", order_id=order_id,
+                            price=fill.net_fill_price, step=i,
+                        )
                         return {
-                            "order_id": order_id,
-                            "fill_price": limit_price,
-                            "fill_time": now_utc(),
-                            "intent_id": intent_id,
+                            **_fill_result(fill, intent_id),
                             "spread_bid": spread.bid if spread is not None else None,
                             "spread_mark": spread.mark if spread is not None else None,
                             "spread_ask": spread.ask if spread is not None else None,
@@ -663,7 +811,7 @@ class OrderManager:
                         )
                     await self.schwab.cancel_order(order_id)
                     post_fill = await self._check_post_cancel_fill(
-                        order_id, limit_price, order_type="exit", intent_id=intent_id
+                        order_id, quantity, order_type="exit", intent_id=intent_id
                     )
                     if post_fill:
                         return {
@@ -677,19 +825,20 @@ class OrderManager:
                             ],
                         }
 
-                except (PartialFillError, TerminalOrderError):
+                except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
                     raise
                 except Exception as e:
                     if intent_id is not None and self.intent_queries is not None:
                         await self.intent_queries.mark_unknown(intent_id, str(e))
                     log.error("exit_step_failed", step=i, error=str(e))
+                    raise AmbiguousOrderError("exit order outcome is unknown") from e
 
             log.warning("exit_ladder_exhausted")
 
     async def _check_post_cancel_fill(
         self,
         order_id: str,
-        limit_price: float,
+        requested_quantity: int,
         order_type: str = "entry",
         intent_id: int | None = None,
     ) -> dict | None:
@@ -697,36 +846,53 @@ class OrderManager:
         try:
             status = await self.schwab.get_order_status(order_id)
             order_status = status.get("status")
+            statuses = order_statuses(status)
+            terminal_failure = next(
+                (value for value in ("REJECTED", "EXPIRED") if value in statuses),
+                None,
+            )
             if intent_id is not None and self.intent_queries is not None and order_status:
-                await self.intent_queries.update_broker_status(intent_id, order_status, status)
-            if order_statuses(status) & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES):
+                await self.intent_queries.update_broker_status(
+                    intent_id, terminal_failure or order_status, status
+                )
+            if statuses & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES):
                 raise PartialFillError(
                     f"Order {order_id} is partially filled after cancel; reconcile broker state"
                 )
+            if terminal_failure:
+                raise TerminalOrderError(terminal_failure, order_id)
             if order_status == "FILLED":
+                fill = parse_broker_fill(status, requested_quantity, order_id)
                 log.warning(
                     "post_cancel_fill_detected",
                     order_id=order_id,
-                    price=limit_price,
+                    price=fill.net_fill_price,
                     order_type=order_type,
                 )
                 orders_filled.labels(underlying=self.underlying, order_type=order_type).inc()
                 return {
-                    "order_id": order_id,
-                    "fill_price": limit_price,
-                    "fill_time": now_utc(),
+                    **_fill_result(fill, intent_id),
                     "post_cancel": True,
-                    "intent_id": intent_id,
                 }
         except Exception as e:
-            if isinstance(e, PartialFillError):
+            if isinstance(
+                e,
+                (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError),
+            ):
                 raise
             log.warning("post_cancel_check_failed", error=str(e))
+            if intent_id is not None and self.intent_queries is not None:
+                await self.intent_queries.mark_unknown(intent_id, str(e))
+            raise AmbiguousOrderError("post-cancel broker state is unknown") from e
         return None
 
     async def _wait_for_fill(
-        self, order_id: str, timeout: int, intent_id: int | None = None
-    ) -> bool:
+        self,
+        order_id: str,
+        timeout: int,
+        intent_id: int | None = None,
+        requested_quantity: int = 1,
+    ) -> BrokerFill | None:
         """Poll order status until filled or timeout."""
         elapsed = 0
         poll_interval = 2
@@ -757,13 +923,13 @@ class OrderManager:
                     )
                     raise TerminalOrderError(terminal_failure, order_id)
                 if order_status == "FILLED":
-                    return True
+                    return parse_broker_fill(status, requested_quantity, order_id)
                 if order_status == "CANCELED":
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False
 
             except Exception as e:
-                if isinstance(e, (PartialFillError, TerminalOrderError)):
+                if isinstance(e, (BrokerFillError, PartialFillError, TerminalOrderError)):
                     raise
                 log.warning("order_poll_error", error=str(e))
 

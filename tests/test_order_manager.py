@@ -4,13 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
-from butterfly_guy.execution.order_manager import LiveSpread, OrderManager, PartialFillError
+from butterfly_guy.execution.order_manager import (
+    AmbiguousOrderError,
+    BrokerFillError,
+    LiveSpread,
+    OrderManager,
+    PartialFillError,
+    parse_broker_fill,
+)
 
 # ---------------------------------------------------------------------------
 # Factories
@@ -86,6 +95,78 @@ def make_order_manager(settings: ExecutionSettings, underlying: str = "SPX"):
 
     om = OrderManager(settings, schwab, builder, underlying)
     return om, schwab
+
+
+def filled_order() -> dict:
+    return json.loads(
+        (Path(__file__).parent / "fixtures/trade_177_entry_fill_redacted.json").read_text()
+    )
+
+
+def broker_fill():
+    return parse_broker_fill(filled_order(), 1, "ORD1")
+
+
+def test_captured_trade_177_fill_uses_execution_net_not_limit() -> None:
+    fill = parse_broker_fill(filled_order(), 1, "REDACTED")
+
+    assert fill.net_fill_price == pytest.approx(0.41)
+    assert fill.execution_time == dt.datetime(
+        2026, 7, 13, 14, 0, 16, tzinfo=dt.timezone.utc
+    )
+    assert fill.remaining_quantity == 0
+
+
+def test_fill_parser_combines_multiple_activities_and_nested_executions() -> None:
+    payload = filled_order()
+    payload["quantity"] = payload["filledQuantity"] = 2
+    payload["orderLegCollection"][0]["quantity"] = 2
+    payload["orderLegCollection"][1]["quantity"] = 4
+    payload["orderLegCollection"][2]["quantity"] = 2
+    activity = payload.pop("orderActivityCollection")[0]
+    payload["childOrderStrategies"] = [
+        {
+            "orderLegCollection": payload["orderLegCollection"],
+            "orderActivityCollection": [activity],
+        },
+        {
+            "orderLegCollection": payload["orderLegCollection"],
+            "orderActivityCollection": [activity],
+        },
+    ]
+
+    assert parse_broker_fill(payload, 2).net_fill_price == pytest.approx(0.41)
+
+
+@pytest.mark.parametrize(
+    "mutation, message",
+    [
+        (
+            lambda payload: payload["orderActivityCollection"][0]["executionLegs"][0].pop(
+                "time"
+            ),
+            "time",
+        ),
+        (
+            lambda payload: payload["orderActivityCollection"][0]["executionLegs"][0].pop(
+                "price"
+            ),
+            "execution evidence",
+        ),
+        (lambda payload: payload.pop("orderActivityCollection"), "executions"),
+        (lambda payload: payload.update(filledQuantity=0), "quantity"),
+        (lambda payload: payload.update(remainingQuantity=1), "quantity"),
+        (lambda payload: payload["orderLegCollection"][1].update(quantity=1), "ratio"),
+    ],
+)
+def test_fill_parser_fails_closed_on_incomplete_or_inconsistent_evidence(
+    mutation, message: str
+) -> None:
+    payload = filled_order()
+    mutation(payload)
+
+    with pytest.raises(BrokerFillError, match=message):
+        parse_broker_fill(payload, 1)
 
 
 def make_chain_data(
@@ -246,11 +327,12 @@ async def test_single_attempt_blocks_when_child_order_is_working():
 
 
 @pytest.mark.asyncio
-async def test_single_attempt_raises_on_partial_fill_status():
+@pytest.mark.parametrize("unsafe_status", ["PARTIALLY_FILLED", "CANCEL_PENDING"])
+async def test_single_attempt_raises_on_partial_or_cancel_pending_status(unsafe_status):
     settings = make_settings(paper_trading=False, retry_interval_seconds=2)
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
-    schwab.get_order_status = AsyncMock(return_value={"status": "PARTIALLY_FILLED"})
+    schwab.get_order_status = AsyncMock(return_value={"status": unsafe_status})
 
     with pytest.raises(PartialFillError):
         await om.execute_single_attempt(candidate, limit_price=2.50)
@@ -259,14 +341,17 @@ async def test_single_attempt_raises_on_partial_fill_status():
 
 
 @pytest.mark.asyncio
-async def test_single_attempt_raises_on_partial_fill_child_status():
+@pytest.mark.parametrize("unsafe_status", ["PARTIALLY_FILLED", "CANCEL_PENDING"])
+async def test_single_attempt_raises_on_partial_or_cancel_pending_child_status(
+    unsafe_status,
+):
     settings = make_settings(paper_trading=False, retry_interval_seconds=2)
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     schwab.get_order_status = AsyncMock(
         return_value={
             "status": "WORKING",
-            "childOrderStrategies": [{"status": "PARTIALLY_FILLED"}],
+            "childOrderStrategies": [{"status": unsafe_status}],
         }
     )
 
@@ -368,13 +453,35 @@ async def test_exit_ladder_aborts_terminal_failure_without_cancel_or_resubmit(
 
 
 @pytest.mark.asyncio
+async def test_exit_ladder_stops_after_ambiguous_submit():
+    om, schwab = make_order_manager(
+        make_settings(paper_trading=False, price_ladder_steps=2)
+    )
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    schwab.place_order.side_effect = RuntimeError("missing Location")
+
+    with patch.object(
+        om, "_fetch_live_spread", new=AsyncMock(return_value=None)
+    ), pytest.raises(AmbiguousOrderError, match="outcome is unknown"):
+        await om.execute_exit(
+            make_candidate(5900, 5950, 6000, 2.50),
+            current_value=3.00,
+            trade_id=7,
+        )
+
+    schwab.place_order.assert_awaited_once()
+    om.intent_queries.mark_unknown.assert_awaited_once_with(42, "missing Location")
+
+
+@pytest.mark.asyncio
 async def test_single_attempt_creates_intent_before_live_submit_and_saves_order_id():
     settings = make_settings(paper_trading=False, retry_interval_seconds=0)
     om, schwab = make_order_manager(settings)
     om.intent_queries = AsyncMock()
     om.intent_queries.create_intent.return_value = 42
     candidate = make_candidate(5900, 5950, 6000, 2.50)
-    schwab.get_order_status = AsyncMock(return_value={"status": "FILLED"})
+    schwab.get_order_status = AsyncMock(return_value=filled_order())
 
     result = await om.execute_single_attempt(candidate, limit_price=2.50)
 
@@ -393,11 +500,23 @@ async def test_single_attempt_ambiguous_submit_leaves_unsafe_intent_without_retr
     schwab.place_order = AsyncMock(side_effect=RuntimeError("missing Location"))
     candidate = make_candidate(5900, 5950, 6000, 2.50)
 
-    result = await om.execute_single_attempt(candidate, limit_price=2.50)
+    with pytest.raises(AmbiguousOrderError, match="outcome is unknown"):
+        await om.execute_single_attempt(candidate, limit_price=2.50)
 
-    assert result is None
     schwab.place_order.assert_awaited_once()
     om.intent_queries.mark_unknown.assert_awaited_once_with(42, "missing Location")
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_status_failure_is_ambiguous():
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    schwab.get_order_status.side_effect = RuntimeError("status unavailable")
+
+    with pytest.raises(AmbiguousOrderError, match="post-cancel"):
+        await om._check_post_cancel_fill("ORD1", 1, intent_id=42)
+
+    om.intent_queries.mark_unknown.assert_awaited_once_with(42, "status unavailable")
 
 
 @pytest.mark.asyncio
@@ -698,7 +817,7 @@ async def test_entry_uses_live_mark_not_candidate_cost():
 
     spread = LiveSpread(bid=2.60, mark=live_mark, ask=2.90)
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
         result = await om.execute_entry(candidate, quantity=1)
 
     assert result is not None
@@ -715,7 +834,9 @@ async def test_entry_steps_up_from_live_mark():
 
     spread = LiveSpread(bid=2.60, mark=live_mark, ask=2.90)
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=[False, True])):
+         patch.object(
+             om, "_wait_for_fill", new=AsyncMock(side_effect=[False, broker_fill()])
+         ):
         result = await om.execute_entry(candidate, quantity=1)
 
     assert result is not None
@@ -732,7 +853,7 @@ async def test_entry_falls_back_to_candidate_cost_when_fetch_fails():
     candidate = make_candidate(5900, 5950, 6000, 2.50)
 
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
         result = await om.execute_entry(candidate, quantity=1)
 
     assert result is not None
@@ -748,7 +869,7 @@ async def test_entry_reprice_called_per_step():
 
     fetch_mock = AsyncMock(return_value=LiveSpread(bid=2.60, mark=2.75, ask=2.90))
     # Fill on the last step so we traverse all 4 steps
-    wait_mock = AsyncMock(side_effect=[False, False, False, True])
+    wait_mock = AsyncMock(side_effect=[False, False, False, broker_fill()])
 
     with patch.object(om, "_fetch_live_spread", new=fetch_mock), \
          patch.object(om, "_wait_for_fill", new=wait_mock):
@@ -778,7 +899,7 @@ async def test_entry_does_not_mutate_candidate_cost():
 
     spread = LiveSpread(bid=2.60, mark=live_mark, ask=2.90)
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
         await om.execute_entry(candidate, quantity=1)
 
     assert candidate.cost == original_cost
@@ -798,7 +919,7 @@ async def test_exit_uses_live_bid_not_current_value():
 
     live_spread = LiveSpread(bid=live_bid, mark=3.40, ask=3.60)
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=live_spread)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
         result = await om.execute_exit(candidate, current_value=current_value, quantity=1)
 
     assert result is not None
@@ -815,7 +936,7 @@ async def test_exit_falls_back_to_current_value_when_fetch_fails():
     current_value = 3.75
 
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=True)):
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
         result = await om.execute_exit(candidate, current_value=current_value, quantity=1)
 
     assert result is not None
@@ -833,7 +954,9 @@ async def test_exit_steps_down_from_live_bid():
 
     live_spread = LiveSpread(bid=live_bid, mark=3.40, ask=3.60)
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=live_spread)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=[False, True])):
+         patch.object(
+             om, "_wait_for_fill", new=AsyncMock(side_effect=[False, broker_fill()])
+         ):
         result = await om.execute_exit(candidate, current_value=2.50, quantity=1)
 
     assert result is not None
@@ -851,7 +974,7 @@ async def test_exit_detects_post_cancel_fill():
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     spread = LiveSpread(bid=3.20, mark=3.40, ask=3.60)
-    schwab.get_order_status = AsyncMock(return_value={"status": "FILLED"})
+    schwab.get_order_status = AsyncMock(return_value=filled_order())
 
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
          patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)):
@@ -859,7 +982,7 @@ async def test_exit_detects_post_cancel_fill():
 
     assert result is not None
     assert result["post_cancel"] is True
-    assert result["fill_price"] == pytest.approx(3.20)
+    assert result["fill_price"] == pytest.approx(0.41)
     assert result["ladder_steps"][-1]["filled"] is True
     schwab.cancel_order.assert_called_once_with("ORD1")
 

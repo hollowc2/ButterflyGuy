@@ -177,7 +177,11 @@ async def test_weekly_pnl_query_converts_points_and_quantity_to_dollars():
     db.pool.fetchval = AsyncMock(return_value=-881.0)
     queries = RiskQueries(db)
 
-    assert await queries.get_weekly_pnl("SPX") == -881.0
+    session_date = dt.date(2026, 7, 12)
+    assert await queries.get_weekly_pnl("SPX", session_date) == -881.0
+    db.pool.fetchval.assert_awaited_once_with(
+        db.pool.fetchval.call_args.args[0], "SPX", session_date
+    )
     sql = db.pool.fetchval.await_args.args[0]
     assert "pnl * 100 * quantity" in sql
 

@@ -10,6 +10,7 @@ from butterfly_guy.core.time_utils import (
     market_close_time,
     minutes_since_open,
     minutes_to_close,
+    session_date,
     time_in_window,
 )
 
@@ -83,3 +84,9 @@ def test_get_0dte_expiration():
     at = et(2026, 3, 10, 10, 0)
     exp = get_0dte_expiration(at=at)
     assert exp == dt.date(2026, 3, 10)
+
+
+def test_session_date_uses_eastern_across_utc_midnight():
+    assert session_date(dt.datetime(2026, 7, 13, 0, 0, tzinfo=dt.timezone.utc)) == dt.date(
+        2026, 7, 12
+    )

@@ -17,6 +17,7 @@ from butterfly_guy.core.metrics import (
     butterfly_candidates_found,
     daily_pnl,
     daily_trade_count,
+    set_readiness,
     start_metrics_server,
     trades_active,
 )
@@ -25,6 +26,7 @@ from butterfly_guy.core.time_utils import (
     is_trading_day,
     market_close_time,
     now_eastern,
+    session_date,
 )
 from butterfly_guy.data.collector import OptionChainCollector
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
@@ -49,16 +51,21 @@ from butterfly_guy.execution.order_manager import (
     PARTIAL_FILL_STATUSES,
     TERMINAL_ORDER_STATUSES,
     WORKING_ORDER_STATUSES,
+    AmbiguousOrderError,
+    BrokerFill,
+    BrokerFillError,
     OrderManager,
     PartialFillError,
+    TerminalOrderError,
     order_ids,
     order_statuses,
+    parse_broker_fill,
     walk_orders,
 )
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier, TelegramNotifier
-from butterfly_guy.services.position_service import PositionService
+from butterfly_guy.services.position_service import PositionService, SettlementEvidenceError
 from butterfly_guy.services.trade_service import TradeService
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
@@ -140,37 +147,12 @@ def _json_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _parse_broker_time(value: Any) -> dt.datetime | None:
-    if isinstance(value, dt.datetime):
-        return value
-    if not isinstance(value, str) or not value:
-        return None
-    text = value.replace("Z", "+00:00")
-    try:
-        parsed = dt.datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
-
-
-def _explicit_fill_details(order: dict[str, Any]) -> tuple[float, dt.datetime] | None:
+def _explicit_fill_details(
+    order: dict[str, Any], requested_quantity: int | float
+) -> BrokerFill | None:
     if order.get("status") != "FILLED":
         return None
-    activities = order.get("orderActivityCollection") or [{}]
-    executions = activities[0].get("executionLegs") or [{}]
-    price = (
-        order.get("filledPrice")
-        or order.get("averageFillPrice")
-        or order.get("averagePrice")
-    )
-    fill_time = _parse_broker_time(
-        order.get("closeTime")
-        or order.get("enteredTime")
-        or executions[0].get("time")
-    )
-    if price is None or fill_time is None:
-        return None
-    return float(price), fill_time
+    return parse_broker_fill(order, requested_quantity)
 
 
 async def _repair_filled_entry_intent(
@@ -179,10 +161,7 @@ async def _repair_filled_entry_intent(
     trade_queries: TradeQueries,
 ) -> dict[str, Any]:
     payload = _json_dict(intent.get("raw_broker_payload"))
-    fill = _explicit_fill_details(payload)
     snapshot = _json_dict(intent.get("candidate_snapshot"))
-    if fill is None:
-        raise RuntimeError("filled entry intent missing explicit fill price/time")
     quantity = intent.get("quantity")
     quantity = 1 if quantity is None else quantity
     expected_positions = _open_trade_positions(
@@ -190,8 +169,11 @@ async def _repair_filled_entry_intent(
     )
     if expected_positions != broker_positions:
         raise RuntimeError("filled entry intent legs/quantities do not match broker positions")
+    fill = _explicit_fill_details(payload, quantity)
+    if fill is None:
+        raise RuntimeError("filled entry intent missing explicit fill price/time")
 
-    fill_price, fill_time = fill
+    fill_price, fill_time = fill.net_fill_price, fill.execution_time
     trade_id = await trade_queries.insert_trade(
         {
             "underlying": intent["underlying"],
@@ -207,7 +189,10 @@ async def _repair_filled_entry_intent(
             "center_symbol": snapshot.get("center_symbol"),
             "upper_symbol": snapshot.get("upper_symbol"),
             "quantity": quantity,
-            "metadata": {"broker_reconciled_entry_intent_id": intent["id"]},
+            "metadata": {
+                "broker_reconciled_entry_intent_id": intent["id"],
+                "broker_fill_evidence": fill.evidence,
+            },
         }
     )
     return {**intent, "trade_id": trade_id}
@@ -219,22 +204,29 @@ async def _repair_filled_exit_intent(
     trade_queries: TradeQueries,
 ) -> None:
     payload = _json_dict(intent.get("raw_broker_payload"))
-    fill = _explicit_fill_details(payload)
+    quantity = intent.get("quantity")
+    quantity = 1 if quantity is None else quantity
+    fill = _explicit_fill_details(payload, quantity)
     if fill is None:
         raise RuntimeError("filled exit intent missing explicit fill price/time")
-    fill_price, fill_time = fill
+    fill_price, fill_time = fill.net_fill_price, fill.execution_time
     entry_price = float(open_trade["entry_price"])
     pnl = fill_price - entry_price
     snapshot = _json_dict(intent.get("candidate_snapshot"))
-    await trade_queries.close_trade(
+    closed = await trade_queries.close_trade(
         int(open_trade["id"]),
         fill_price,
         fill_time,
         str(snapshot.get("exit_reason") or "broker_reconciled_exit"),
         pnl,
         float(open_trade.get("peak_value") or entry_price),
-        metadata={"broker_reconciled_exit_intent_id": intent["id"]},
+        metadata={
+            "broker_reconciled_exit_intent_id": intent["id"],
+            "broker_fill_evidence": fill.evidence,
+        },
     )
+    if not closed:
+        raise RuntimeError("filled exit intent did not close exactly one OPEN trade")
 
 
 class BrokerStateGate:
@@ -258,12 +250,14 @@ async def _assert_broker_state_matches_db(
     open_rows: list[dict],
     intent_queries: OrderIntentQueries | None = None,
     trade_queries: TradeQueries | None = None,
+    trade_date: dt.date | None = None,
 ) -> None:
+    today = trade_date or session_date()
     account_snapshot = await schwab.get_account_snapshot()
     broker_positions = _broker_option_positions(account_snapshot, underlying)
     expected_positions = _open_trade_positions(open_rows)
     intents = (
-        await intent_queries.intents_for_day(underlying, dt.date.today())
+        await intent_queries.intents_for_day(underlying, today)
         if intent_queries is not None
         else []
     )
@@ -426,8 +420,10 @@ async def broker_reconciler_loop(
             if gate.unsafe:
                 log.info("broker_state_gate_cleared")
             gate.clear()
+            set_readiness(None)
         except Exception as e:
             gate.set_unsafe(str(e))
+            set_readiness("broker_reconciliation_unsafe")
             log.error("broker_state_unsafe", error=str(e))
         await asyncio.sleep(interval_seconds)
 
@@ -505,7 +501,17 @@ async def entry_loop(
             exc = monitor_task.exception()
             if exc:
                 log.error("monitor_task_error", error=str(exc))
-                if isinstance(exc, PartialFillError):
+                if isinstance(
+                    exc,
+                    (
+                        BrokerFillError,
+                        AmbiguousOrderError,
+                        PartialFillError,
+                        SettlementEvidenceError,
+                        TerminalOrderError,
+                    ),
+                ):
+                    set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
                     return
             active_trade = None
@@ -528,7 +534,16 @@ async def entry_loop(
                     )
             except Exception as e:
                 log.error("entry_loop_error", error=str(e))
-                if isinstance(e, PartialFillError):
+                if isinstance(
+                    e,
+                    (
+                        AmbiguousOrderError,
+                        BrokerFillError,
+                        PartialFillError,
+                        TerminalOrderError,
+                    ),
+                ):
+                    set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
                     return
 
@@ -572,7 +587,7 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         )
         sleep_secs = (next_midnight - now).total_seconds()
         await asyncio.sleep(sleep_secs)
-        today = dt.date.today()
+        today = session_date()
         await risk_queries.get_or_create(today, underlying)
         daily_trade_count.labels(underlying=underlying).set(0)
         trades_active.labels(underlying=underlying).set(0)
@@ -724,10 +739,11 @@ async def main() -> None:
 
     recovered_peak: float | None = None
 
+    today = session_date()
     open_rows = await trade_q.get_open_trades(underlying)
     if not config.execution.paper_trading:
         await _assert_broker_state_matches_db(
-            schwab, underlying, open_rows, intent_q, trade_q
+            schwab, underlying, open_rows, intent_q, trade_q, today
         )
         open_rows = await trade_q.get_open_trades(underlying)
 
@@ -778,7 +794,6 @@ async def main() -> None:
         )
 
     # Initialize daily counters from DB so metrics survive restarts
-    today = dt.date.today()
     today_trades = await trade_q.get_trades_for_date(today, underlying)
     daily_trade_count.labels(underlying=underlying).set(len(today_trades))
     await risk_engine.sync_trade_count(len(today_trades), today)
@@ -815,14 +830,15 @@ async def main() -> None:
         WHERE underlying = $1
           AND scan_time = (
               SELECT MAX(scan_time) FROM butterfly_candidates
-              WHERE underlying = $1 AND scan_time::date = CURRENT_DATE
+              WHERE underlying = $1 AND scan_time::date = $2
           )
         """,
-        underlying,
+        underlying, today,
     )
     if last_scan_count:
         butterfly_candidates_found.labels(underlying=underlying).set(last_scan_count)
 
+    set_readiness(None)
     try:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(collector.run_loop(), name="collector")
@@ -857,6 +873,7 @@ async def main() -> None:
             if notifier:
                 await notifier.notify_error(str(exc), context="TaskGroup")
     finally:
+        set_readiness("shutting_down")
         await schwab.close()
         await db.close()
 

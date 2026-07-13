@@ -8,11 +8,15 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class SchwabSettings(BaseModel):
+class ConfigModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class SchwabSettings(ConfigModel):
     api_key: str = ""
     secret_key: str = ""
     token_path: str = "tokens.json"
@@ -20,12 +24,12 @@ class SchwabSettings(BaseModel):
     max_token_age: int = 518400
 
 
-class VixWidthBucket(BaseModel):
+class VixWidthBucket(ConfigModel):
     vix_max: float       # exclusive upper bound; use 9999.0 for the catch-all last bucket
     widths: list[int]    # widths to scan in this regime (narrow → wide, typically 3 entries)
 
 
-class StrategySettings(BaseModel):
+class StrategySettings(ConfigModel):
     underlying: str = "SPX"
     wing_widths: list[int] = Field(default_factory=lambda: [10, 20, 30])
     vix_width_buckets: list[VixWidthBucket] | None = None
@@ -39,7 +43,7 @@ class StrategySettings(BaseModel):
     )
 
 
-class EntrySettings(BaseModel):
+class EntrySettings(ConfigModel):
     start_time: str = "07:00"
     end_time: str = "07:30"
     timezone: str = "America/Los_Angeles"
@@ -52,7 +56,7 @@ class EntrySettings(BaseModel):
     min_gap_pct: float | None = None  # Skip days where |gap| < this (e.g. 0.0025 = 0.25%)
 
 
-class ExecutionSettings(BaseModel):
+class ExecutionSettings(ConfigModel):
     price_ladder_step: float = 0.05
     price_ladder_steps: int = 4
     retry_interval_seconds: int = 20
@@ -66,7 +70,7 @@ class ExecutionSettings(BaseModel):
     allow_live_trading: bool = False
 
 
-class TimeRegime(BaseModel):
+class TimeRegime(ConfigModel):
     start_minutes_after_open: int
     end_minutes_after_open: int
     drawdown_threshold: float
@@ -75,7 +79,7 @@ class TimeRegime(BaseModel):
     min_hold_minutes: float = 0.0
 
 
-class QuoteQualitySettings(BaseModel):
+class QuoteQualitySettings(ConfigModel):
     enabled: bool = False
     min_bid_to_mark_ratio: float = 0.0
     max_spread_width_ratio: float | None = None
@@ -84,7 +88,7 @@ class QuoteQualitySettings(BaseModel):
     max_leg_spread_abs: float | None = None
 
 
-class PeakTrackingSettings(BaseModel):
+class PeakTrackingSettings(ConfigModel):
     confirmation_polls: int = 1
     confirmation_tolerance_ratio: float = 0.05
     require_quote_quality: bool = False
@@ -92,7 +96,7 @@ class PeakTrackingSettings(BaseModel):
     max_jump_abs: float | None = None
 
 
-class ProfitProtectorSettings(BaseModel):
+class ProfitProtectorSettings(ConfigModel):
     breakeven_activation_profit: float = 1.00
     breakeven_floor_profit: float = 0.00
     profit_lock_activation_profit: float = 2.00
@@ -101,7 +105,7 @@ class ProfitProtectorSettings(BaseModel):
     large_peak_drawdown_threshold: float = 0.50
 
 
-class ProfitManagementSettings(BaseModel):
+class ProfitManagementSettings(ConfigModel):
     strategy: Literal["peakvaluetrailer", "profitprotector"] = "peakvaluetrailer"
     regimes: dict[str, TimeRegime] = Field(default_factory=dict)
     # 0 disables pre-close liquidation; cash-settled index butterflies should run to close.
@@ -113,7 +117,7 @@ class ProfitManagementSettings(BaseModel):
     profitprotector: ProfitProtectorSettings = Field(default_factory=ProfitProtectorSettings)
 
 
-class RiskSettings(BaseModel):
+class RiskSettings(ConfigModel):
     max_daily_loss: float = 500.0
     max_trades_per_day: int = 1
     max_position_size: int = 1
@@ -123,11 +127,11 @@ class RiskSettings(BaseModel):
     fail_safe_on_balance_error: bool = True  # if True, block trading when balance API unavailable
 
 
-class CollectorSettings(BaseModel):
+class CollectorSettings(ConfigModel):
     snapshot_interval_seconds: int = 60
 
 
-class DatabaseSettings(BaseModel):
+class DatabaseSettings(ConfigModel):
     host: str = "localhost"
     port: int = 5432
     name: str = "butterfly_guy"
@@ -139,7 +143,7 @@ class DatabaseSettings(BaseModel):
         return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
 
 
-class MonitoringSettings(BaseModel):
+class MonitoringSettings(ConfigModel):
     metrics_port: int = 8000
     log_level: str = "INFO"
 
@@ -148,7 +152,7 @@ class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="",
         env_nested_delimiter="__",
-        extra="ignore",
+        extra="forbid",
     )
 
     schwab: SchwabSettings = Field(default_factory=SchwabSettings)
@@ -162,6 +166,52 @@ class AppConfig(BaseSettings):
     collector: CollectorSettings = Field(default_factory=CollectorSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+
+    @model_validator(mode="after")
+    def validate_trading_safety(self) -> AppConfig:
+        widths = self.strategy.wing_widths
+        if not widths or any(width <= 0 for width in widths) or len(widths) != len(set(widths)):
+            raise ValueError("strategy.wing_widths must be unique positive values")
+        if set(widths) - self.strategy.max_cost_per_width.keys() or any(
+            cost <= 0 for cost in self.strategy.max_cost_per_width.values()
+        ):
+            raise ValueError(
+                "strategy.max_cost_per_width must cover all widths with positive costs"
+            )
+        if not 0 < self.strategy.rr_min <= self.strategy.rr_target <= self.strategy.rr_max:
+            raise ValueError("strategy reward/risk values must satisfy 0 < min <= target <= max")
+        if self.strategy.spot_range <= 0 or self.entry.center_tolerance < 0:
+            raise ValueError(
+                "strategy spot range must be positive and center tolerance nonnegative"
+            )
+        buckets = self.strategy.vix_width_buckets or []
+        if any(a.vix_max >= b.vix_max for a, b in zip(buckets, buckets[1:])):
+            raise ValueError("strategy.vix_width_buckets must have increasing vix_max values")
+        if any(
+            not bucket.widths or any(width <= 0 for width in bucket.widths)
+            for bucket in buckets
+        ):
+            raise ValueError("strategy.vix_width_buckets widths must be positive and nonempty")
+        if self.entry.start_time >= self.entry.end_time:
+            raise ValueError("entry start_time must precede end_time")
+        if min(self.entry.max_vix_age_seconds, self.entry.max_chain_snapshot_age_seconds) <= 0:
+            raise ValueError("entry freshness limits must be positive")
+        if min(
+            self.execution.price_ladder_step,
+            self.execution.price_ladder_steps,
+            self.execution.retry_interval_seconds,
+            self.execution.order_timeout_seconds,
+        ) <= 0:
+            raise ValueError("execution ladder and timeout values must be positive")
+        if min(
+            self.risk.max_daily_loss,
+            self.risk.max_trades_per_day,
+            self.risk.max_position_size,
+            self.risk.max_weekly_loss,
+            self.risk.min_buying_power,
+        ) <= 0:
+            raise ValueError("risk limits must be positive")
+        return self
 
 
 def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env") -> AppConfig:
