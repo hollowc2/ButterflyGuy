@@ -115,7 +115,7 @@ BG-001, BG-004, and BG-005 through BG-014 are complete and verified. The durable
 - Added a focused regression proving a terminal rejection causes exactly one `attempt_entry()` call.
 - BG-005: added one Eastern `session_date()` source and routed startup reconciliation, broker/intent ownership, daily and weekly risk, reset, and startup metrics through it instead of host/DB-local dates.
 - Added a UTC-midnight regression and updated focused risk-query coverage; 113 focused tests and changed-file Ruff pass.
-- BG-006: deployment now validates the checked-out SHA, fast-forwards the deployed checkout to that exact SHA, asserts parity, rebuilds only paper SPX/NDX automatically, and checks both service health endpoints.
+- BG-006: pushes now validate the checked-out SHA without deploying. Manual dispatch first requires zero OPEN trades and zero nonterminal broker intents, then fast-forwards to the exact SHA, rebuilds only paper SPX/NDX, and checks readiness.
 - BG-007: AI PR review is read-only and can only fail the check; autonomous edits, pushes, comments, and auto-merge were removed.
 - BG-014: pytest, Compose rendering, and changed-Python Ruff checks are blocking in both PR and deployment workflows.
 - BG-012: Schwab initialization no longer logs any account-hash fragment; a focused regression locks the log shape.

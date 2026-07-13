@@ -35,7 +35,7 @@ This checklist is the cross-session handoff. Work the first unchecked P1 unless 
 - [ ] BG-003 — Persist authoritative broker fill evidence. Requires redacted market-hours XSP fixtures.
 - [x] BG-004 — Fail closed when settlement evidence is unavailable. Completed 2026-07-12; failed valuation preserves the OPEN trade, degrades readiness, and stops entry orchestration.
 - [x] BG-005 — Use one explicit Eastern session date across safety paths. Completed 2026-07-12; focused date/reconciliation/risk regressions pass.
-- [x] BG-006 — Validate and deploy the same revision; scope live-service rebuilds. Completed 2026-07-12; exact-SHA validation/deploy assertion and SPX/NDX-only automatic rebuild verified.
+- [x] BG-006 — Validate and deploy the same revision; scope live-service rebuilds. Completed 2026-07-13; pushes validate only, while manual deployment requires a flat DB and preserves exact-SHA/readiness checks.
 - [x] BG-007 — Make AI review read-only and require deterministic/human gates. Completed 2026-07-12; workflow is read-only, cannot patch/merge, and fails on deterministic or AI findings.
 - [x] BG-008 — Separate liveness from readiness. Completed 2026-07-12; `/ready` tracks startup, shutdown, and live broker-gate safety and deployment consumes it.
 - [x] BG-009 — Reject unknown and unsafe trading configuration. Completed 2026-07-12; nested extras fail closed and core selection/execution/risk invariants are validated.
@@ -474,7 +474,7 @@ Behavior-changing: no
 | Price improvement/multi-fill | Wrong stored PnL/risk | Broker payload persisted in intent | Normal path discards execution details | Later transaction comparison | Manual correction | BG-003 authoritative fill result. |
 | Both settlement sources fail | Trade closed at zero | Two data attempts | Zero sentinel treated as valid | Error log only | Manual DB repair | BG-004 durable settlement-pending state. |
 | Restart after 20:00 ET | Wrong order/intent/risk date | Eastern helpers exist elsewhere | `date.today`/`CURRENT_DATE` split | Reconciliation errors may appear | Manual date-specific inspection | BG-005 explicit session date. |
-| Main push | Untested SHA and live XSP rebuild | Tests on old checkout, SPX liveness | SHA mismatch, all-service deploy | Weak | Git rollback/rebuild | BG-006 immutable validated deployment. |
+| Main push | Untested SHA and live XSP rebuild | Pushes now validate only; deployment is manual | Remaining risk is operator misuse of manual dispatch | Workflow result and revision checks | Do not dispatch until broker/DB are flat | BG-006 immutable validated deployment. |
 | AI reviewer edits PR | Unsafe code auto-merges | Syntax and model re-review | No deterministic post-edit tests/human approval | Post-deploy failures | Revert | BG-007 read-only AI review and branch protection. |
 | Broker/DB/data unhealthy | `/health` stays green | Process uptime only | No readiness | External logs/metrics | Operator diagnosis | BG-008 readiness state. |
 | Config typo | Unsafe default silently wins | Pydantic type parsing, selected live guards | Extras/ranges ignored | Behavior/log review | Correct config/restart | BG-009 strict semantic validation. |

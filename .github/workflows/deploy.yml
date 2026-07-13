@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -19,13 +20,28 @@ jobs:
       - name: Validate
         run: |
           uv run pytest -q
+          touch .env
           docker compose -f infra/docker-compose.yml config >/dev/null
           mapfile -t changed_python < <(git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" -- '*.py')
           if ((${#changed_python[@]})); then
             uv run ruff check "${changed_python[@]}"
           fi
 
+      - name: Check runtime is flat
+        if: github.event_name == 'workflow_dispatch'
+        id: safety
+        working-directory: /opt/butterflyguy
+        run: |
+          unsafe=$(docker exec butterfly_timescaledb psql -U butterfly -d butterfly_guy -tAc "
+            SELECT
+              (SELECT count(*) FROM butterfly_trades WHERE status = 'OPEN') +
+              (SELECT count(*) FROM broker_order_intents
+               WHERE status IS NULL OR status NOT IN ('FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'))
+          ")
+          test "$unsafe" = "0"
+
       - name: Deploy
+        if: github.event_name == 'workflow_dispatch' && steps.safety.outcome == 'success'
         working-directory: /opt/butterflyguy
         run: |
           git fetch origin main
