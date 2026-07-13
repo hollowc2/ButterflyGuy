@@ -39,8 +39,8 @@ Still undone or blocked:
 - The full-repo Ruff command still reports 112 pre-existing errors outside the
   changed safety files; targeted Ruff for this implementation passes.
 - Deploy, runtime `/ready` proof, and the blocking drills remain pending. The
-  safety work was committed and pushed as `65f1b2b`; its automatic deployment
-  was skipped because validation failed before deployment.
+  safety work was pushed as `65f1b2b`, followed by deployment-gate fix
+  `2398b15`. CI passed all 399 tests and intentionally skipped deployment.
 
 ## Offline drill update — 2026-07-13 18:43 UTC
 
@@ -57,6 +57,9 @@ The safe fixture/mock/tabletop batch is recorded in
   `/health` versus degraded `/ready` behavior.
 - Verification now passes 399 full tests, targeted Ruff, `git diff --check`, and
   `graphify update .`.
+- Pushes now validate without deploying. Deployment requires manual workflow
+  dispatch and fails closed unless the DB has zero `OPEN` trades and zero
+  nonterminal broker intents.
 - The blocking-drill checklist remains open where an exit fixture, complete fault
   matrix, external alert delivery, or flat-runtime restart/deploy proof is still
   required. No broker write, restart, deployment, configuration change, or
@@ -71,7 +74,7 @@ The safe fixture/mock/tabletop batch is recorded in
 - [ ] Complete BG-003: authoritative broker fill evidence. Code and entry fixture complete; exit fixture/live proof pending.
 - [x] Complete BG-002: idempotent exit completion.
 - [x] Run the focused and full verification gates. Full tests pass; full-repo Ruff has unrelated baseline failures noted above.
-- [x] Commit only the intended safety changes; keep generated universe churn separate. Safety commit `65f1b2b` is pushed; universe and backtest-tool churn remain local.
+- [x] Commit only the intended safety changes; keep generated universe churn separate. Commits `65f1b2b` and `2398b15` are pushed; CI is green and universe/backtest-tool churn remains local.
 - [ ] Deploy the exact tested SHA after confirming no open trades or working orders.
 - [ ] Verify `/ready`, broker reconciliation, migrations, logs, and DB state in the running containers.
 - [ ] Complete the blocking drills in `drill.md` before approving another live pilot.
@@ -147,8 +150,9 @@ Done when every failure injected after a broker fill still results in exactly on
 
 ## Phase 4: Verification and deploy
 
-Status: local test/config/diff/graph verification and scoped publication complete.
-Deployment is blocked by the two open trades and live XSP mode.
+Status: local verification, scoped publication, and push validation are complete
+at `2398b15`. Deployment was intentionally skipped and remains blocked by the
+two open trades and live XSP mode.
 
 Run, in order:
 
