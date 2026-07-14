@@ -91,7 +91,7 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 - `AGENTS.md`
 - `README.md`
 - `CLAUDE.md`
-- `prelivecheckout.md`
+- `todo.md`
 - `pyproject.toml`
 - `configs/config.yaml`
 - `infra/docker-compose.yml`
@@ -112,7 +112,7 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 1. **High — execution/ops — later:** Complex-order status names remain based on anticipated values rather than a completed paper/shadow evidence set. Restart reconciliation now recursively maps parent/child IDs and statuses and fails closed on missing, unmapped, partial, cancel-pending, or unknown working child states. Files: `execution/order_manager.py`, `scripts/run_live.py`, `scripts/report_broker_order_statuses.py`. Next: collect redacted read-only status reports and map only observed additions.
 2. **High — ops — later:** `/health` returns 200 based only on the metrics HTTP thread and does not expose DB, broker auth, data freshness, risk halt, or reconciliation gate readiness. Files: `core/metrics.py`, `scripts/run_live.py`, Docker health configuration. Fix as a separate PR with a small thread-safe readiness snapshot owned by the orchestrator.
 3. **Medium — backtest/tests — later:** Backtests share selection/profit-policy pieces but cannot prove broker execution parity; modeled fills can remain optimistic relative to complex-order queueing, partial fills, and cancel races. Files: `backtest/simulation_engine.py`, execution/parity reports. Fix: keep this explicit in reports and calibrate models only from observed paper/shadow order lifecycle data.
-4. **Medium — ops/tests — later:** Restart, broker outage, DB outage, manual flatten, and rollback procedures are documented but not yet demonstrated by repeatable drills. Files: `prelivecheckout.md` and operational runbook/tests. Fix: execute controlled paper/shadow drills and retain redacted evidence.
+4. **Medium — ops/tests — later:** The remaining supervised restart, manual flatten, alert-delivery, and rollback procedures are tracked in `todo.md`. Fix: execute the controlled drills and retain redacted evidence.
 
 Completed execution/risk items: exact broker/DB leg-symbol equality, signed Schwab quantity normalization, DB-derived `+quantity/-2 * quantity/+quantity` comparison, and explicit zero-quantity rejection at startup, runtime, and filled-entry repair.
 

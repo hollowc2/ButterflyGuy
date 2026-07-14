@@ -492,6 +492,42 @@ async def test_single_attempt_creates_intent_before_live_submit_and_saves_order_
 
 
 @pytest.mark.asyncio
+async def test_entry_intent_db_failure_prevents_broker_write():
+    om, schwab = make_order_manager(
+        make_settings(paper_trading=False, retry_interval_seconds=0)
+    )
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.side_effect = RuntimeError("db unavailable")
+
+    with pytest.raises(RuntimeError, match="db unavailable"):
+        await om.execute_single_attempt(
+            make_candidate(5900, 5950, 6000, 2.50), limit_price=2.50
+        )
+
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_exit_intent_db_failure_prevents_broker_write():
+    om, schwab = make_order_manager(
+        make_settings(paper_trading=False, retry_interval_seconds=0)
+    )
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.side_effect = RuntimeError("db unavailable")
+
+    with patch.object(
+        om, "_fetch_live_spread", new=AsyncMock(return_value=None)
+    ), pytest.raises(RuntimeError, match="db unavailable"):
+        await om.execute_exit(
+            make_candidate(5900, 5950, 6000, 2.50),
+            current_value=3.00,
+            trade_id=7,
+        )
+
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_single_attempt_ambiguous_submit_leaves_unsafe_intent_without_retry():
     settings = make_settings(paper_trading=False, retry_interval_seconds=0)
     om, schwab = make_order_manager(settings)
@@ -560,6 +596,30 @@ async def test_fetch_live_spread_returns_none_on_nonpositive_mark():
     result = await om._fetch_live_spread(candidate)
 
     assert result is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "lower_bid,lower_mark,lower_ask",
+    [(-0.1, 1.0, 1.1), (1.2, 1.1, 1.0)],
+    ids=["negative", "crossed"],
+)
+async def test_fetch_live_spread_rejects_invalid_leg_quotes(
+    lower_bid, lower_mark, lower_ask
+):
+    om, schwab = make_order_manager(make_settings())
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    exp = dt.date(2026, 3, 21)
+    schwab.get_option_chain = AsyncMock(
+        return_value=make_chain_data_with_spread(
+            exp, 5900, 5950, 6000,
+            lower_bid, lower_mark, lower_ask,
+            1.4, 1.5, 1.6,
+            2.3, 2.4, 2.5,
+        )
+    )
+
+    assert await om._fetch_live_spread(candidate) is None
 
 
 # ---------------------------------------------------------------------------

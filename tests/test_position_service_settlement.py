@@ -1,5 +1,6 @@
 """Tests for cash-settlement spot selection."""
 
+import asyncio
 import datetime as dt
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -374,3 +375,84 @@ async def test_settlement_failure_keeps_trade_open() -> None:
     service.trade_queries.close_trade.assert_not_awaited()
     assert readiness_snapshot() == (False, "settlement_evidence_unavailable")
     set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_peak_db_failure_cannot_reach_broker_exit() -> None:
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.strategy.underlying = "SPX"
+    service.schwab = AsyncMock()
+    service.schwab.get_option_chain.return_value = {}
+    service.order_manager = AsyncMock()
+    service.trade_queries = MagicMock(
+        update_peak_value=AsyncMock(side_effect=RuntimeError("db unavailable"))
+    )
+    service.decision_queries = MagicMock(log_event=AsyncMock())
+    service.monitoring_leg_queries = None
+    service.tent_queries = MagicMock(insert=AsyncMock())
+    service.position_manager = MagicMock()
+    service.position_manager.update_position_value.return_value = MagicMock(
+        peak_update_rejected=False,
+        peak_value=2.0,
+        current_value=1.5,
+    )
+    service.state_machine = MagicMock()
+    trade = TradeRecord(
+        trade_id=7,
+        trade_date=dt.date(2026, 7, 14),
+        entry_price=1.0,
+    )
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=True
+    ), patch(
+        "butterfly_guy.services.position_service.session_date",
+        return_value=trade.trade_date,
+    ), patch(
+        "butterfly_guy.services.position_service.get_0dte_expiration"
+    ), patch(
+        "butterfly_guy.services.position_service.asyncio.sleep",
+        new=AsyncMock(side_effect=asyncio.CancelledError),
+    ), pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock())
+
+    service.order_manager.execute_exit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cash_settlement_db_failure_stops_after_one_close_attempt() -> None:
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.execution.paper_trading = False
+    service.config.strategy.underlying = "XSP"
+    service.trade_queries = MagicMock(
+        close_trade=AsyncMock(side_effect=RuntimeError("db unavailable"))
+    )
+    service.position_manager = MagicMock()
+    service.state_machine = MagicMock()
+    service._last_persisted_peak = 1.0
+    service._wait_for_broker_cash_settlement = AsyncMock(
+        return_value=BrokerCashSettlement(
+            settlement_value=3.47,
+            settlement_spot=751.53,
+            processing_time=dt.datetime(2026, 7, 14, 6, 56, tzinfo=dt.timezone.utc),
+            entry_net_amount=-43.65,
+            settlement_net_amount=347.0,
+            net_pnl_dollars=303.35,
+            evidence={"status": "SETTLED"},
+        )
+    )
+    trade = TradeRecord(
+        trade_id=177,
+        trade_date=dt.date(2026, 7, 13),
+        entry_price=0.41,
+        quantity=1,
+    )
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=False
+    ), pytest.raises(RuntimeError, match="db unavailable"):
+        await service.monitor_loop(trade, MagicMock())
+
+    service.trade_queries.close_trade.assert_awaited_once()

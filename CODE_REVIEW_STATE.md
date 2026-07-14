@@ -38,7 +38,7 @@ BG-001, BG-004, and BG-005 through BG-014 are complete and verified. The durable
 
 - `AGENTS.md`, `README.md`, `CLAUDE.md`, `pyproject.toml`
 - `graphify-out/GRAPH_REPORT.md` (stale build from `331e6e92`; used for navigation only) and targeted Graphify queries
-- `docs/ai/REVIEW_STATE.md`, relevant `prelivecheckout.md` sections, `docs/live-runbook.md` graph nodes
+- `docs/ai/REVIEW_STATE.md`, relevant `todo.md` sections, `docs/live-runbook.md` graph nodes
 - All runtime YAML files and `infra/docker-compose.yml` without reading secret files
 - Both GitHub Actions workflows
 - All SQL migrations, migration runner, DB pool, and query-layer safety-critical regions

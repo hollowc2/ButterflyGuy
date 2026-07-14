@@ -268,9 +268,15 @@ class OrderManager:
                 chain_data, expiration, direction=candidate.direction
             ):
                 if strike in target_strikes:
-                    bids[strike] = opt.get("bid", 0)
-                    marks[strike] = opt.get("mark", 0)
-                    asks[strike] = opt.get("ask", 0)
+                    bid = opt.get("bid", 0)
+                    mark = opt.get("mark", 0)
+                    ask = opt.get("ask", 0)
+                    if min(bid, mark, ask) < 0 or bid > ask:
+                        log.warning("live_spread_invalid_quote", strike=strike)
+                        return None
+                    bids[strike] = bid
+                    marks[strike] = mark
+                    asks[strike] = ask
                     ois[strike] = opt.get("openInterest", 0)
 
             if len(marks) < 3:

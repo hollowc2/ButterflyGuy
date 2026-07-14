@@ -25,6 +25,18 @@ async def test_initialize_does_not_log_account_identifiers(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_initialize_fails_closed_when_authentication_fails(monkeypatch):
+    response = MagicMock(status_code=401)
+    client = MagicMock(get_account_numbers=AsyncMock(return_value=response))
+    monkeypatch.setattr(
+        "schwab.auth.client_from_token_file", MagicMock(return_value=client)
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to get account numbers: 401"):
+        await SchwabClientWrapper(SchwabSettings(account_id="redacted")).initialize()
+
+
+@pytest.mark.asyncio
 async def test_place_order_submits_once_without_retry_wrapper():
     schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
     schwab._account_hash = "HASH"

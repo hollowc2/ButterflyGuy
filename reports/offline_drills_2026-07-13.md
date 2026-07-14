@@ -54,5 +54,32 @@
 The remaining mock-only work is the explicit entry/exit/DB fault-injection matrix,
 restored-settlement replay, invalid-quote/timestamp cases, and mocked token expiry.
 External alert delivery requires separate approval because it sends messages.
-Runtime and real-broker work remain blocked until trades 176 and 177 are terminal
-and broker/DB state is reconciled.
+Runtime and real-broker work remain blocked whenever any strategy trade is open
+or broker/DB state is not reconciled.
+
+## Follow-up — 2026-07-14
+
+- Trade 177 is `CLOSED`; retained Schwab expiration transactions reconcile its
+  `$3.47` cash settlement and `$303.35` net realized P&L.
+- The focused safety suite passed `140` tests after adding one shared
+  fail-closed check for negative or crossed option-leg quotes.
+- Existing executed regressions now satisfy the fixture/mock portions of the
+  authoritative-fill, exit idempotency, restart reconciliation,
+  partial/cancel-pending, rejected/expired, ambiguous-submit, readiness, and
+  settlement drills.
+- The manual-flatten and token-recovery tabletops are now recorded in
+  `docs/live-runbook.md`.
+- The full suite passes `417` tests; targeted Ruff, `git diff --check`, and
+  `graphify update .` pass.
+- Direct fault injection now proves that DB insert, intent-link, and risk-state
+  failures after a broker entry fill raise one reconciliation stop and release
+  the entry lock without another submission.
+- Durable-intent DB failures now prove no entry or exit broker write occurs;
+  peak persistence cannot reach exit submission; cash-settlement close failure
+  makes exactly one DB attempt; startup/runtime authentication failures fail
+  closed.
+- The real keepalive script passes mocked near-expiry and expired-token cases
+  using only an in-memory synthetic token, fake clock, fake broker response, and
+  fake Telegram sender.
+- Still open: external alert delivery, real partial-fill observation,
+  supervised flatten/restart, and exact-SHA deploy/rollback.

@@ -1,7 +1,6 @@
 # Live Runbook
 
-This repo is not cleared for live-money automation until `prelivecheckout.md`
-has no Critical/High safety blockers.
+This repo is not cleared for live-money automation until `todo.md` is complete.
 
 ## Startup
 
@@ -52,13 +51,39 @@ manually before continuing.
 
 ## Manual Flatten
 
-There is no tested in-repo auto-flatten command yet.
+There is intentionally no in-repo auto-flatten command. The operator owns the
+broker action; the app only supplies read-only evidence afterward.
 
-1. Disable entry by keeping live mode off or stopping the affected app.
-2. Use Schwab directly to close the exact option legs shown by the broker.
-3. Confirm the broker is flat for those legs.
-4. Compare the broker result to the OPEN row in `butterfly_trades`.
-5. Only update DB state after broker flatness is confirmed.
+1. Announce manual control and disable new entry. Do not stop monitoring until
+   the operator is actively watching the position in Schwab.
+2. In Schwab, record the exact option symbols, signed quantities, and working
+   orders. Independently compare them with the OPEN `butterfly_trades` row.
+3. Cancel only confirmed working orders, then re-check their terminal status.
+4. Submit the exact closing complex order in Schwab with human confirmation.
+5. Confirm broker flatness and no working child/parent orders in Schwab.
+6. Run the read-only status reporter and reconcile `broker_order_intents`,
+   `butterfly_trades`, `daily_risk_state`, and `decision_log`. Never edit the DB
+   merely to make it agree with an assumed broker outcome.
+
+The 2026-07-14 tabletop passed these steps. A broker-action rehearsal still
+requires explicit approval and a supervised position.
+
+## Token Recovery
+
+1. Treat failed authentication as not ready and keep new entry disabled.
+2. Confirm open positions and working orders from Schwab before touching a
+   service. If either exists, maintain manual supervision.
+3. Re-authenticate interactively with `uv run python tools/auth_init.py`; never
+   print or copy the token contents.
+4. Verify only file ownership/permissions and the expected mounted path.
+5. Run `uv run python tools/schwab_token_keepalive.py` and require a successful
+   read-only quote before considering a restart.
+6. When broker/DB state is flat and reconciled, restart only the affected
+   service and require `/ready`, logs, and a read-only broker status check to
+   pass before entry is enabled.
+
+The 2026-07-14 recovery tabletop passed. Real re-authentication requires the
+owner/browser; mocked expiry and external-alert delivery remain separate tests.
 
 ## Rollback
 
