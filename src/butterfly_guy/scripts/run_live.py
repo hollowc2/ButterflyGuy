@@ -65,7 +65,11 @@ from butterfly_guy.execution.order_manager import (
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier, TelegramNotifier
-from butterfly_guy.services.position_service import PositionService, SettlementEvidenceError
+from butterfly_guy.services.position_service import (
+    PositionService,
+    SettlementEvidenceError,
+    broker_cash_settlement_from_transactions,
+)
 from butterfly_guy.services.trade_service import TradeService
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
@@ -229,6 +233,35 @@ async def _repair_filled_exit_intent(
         raise RuntimeError("filled exit intent did not close exactly one OPEN trade")
 
 
+async def _expired_trade_has_broker_settlement(
+    schwab: SchwabClientWrapper,
+    row: dict[str, Any],
+    today: dt.date,
+) -> bool:
+    trade_date = row.get("trade_date")
+    if not isinstance(trade_date, dt.date) or trade_date >= today:
+        return False
+    transactions: list[dict[str, Any]] = []
+    day = trade_date
+    while day <= today:
+        transactions.extend(await schwab.get_transactions_for_day(day))
+        day += dt.timedelta(days=1)
+    trade = TradeRecord(
+        trade_id=int(row["id"]),
+        trade_date=trade_date,
+        direction=str(row["direction"]),
+        lower_strike=float(row["lower_strike"]),
+        center_strike=float(row["center_strike"]),
+        upper_strike=float(row["upper_strike"]),
+        entry_price=float(row["entry_price"]),
+        lower_symbol=str(row["lower_symbol"]),
+        center_symbol=str(row["center_symbol"]),
+        upper_symbol=str(row["upper_symbol"]),
+        quantity=int(row.get("quantity") or 1),
+    )
+    return broker_cash_settlement_from_transactions(transactions, trade) is not None
+
+
 class BrokerStateGate:
     def __init__(self) -> None:
         self.reason: str | None = None
@@ -364,6 +397,14 @@ async def _assert_broker_state_matches_db(
             log.warning(
                 "broker_filled_exit_repaired",
                 intent_id=filled_exits[0]["id"],
+                trade_id=open_rows[0]["id"],
+            )
+            return
+        if len(open_rows) == 1 and await _expired_trade_has_broker_settlement(
+            schwab, open_rows[0], today
+        ):
+            log.info(
+                "broker_cash_settlement_ready_for_db_close",
                 trade_id=open_rows[0]["id"],
             )
             return
@@ -805,7 +846,7 @@ async def main() -> None:
 
     # Sync risk state PnL — if an open trade was recovered, include its entry cost as
     # worst-case committed exposure so the daily loss budget is correctly consumed.
-    if recovered_trade is not None:
+    if recovered_trade is not None and recovered_trade.trade_date == today:
         open_trade_entry = trade_pnl_dollars(
             recovered_trade.entry_price, recovered_trade.quantity
         )

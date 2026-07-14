@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
@@ -23,6 +24,7 @@ from butterfly_guy.core.time_utils import (
     is_market_open,
     market_close_time,
     now_eastern,
+    session_date,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
@@ -61,6 +63,146 @@ log = get_logger(__name__)
 
 class SettlementEvidenceError(RuntimeError):
     """Raised when an open trade cannot be valued safely after market close."""
+
+
+class BrokerCashSettlement(NamedTuple):
+    settlement_value: float
+    settlement_spot: float | None
+    processing_time: dt.datetime
+    entry_net_amount: float
+    settlement_net_amount: float
+    net_pnl_dollars: float
+    evidence: dict[str, object]
+
+
+def _transaction_time(value: object) -> dt.datetime:
+    if not isinstance(value, str) or not value:
+        raise SettlementEvidenceError("cash-settlement transaction is missing its time")
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise SettlementEvidenceError("cash-settlement transaction has invalid time") from exc
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+
+
+def broker_cash_settlement_from_transactions(
+    transactions: list[dict[str, Any]],
+    trade: TradeRecord,
+) -> BrokerCashSettlement | None:
+    """Return complete, validated cash-settlement evidence for one butterfly."""
+    quantity = float(trade.quantity)
+    symbols = (trade.lower_symbol, trade.center_symbol, trade.upper_symbol)
+    if quantity <= 0 or not all(symbols) or len(set(symbols)) != 3:
+        raise SettlementEvidenceError("trade is missing valid broker leg evidence")
+    if trade.direction not in {"CALL", "PUT"}:
+        raise SettlementEvidenceError("trade has an invalid option direction")
+
+    expected = dict(zip(symbols, (quantity, -2 * quantity, quantity), strict=True))
+    strikes = dict(
+        zip(
+            symbols,
+            (trade.lower_strike, trade.center_strike, trade.upper_strike),
+            strict=True,
+        )
+    )
+    opening = dict.fromkeys(symbols, 0.0)
+    closing = dict.fromkeys(symbols, 0.0)
+    entry_net_amount = 0.0
+    settlement_net_amount = 0.0
+    closing_items: list[tuple[str, float, float]] = []
+    closing_times: list[dt.datetime] = []
+    evidence_transactions: list[dict[str, object]] = []
+
+    for transaction in transactions:
+        matching: list[tuple[str, str, float, float]] = []
+        for item in transaction.get("transferItems") or []:
+            symbol = str((item.get("instrument") or {}).get("symbol") or "")
+            if symbol not in expected:
+                continue
+            try:
+                effect = str(item["positionEffect"])
+                amount = float(item["amount"])
+                price = float(item["price"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise SettlementEvidenceError(
+                    "cash-settlement transaction has incomplete leg evidence"
+                ) from exc
+            matching.append((symbol, effect, amount, price))
+
+        if not matching:
+            continue
+        effects = {item[1] for item in matching}
+        if len(effects) != 1 or effects.pop() not in {"OPENING", "CLOSING"}:
+            raise SettlementEvidenceError(
+                "cash-settlement transaction mixes opening and closing legs"
+            )
+        effect = matching[0][1]
+        try:
+            net_amount = float(transaction["netAmount"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SettlementEvidenceError(
+                "cash-settlement transaction is missing its net amount"
+            ) from exc
+        transaction_time = _transaction_time(transaction.get("time"))
+        target = opening if effect == "OPENING" else closing
+        if effect == "OPENING":
+            entry_net_amount += net_amount
+        else:
+            settlement_net_amount += net_amount
+            closing_times.append(transaction_time)
+        for symbol, _, amount, price in matching:
+            target[symbol] += amount
+            if effect == "CLOSING":
+                closing_items.append((symbol, amount, price))
+        evidence_transactions.append(
+            {
+                "type": transaction.get("type"),
+                "time": transaction_time.isoformat(),
+                "net_amount": net_amount,
+                "items": [
+                    {
+                        "symbol": symbol,
+                        "position_effect": item_effect,
+                        "amount": amount,
+                        "price": price,
+                    }
+                    for symbol, item_effect, amount, price in matching
+                ],
+            }
+        )
+
+    def matches(actual: dict[str, float], wanted: dict[str, float]) -> bool:
+        return all(abs(actual[symbol] - wanted[symbol]) < 1e-9 for symbol in symbols)
+
+    if not matches(opening, expected) or not matches(
+        closing, {symbol: -amount for symbol, amount in expected.items()}
+    ):
+        return None
+    if not closing_times or entry_net_amount >= 0:
+        raise SettlementEvidenceError("cash-settlement cash flow contradicts a debit butterfly")
+
+    settlement_value = sum(-amount * price for _, amount, price in closing_items) / quantity
+    wing_width = (trade.upper_strike - trade.lower_strike) / 2
+    if wing_width <= 0 or not -1e-9 <= settlement_value <= wing_width + 1e-9:
+        raise SettlementEvidenceError("cash settlement is outside the butterfly payoff")
+    spot_values = [
+        strikes[symbol] - price if trade.direction == "PUT" else strikes[symbol] + price
+        for symbol, _, price in closing_items
+        if price > 0
+    ]
+    if spot_values and max(spot_values) - min(spot_values) > 0.02:
+        raise SettlementEvidenceError("cash-settlement legs imply inconsistent index values")
+    settlement_spot = round(sum(spot_values) / len(spot_values), 4) if spot_values else None
+    net_pnl_dollars = entry_net_amount + settlement_net_amount
+    return BrokerCashSettlement(
+        settlement_value=round(settlement_value, 4),
+        settlement_spot=settlement_spot,
+        processing_time=max(closing_times),
+        entry_net_amount=round(entry_net_amount, 2),
+        settlement_net_amount=round(settlement_net_amount, 2),
+        net_pnl_dollars=round(net_pnl_dollars, 2),
+        evidence={"status": "SETTLED", "transactions": evidence_transactions},
+    )
 
 
 def final_regular_session_close_from_candles(
@@ -139,7 +281,7 @@ class PositionService:
         log.info("position_monitor_started", trade_id=trade.trade_id)
 
         exited = False
-        while is_market_open() and not exited:
+        while is_market_open() and trade.trade_date == session_date() and not exited:
             try:
                 # Fetch latest chain for position valuation
                 expiration = get_0dte_expiration()
@@ -424,43 +566,75 @@ class PositionService:
         settlement_spot: float | None = None
         settlement_source = "unknown"
         settlement_ts: dt.datetime | None = None
+        settlement_metadata: dict[str, object] = {}
+        exit_time = now_eastern()
         peak = max(self._last_persisted_peak, trade.peak_value or 0.0)
-        try:
-            settlement_spot, settlement_source, settlement_ts = await self._settlement_spot_price(
-                self.config.strategy.underlying,
-                trade.trade_date,
-            )
-            settlement_value = fly_settlement_value(candidate, settlement_spot)
-        except Exception as e:
-            log.error("eod_settlement_valuation_failed", error=str(e))
-            settlement_source = "option_chain_mark_fallback"
-            settlement_ts = None
+        if not self.config.execution.paper_trading:
             try:
-                expiration = get_0dte_expiration()
-                chain_data = await self.schwab.get_option_chain(
-                    SCHWAB_CHAIN_SYMBOLS.get(
-                        self.config.strategy.underlying,
-                        self.config.strategy.underlying,
-                    ),
-                    expiration,
-                )
-                settlement_spot = _chain_spot_price(chain_data)
-                quotes = self._extract_quotes(chain_data, expiration, candidate)
-                pos_state = self.position_manager.update_position_value(candidate, quotes)
-                settlement_value = pos_state.current_value
-                peak = pos_state.peak_value
-            except Exception as fallback_error:
-                log.error("eod_valuation_failed", error=str(fallback_error))
+                settlement = await self._wait_for_broker_cash_settlement(trade)
+            except Exception:
                 set_readiness("settlement_evidence_unavailable")
-                raise SettlementEvidenceError(
-                    f"No settlement evidence for open trade {trade.trade_id}"
-                ) from fallback_error
+                raise
+            settlement_value = settlement.settlement_value
+            settlement_spot = settlement.settlement_spot
+            settlement_source = "schwab_expiration_transactions"
+            settlement_ts = dt.datetime.combine(
+                trade.trade_date,
+                market_close_time(trade.trade_date),
+                tzinfo=EASTERN,
+            )
+            exit_time = settlement_ts
+            gross_pnl_dollars = (
+                settlement_value - trade.entry_price
+            ) * 100 * trade.quantity
+            pnl = settlement.net_pnl_dollars / (100 * trade.quantity)
+            settlement_metadata = {
+                "gross_pnl_dollars": round(gross_pnl_dollars, 2),
+                "net_pnl_dollars": settlement.net_pnl_dollars,
+                "entry_net_amount": settlement.entry_net_amount,
+                "settlement_net_amount": settlement.settlement_net_amount,
+                "settlement_processing_time": settlement.processing_time.isoformat(),
+                "broker_cash_settlement_evidence": settlement.evidence,
+            }
+        else:
+            try:
+                settlement_spot, settlement_source, settlement_ts = (
+                    await self._settlement_spot_price(
+                        self.config.strategy.underlying,
+                        trade.trade_date,
+                    )
+                )
+                settlement_value = fly_settlement_value(candidate, settlement_spot)
+            except Exception as e:
+                log.error("eod_settlement_valuation_failed", error=str(e))
+                settlement_source = "option_chain_mark_fallback"
+                settlement_ts = None
+                try:
+                    expiration = get_0dte_expiration()
+                    chain_data = await self.schwab.get_option_chain(
+                        SCHWAB_CHAIN_SYMBOLS.get(
+                            self.config.strategy.underlying,
+                            self.config.strategy.underlying,
+                        ),
+                        expiration,
+                    )
+                    settlement_spot = _chain_spot_price(chain_data)
+                    quotes = self._extract_quotes(chain_data, expiration, candidate)
+                    pos_state = self.position_manager.update_position_value(candidate, quotes)
+                    settlement_value = pos_state.current_value
+                    peak = pos_state.peak_value
+                except Exception as fallback_error:
+                    log.error("eod_valuation_failed", error=str(fallback_error))
+                    set_readiness("settlement_evidence_unavailable")
+                    raise SettlementEvidenceError(
+                        f"No settlement evidence for open trade {trade.trade_id}"
+                    ) from fallback_error
+            pnl = settlement_value - trade.entry_price
 
-        pnl = settlement_value - trade.entry_price
         closed = await self.trade_queries.close_trade(
             trade.trade_id,
             settlement_value,
-            now_eastern(),
+            exit_time,
             "cash_settled",
             pnl,
             peak,
@@ -471,6 +645,7 @@ class PositionService:
                 "settlement_source": settlement_source,
                 "settlement_spot": settlement_spot,
                 "settlement_spot_time": settlement_ts.isoformat() if settlement_ts else None,
+                **settlement_metadata,
             },
         )
         if not closed:
@@ -501,6 +676,39 @@ class PositionService:
             settlement_value=settlement_value,
             pnl=pnl,
         )
+
+    async def _wait_for_broker_cash_settlement(
+        self,
+        trade: TradeRecord,
+    ) -> BrokerCashSettlement:
+        """Wait for Schwab to post all opening and expiration transactions."""
+        while True:
+            today = session_date()
+            try:
+                transactions: list[dict[str, Any]] = []
+                day = trade.trade_date
+                while day <= today:
+                    transactions.extend(await self.schwab.get_transactions_for_day(day))
+                    day += dt.timedelta(days=1)
+                settlement = broker_cash_settlement_from_transactions(transactions, trade)
+                if settlement is not None:
+                    log.info(
+                        "broker_cash_settlement_available",
+                        trade_id=trade.trade_id,
+                        settlement_value=settlement.settlement_value,
+                        net_pnl_dollars=settlement.net_pnl_dollars,
+                    )
+                    return settlement
+            except SettlementEvidenceError:
+                raise
+            except Exception as e:
+                log.warning(
+                    "broker_cash_settlement_poll_failed",
+                    trade_id=trade.trade_id,
+                    error=str(e),
+                )
+            log.debug("broker_cash_settlement_pending", trade_id=trade.trade_id)
+            await asyncio.sleep(300)
 
     async def _settlement_spot_price(
         self,
@@ -535,7 +743,7 @@ class PositionService:
         """Record trade exit metrics and update risk engine."""
         underlying = self.config.strategy.underlying
         pnl_dollars = trade_pnl_dollars(pnl, trade.quantity)
-        await self.risk_engine.record_pnl(pnl_dollars)
+        await self.risk_engine.record_pnl(pnl_dollars, trade.trade_date)
 
         # Update prometheus metrics
         trades_active.labels(underlying=underlying).set(0)

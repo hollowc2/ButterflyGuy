@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -149,6 +150,35 @@ async def test_startup_reconciliation_blocks_open_trade_when_broker_flat():
             "SPX",
             [OPEN_TRADE],
         )
+
+
+@pytest.mark.asyncio
+async def test_startup_reconciliation_allows_posted_expiration_settlement(monkeypatch):
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+    schwab.get_todays_orders.return_value = []
+    schwab.get_transactions_for_day.return_value = [{"settlement": "redacted"}]
+    monkeypatch.setattr(
+        "butterfly_guy.scripts.run_live.broker_cash_settlement_from_transactions",
+        lambda transactions, trade: Mock() if transactions and trade.trade_id == 177 else None,
+    )
+    trade = {
+        **OPEN_TRADE,
+        "id": 177,
+        "trade_date": dt.date(2026, 7, 13),
+        "direction": "CALL",
+        "lower_strike": 6000,
+        "center_strike": 6050,
+        "upper_strike": 6100,
+        "entry_price": 1.0,
+    }
+
+    await _assert_broker_state_matches_db(
+        schwab,
+        "SPX",
+        [trade],
+        trade_date=dt.date(2026, 7, 14),
+    )
 
 
 @pytest.mark.asyncio
