@@ -6,8 +6,9 @@ Updated: 2026-07-14
 
 Do not restart, deploy, run a broker-write drill, or approve another live pilot
 until the database has zero `OPEN` trades, Schwab has no working/unknown orders,
-and broker positions reconcile with the database. At the latest read-only check,
-XSP trade 179 and NDX trade 180 were still `OPEN`.
+and broker positions reconcile with the database. The 2026-07-14 post-close XSP
+restart proof passed with flat DB/broker state; re-check the gate immediately
+before every later drill.
 
 All safe local work is complete: BG-002/BG-003, fixture/mock failure matrices,
 readiness checks, invalid-quote rejection, settlement replay, manual-flatten and
@@ -16,9 +17,10 @@ token-recovery tabletops, and synthetic token-expiry coverage. Verification:
 
 ## Remaining tasks
 
-- [ ] **Supervised flat-runtime restart proof.** With broker and DB flat, restart
+- [x] **Supervised flat-runtime restart proof.** With broker and DB flat, restart
   only the affected service and prove exact leg/order reconciliation, `/health`,
-  `/ready`, migrations, and clean logs without any broker write.
+  `/ready`, migrations, and clean logs without any broker write. Evidence:
+  `reports/flat_runtime_restart_2026-07-14.md`.
 - [ ] **Real partial-fill/cancel-pending evidence.** Requires separate approval,
   supervision, and the risk exception in `partial-fill-test-plan.md`; retain a
   redacted payload and prove the ladder stops, readiness degrades, and the order
