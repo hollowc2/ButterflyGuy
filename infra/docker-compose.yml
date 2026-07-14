@@ -87,7 +87,7 @@ services:
       DATABASE__USER: butterfly
       LIVE_ACCOUNT_ALLOCATION: "20000"
       LIVE_MAX_ACCOUNT_DAILY_LOSS: "50"
-      LIVE_XSP_CANARY: "true"
+      LIVE_XSP_CANARY: "false"
     read_only: true
     tmpfs:
       - /tmp
