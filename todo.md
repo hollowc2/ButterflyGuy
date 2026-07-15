@@ -12,15 +12,15 @@ before every later drill.
 
 All safe local work is complete: BG-002/BG-003, fixture/mock failure matrices,
 readiness checks, invalid-quote rejection, settlement replay, manual-flatten and
-token-recovery tabletops, and synthetic token-expiry coverage. Verification:
-`140` focused safety tests pass; the full local suite is `421 passed, 1 skipped`
-(the skipped test requires its isolated CI TimescaleDB).
+token-recovery tabletops, and critical-alert routing. Verification: the full
+local suite is `434 passed, 1 skipped` (the skipped test requires its isolated
+CI TimescaleDB).
 
 The 2026-07-15 hardening pass also made repeated entry failures degrade
 readiness with metric/audit evidence and a live Prometheus alert rule, added a
 real-Timescale migration/risk-query CI smoke test, and extended the manual
-deployment gate/rebuild/readiness checks to SPX, NDX, and XSP. External alert
-delivery remains unproven until the supervised test below is approved.
+deployment gate/rebuild/readiness checks to SPX, NDX, and XSP. The supervised
+external-alert and exact-SHA rollback drills passed on 2026-07-15.
 
 ## Remaining tasks
 
@@ -32,18 +32,19 @@ delivery remains unproven until the supervised test below is approved.
   supervision, and the risk exception in `partial-fill-test-plan.md`; retain a
   redacted payload and prove the ladder stops, readiness degrades, and the order
   reaches a verified terminal outcome.
-- [ ] **Critical external-alert delivery and deduplication.** Send approved test
-  alerts for broker ambiguity, reconciliation failure, settlement failure, and
-  token expiry; prove each actionable condition arrives once without identifiers.
+- [x] **Critical external-alert delivery and deduplication.** Alertmanager now
+  centrally deduplicates broker ambiguity, reconciliation failure, settlement
+  failure, and token-expiry alerts. Eight supervised submissions produced four
+  successful Discord deliveries with zero transport failures and no identifiers.
+  Evidence: `reports/external_alert_delivery_2026-07-15.md`.
 - [ ] **Supervised manual-flatten rehearsal.** Follow `docs/live-runbook.md` with
   explicit broker-write approval, two-view leg/order confirmation, broker-flat
   proof, and post-action DB/risk/decision-log reconciliation.
-- [ ] **Exact-SHA deployment and rollback drill.** Deploy only from a flat state,
-  prove the running revision and migrations, verify broker/DB reconciliation,
-  `/health`, `/ready`, and logs, then roll back and repeat the same checks. The
-  deployment half passed at `ce3b785` on 2026-07-15; retained evidence is in
-  `reports/exact_sha_deployment_2026-07-15.md`. Rollback and its repeated checks
-  remain outstanding.
+- [x] **Exact-SHA deployment and rollback drill.** The deployment half passed at
+  `ce3b785`; the follow-up drill rolled all three paper services back to exact
+  SHA `3d25e4a`, repeated the full flat/readiness/migration/log checks, restored
+  exact SHA `2a8ca01`, and repeated them again. Evidence:
+  `reports/exact_sha_deployment_2026-07-15.md`.
 
 ## Safety boundaries
 

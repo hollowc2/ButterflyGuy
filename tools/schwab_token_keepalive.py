@@ -1,22 +1,23 @@
 """Keep the Schwab OAuth token alive and alert before refresh token expiry.
 
 Schwab refresh tokens have a hard 7-day expiry from issue date.
-This script sends a Telegram alert 8 hours before expiry and every hour after.
+This script raises one centrally deduplicated alert starting 8 hours before expiry.
 Also sends a weekly Sunday evening reminder to re-auth before the new week.
 
-Cron: run hourly + dedicated Sunday 6:50 PM PDT run
-  0 * * * * /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
-  50 1 * * 1 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py --sunday-reminder >> /opt/butterflyguy/keepalive.log 2>&1
+Cron: run hourly plus a dedicated Sunday 6:50 PM PDT reminder.
 """
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
+
 from dotenv import dotenv_values
 
 sys.path.insert(0, str(Path(__file__).parent))
 from notify import send as notify
+from notify import send_alertmanager
 
 SUNDAY_REMINDER = "--sunday-reminder" in sys.argv
 
@@ -24,6 +25,7 @@ ROOT = Path(__file__).parent.parent
 env = dotenv_values(ROOT / ".env")
 
 TOKEN_PATH = ROOT / "tokens.json"
+ALERTMANAGER_URL = os.getenv("ALERTMANAGER_URL", "http://127.0.0.1:9093")
 API_KEY = env.get("SCHWAB_API_KEY")
 SECRET_KEY = env.get("SCHWAB_SECRET_KEY")
 
@@ -48,16 +50,46 @@ now = time.time()
 seconds_remaining = expiry_ts - now
 hours_remaining = seconds_remaining / 3600
 
+
 if SUNDAY_REMINDER:
-    notify(f"📅 Weekly reminder: re-auth Schwab before market open tomorrow.\nRefresh token expires in {hours_remaining:.1f}h.\ncd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
+    notify(
+        "📅 Weekly reminder: re-auth Schwab before market open tomorrow.\n"
+        f"Refresh token expires in {hours_remaining:.1f}h.\n"
+        "cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py",
+    )
     print(f"SUNDAY REMINDER: sent, refresh token expires in {hours_remaining:.1f}h")
 
 if seconds_remaining <= 0:
-    notify(f"🚨 Schwab refresh token has EXPIRED. Re-auth required immediately: cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
-    print(f"ALERT: refresh token expired {abs(hours_remaining):.1f}h ago")
+    alert_accepted = send_alertmanager(
+        ALERTMANAGER_URL,
+        "token_expiry",
+        "ALL",
+    )
+    alert_result = "sent" if alert_accepted else "failed"
+    print(
+        f"TOKEN ALERT: {alert_result}; refresh token expired "
+        f"{abs(hours_remaining):.1f}h ago"
+    )
 elif seconds_remaining <= WARN_BEFORE:
-    notify(f"⏰ Schwab refresh token expires in {hours_remaining:.1f} hours. Re-auth soon: cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py")
-    print(f"ALERT: refresh token expires in {hours_remaining:.1f}h")
+    alert_accepted = send_alertmanager(
+        ALERTMANAGER_URL,
+        "token_expiry",
+        "ALL",
+    )
+    alert_result = "sent" if alert_accepted else "failed"
+    print(
+        f"TOKEN ALERT: {alert_result}; refresh token expires in "
+        f"{hours_remaining:.1f}h"
+    )
+else:
+    alert_accepted = send_alertmanager(
+        ALERTMANAGER_URL,
+        "token_expiry",
+        "ALL",
+        resolved=True,
+    )
+    alert_result = "resolved" if alert_accepted else "failed"
+    print(f"TOKEN ALERT: {alert_result}; refresh token is healthy")
 
 # Always try to refresh the access token
 try:
@@ -71,7 +103,13 @@ try:
     )
     resp = client.get_quote("$SPX")
     resp.raise_for_status()
-    print(f"OK: token refreshed, SPX quote fetched (status {resp.status_code}), refresh token expires in {hours_remaining:.1f}h")
+    print(
+        f"OK: token refreshed, SPX quote fetched (status {resp.status_code}), "
+        f"refresh token expires in {hours_remaining:.1f}h"
+    )
 except Exception as e:
     print(f"ERROR: {e}")
+    sys.exit(1)
+
+if not alert_accepted:
     sys.exit(1)

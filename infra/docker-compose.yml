@@ -20,6 +20,7 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
+      ALERTMANAGER_URL: http://alertmanager:9093
     read_only: true
     tmpfs:
       - /tmp
@@ -51,6 +52,7 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
+      ALERTMANAGER_URL: http://alertmanager:9093
     read_only: true
     tmpfs:
       - /tmp
@@ -85,6 +87,7 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
+      ALERTMANAGER_URL: http://alertmanager:9093
       LIVE_ACCOUNT_ALLOCATION: "20000"
       LIVE_MAX_ACCOUNT_DAILY_LOSS: "50"
       LIVE_XSP_CANARY: "false"

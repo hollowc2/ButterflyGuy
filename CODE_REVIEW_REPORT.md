@@ -8,7 +8,7 @@ Review date: 2026-07-12 UTC
 
 ButterflyGuy has a clear package layout, typed configuration, strong pure-logic tests, conservative live-startup gates, durable broker order intents, recursive broker-state reconciliation, an advisory entry lock, and database uniqueness for one open trade per underlying/day. The entry-selection path has also made real progress toward live/backtest reuse through `strategy.entry_selection.select_entry_candidate()`.
 
-The repository is understandable and all BG-001 through BG-014 code remediations are complete. SPX, NDX, and XSP are currently paper-only. Unattended live trading remains a NO-GO until the supervised partial-fill, alert-delivery, manual-flatten, and deployment/rollback drills in `todo.md` produce retained evidence.
+The repository is understandable and all BG-001 through BG-014 code remediations are complete. SPX, NDX, and XSP are currently paper-only. External alert delivery/deduplication and exact-SHA rollback/restore drills passed on 2026-07-15. Unattended live trading remains a NO-GO until the supervised real partial-fill/cancel-pending and manual-flatten drills in `todo.md` produce retained evidence.
 
 Strongest areas:
 
@@ -587,4 +587,4 @@ Not executed:
 
 ## Final production-readiness decision
 
-NO-GO for unattended live trading. Keep all assets paper-only until the remaining supervised drills in `todo.md` pass. The code remediations are complete; the remaining gate is operational evidence, not an open BG-001 through BG-014 implementation item.
+NO-GO for unattended live trading. Keep all assets paper-only until the real partial-fill/cancel-pending and manual-flatten drills in `todo.md` pass. The code remediations, external-alert proof, and exact-SHA rollback proof are complete; the remaining gate is supervised broker-write evidence, not an open BG-001 through BG-014 implementation item.

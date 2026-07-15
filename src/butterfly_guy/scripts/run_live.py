@@ -66,7 +66,11 @@ from butterfly_guy.execution.order_manager import (
 )
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
-from butterfly_guy.services.notifier import DiscordNotifier, TelegramNotifier
+from butterfly_guy.services.notifier import (
+    AlertmanagerNotifier,
+    DiscordNotifier,
+    TelegramNotifier,
+)
 from butterfly_guy.services.position_service import (
     PositionService,
     SettlementEvidenceError,
@@ -444,6 +448,34 @@ async def _assert_broker_state_matches_db(
         )
 
 
+async def _reconcile_broker_state(
+    schwab: SchwabClientWrapper,
+    underlying: str,
+    open_rows: list[dict] | None,
+    intent_queries: OrderIntentQueries | None,
+    trade_queries: TradeQueries | None,
+    critical_notifier: AlertmanagerNotifier | None,
+    trade_date: dt.date | None = None,
+) -> None:
+    try:
+        if open_rows is None:
+            if trade_queries is None:
+                raise RuntimeError("trade queries are required for runtime reconciliation")
+            open_rows = await trade_queries.get_open_trades(underlying)
+        await _assert_broker_state_matches_db(
+            schwab,
+            underlying,
+            open_rows,
+            intent_queries,
+            trade_queries,
+            trade_date,
+        )
+    except Exception:
+        if critical_notifier:
+            await critical_notifier.notify_critical("reconciliation_failure")
+        raise
+
+
 async def broker_reconciler_loop(
     schwab: SchwabClientWrapper,
     underlying: str,
@@ -451,21 +483,26 @@ async def broker_reconciler_loop(
     intent_queries: OrderIntentQueries,
     gate: BrokerStateGate,
     interval_seconds: int = 15,
+    critical_notifier: AlertmanagerNotifier | None = None,
 ) -> None:
     while True:
         try:
-            open_rows = await trade_queries.get_open_trades(underlying)
-            await _assert_broker_state_matches_db(
+            await _reconcile_broker_state(
                 schwab,
                 underlying,
-                open_rows,
+                None,
                 intent_queries,
                 trade_queries,
+                critical_notifier,
             )
+            if critical_notifier:
+                await critical_notifier.retry_pending_resolutions()
             if gate.unsafe:
                 log.info("broker_state_gate_cleared")
                 gate.clear()
                 clear_readiness("broker_reconciliation_unsafe")
+                if critical_notifier:
+                    await critical_notifier.resolve_critical("reconciliation_failure")
         except Exception as e:
             gate.set_unsafe(str(e))
             set_readiness("broker_reconciliation_unsafe")
@@ -520,6 +557,7 @@ async def entry_loop(
     recovered_candidate: ButterflyCandidate | None = None,
     recovered_peak: float | None = None,
     broker_gate: BrokerStateGate | None = None,
+    critical_notifier: AlertmanagerNotifier | None = None,
 ) -> None:
     """Periodically attempt entries during the entry window."""
     active_trade: TradeRecord | None = recovered_trade
@@ -559,6 +597,13 @@ async def entry_loop(
                 ):
                     set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
+                    if critical_notifier:
+                        condition = (
+                            "settlement_failure"
+                            if isinstance(exc, SettlementEvidenceError)
+                            else "broker_ambiguity"
+                        )
+                        await critical_notifier.notify_critical(condition)
                     return
             active_trade = None
             monitor_task = None
@@ -595,6 +640,8 @@ async def entry_loop(
                 ):
                     set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
+                    if critical_notifier:
+                        await critical_notifier.notify_critical("broker_ambiguity")
                     return
                 consecutive_errors += 1
                 underlying = trade_service.config.strategy.underlying
@@ -712,6 +759,12 @@ async def main() -> None:
         "",
     )
     risk_notifier = TelegramNotifier()
+    alertmanager_url = os.getenv("ALERTMANAGER_URL", "")
+    critical_notifier = (
+        AlertmanagerNotifier(alertmanager_url, config.strategy.underlying)
+        if alertmanager_url
+        else None
+    )
     notifier = (
         DiscordNotifier(webhook)
         if webhook and config.strategy.underlying == "SPX"
@@ -806,9 +859,22 @@ async def main() -> None:
     today = session_date()
     open_rows = await trade_q.get_open_trades(underlying)
     if not config.execution.paper_trading:
-        await _assert_broker_state_matches_db(
-            schwab, underlying, open_rows, intent_q, trade_q, today
+        await _reconcile_broker_state(
+            schwab,
+            underlying,
+            open_rows,
+            intent_q,
+            trade_q,
+            critical_notifier,
+            today,
         )
+        if critical_notifier:
+            for condition in (
+                "reconciliation_failure",
+                "broker_ambiguity",
+                "settlement_failure",
+            ):
+                await critical_notifier.resolve_critical(condition)
         open_rows = await trade_q.get_open_trades(underlying)
 
     if open_rows:
@@ -914,6 +980,7 @@ async def main() -> None:
                     recovered_candidate,
                     recovered_peak,
                     broker_gate,
+                    critical_notifier,
                 ),
                 name="entry_loop",
             )
@@ -925,6 +992,7 @@ async def main() -> None:
                         trade_q,
                         intent_q,
                         broker_gate,
+                        critical_notifier=critical_notifier,
                     ),
                     name="broker_reconciler",
                 )

@@ -25,9 +25,11 @@ from butterfly_guy.scripts.run_live import (
     _assert_live_config_supported,
     _broker_option_positions,
     _order_symbols,
+    _reconcile_broker_state,
     broker_reconciler_loop,
     entry_loop,
 )
+from butterfly_guy.services.position_service import SettlementEvidenceError
 
 LOWER = "SPXW  260625C06000000"
 CENTER = "SPXW  260625C06050000"
@@ -136,6 +138,25 @@ async def test_startup_reconciliation_blocks_broker_position_without_open_trade(
 
     with pytest.raises(RuntimeError, match="DB has no OPEN trade"):
         await _assert_broker_state_matches_db(schwab, "SPX", [])
+
+
+@pytest.mark.asyncio
+async def test_startup_reconciliation_failure_alerts_without_broker_details():
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.side_effect = RuntimeError("account identifier redacted")
+    critical_notifier = Mock(notify_critical=AsyncMock(return_value=False))
+
+    with pytest.raises(RuntimeError, match="identifier redacted"):
+        await _reconcile_broker_state(
+            schwab,
+            "SPX",
+            [],
+            None,
+            None,
+            critical_notifier,
+        )
+
+    critical_notifier.notify_critical.assert_awaited_once_with("reconciliation_failure")
 
 
 @pytest.mark.asyncio
@@ -302,12 +323,63 @@ async def test_runtime_reconciliation_degrades_readiness_on_dependency_failure(
 
     set_readiness(None)
     monkeypatch.setattr(asyncio, "sleep", stop_after_one_iteration)
+    critical_notifier = Mock(notify_critical=AsyncMock(return_value=False))
     with pytest.raises(asyncio.CancelledError):
-        await broker_reconciler_loop(schwab, "SPX", trades, intents, gate)
+        await broker_reconciler_loop(
+            schwab,
+            "SPX",
+            trades,
+            intents,
+            gate,
+            critical_notifier=critical_notifier,
+        )
 
     assert gate.reason == failure
     assert readiness_snapshot() == (False, "broker_reconciliation_unsafe")
+    critical_notifier.notify_critical.assert_awaited_once_with("reconciliation_failure")
     set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_runtime_reconciliation_resolution_rearms_alert(monkeypatch):
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+    schwab.get_todays_orders.return_value = []
+    trades = AsyncMock()
+    trades.get_open_trades.side_effect = [RuntimeError("database unavailable"), []]
+    intents = AsyncMock()
+    intents.intents_for_day.return_value = []
+    gate = BrokerStateGate()
+    critical_notifier = Mock(
+        notify_critical=AsyncMock(),
+        resolve_critical=AsyncMock(),
+        retry_pending_resolutions=AsyncMock(),
+    )
+    sleeps = 0
+
+    async def stop_after_recovery(_):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 2:
+            raise asyncio.CancelledError
+
+    set_readiness(None)
+    monkeypatch.setattr(asyncio, "sleep", stop_after_recovery)
+    with pytest.raises(asyncio.CancelledError):
+        await broker_reconciler_loop(
+            schwab,
+            "SPX",
+            trades,
+            intents,
+            gate,
+            critical_notifier=critical_notifier,
+        )
+
+    critical_notifier.notify_critical.assert_awaited_once_with("reconciliation_failure")
+    critical_notifier.resolve_critical.assert_awaited_once_with("reconciliation_failure")
+    critical_notifier.retry_pending_resolutions.assert_awaited_once_with()
+    assert not gate.unsafe
+    assert readiness_snapshot() == (True, None)
 
 
 @pytest.mark.asyncio
@@ -320,9 +392,11 @@ async def test_entry_loop_stops_after_unsafe_order_error(monkeypatch, error):
     trade_service.attempt_entry = AsyncMock(side_effect=error)
     monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
 
-    await entry_loop(trade_service, Mock())
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    await entry_loop(trade_service, Mock(), critical_notifier=critical_notifier)
 
     trade_service.attempt_entry.assert_awaited_once()
+    critical_notifier.notify_critical.assert_awaited_once_with("broker_ambiguity")
     assert readiness_snapshot() == (False, "broker_order_state_unsafe")
     set_readiness(None)
 
@@ -382,13 +456,28 @@ async def test_entry_loop_repeated_errors_degrade_and_recover(
 
 
 @pytest.mark.asyncio
-async def test_entry_loop_stops_after_monitor_broker_fill_error(monkeypatch):
+@pytest.mark.parametrize(
+    "error,condition",
+    [
+        (
+            BrokerFillError("missing execution evidence"),
+            "broker_ambiguity",
+        ),
+        (
+            SettlementEvidenceError("missing settlement evidence"),
+            "settlement_failure",
+        ),
+    ],
+)
+async def test_entry_loop_alerts_after_monitor_safety_error(
+    monkeypatch, error, condition
+):
     trade_service = Mock(attempt_entry=AsyncMock())
     position_service = Mock()
     position_service.monitor_loop.return_value = _never_awaited()
     monitor_task = Mock()
     monitor_task.done.return_value = True
-    monitor_task.exception.return_value = BrokerFillError("missing execution evidence")
+    monitor_task.exception.return_value = error
 
     def create_task(coro, **_kwargs):
         coro.close()
@@ -397,14 +486,17 @@ async def test_entry_loop_stops_after_monitor_broker_fill_error(monkeypatch):
     monkeypatch.setattr(asyncio, "create_task", create_task)
     monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
 
+    critical_notifier = Mock(notify_critical=AsyncMock())
     await entry_loop(
         trade_service,
         position_service,
         recovered_trade=Mock(trade_id=7),
         recovered_candidate=Mock(),
+        critical_notifier=critical_notifier,
     )
 
     trade_service.attempt_entry.assert_not_awaited()
+    critical_notifier.notify_critical.assert_awaited_once_with(condition)
     assert readiness_snapshot() == (False, "broker_order_state_unsafe")
     set_readiness(None)
 

@@ -39,5 +39,35 @@ run, and all three runtime configurations remained `paper_trading: true`.
 
 Deployment result: **PASS**.
 
-The rollback half of the operational drill was not authorized or performed, so
-the combined deployment-and-rollback task remains open.
+## Follow-up rollback and restore drill
+
+The owner separately authorized the rollback half after market close. The drill
+used clean detached worktrees so uncommitted alert work could not enter either
+image set. Immediately before both the rollback and restore, the safety gate
+confirmed zero open DB trades, zero nonterminal broker intents, no relevant
+active or unknown Schwab orders, and exact broker-position/DB reconciliation.
+No Schwab write endpoint was called.
+
+Rollback target: `3d25e4af7d9a4102e9b1a1bbafffeae7c1e68374`.
+
+- SPX, NDX, and XSP images all carried the exact `3d25e4a` revision label.
+- All three containers remained paper-only, started at approximately
+  `2026-07-15T21:59:19Z`, and had restart count `0`.
+- `/health` and `/ready` passed for every service; all nine migrations were
+  present; DB state remained zero open trades and zero nonterminal intents.
+- The repeated read-only Schwab gate passed and startup logs were clean.
+
+Restore target: `2a8ca01a85c09725214d81c70088187fefeddd98`.
+
+- SPX, NDX, and XSP images all carried the exact `2a8ca01` revision label.
+- All three containers remained paper-only, started at approximately
+  `2026-07-15T22:02:43Z`, and had restart count `0`.
+- `/health`, `/ready`, the nine-migration check, flat DB checks, and the
+  read-only Schwab reconciliation gate all passed again.
+- Independent review found no startup error, broker mismatch, or restart loop.
+
+The temporary worktrees were removed. The pre-drill images remain tagged with
+the local `rescue-ce3b785` suffix as an additional emergency fallback.
+
+Rollback and restore result: **PASS**. The combined exact-SHA deployment and
+rollback drill is complete.

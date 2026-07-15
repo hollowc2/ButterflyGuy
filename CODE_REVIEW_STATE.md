@@ -138,10 +138,10 @@ BG-014 are now remediated and the current status is summarized above.
 ## Unresolved risks
 
 - Real partial-fill/cancel-pending broker evidence remains outstanding; synthetic handling is fail-closed.
-- External alert delivery/deduplication, manual-flatten rehearsal, and exact-SHA deployment/rollback drills remain outstanding in `todo.md`.
-- Existing local modifications remain user-owned and were not changed by this review.
+- The supervised manual-flatten rehearsal remains outstanding in `todo.md`.
+- External alert delivery/deduplication and exact-SHA deployment/rollback drills passed on 2026-07-15; retained evidence is in `reports/`.
 
 ## Exact next actions
 
 1. Keep all assets paper-only unless the owner explicitly authorizes a supervised live canary.
-2. Run the remaining controlled drills in `todo.md` only after the flat DB/broker gate passes.
+2. Run the two remaining broker-write drills in `todo.md` only after the flat DB/broker gate passes and fresh owner approval is recorded.

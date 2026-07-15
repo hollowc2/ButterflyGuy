@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-Keep all three strategies paper-only while closing the remaining operational observability, CI, deployment-gate, and documentation gaps.
+Keep all three strategies paper-only while retaining evidence for the two remaining supervised broker-write drills.
 
 ## Historical Cycle Checkpoints
 
@@ -62,6 +62,8 @@ These checkpoints record prior canary states and are not current runtime instruc
 - **Terminal retry reactivation review complete:** The live DB reports zero OPEN XSP trades and zero active XSP broker intents. Silent runtime checks confirm exact-account matching, `LIVE_ACCOUNT_ALLOCATION=20000`, `LIVE_MAX_ACCOUNT_DAILY_LOSS=50`, and `LIVE_XSP_CANARY=true`; XSP config remains live-approved with `max_position_size=1`, `max_trades_per_day=1`, and `max_daily_loss=50`. The existing paper container is running with restart count `0` and repeated `market_closed_waiting`; the market is closed, so rebuilding now cannot enter the supervised strategy window. Approved action: change only XSP `paper_trading` to false and rebuild/recreate only `butterfly_xsp_app`, then restore paper immediately on any unsafe startup evidence.
 - **Terminal retry reactivation implementation complete:** Changed only `configs/config_xsp.yaml` from `paper_trading: true` to `false` for activation and rebuilt/recreated only `butterfly_xsp_app`. Final diff review added and confirmed one more failing regression for a contradictory FILLED parent with a REJECTED child; terminal failure classification now precedes FILLED classification, and the final XSP-only image was rebuilt again with that fail-closed ordering.
 - **Terminal retry reactivation verification complete:** Final focused OrderManager, TradeService, PositionService, and live-runner tests pass (`83 passed in 1.85s`); targeted Ruff and `git diff --check` pass. Final `graphify update .` rebuilt 3,510 nodes, 5,883 edges, and 275 communities. The deployed XSP image is running live mode with restart count `0`, the terminal exception is importable in-container, exact-account/allocation/loss/canary checks pass, Schwab `accountNumbers` authentication returned `200`, startup reconciliation completed before the task group reached `market_closed_waiting`, and post-start DB checks remain zero OPEN XSP trades and zero active XSP intents. No test order or Schwab write call was made because the configured market window was closed; no unsafe status, mismatch, traceback, or restart loop was observed.
+- **Critical-alert drill complete:** Broker ambiguity, reconciliation failure, settlement failure, and token expiry now use stable identifier-free Alertmanager fingerprints. Eight supervised submissions produced exactly four successful Discord transports with zero failure-counter increase; failed resolutions retry. Evidence is retained in `reports/external_alert_delivery_2026-07-15.md`.
+- **Exact-SHA rollback drill complete:** From a flat broker/DB gate, all three paper services rolled back to exact SHA `3d25e4a`, passed revision/migration/readiness/reconciliation/log checks, restored exact SHA `2a8ca01`, and passed the same checks again. No broker write occurred. Evidence is retained in `reports/exact_sha_deployment_2026-07-15.md`.
 
 ## Non-Negotiable Rules
 
@@ -114,18 +116,18 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 1. **High — execution/ops — later:** Complex-order status names remain based on anticipated values rather than a completed paper/shadow evidence set. Restart reconciliation now recursively maps parent/child IDs and statuses and fails closed on missing, unmapped, partial, cancel-pending, or unknown working child states. Files: `execution/order_manager.py`, `scripts/run_live.py`, `scripts/report_broker_order_statuses.py`. Next: collect redacted read-only status reports and map only observed additions.
 2. **High — ops — complete:** `/health` remains liveness and `/ready` now fails on startup/shutdown, unsafe broker state, settlement evidence failure, and repeated entry-loop failures. Entry-loop failures also increment a metric and persist audit events.
 3. **Medium — backtest/tests — later:** Backtests share selection/profit-policy pieces but cannot prove broker execution parity; modeled fills can remain optimistic relative to complex-order queueing, partial fills, and cancel races. Files: `backtest/simulation_engine.py`, execution/parity reports. Fix: keep this explicit in reports and calibrate models only from observed paper/shadow order lifecycle data.
-4. **Medium — ops/tests — later:** The remaining supervised restart, manual flatten, alert-delivery, and rollback procedures are tracked in `todo.md`. Fix: execute the controlled drills and retain redacted evidence.
+4. **Medium — ops/tests — later:** The real partial-fill/cancel-pending and manual-flatten rehearsals remain tracked in `todo.md`. Both require fresh broker-write approval and market-hours supervision.
 
 Completed execution/risk items: exact broker/DB leg-symbol equality, signed Schwab quantity normalization, DB-derived `+quantity/-2 * quantity/+quantity` comparison, and explicit zero-quantity rejection at startup, runtime, and filled-entry repair.
 
 ## Active Work Item
 
-Complete locally: repeated generic entry failures degrade readiness and produce metric/audit evidence; real Timescale CI executes migrations and critical risk reads; manual deploys reconcile Schwab and DB state before rebuilding and checking SPX/NDX/XSP; all current configs remain paper-only.
+Complete locally: repeated generic entry failures degrade readiness and produce metric/audit evidence; real Timescale CI executes migrations and critical risk reads; manual deploys reconcile Schwab and DB state before rebuilding and checking SPX/NDX/XSP; critical alerts use centrally deduplicated external delivery; the exact-SHA rollback/restore drill passed; all current configs remain paper-only.
 
 ## Remaining Risks
 
 - Real Schwab complex-order parent/child partial-fill evidence remains unproven; synthetic handling is fail-closed.
-- External alert delivery/deduplication and the supervised manual-flatten and exact-SHA rollback drills remain outstanding in `todo.md`.
+- Real partial-fill/cancel-pending and supervised manual-flatten evidence remain outstanding in `todo.md`.
 - Historical fill modeling cannot reproduce all live broker lifecycle states.
 
 ## Next Session Launch Prompt
