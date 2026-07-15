@@ -40,7 +40,10 @@ delivery remains unproven until the supervised test below is approved.
   proof, and post-action DB/risk/decision-log reconciliation.
 - [ ] **Exact-SHA deployment and rollback drill.** Deploy only from a flat state,
   prove the running revision and migrations, verify broker/DB reconciliation,
-  `/health`, `/ready`, and logs, then roll back and repeat the same checks.
+  `/health`, `/ready`, and logs, then roll back and repeat the same checks. The
+  deployment half passed at `ce3b785` on 2026-07-15; retained evidence is in
+  `reports/exact_sha_deployment_2026-07-15.md`. Rollback and its repeated checks
+  remain outstanding.
 
 ## Safety boundaries
 
