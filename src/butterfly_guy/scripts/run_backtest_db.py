@@ -550,12 +550,12 @@ async def load_entry_chains(
     date: dt.date,
     underlying: str,
 ) -> ChainDay:
-    """Load only the entry-window snapshots (09:30–10:45 ET) for butterfly selection."""
+    """Load full-chain snapshots available for entry selection."""
     start_utc = dt.datetime(
         date.year, date.month, date.day, 9, 30, tzinfo=EASTERN
     ).astimezone(dt.timezone.utc)
     end_utc = dt.datetime(
-        date.year, date.month, date.day, 12, 15, tzinfo=EASTERN
+        date.year, date.month, date.day, 15, 30, tzinfo=EASTERN
     ).astimezone(dt.timezone.utc)
     rows = await conn.fetch(
         """
