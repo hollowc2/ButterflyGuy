@@ -41,6 +41,9 @@ trades_total = Counter(
 trades_active = Gauge("butterfly_trades_active", "Currently active trades", ["underlying"])
 daily_pnl = Gauge("butterfly_daily_pnl_dollars", "Daily realized PnL in dollars", ["underlying"])
 daily_trade_count = Gauge("butterfly_daily_trade_count", "Trades executed today", ["underlying"])
+entry_loop_errors = Counter(
+    "butterfly_entry_loop_errors_total", "Total entry loop errors", ["underlying"]
+)
 
 # Position
 position_value = Gauge("butterfly_position_value", "Current position mark value", ["underlying"])
@@ -90,19 +93,28 @@ schwab_api_errors = Counter(
 _server_start_time: float | None = None
 _server_underlying: str = "unknown"
 _readiness_lock = Lock()
-_readiness_reason: str | None = "starting"
+_readiness_reasons: set[str] = {"starting"}
 
 
 def set_readiness(reason: str | None) -> None:
-    """Set readiness; ``None`` means the service is ready."""
-    global _readiness_reason
+    """Add a not-ready reason; ``None`` explicitly resets all reasons."""
     with _readiness_lock:
-        _readiness_reason = reason
+        if reason is None:
+            _readiness_reasons.clear()
+        else:
+            _readiness_reasons.add(reason)
+
+
+def clear_readiness(reason: str) -> None:
+    """Clear only the recovered subsystem's not-ready reason."""
+    with _readiness_lock:
+        _readiness_reasons.discard(reason)
 
 
 def readiness_snapshot() -> tuple[bool, str | None]:
     with _readiness_lock:
-        return _readiness_reason is None, _readiness_reason
+        reason = ",".join(sorted(_readiness_reasons)) or None
+        return reason is None, reason
 
 
 class _MetricsHandler(BaseHTTPRequestHandler):

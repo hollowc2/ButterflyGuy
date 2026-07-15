@@ -8,7 +8,7 @@ Review date: 2026-07-12 UTC
 
 ButterflyGuy has a clear package layout, typed configuration, strong pure-logic tests, conservative live-startup gates, durable broker order intents, recursive broker-state reconciliation, an advisory entry lock, and database uniqueness for one open trade per underlying/day. The entry-selection path has also made real progress toward live/backtest reuse through `strategy.entry_selection.select_entry_candidate()`.
 
-The repository is understandable, but it is not ready for unattended live trading. Seven P1 findings remain in execution, position closure, fill authority, settlement, market-date handling, and CI/deployment. The largest immediate risks are that terminal broker failures can be retried by the outer runtime loop, an exit can be submitted again after a successful fill if post-fill persistence fails, and normal live trades record the submitted limit rather than broker execution details. Current XSP configuration is live-enabled, so live trading should be returned to disabled/paper mode until the immediate safety corrections and failure-injection tests are complete.
+The repository is understandable and all BG-001 through BG-014 code remediations are complete. SPX, NDX, and XSP are currently paper-only. Unattended live trading remains a NO-GO until the supervised partial-fill, alert-delivery, manual-flatten, and deployment/rollback drills in `todo.md` produce retained evidence.
 
 Strongest areas:
 
@@ -28,22 +28,22 @@ Five highest-value improvements:
 
 ## Remediation tracker
 
-This checklist is the cross-session handoff. Work the first unchecked P1 unless its dependency or owner decision blocks it. XSP live mode is an owner-approved, Monday-only canary for gathering real market-hours order data; do not disable it as part of these fixes. Return it to `paper_trading: true` after that test.
+This checklist is the cross-session handoff. BG-001 through BG-014 are complete. All assets are currently paper-only; any future live canary requires fresh explicit owner approval and the flat DB/broker gate in `todo.md`.
 
 - [x] BG-001 — Stop the entry loop after terminal broker failures. Completed 2026-07-12; focused runtime-boundary regression passes.
-- [ ] BG-002 — Make confirmed exit completion idempotent. Blocked by BG-003.
-- [ ] BG-003 — Persist authoritative broker fill evidence. Requires redacted market-hours XSP fixtures.
+- [x] BG-002 — Make confirmed exit completion idempotent. Completed 2026-07-13; a confirmed fill ends local monitoring before fallible secondary work and DB closure is conditional on an `OPEN` row.
+- [x] BG-003 — Persist authoritative broker fill evidence. Completed 2026-07-13; normal entry/exit paths parse broker price, time, quantity, and redacted execution evidence and fail closed on ambiguity.
 - [x] BG-004 — Fail closed when settlement evidence is unavailable. Completed 2026-07-12; failed valuation preserves the OPEN trade, degrades readiness, and stops entry orchestration.
 - [x] BG-005 — Use one explicit Eastern session date across safety paths. Completed 2026-07-12; focused date/reconciliation/risk regressions pass.
-- [x] BG-006 — Validate and deploy the same revision; scope live-service rebuilds. Completed 2026-07-13; pushes validate only, while manual deployment requires a flat DB and preserves exact-SHA/readiness checks.
+- [x] BG-006 — Validate and deploy the same revision; scope service rebuilds. Completed 2026-07-15; pushes validate only, while manual deployment requires flat DB plus Schwab reconciliation and rebuilds/readiness-checks SPX, NDX, and XSP at the exact SHA.
 - [x] BG-007 — Make AI review read-only and require deterministic/human gates. Completed 2026-07-12; workflow is read-only, cannot patch/merge, and fails on deterministic or AI findings.
-- [x] BG-008 — Separate liveness from readiness. Completed 2026-07-12; `/ready` tracks startup, shutdown, and live broker-gate safety and deployment consumes it.
+- [x] BG-008 — Separate liveness from readiness. Completed 2026-07-15; `/ready` tracks startup, shutdown, broker-gate safety, settlement evidence, and repeated entry-loop failures; deployment consumes all three endpoints.
 - [x] BG-009 — Reject unknown and unsafe trading configuration. Completed 2026-07-12; nested extras fail closed and core selection/execution/risk invariants are validated.
 - [x] BG-010 — Remove or clearly label conflicting legacy research rules. Completed 2026-07-12; README labels independent legacy paths and parity output uses configured RR target.
 - [x] BG-011 — Add an applied-migration ledger. Completed 2026-07-12; locked checksum ledger runs immutable migrations once and fails closed on drift.
 - [x] BG-012 — Remove the account-hash prefix from logs. Completed 2026-07-12; initialization logs no account identifier and focused regression passes.
 - [x] BG-013 — Verify dependency timeouts, then own explicit broker deadlines if needed. Completed 2026-07-12; installed schwab-py uses Authlib AsyncOAuth2Client with HTTPX's bounded 5-second default.
-- [x] BG-014 — Establish blocking deterministic quality gates incrementally. Completed 2026-07-12; tests, Compose rendering, and changed-file Ruff are blocking in PR and deployment workflows.
+- [x] BG-014 — Establish blocking deterministic quality gates incrementally. Completed 2026-07-15; tests, Compose rendering, changed-file Ruff, and a real Timescale migration/risk-query smoke test are blocking CI checks.
 
 ## 2. Architecture map
 
@@ -83,16 +83,16 @@ Dependencies generally point inward from scripts/services to pure strategy/posit
 | Quote/chain validation | builder, trade service, position manager | Split across `strategy`, `services`, `position`, `execution` | No single quote-validity model with timestamps across all legs. |
 | Entry eligibility | time window -> risk -> freshness | `TradeService` and `RiskEngine` | Market/date logic is split between time utilities, host dates, SQL `CURRENT_DATE`, and broker date helpers. |
 | Construction/selection | `select_entry_candidate()` | `strategy/entry_selection.py` | Primary live/DB replay is shared; legacy simulation/research paths diverge. |
-| Risk approval | `RiskEngine.can_trade()` twice for live | `risk/risk_engine.py` | Enforcement is correctly repeated inside the advisory lock; settlement/exit accounting can still leave state stale. |
-| Order intent | `OrderIntentQueries.create_intent()` | `execution/order_manager.py` + DB | Good durable boundary, but normal fill data is reduced to a boolean. |
-| Broker/paper execution | `OrderManager` | `execution/order_manager.py` | Paper and live fill semantics differ intentionally; live execution evidence is not preserved accurately. |
+| Risk approval | `RiskEngine.can_trade()` twice for live | `risk/risk_engine.py` | Enforcement is repeated inside the advisory lock; later accounting failures cannot resubmit a confirmed exit. |
+| Order intent | `OrderIntentQueries.create_intent()` | `execution/order_manager.py` + DB | Durable intent and redacted broker execution evidence support normal and recovery paths. |
+| Broker/paper execution | `OrderManager` | `execution/order_manager.py` | Paper and live fill semantics differ intentionally; live fills require authoritative broker execution evidence. |
 | Reconciliation | startup + 15-second loop | `scripts/run_live.py` | Large, safety-critical business rule embedded in entrypoint. |
 | Position creation | fill -> `insert_trade()` | `TradeService` | Fill-to-trade-to-risk updates are not one transaction, but restart intent repair mitigates entry crashes. |
 | Position monitoring | chain -> `PositionManager` -> state machine | `PositionService` | Broad exception loop can remain alive while degraded. |
 | Exit decision | `ProfitStateMachine.evaluate()` | `position/state_machine.py` | Cohesive and well tested. |
-| Exit execution | `OrderManager.execute_exit()` | `execution/order_manager.py` | Post-fill completion ordering is not idempotent. |
-| Settlement | final bar -> intrinsic value | `PositionService` | Double failure silently becomes a zero-value close. |
-| Reporting | metrics, decision log, notifier, reports | Split by adapter | DB remains historical authority, but incorrect normal fill data contaminates all downstream views. |
+| Exit execution | `OrderManager.execute_exit()` | `execution/order_manager.py` | Confirmed fills end local monitoring before fallible secondary accounting/reporting. |
+| Settlement | broker cash settlement -> final bar/chain fallback | `PositionService` | Missing evidence fails closed and leaves the trade open/readiness degraded. |
+| Reporting | metrics, decision log, notifier, reports | Split by adapter | DB remains historical authority; broker fill evidence feeds PnL, risk, and reports. |
 
 ### Backtest lifecycle
 
@@ -101,12 +101,14 @@ The primary DB replay loads the asset YAML through `load_asset_config()`, uses s
 ### Restart, authentication, metrics, and asset behavior
 
 - Restart: open DB trades are rebuilt into `TradeRecord`/`ButterflyCandidate`; persisted peak is restored; live broker positions and recursive order states are compared every 15 seconds; explicit filled intents can repair missing entry/exit DB transitions.
-- Authentication: token-file authentication resolves only the configured account. No default account is selected. The resolved account-hash prefix is logged.
-- Metrics: Prometheus is process-global. `/health` reports only process uptime; it is not readiness.
+- Authentication: token-file authentication resolves only the configured account. No default account is selected and no account identifier fragment is logged.
+- Metrics: Prometheus is process-global. `/health` reports liveness; `/ready` reports orchestrator safety state, including repeated entry failures.
 - Notifications: Discord is SPX-only for trades; Telegram carries risk/operational notices; `decision_log` carries audit events.
-- Assets: SPX and NDX YAML are paper; XSP is currently live-enabled behind explicit account, allocation, loss, and one-contract canary guards. Widths, tolerances, quote quality, drawdowns, and risk differ intentionally.
+- Assets: SPX, NDX, and XSP YAML are currently paper-only. Widths, tolerances, quote quality, drawdowns, and risk differ intentionally; any future XSP live canary still requires explicit account, allocation, loss, and one-contract guards.
 
-## 3. Findings summary
+## 3. Original audit findings summary
+
+The counts below describe the 2026-07-12 audit before remediation; the tracker above is the current status.
 
 ### By severity
 
@@ -177,6 +179,8 @@ Behavior-changing: yes
 
 ### BG-002
 
+Status: Remediated 2026-07-13. The evidence below describes the pre-fix behavior.
+
 ID: BG-002
 Title: A post-fill persistence failure can trigger a second exit order
 Severity: P1 — High
@@ -195,6 +199,8 @@ Dependencies: BG-003 for authoritative fill data.
 Behavior-changing: yes
 
 ### BG-003
+
+Status: Remediated 2026-07-13. The evidence below describes the pre-fix behavior.
 
 ID: BG-003
 Title: Normal live fills persist submitted limit price and local time, not broker execution
@@ -254,6 +260,8 @@ Dependencies: None.
 Behavior-changing: yes
 
 ### BG-006
+
+Status: Remediated 2026-07-15. The evidence below describes the pre-fix workflow and live-canary state.
 
 ID: BG-006
 Title: Deployment validates a different revision than it deploys and always rebuilds live XSP
@@ -574,9 +582,9 @@ Not executed:
 
 - No broker write, cancel, replace, preview, or live-order command.
 - No live-mode change, container restart, deployment, database mutation, or credential inspection.
-- No real integration against Schwab or TimescaleDB; the full local test suite used mocks/fakes and completed without broker writes.
+- The original audit did not run a real integration test. On 2026-07-15, the isolated CI smoke test passed against disposable TimescaleDB; no Schwab write or live DB mutation was performed.
 - No Graphify update because no code files were modified; the existing graph staleness is explicitly recorded.
 
 ## Final production-readiness decision
 
-NO-GO for unattended live trading. Keep live trading disabled until BG-001 through BG-005 and BG-006 have verified fixes, real redacted fill/status evidence exists, and the restart/exit/settlement failure drills pass. The repository is a solid paper/research foundation, but current orchestration and deployment failure modes can still make a dangerous change appear safe.
+NO-GO for unattended live trading. Keep all assets paper-only until the remaining supervised drills in `todo.md` pass. The code remediations are complete; the remaining gate is operational evidence, not an open BG-001 through BG-014 implementation item.

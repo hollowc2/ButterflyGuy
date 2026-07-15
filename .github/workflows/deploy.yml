@@ -39,6 +39,98 @@ jobs:
                WHERE status IS NULL OR status NOT IN ('FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'))
           ")
           test "$unsafe" = "0"
+          docker exec -i butterfly_spx_app python - <<'PY'
+          import asyncio
+          import datetime as dt
+
+          from butterfly_guy.core.config import load_config
+          from butterfly_guy.core.time_utils import session_date
+          from butterfly_guy.data.schwab_client import SchwabClientWrapper
+          from butterfly_guy.execution.order_manager import (
+              CANCEL_PENDING_STATUSES,
+              PARTIAL_FILL_STATUSES,
+              TERMINAL_ORDER_STATUSES,
+              WORKING_ORDER_STATUSES,
+              order_statuses,
+              walk_orders,
+          )
+          from butterfly_guy.scripts.run_live import (
+              _broker_option_positions,
+              _matches_underlying,
+              _order_symbols,
+          )
+
+
+          async def check() -> None:
+              schwab = SchwabClientWrapper(load_config("configs/config.yaml").schwab)
+              await schwab.initialize()
+              try:
+                  today = session_date()
+                  response = await schwab._retry(
+                      schwab.client.get_orders_for_account,
+                      schwab.account_hash,
+                      from_entered_datetime=dt.datetime.combine(
+                          today - dt.timedelta(days=59), dt.time.min
+                      ),
+                      to_entered_datetime=dt.datetime.combine(today, dt.time.max),
+                      endpoint="deployment_order_gate",
+                  )
+                  broker_orders = response.json()
+                  if not isinstance(broker_orders, list):
+                      raise RuntimeError("Schwab order history response is not a list")
+                  snapshot = await schwab.get_account_snapshot()
+                  known_statuses = (
+                      WORKING_ORDER_STATUSES
+                      | PARTIAL_FILL_STATUSES
+                      | CANCEL_PENDING_STATUSES
+                      | TERMINAL_ORDER_STATUSES
+                  )
+                  active_statuses = (
+                      WORKING_ORDER_STATUSES
+                      | PARTIAL_FILL_STATUSES
+                      | CANCEL_PENDING_STATUSES
+                  )
+                  for underlying in ("SPX", "NDX", "XSP"):
+                      positions = _broker_option_positions(snapshot, underlying)
+                      if positions:
+                          raise RuntimeError(
+                              f"Broker has {len(positions)} {underlying} option "
+                              "position(s) while the DB is flat"
+                          )
+                      relevant = [
+                          order
+                          for order in broker_orders
+                          if any(
+                              _matches_underlying(symbol, underlying)
+                              for symbol in _order_symbols(order)
+                          )
+                      ]
+                      if any(
+                          not node.get("status")
+                          for order in relevant
+                          for node in walk_orders(order)
+                      ):
+                          raise RuntimeError(
+                              f"Broker has missing {underlying} order status"
+                          )
+                      statuses = set().union(
+                          *(order_statuses(order) for order in relevant)
+                      )
+                      unknown = statuses - known_statuses
+                      if unknown:
+                          raise RuntimeError(
+                              f"Broker has unmapped {underlying} order status(es)"
+                          )
+                      if statuses & active_statuses:
+                          raise RuntimeError(
+                              f"Broker has active {underlying} order(s)"
+                          )
+              finally:
+                  await schwab.close()
+
+
+          asyncio.run(check())
+          PY
 
       - name: Deploy
         if: github.event_name == 'workflow_dispatch' && steps.safety.outcome == 'success'
@@ -47,8 +139,8 @@ jobs:
           git fetch origin main
           git merge --ff-only "$GITHUB_SHA"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          docker compose -f infra/docker-compose.yml --profile ndx up --build -d app_spx app_ndx
-          for port in 8000 8001; do
+          docker compose -f infra/docker-compose.yml --profile ndx --profile xsp up --build -d app_spx app_ndx app_xsp
+          for port in 8000 8001 8003; do
             ready=false
             for i in {1..30}; do
               if curl --fail --silent --show-error "http://127.0.0.1:${port}/ready" >/dev/null; then

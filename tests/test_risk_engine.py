@@ -180,10 +180,11 @@ async def test_weekly_pnl_query_converts_points_and_quantity_to_dollars():
     session_date = dt.date(2026, 7, 12)
     assert await queries.get_weekly_pnl("SPX", session_date) == -881.0
     db.pool.fetchval.assert_awaited_once_with(
-        db.pool.fetchval.call_args.args[0], "SPX", session_date
+        db.pool.fetchval.call_args.args[0], "SPX", session_date - dt.timedelta(days=7)
     )
     sql = db.pool.fetchval.await_args.args[0]
     assert "pnl * 100 * quantity" in sql
+    assert "trade_date >= $2" in sql
 
 
 @pytest.mark.asyncio

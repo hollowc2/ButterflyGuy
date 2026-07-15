@@ -1,0 +1,34 @@
+name: Database Smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  timescaledb:
+    runs-on: ubuntu-latest
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: butterfly
+          POSTGRES_PASSWORD: butterfly
+          POSTGRES_DB: butterfly_guy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U butterfly -d butterfly_guy"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run pytest -q tests/integration/test_database_smoke.py
+        env:
+          CI_DATABASE_URL: postgresql://butterfly:butterfly@127.0.0.1:5432/butterfly_guy

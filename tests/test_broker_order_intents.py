@@ -98,13 +98,14 @@ async def test_startup_matches_bot_intent_to_nested_order_id():
 
 
 @pytest.mark.asyncio
-async def test_startup_rejects_unknown_working_order():
+@pytest.mark.parametrize("unsafe_status", ["WORKING", "PARTIALLY_FILLED", "CANCEL_PENDING"])
+async def test_startup_rejects_unknown_active_order(unsafe_status):
     schwab = AsyncMock()
     schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
     schwab.get_todays_orders.return_value = [
         {
             "orderId": "OTHER1",
-            "status": "WORKING",
+            "status": unsafe_status,
             "orderLegCollection": [
                 {"instrument": {"symbol": "SPXW  260625C06000000"}}
             ],
@@ -113,7 +114,7 @@ async def test_startup_rejects_unknown_working_order():
     intents = AsyncMock()
     intents.intents_for_day.return_value = []
 
-    with pytest.raises(RuntimeError, match="unknown working SPX order"):
+    with pytest.raises(RuntimeError, match="unknown active SPX order"):
         await _assert_broker_state_matches_db(schwab, "SPX", [], intents)
 
 
@@ -139,7 +140,7 @@ async def test_startup_rejects_unknown_nested_working_order():
     intents = AsyncMock()
     intents.intents_for_day.return_value = []
 
-    with pytest.raises(RuntimeError, match="unknown working SPX order"):
+    with pytest.raises(RuntimeError, match="unknown active SPX order"):
         await _assert_broker_state_matches_db(schwab, "SPX", [], intents)
 
 

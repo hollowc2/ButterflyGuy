@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
@@ -324,6 +324,60 @@ async def test_entry_loop_stops_after_unsafe_order_error(monkeypatch, error):
 
     trade_service.attempt_entry.assert_awaited_once()
     assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_entry_loop_repeated_errors_degrade_and_recover(
+    monkeypatch,
+):
+    trade_service = Mock(
+        config=Mock(strategy=Mock(underlying="SPX")),
+        decision_queries=Mock(log_event=AsyncMock()),
+    )
+    trade_service.attempt_entry = AsyncMock(
+        side_effect=[
+            RuntimeError("invalid SQL"),
+            RuntimeError("invalid SQL"),
+            RuntimeError("invalid SQL"),
+            RuntimeError("invalid SQL"),
+            None,
+            RuntimeError("invalid SQL"),
+            RuntimeError("invalid SQL"),
+            RuntimeError("invalid SQL"),
+        ]
+    )
+    metric = Mock()
+    monkeypatch.setattr(
+        "butterfly_guy.scripts.run_live.entry_loop_errors.labels",
+        Mock(return_value=metric),
+    )
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    sleeps = 0
+
+    async def stop_after_two_episodes(_):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 5:
+            assert readiness_snapshot() == (True, None)
+        if sleeps == 8:
+            raise asyncio.CancelledError
+
+    set_readiness(None)
+    monkeypatch.setattr(asyncio, "sleep", stop_after_two_episodes)
+    with pytest.raises(asyncio.CancelledError):
+        await entry_loop(trade_service, Mock())
+
+    assert trade_service.attempt_entry.await_count == 8
+    assert metric.inc.call_count == 7
+    assert trade_service.decision_queries.log_event.await_count == 7
+    assert trade_service.decision_queries.log_event.await_args_list[0] == call(
+        "entry_loop_error",
+        {"error": "invalid SQL", "consecutive_failures": 1},
+        underlying="SPX",
+    )
+    assert readiness_snapshot() == (False, "entry_loop_repeated_failures")
     set_readiness(None)
 
 

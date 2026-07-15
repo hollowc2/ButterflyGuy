@@ -1,6 +1,6 @@
 # Butterfly Guy Live-Readiness TODO
 
-Updated: 2026-07-14
+Updated: 2026-07-15
 
 ## Current gate
 
@@ -13,7 +13,14 @@ before every later drill.
 All safe local work is complete: BG-002/BG-003, fixture/mock failure matrices,
 readiness checks, invalid-quote rejection, settlement replay, manual-flatten and
 token-recovery tabletops, and synthetic token-expiry coverage. Verification:
-`140` focused safety tests and `417` full tests pass.
+`140` focused safety tests pass; the full local suite is `421 passed, 1 skipped`
+(the skipped test requires its isolated CI TimescaleDB).
+
+The 2026-07-15 hardening pass also made repeated entry failures degrade
+readiness with metric/audit evidence and a live Prometheus alert rule, added a
+real-Timescale migration/risk-query CI smoke test, and extended the manual
+deployment gate/rebuild/readiness checks to SPX, NDX, and XSP. External alert
+delivery remains unproven until the supervised test below is approved.
 
 ## Remaining tasks
 

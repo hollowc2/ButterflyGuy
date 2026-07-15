@@ -16,7 +16,7 @@ Principal-level engineering, architecture, reliability, and trading-safety audit
 
 ## Current phase
 
-BG-001, BG-004, and BG-005 through BG-014 are complete and verified. The durable cross-session checklist is in `CODE_REVIEW_REPORT.md` under **Remediation tracker**. BG-002 depends on BG-003, which awaits redacted market-hours XSP fill evidence.
+BG-001 through BG-014 are complete and verified. The durable cross-session checklist is in `CODE_REVIEW_REPORT.md` under **Remediation tracker**. Current work closes follow-up observability, real-DB CI, and deployment-gate gaps without changing paper/live mode.
 
 ## Architecture map
 
@@ -31,8 +31,8 @@ BG-001, BG-004, and BG-005 through BG-014 are complete and verified. The durable
 - Restart/recovery: startup and a 15-second live reconciler compare exact DB legs/ratios with broker positions and recursive order states; filled entry/exit intents may repair missing trade transitions when explicit broker fill price/time exists.
 - Backtest: `run_backtest_db.py` loads the asset YAML and uses shared `select_entry_candidate()` for its primary DB replay, then hands the chosen entry to `SimulationEngine`; legacy `SimulationEngine.simulate_day()` and `run_entry_analysis.py` retain independent selection/default paths.
 - Authentication: `SchwabClientWrapper.initialize()` builds the async Schwab client from the token file, requires an explicit account ID, and resolves its account hash; token refresh is external in `tools/`.
-- Metrics/notifications: Prometheus globals plus a thread-based `/metrics` and liveness-only `/health`; Discord for SPX trade events, Telegram for risk/token operational alerts, and DB `decision_log` for audit events.
-- Asset differences: SPX is paper-primary; NDX is paper/experimental; current XSP configuration is live-enabled behind a one-contract canary and account/allocation/loss confirmations. Asset width, tolerance, quote-quality, drawdown, and risk settings differ in their YAML files.
+- Metrics/notifications: Prometheus globals plus `/metrics`, liveness-only `/health`, and safety-aware `/ready`; Discord for SPX trade events, Telegram for risk/token operational alerts, Prometheus/Alertmanager for runtime failures, and DB `decision_log` for audit events.
+- Asset differences: SPX, NDX, and XSP are currently configured paper-only. Asset width, tolerance, quote-quality, drawdown, and risk settings differ in their YAML files; any future XSP live canary still requires explicit account/allocation/loss confirmations.
 
 ## Files and directories reviewed
 
@@ -49,14 +49,17 @@ BG-001, BG-004, and BG-005 through BG-014 are complete and verified. The durable
 
 - No mandatory repository area remains uninspected. Remaining work is report synthesis, exact line-reference verification, and final state/report cross-check.
 
-## Confirmed findings
+## Historical confirmed findings (pre-remediation)
+
+The findings below are retained as the original audit record; BG-001 through
+BG-014 are now remediated and the current status is summarized above.
 
 - Terminal broker rejection/expiry stops one order ladder but `entry_loop()` catches it as a generic exception and can start a new full entry attempt 15 seconds later; the top-level loop has no terminal-order regression coverage.
 - After a live exit fill and DB close, `PositionService` updates risk before setting local `exited=True`; a risk/DB failure in that interval is swallowed and the monitor can submit another closing order.
 - Normal live fill persistence uses submitted limit price and local observation time instead of explicit broker execution price/time; this flows into trades, PnL, risk, and reports.
 - Cash settlement initializes value to zero and still closes the trade if both primary and fallback valuation fail.
 - Live reconciliation and risk/day initialization use host-local `date.today()` while canonical market date is Eastern; the Compose host/runtime is UTC-oriented, creating a post-20:00 ET date split.
-- XSP is currently configured `paper_trading: false`; paper is the model/SPX/NDX default but not the entire deployed config set.
+- At the original audit, XSP was configured `paper_trading: false`; it has since been returned to paper-only with `allow_live_trading: false`.
 - `/health` is process liveness only and remains 200 independent of DB, broker, market-data, risk, reconciler, or monitor state.
 - Deployment validates `/opt/butterflyguy` before pulling the pushed commit, then deploys all three apps; validation therefore does not prove the deployed revision and every main push rebuilds the live-enabled XSP canary.
 - The PR workflow lets an LLM edit, stages all files, pushes without tests/lint, and can auto-merge after only syntax/LLM review.
@@ -79,7 +82,7 @@ BG-001, BG-004, and BG-005 through BG-014 are complete and verified. The durable
 - Preserve all pre-existing worktree changes.
 - Use Graphify for cross-module relationships and verify safety-critical conclusions against source and tests.
 - Do not change strategy rules, risk thresholds, order routing, fill assumptions, asset-specific behavior, or live-mode behavior during autonomous remediation.
-- XSP live mode is an owner-approved Monday-only canary for gathering real market-hours order data. Preserve it during remediation and return it to `paper_trading: true` after the test.
+- The prior XSP canary is complete. Keep XSP paper-only unless the owner gives fresh explicit approval for another supervised test after the flat DB/broker gate passes.
 
 ## Commands executed
 
@@ -113,9 +116,11 @@ BG-001, BG-004, and BG-005 through BG-014 are complete and verified. The durable
 - Created `CODE_REVIEW_REPORT.md`.
 - BG-001: `entry_loop()` now stops after `TerminalOrderError` as well as `PartialFillError`, including errors surfaced by a completed monitor task.
 - Added a focused regression proving a terminal rejection causes exactly one `attempt_entry()` call.
+- BG-002: confirmed exit fills now end local monitoring before fallible accounting/reporting work, and `close_trade` is conditional on an `OPEN` row.
+- BG-003: normal live entry/exit paths parse and persist broker price, time, quantity, and redacted execution evidence; incomplete or contradictory fills fail closed.
 - BG-005: added one Eastern `session_date()` source and routed startup reconciliation, broker/intent ownership, daily and weekly risk, reset, and startup metrics through it instead of host/DB-local dates.
 - Added a UTC-midnight regression and updated focused risk-query coverage; 113 focused tests and changed-file Ruff pass.
-- BG-006: pushes now validate the checked-out SHA without deploying. Manual dispatch first requires zero OPEN trades and zero nonterminal broker intents, then fast-forwards to the exact SHA, rebuilds only paper SPX/NDX, and checks readiness.
+- BG-006: pushes now validate the checked-out SHA without deploying. Manual dispatch requires a flat DB plus read-only Schwab order/position reconciliation, then fast-forwards to the exact SHA, rebuilds paper SPX/NDX/XSP, and checks all three readiness endpoints.
 - BG-007: AI PR review is read-only and can only fail the check; autonomous edits, pushes, comments, and auto-merge were removed.
 - BG-014: pytest, Compose rendering, and changed-Python Ruff checks are blocking in both PR and deployment workflows.
 - BG-012: Schwab initialization no longer logs any account-hash fragment; a focused regression locks the log shape.
@@ -125,17 +130,18 @@ BG-001, BG-004, and BG-005 through BG-014 are complete and verified. The durable
 - BG-009: runtime config rejects unknown keys and unsafe selection, execution, freshness, and risk invariants.
 - BG-010: README labels legacy independent research paths as non-parity, and parity reporting now uses configured RR target.
 - BG-004: settlement now raises a dedicated fail-closed error when primary and fallback evidence both fail, leaving the DB trade OPEN and readiness degraded.
+- Repeated generic entry failures now increment `butterfly_entry_loop_errors_total`, persist `entry_loop_error` audit rows, and degrade `/ready`; the live Prometheus rule alerts after three failures in five minutes.
+- A dedicated Timescale CI smoke test runs every migration and executes the weekly/recent P&L reads against PostgreSQL.
 - Updated Graphify artifacts after the code change.
 - No configuration, service, database, credential, or broker state was changed.
 
 ## Unresolved risks
 
-- Two coupled P1 findings remain open: BG-003 needs redacted real Schwab fill evidence, and BG-002 depends on that authoritative fill contract.
-- Current XSP configuration is live-enabled despite the report's NO-GO decision for unattended live trading.
+- Real partial-fill/cancel-pending broker evidence remains outstanding; synthetic handling is fail-closed.
+- External alert delivery/deduplication, manual-flatten rehearsal, and exact-SHA deployment/rollback drills remain outstanding in `todo.md`.
 - Existing local modifications remain user-owned and were not changed by this review.
 
 ## Exact next actions
 
-1. Collect redacted market-hours XSP fill fixtures during the owner-approved Monday canary, then implement BG-003.
-2. Fix BG-002 with post-fill failure injection and idempotent DB close semantics after BG-003.
-3. Return XSP to `paper_trading: true` after the Monday canary.
+1. Keep all assets paper-only unless the owner explicitly authorizes a supervised live canary.
+2. Run the remaining controlled drills in `todo.md` only after the flat DB/broker gate passes.

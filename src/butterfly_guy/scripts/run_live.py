@@ -15,8 +15,10 @@ from butterfly_guy.core.config import AppConfig, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.core.metrics import (
     butterfly_candidates_found,
+    clear_readiness,
     daily_pnl,
     daily_trade_count,
+    entry_loop_errors,
     set_readiness,
     start_metrics_server,
     trades_active,
@@ -81,6 +83,7 @@ log = get_logger("run_live")
 
 LIVE_ACCOUNT_ALLOCATION = 20_000.0
 LIVE_MAX_DAILY_LOSS = {"SPX": 500.0, "XSP": 50.0}
+ENTRY_LOOP_ERROR_THRESHOLD = 3
 
 
 def _matches_underlying(symbol: str, underlying: str) -> bool:
@@ -338,14 +341,15 @@ async def _assert_broker_state_matches_db(
             f"{', '.join(sorted(unmapped_statuses))}"
         )
 
-    working_orders = [
+    active_orders = [
         order for order in relevant_orders
-        if order_statuses(order) & (WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES)
+        if order_statuses(order)
+        & (WORKING_ORDER_STATUSES | PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES)
         and order_ids(order).isdisjoint(known_order_ids)
     ]
-    if working_orders:
+    if active_orders:
         raise RuntimeError(
-            f"Broker has {len(working_orders)} unknown working {underlying} order(s); "
+            f"Broker has {len(active_orders)} unknown active {underlying} order(s); "
             "refusing live startup"
         )
 
@@ -460,8 +464,8 @@ async def broker_reconciler_loop(
             )
             if gate.unsafe:
                 log.info("broker_state_gate_cleared")
-            gate.clear()
-            set_readiness(None)
+                gate.clear()
+                clear_readiness("broker_reconciliation_unsafe")
         except Exception as e:
             gate.set_unsafe(str(e))
             set_readiness("broker_reconciliation_unsafe")
@@ -520,6 +524,7 @@ async def entry_loop(
     """Periodically attempt entries during the entry window."""
     active_trade: TradeRecord | None = recovered_trade
     monitor_task: asyncio.Task | None = None
+    consecutive_errors = 0
 
     if recovered_trade is not None and recovered_candidate is not None:
         log.info("resuming_monitor_for_recovered_trade", trade_id=recovered_trade.trade_id)
@@ -566,6 +571,10 @@ async def entry_loop(
                 continue
             try:
                 result = await trade_service.attempt_entry()
+                if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
+                    clear_readiness("entry_loop_repeated_failures")
+                    log.info("entry_loop_recovered")
+                consecutive_errors = 0
                 if result:
                     active_trade, candidate = result
                     log.info("entry_loop_got_trade", trade_id=active_trade.trade_id)
@@ -587,6 +596,19 @@ async def entry_loop(
                     set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
                     return
+                consecutive_errors += 1
+                underlying = trade_service.config.strategy.underlying
+                entry_loop_errors.labels(underlying=underlying).inc()
+                if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
+                    set_readiness("entry_loop_repeated_failures")
+                try:
+                    await trade_service.decision_queries.log_event(
+                        "entry_loop_error",
+                        {"error": str(e), "consecutive_failures": consecutive_errors},
+                        underlying=underlying,
+                    )
+                except Exception as audit_error:
+                    log.error("entry_loop_audit_error", error=str(audit_error))
 
         await asyncio.sleep(15)
 
@@ -777,6 +799,7 @@ async def main() -> None:
     recovered_candidate: ButterflyCandidate | None = None
 
     trades_active.labels(underlying=underlying).set(0)
+    entry_loop_errors.labels(underlying=underlying).inc(0)
 
     recovered_peak: float | None = None
 

@@ -2,9 +2,11 @@
 
 ## Current Objective
 
-Fixed the XSP terminal-order retry bug, completed the full reactivation gate, and deployed the verified fix to the live-enabled one-contract XSP canary while the market was closed.
+Keep all three strategies paper-only while closing the remaining operational observability, CI, deployment-gate, and documentation gaps.
 
-## Current Cycle Checkpoints
+## Historical Cycle Checkpoints
+
+These checkpoints record prior canary states and are not current runtime instructions; use the objective and active work item below for current truth.
 
 - **Cycle 1 review complete:** Reconciliation recursively collects child symbols but only checks the top-level order status. A bot-owned `WORKING` parent with a nested partial-fill or cancel-pending child is therefore allowed. Planned fix: recursively inspect statuses and fail closed on an unsafe descendant. No broker, DB, service, or Docker commands were run.
 - **Cycle 1 implementation complete:** Added redacted synthetic nested-partial regressions, confirmed the gap in reconciliation and active fill polling, and added one shared recursive status helper used by both paths.
@@ -84,7 +86,7 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 - **Position/exit:** `PositionService` restores an open DB trade, polls fresh chains, updates `PositionManager` and `ProfitStateMachine`, persists peak state, and routes exit orders through `OrderManager`; index positions are cash-settled from the final regular-session close after market close.
 - **Risk:** `RiskEngine` checks market/trading day, halt state, daily trade count/loss, position size, buying power, weekly loss, and consecutive-loss warning policy. Live entry rechecks risk under a PostgreSQL advisory lock immediately before submit.
 - **Backtest/parity:** `SimulationEngine` and DB loaders replay historical snapshots with shared selection and profit-policy components, while order execution/fill modeling remains separate from the broker live path. Selection and exit-mark parity reports compare stored/live decisions.
-- **Operations:** Docker runs separate SPX, NDX, and XSP app services with TimescaleDB and Prometheus/Grafana integration. `/health` currently proves only that the metrics thread/process is serving HTTP.
+- **Operations:** Docker runs separate SPX, NDX, and XSP app services with TimescaleDB and Prometheus/Grafana integration. `/health` is liveness; `/ready` reports orchestrator safety state. All three current configs are paper-only.
 
 ## Important Files Reviewed
 
@@ -110,7 +112,7 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 ## Ranked Issues
 
 1. **High — execution/ops — later:** Complex-order status names remain based on anticipated values rather than a completed paper/shadow evidence set. Restart reconciliation now recursively maps parent/child IDs and statuses and fails closed on missing, unmapped, partial, cancel-pending, or unknown working child states. Files: `execution/order_manager.py`, `scripts/run_live.py`, `scripts/report_broker_order_statuses.py`. Next: collect redacted read-only status reports and map only observed additions.
-2. **High — ops — later:** `/health` returns 200 based only on the metrics HTTP thread and does not expose DB, broker auth, data freshness, risk halt, or reconciliation gate readiness. Files: `core/metrics.py`, `scripts/run_live.py`, Docker health configuration. Fix as a separate PR with a small thread-safe readiness snapshot owned by the orchestrator.
+2. **High — ops — complete:** `/health` remains liveness and `/ready` now fails on startup/shutdown, unsafe broker state, settlement evidence failure, and repeated entry-loop failures. Entry-loop failures also increment a metric and persist audit events.
 3. **Medium — backtest/tests — later:** Backtests share selection/profit-policy pieces but cannot prove broker execution parity; modeled fills can remain optimistic relative to complex-order queueing, partial fills, and cancel races. Files: `backtest/simulation_engine.py`, execution/parity reports. Fix: keep this explicit in reports and calibrate models only from observed paper/shadow order lifecycle data.
 4. **Medium — ops/tests — later:** The remaining supervised restart, manual flatten, alert-delivery, and rollback procedures are tracked in `todo.md`. Fix: execute the controlled drills and retain redacted evidence.
 
@@ -118,61 +120,14 @@ Completed execution/risk items: exact broker/DB leg-symbol equality, signed Schw
 
 ## Active Work Item
 
-Complete: `REJECTED`/`EXPIRED` abort entry and exit submission before cancel/reprice, exact terminal status/payload remains persisted, TradeService and PositionService do not restart submission, focused verification is green, Graphify is current, and the verified XSP-only image is live-enabled behind the existing canary and risk gates.
-
-## Changes Made This Session
-
-- Added `TerminalOrderError` for `REJECTED`/`EXPIRED` and propagated it through all entry/exit ladder callers.
-- Persist terminal child or parent status before aborting; never cancel, mark unknown, or resubmit after those terminal failures.
-- Kept timeout and CANCELED repricing behavior unchanged and retained fail-closed partial/cancel-pending handling.
-- Added focused OrderManager, TradeService, and PositionService regressions, including contradictory parent/child status handling.
-- Reactivated only XSP after every DB, account, risk, canary, test, lint, graph, and runtime gate passed.
-
-## Commands Run
-
-- Read all required repo instructions, review state, graph report, and live runbook; queried Graphify for the execution/service/intent path.
-- Ran the terminal regressions before implementation and observed the cancel/retry failures.
-- Ran focused pytest, targeted Ruff, `git diff --check`, and `graphify update .` after the final code change.
-- Queried only counts from the live DB and boolean account/canary confirmations without changing DB or broker state.
-- Rebuilt/recreated only `butterfly_xsp_app`, then inspected its loaded config/code, restart count, redacted startup logs, and post-start DB counts.
-
-## Tests / Verification
-
-- PASS: 83 focused tests across OrderManager, TradeService, PositionService, and live runner (`83 passed in 1.85s`).
-- PASS: targeted Ruff and `git diff --check`.
-- PASS: final Graphify update (3,510 nodes, 5,883 edges, 275 communities).
-- PASS: zero OPEN XSP DB trades and zero active XSP broker intents before and after activation.
-- PASS: exact account match; allocation `20000`; daily loss `50`; XSP canary true; position/trade caps both `1`.
-- PASS: XSP-only image live mode, terminal fix loaded, restart count `0`, Schwab auth `200`, startup reconciliation, and `market_closed_waiting`.
-- No live test order was placed; the market and configured entry window were closed.
-
-## Decisions Made
-
-- Permit XSP only as a supervised one-contract canary, not unattended production.
-- Keep XSP live-enabled only behind the supervised canary and restore paper immediately on any documented unsafe state.
-- Keep NDX blocked and retain all exact-account, allocation, loss, reconciliation, and fail-closed status controls.
-- Add status mappings only from the redacted XSP evidence collected after the canary.
-- Preserve the unrelated `run_backtest_db.py` worktree change.
-
-## Deferred / Avoided Changes
-
-- No speculative order-status expansion, broad health/readiness framework, backtest fill redesign, or operational drill.
-- Do not touch the user's existing `run_backtest_db.py` modification.
+Complete locally: repeated generic entry failures degrade readiness and produce metric/audit evidence; real Timescale CI executes migrations and critical risk reads; manual deploys reconcile Schwab and DB state before rebuilding and checking SPX/NDX/XSP; all current configs remain paper-only.
 
 ## Remaining Risks
 
-- Real Schwab complex-order parent/child status vocabulary remains unproven; synthetic restart behavior is now fail-closed.
-- XSP historical expectancy is negative and the supervised canary is operational evidence collection, not strategy validation.
-- Health is process-level rather than dependency/readiness-level.
-- Operational recovery drills remain unproven.
+- Real Schwab complex-order parent/child partial-fill evidence remains unproven; synthetic handling is fail-closed.
+- External alert delivery/deduplication and the supervised manual-flatten and exact-SHA rollback drills remain outstanding in `todo.md`.
 - Historical fill modeling cannot reproduce all live broker lifecycle states.
-
-## Recommended Next PRs
-
-1. Supervise the next configured XSP window; stop and restore paper on any unknown, rejected, partial, cancel-pending, mismatch, or restart-loop state, then collect the redacted report.
-2. Add an orchestrator-owned readiness snapshot for DB, broker auth, data freshness, risk halt, and broker reconciliation.
-3. Execute and document controlled restart/outage/manual-flatten/rollback drills.
 
 ## Next Session Launch Prompt
 
-Read `docs/ai/REVIEW_STATE.md` and `docs/live-runbook.md` first. XSP is live-enabled with the terminal-order fix deployed. Before the next configured entry window, reconfirm supervision, zero OPEN XSP DB trades, zero active intents, exact-account/allocation/loss/canary gates, restart count `0`, and current Schwab/data health without printing secrets. Stop and restore paper mode on any unknown status, rejection, partial fill, cancel-pending state, broker/DB mismatch, or restart loop. After any lifecycle, collect the redacted XSP report and add only observed mappings with focused tests.
+Read `todo.md` and `docs/live-runbook.md`. Treat SPX, NDX, and XSP as paper-only unless the owner explicitly authorizes a supervised live canary. Before any deployment or broker-write drill, require zero open DB trades, zero nonterminal intents, no working/unknown Schwab orders, and exact broker-position/DB reconciliation.

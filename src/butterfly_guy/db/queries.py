@@ -540,15 +540,16 @@ class RiskQueries:
 
     async def get_weekly_pnl(self, underlying: str, session_date: dt.date) -> float:
         """Dollar PnL for the rolling 7-day window (closed trades only)."""
+        cutoff_date = session_date - dt.timedelta(days=7)
         val = await self.db.pool.fetchval(
             """
             SELECT COALESCE(SUM(pnl * 100 * quantity), 0)
             FROM butterfly_trades
             WHERE underlying = $1
-              AND trade_date >= $2 - INTERVAL '7 days'
+              AND trade_date >= $2
               AND status = 'CLOSED'
             """,
-            underlying, session_date,
+            underlying, cutoff_date,
         )
         return float(val)
 
