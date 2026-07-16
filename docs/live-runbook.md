@@ -49,6 +49,10 @@ Any unknown broker position/order, stale chain snapshot, DB outage, rejected
 order, cancel-pending state, or partial fill means stop entries and reconcile
 manually before continuing.
 
+Do not increase quantity, repeat orders, or manipulate limits to manufacture a
+partial fill. Real partial/cancel-pending payloads are opportunistic evidence;
+the synthetic fail-closed tests are the pre-live safety gate.
+
 ## Manual Flatten
 
 There is intentionally no in-repo auto-flatten command. The operator owns the
@@ -65,8 +69,11 @@ broker action; the app only supplies read-only evidence afterward.
    `butterfly_trades`, `daily_risk_state`, and `decision_log`. Never edit the DB
    merely to make it agree with an assumed broker outcome.
 
-The 2026-07-14 tabletop passed these steps. A broker-action rehearsal still
-requires explicit approval and a supervised position.
+The 2026-07-14 tabletop passed these steps. On 2026-07-16 the supervised broker
+action also passed: the complex close filled, Schwab became flat, and the runtime
+failed closed because the external order had no bot-owned EXIT intent. Evidence
+is in `reports/xsp_manual_flatten_2026-07-16.md`; DB/risk/audit reconciliation and
+the paper-mode XSP recreate remain separate approved actions.
 
 ## Token Recovery
 

@@ -32,7 +32,7 @@ BG-001 through BG-014 are complete and verified. The durable cross-session check
 - Backtest: `run_backtest_db.py` loads the asset YAML and uses shared `select_entry_candidate()` for its primary DB replay, then hands the chosen entry to `SimulationEngine`; legacy `SimulationEngine.simulate_day()` and `run_entry_analysis.py` retain independent selection/default paths.
 - Authentication: `SchwabClientWrapper.initialize()` builds the async Schwab client from the token file, requires an explicit account ID, and resolves its account hash; token refresh is external in `tools/`.
 - Metrics/notifications: Prometheus globals plus `/metrics`, liveness-only `/health`, and safety-aware `/ready`; Discord for SPX trade events, Telegram for risk/token operational alerts, Prometheus/Alertmanager for runtime failures, and DB `decision_log` for audit events.
-- Asset differences: SPX, NDX, and XSP are currently configured paper-only. Asset width, tolerance, quote-quality, drawdown, and risk settings differ in their YAML files; any future XSP live canary still requires explicit account/allocation/loss confirmations.
+- Asset differences: all repo configs are paper-only. The running XSP service remains on the prior live-canary image but is fail-closed after the verified manual close; reconcile the DB/risk/audit state before recreating only XSP in paper mode.
 
 ## Files and directories reviewed
 
@@ -59,7 +59,7 @@ BG-014 are now remediated and the current status is summarized above.
 - Normal live fill persistence uses submitted limit price and local observation time instead of explicit broker execution price/time; this flows into trades, PnL, risk, and reports.
 - Cash settlement initializes value to zero and still closes the trade if both primary and fallback valuation fail.
 - Live reconciliation and risk/day initialization use host-local `date.today()` while canonical market date is Eastern; the Compose host/runtime is UTC-oriented, creating a post-20:00 ET date split.
-- At the original audit, XSP was configured `paper_trading: false`; it has since been returned to paper-only with `allow_live_trading: false`.
+- At the original audit, XSP was configured `paper_trading: false`, was later returned to paper-only, and was re-authorized on 2026-07-16 for one supervised one-contract canary.
 - `/health` is process liveness only and remains 200 independent of DB, broker, market-data, risk, reconciler, or monitor state.
 - Deployment validates `/opt/butterflyguy` before pulling the pushed commit, then deploys all three apps; validation therefore does not prove the deployed revision and every main push rebuilds the live-enabled XSP canary.
 - The PR workflow lets an LLM edit, stages all files, pushes without tests/lint, and can auto-merge after only syntax/LLM review.
@@ -82,7 +82,7 @@ BG-014 are now remediated and the current status is summarized above.
 - Preserve all pre-existing worktree changes.
 - Use Graphify for cross-module relationships and verify safety-critical conclusions against source and tests.
 - Do not change strategy rules, risk thresholds, order routing, fill assumptions, asset-specific behavior, or live-mode behavior during autonomous remediation.
-- The prior XSP canary is complete. Keep XSP paper-only unless the owner gives fresh explicit approval for another supervised test after the flat DB/broker gate passes.
+- The owner-approved 2026-07-16 XSP canary and broker-side manual close completed. The repo config is restored to paper mode; live DB reconciliation and the XSP recreate remain separately controlled actions.
 
 ## Commands executed
 
@@ -137,11 +137,11 @@ BG-014 are now remediated and the current status is summarized above.
 
 ## Unresolved risks
 
-- Real partial-fill/cancel-pending broker evidence remains outstanding; synthetic handling is fail-closed.
-- The supervised manual-flatten rehearsal remains outstanding in `todo.md`.
+- Real partial-fill/cancel-pending broker evidence remains unobserved but is opportunistic, not a pre-live gate; synthetic handling is fail-closed.
+- The broker-side manual-flatten action passed; post-action DB/risk/audit reconciliation and the paper-mode XSP recreate remain outstanding in `todo.md`.
 - External alert delivery/deduplication and exact-SHA deployment/rollback drills passed on 2026-07-15; retained evidence is in `reports/`.
 
 ## Exact next actions
 
 1. Keep all assets paper-only unless the owner explicitly authorizes a supervised live canary.
-2. Run the two remaining broker-write drills in `todo.md` only after the flat DB/broker gate passes and fresh owner approval is recorded.
+2. Reconcile the verified manual-close fill into trade `182`, daily risk state, and decision log, then recreate only XSP in paper mode and require flat broker/DB plus `/ready` proof.

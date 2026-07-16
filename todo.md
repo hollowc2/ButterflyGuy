@@ -1,6 +1,6 @@
 # Butterfly Guy Live-Readiness TODO
 
-Updated: 2026-07-15
+Updated: 2026-07-16
 
 ## Current gate
 
@@ -22,16 +22,31 @@ real-Timescale migration/risk-query CI smoke test, and extended the manual
 deployment gate/rebuild/readiness checks to SPX, NDX, and XSP. The supervised
 external-alert and exact-SHA rollback drills passed on 2026-07-15.
 
+On 2026-07-16 the owner rejected manufacturing a quantity-two partial fill as
+unnecessary live risk. Synthetic fail-closed coverage is the readiness gate;
+real Schwab partial/cancel-pending evidence is now opportunistic and nonblocking.
+The broker-action half of the supervised manual-flatten rehearsal passed on a
+normal one-contract XSP canary. Post-action DB/risk/audit reconciliation and the
+paper-mode XSP recreate remain.
+
+The XSP 744/748/752 PUT butterfly entry and operator-owned complex close both
+filled. Schwab showed all three legs flat and no working XSP order afterward.
+The runtime correctly failed closed because the external close had no bot-owned
+EXIT intent: trade `182` remains OPEN locally, realized P&L remains zero, and
+`/ready` reports `broker_reconciliation_unsafe`. The repo config is restored to
+paper mode; do not recreate XSP until the verified broker fill is reconciled.
+
 ## Remaining tasks
 
 - [x] **Supervised flat-runtime restart proof.** With broker and DB flat, restart
   only the affected service and prove exact leg/order reconciliation, `/health`,
   `/ready`, migrations, and clean logs without any broker write. Evidence:
   `reports/flat_runtime_restart_2026-07-14.md`.
-- [ ] **Real partial-fill/cancel-pending evidence.** Requires separate approval,
-  supervision, and the risk exception in `partial-fill-test-plan.md`; retain a
-  redacted payload and prove the ladder stops, readiness degrades, and the order
-  reaches a verified terminal outcome.
+- [x] **Partial-fill/cancel-pending safety coverage.** Synthetic parent/child
+  cases prove that the runtime persists evidence, stops entry, degrades
+  readiness, and fails closed. A real broker occurrence cannot be reliably or
+  safely manufactured; collect it only if it occurs naturally, following
+  `partial-fill-test-plan.md`.
 - [x] **Critical external-alert delivery and deduplication.** Alertmanager now
   centrally deduplicates broker ambiguity, reconciliation failure, settlement
   failure, and token-expiry alerts. Eight supervised submissions produced four
@@ -39,7 +54,12 @@ external-alert and exact-SHA rollback drills passed on 2026-07-15.
   Evidence: `reports/external_alert_delivery_2026-07-15.md`.
 - [ ] **Supervised manual-flatten rehearsal.** Follow `docs/live-runbook.md` with
   explicit broker-write approval, two-view leg/order confirmation, broker-flat
-  proof, and post-action DB/risk/decision-log reconciliation.
+  proof, and post-action DB/risk/decision-log reconciliation. The broker action,
+  flatness proof, redacted status report, fail-closed readiness response, and
+  critical alert passed on 2026-07-16. Evidence:
+  `reports/xsp_manual_flatten_2026-07-16.md`. Remaining: reconcile trade `182`,
+  risk state, and decision log from the verified fill, then recreate XSP in paper
+  mode and repeat flat `/ready`/log checks.
 - [x] **Exact-SHA deployment and rollback drill.** The deployment half passed at
   `ce3b785`; the follow-up drill rolled all three paper services back to exact
   SHA `3d25e4a`, repeated the full flat/readiness/migration/log checks, restored
