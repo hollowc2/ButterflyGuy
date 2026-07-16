@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-Complete the verified XSP manual-close reconciliation, then recreate only XSP in paper mode and prove flat readiness. Keep all repo configs paper-only.
+Retain the completed remediation and operational evidence. Keep all assets paper-only unless the owner gives fresh explicit live-canary authorization after a flat broker/DB preflight.
 
 ## Historical Cycle Checkpoints
 
@@ -66,6 +66,7 @@ These checkpoints record prior canary states and are not current runtime instruc
 - **Exact-SHA rollback drill complete:** From a flat broker/DB gate, all three paper services rolled back to exact SHA `3d25e4a`, passed revision/migration/readiness/reconciliation/log checks, restored exact SHA `2a8ca01`, and passed the same checks again. No broker write occurred. Evidence is retained in `reports/exact_sha_deployment_2026-07-15.md`.
 - **2026-07-16 XSP canary activation complete:** The owner made real partial-fill evidence opportunistic rather than manufacturing quantity-two risk, approved one supervised one-contract XSP canary, and plans the manual close. The DB reported zero OPEN XSP trades and zero nonterminal XSP intents; the redacted read-only Schwab position/order gate passed for SPX, NDX, and XSP. Only XSP was rebuilt/recreated. Its runtime loaded `paper_trading=false`, `allow_live_trading=true`, `LIVE_XSP_CANARY=true`, one contract, one trade, and `$50` daily loss; restart count is `0`, `/health` and `/ready` pass, migrations remain complete, and startup reached `market_closed_waiting`. No broker write occurred during activation.
 - **2026-07-16 XSP manual-close broker action complete:** Trade `182` entered as one 744/748/752 PUT butterfly at a `$0.33` debit. The operator submitted one complex close, which Schwab reported FILLED at a `$0.07` credit with zero remaining quantity; the broker position became flat and no working XSP order remained. The live reconciler correctly raised `broker_reconciliation_unsafe` because the external close had no bot-owned EXIT intent. The redacted evidence is retained in `reports/xsp_manual_flatten_2026-07-16.md`. The repo config is restored to paper mode; DB/risk/audit reconciliation and the XSP recreate remain pending.
+- **2026-07-16 XSP manual-close reconciliation complete:** After broker flatness and both terminal orders were reverified, only XSP was stopped. Trade `182` was atomically closed at `$0.07` with `-$0.26` spread P&L, XSP daily realized P&L became `-$26`, and `manual_trade_exit_reconciled` was recorded. XSP was rebuilt/recreated with `paper_trading=true`, `allow_live_trading=false`, and `LIVE_XSP_CANARY=false`. Final proof: broker positions empty, both orders `FILLED`, zero OPEN XSP trades, zero nonterminal intents, `/health` OK, `/ready` ready, restart count `0`, and no unsafe/error startup log.
 
 ## Non-Negotiable Rules
 
@@ -90,7 +91,7 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 - **Position/exit:** `PositionService` restores an open DB trade, polls fresh chains, updates `PositionManager` and `ProfitStateMachine`, persists peak state, and routes exit orders through `OrderManager`; index positions are cash-settled from the final regular-session close after market close.
 - **Risk:** `RiskEngine` checks market/trading day, halt state, daily trade count/loss, position size, buying power, weekly loss, and consecutive-loss warning policy. Live entry rechecks risk under a PostgreSQL advisory lock immediately before submit.
 - **Backtest/parity:** `SimulationEngine` and DB loaders replay historical snapshots with shared selection and profit-policy components, while order execution/fill modeling remains separate from the broker live path. Selection and exit-mark parity reports compare stored/live decisions.
-- **Operations:** Docker runs separate SPX, NDX, and XSP app services with TimescaleDB and Prometheus/Grafana integration. `/health` is liveness; `/ready` reports orchestrator safety state. All repo configs are paper-only; the running XSP service is fail-closed pending post-close reconciliation and an XSP-only recreate.
+- **Operations:** Docker runs separate SPX, NDX, and XSP app services with TimescaleDB and Prometheus/Grafana integration. `/health` is liveness; `/ready` reports orchestrator safety state. All repo configs and running services are paper-only; XSP is broker/DB flat and ready.
 
 ## Important Files Reviewed
 
@@ -118,18 +119,18 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 1. **High — execution/ops — later:** Complex-order status names remain based on anticipated values rather than a completed paper/shadow evidence set. Restart reconciliation now recursively maps parent/child IDs and statuses and fails closed on missing, unmapped, partial, cancel-pending, or unknown working child states. Files: `execution/order_manager.py`, `scripts/run_live.py`, `scripts/report_broker_order_statuses.py`. Next: collect redacted read-only status reports and map only observed additions.
 2. **High — ops — complete:** `/health` remains liveness and `/ready` now fails on startup/shutdown, unsafe broker state, settlement evidence failure, and repeated entry-loop failures. Entry-loop failures also increment a metric and persist audit events.
 3. **Medium — backtest/tests — later:** Backtests share selection/profit-policy pieces but cannot prove broker execution parity; modeled fills can remain optimistic relative to complex-order queueing, partial fills, and cancel races. Files: `backtest/simulation_engine.py`, execution/parity reports. Fix: keep this explicit in reports and calibrate models only from observed paper/shadow order lifecycle data.
-4. **Medium — ops/tests — active:** The manual close and broker-flat proof passed. Reconcile the verified fill into DB/risk/audit state, then recreate XSP in paper mode and repeat flat readiness checks. Real partial/cancel-pending evidence is opportunistic; never manufacture it.
+4. **Medium — ops/tests — complete:** The manual close, fail-closed response, verified DB/risk/audit reconciliation, paper-mode recreate, and flat readiness checks passed. Real partial/cancel-pending evidence is opportunistic; never manufacture it.
 
 Completed execution/risk items: exact broker/DB leg-symbol equality, signed Schwab quantity normalization, DB-derived `+quantity/-2 * quantity/+quantity` comparison, and explicit zero-quantity rejection at startup, runtime, and filled-entry repair.
 
 ## Active Work Item
 
-Complete locally: code remediations, critical-alert delivery, exact-SHA rollback, synthetic partial/cancel safety, and the broker-action half of the XSP manual-flatten rehearsal. The repo config is paper-only. Remaining operational work is the verified manual-close DB/risk/audit reconciliation and XSP-only paper recreate/readiness proof.
+Complete: code remediations, critical-alert delivery, exact-SHA rollback, synthetic partial/cancel safety, and the end-to-end XSP manual-flatten rehearsal. All assets are paper-only; no active remediation item remains.
 
 ## Remaining Risks
 
 - Real Schwab complex-order parent/child partial-fill evidence remains unobserved; synthetic handling is fail-closed and real evidence is opportunistic.
-- Manual-close broker evidence is complete; post-action DB/risk/audit reconciliation and the paper-mode XSP recreate remain outstanding in `todo.md`.
+- Manual-close broker evidence, DB/risk/audit reconciliation, and the paper-mode XSP recreate are complete.
 - Historical fill modeling cannot reproduce all live broker lifecycle states.
 
 ## Next Session Launch Prompt

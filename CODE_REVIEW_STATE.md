@@ -32,7 +32,7 @@ BG-001 through BG-014 are complete and verified. The durable cross-session check
 - Backtest: `run_backtest_db.py` loads the asset YAML and uses shared `select_entry_candidate()` for its primary DB replay, then hands the chosen entry to `SimulationEngine`; legacy `SimulationEngine.simulate_day()` and `run_entry_analysis.py` retain independent selection/default paths.
 - Authentication: `SchwabClientWrapper.initialize()` builds the async Schwab client from the token file, requires an explicit account ID, and resolves its account hash; token refresh is external in `tools/`.
 - Metrics/notifications: Prometheus globals plus `/metrics`, liveness-only `/health`, and safety-aware `/ready`; Discord for SPX trade events, Telegram for risk/token operational alerts, Prometheus/Alertmanager for runtime failures, and DB `decision_log` for audit events.
-- Asset differences: all repo configs are paper-only. The running XSP service remains on the prior live-canary image but is fail-closed after the verified manual close; reconcile the DB/risk/audit state before recreating only XSP in paper mode.
+- Asset differences: all repo configs and running services are paper-only. The completed XSP canary is broker/DB flat after verified manual-close reconciliation and an XSP-only recreate.
 
 ## Files and directories reviewed
 
@@ -82,7 +82,7 @@ BG-014 are now remediated and the current status is summarized above.
 - Preserve all pre-existing worktree changes.
 - Use Graphify for cross-module relationships and verify safety-critical conclusions against source and tests.
 - Do not change strategy rules, risk thresholds, order routing, fill assumptions, asset-specific behavior, or live-mode behavior during autonomous remediation.
-- The owner-approved 2026-07-16 XSP canary and broker-side manual close completed. The repo config is restored to paper mode; live DB reconciliation and the XSP recreate remain separately controlled actions.
+- The owner-approved 2026-07-16 XSP canary, broker-side manual close, DB/risk/audit reconciliation, and paper-mode XSP recreate completed with retained evidence.
 
 ## Commands executed
 
@@ -138,10 +138,10 @@ BG-014 are now remediated and the current status is summarized above.
 ## Unresolved risks
 
 - Real partial-fill/cancel-pending broker evidence remains unobserved but is opportunistic, not a pre-live gate; synthetic handling is fail-closed.
-- The broker-side manual-flatten action passed; post-action DB/risk/audit reconciliation and the paper-mode XSP recreate remain outstanding in `todo.md`.
+- The supervised manual-flatten rehearsal passed end to end; retained evidence is in `reports/xsp_manual_flatten_2026-07-16.md`.
 - External alert delivery/deduplication and exact-SHA deployment/rollback drills passed on 2026-07-15; retained evidence is in `reports/`.
 
 ## Exact next actions
 
 1. Keep all assets paper-only unless the owner explicitly authorizes a supervised live canary.
-2. Reconcile the verified manual-close fill into trade `182`, daily risk state, and decision log, then recreate only XSP in paper mode and require flat broker/DB plus `/ready` proof.
+2. No active remediation item remains. Any future live canary still requires fresh owner approval and the flat broker/DB gate.

@@ -8,7 +8,7 @@ Review date: 2026-07-12 UTC
 
 ButterflyGuy has a clear package layout, typed configuration, strong pure-logic tests, conservative live-startup gates, durable broker order intents, recursive broker-state reconciliation, an advisory entry lock, and database uniqueness for one open trade per underlying/day. The entry-selection path has also made real progress toward live/backtest reuse through `strategy.entry_selection.select_entry_candidate()`.
 
-The repository is understandable and all BG-001 through BG-014 code remediations are complete. External alert delivery/deduplication and exact-SHA rollback/restore drills passed on 2026-07-15. The supervised XSP manual close filled and proved broker flatness plus fail-closed reconciliation behavior on 2026-07-16; DB/risk/audit reconciliation and the paper-mode XSP recreate remain. Real partial-fill evidence is opportunistic and must not be manufactured.
+The repository is understandable and all BG-001 through BG-014 code remediations are complete. External alert delivery/deduplication and exact-SHA rollback/restore drills passed on 2026-07-15. The supervised XSP manual-flatten rehearsal passed end to end on 2026-07-16: broker close, fail-closed response, DB/risk/audit reconciliation, paper-mode recreate, and flat readiness proof. Real partial-fill evidence is opportunistic and must not be manufactured.
 
 Strongest areas:
 
@@ -28,7 +28,7 @@ Five highest-value improvements:
 
 ## Remediation tracker
 
-This checklist is the cross-session handoff. BG-001 through BG-014 are complete. All repo configs are paper-only; the running XSP canary is fail-closed pending verified post-close reconciliation and an XSP-only recreate.
+This checklist is the cross-session handoff. BG-001 through BG-014 and all tracked operational drills are complete. All repo configs and running services are paper-only.
 
 - [x] BG-001 — Stop the entry loop after terminal broker failures. Completed 2026-07-12; focused runtime-boundary regression passes.
 - [x] BG-002 — Make confirmed exit completion idempotent. Completed 2026-07-13; a confirmed fill ends local monitoring before fallible secondary work and DB closure is conditional on an `OPEN` row.
@@ -104,7 +104,7 @@ The primary DB replay loads the asset YAML through `load_asset_config()`, uses s
 - Authentication: token-file authentication resolves only the configured account. No default account is selected and no account identifier fragment is logged.
 - Metrics: Prometheus is process-global. `/health` reports liveness; `/ready` reports orchestrator safety state, including repeated entry failures.
 - Notifications: Discord is SPX-only for trades; Telegram carries risk/operational notices; `decision_log` carries audit events.
-- Assets: all YAML configs are paper-only. The running XSP canary remains on its prior image but cannot enter while broker/DB reconciliation is unsafe. Widths, tolerances, quote quality, drawdowns, and risk differ intentionally.
+- Assets: all YAML configs and running services are paper-only. XSP is broker/DB flat after the completed canary and paper-mode recreate. Widths, tolerances, quote quality, drawdowns, and risk differ intentionally.
 
 ## 3. Original audit findings summary
 
@@ -587,4 +587,4 @@ Not executed:
 
 ## Final production-readiness decision
 
-NO-GO for unattended live trading. The broker-side manual-flatten rehearsal passed, but its verified fill still needs DB/risk/audit reconciliation followed by an XSP-only paper-mode recreate and flat readiness proof. Real partial-fill/cancel-pending evidence remains opportunistic and must not be manufactured.
+All tracked remediation and supervised operational evidence items are complete. This does not automatically enable unattended live trading: all services remain paper-only, and any future live authorization still requires an explicit owner decision plus a fresh flat broker/DB preflight. Real partial-fill/cancel-pending evidence remains opportunistic and must not be manufactured.

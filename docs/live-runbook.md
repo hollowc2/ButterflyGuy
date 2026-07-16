@@ -71,9 +71,10 @@ broker action; the app only supplies read-only evidence afterward.
 
 The 2026-07-14 tabletop passed these steps. On 2026-07-16 the supervised broker
 action also passed: the complex close filled, Schwab became flat, and the runtime
-failed closed because the external order had no bot-owned EXIT intent. Evidence
-is in `reports/xsp_manual_flatten_2026-07-16.md`; DB/risk/audit reconciliation and
-the paper-mode XSP recreate remain separate approved actions.
+failed closed because the external order had no bot-owned EXIT intent. After
+reverification, the DB/risk/audit state was reconciled atomically and XSP was
+rebuilt paper-only with flat `/ready` proof. Evidence is in
+`reports/xsp_manual_flatten_2026-07-16.md`.
 
 ## Token Recovery
 

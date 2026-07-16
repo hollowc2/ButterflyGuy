@@ -6,10 +6,10 @@ The supervised broker-action portion passed. The operator closed the exact
 one-contract XSP butterfly as one complex order. Schwab reported the order
 `FILLED`, all three legs became flat, and no working XSP order remained.
 
-Post-action application reconciliation is intentionally still pending. The
-manual broker order had no bot-owned EXIT intent, so the runtime did not guess
-at an exit transition: it retained trade `182` as OPEN, left realized P&L
-unchanged, degraded `/ready`, and emitted the reconciliation-failure alert.
+The manual broker order had no bot-owned EXIT intent, so the runtime correctly
+did not guess at an exit transition: it retained trade `182` as OPEN, left
+realized P&L unchanged, degraded `/ready`, and emitted the reconciliation-failure
+alert until the verified fill was reconciled under supervision.
 
 ## Redacted evidence
 
@@ -42,16 +42,30 @@ The durable DB checkpoint remained:
 - `decision_log`: entry evidence present, no manual-exit audit event.
 
 No database mutation, service restart, deployment, or agent-initiated broker
-write was performed while collecting this evidence.
+write was performed during the broker-action evidence phase.
 
-## Remaining controlled actions
+## Post-action reconciliation and paper restore
 
-1. With explicit authorization, reconcile the verified `$0.07` fill into trade
-   `182`, XSP daily risk state, and `decision_log` without inventing evidence.
-2. Recreate only XSP from the restored paper-mode repo config.
-3. Require zero OPEN XSP trades, zero nonterminal intents, broker flatness,
-   `/health` OK, `/ready` ready, restart count zero, and clean reconciliation
-   logs before closing the rehearsal.
+After fresh read-only proof that Schwab remained flat with two terminal `FILLED`
+orders, only XSP was stopped so its in-memory monitor could not act during
+reconciliation. One atomic DB operation then:
 
-Broker action and fail-closed response: **PASS**.
-Full manual-flatten rehearsal: **PENDING POST-ACTION RECONCILIATION**.
+- closed trade `182` at `$0.07` and `2026-07-16T16:01:37Z` with reason
+  `manual_broker_close`, spread P&L `-$0.26`, and redacted fill metadata;
+- changed XSP daily realized P&L from `$0` to `-$26`; and
+- inserted one `manual_trade_exit_reconciled` decision event.
+
+Preconditions required the exact OPEN XSP trade, one-contract 744/748/752
+structure, `$0.33` entry, zero realized P&L, and zero nonterminal XSP intents.
+Any mismatch would have aborted the operation.
+
+Only XSP was then rebuilt/recreated. Final runtime proof:
+
+- `paper_trading=true`, `allow_live_trading=false`, `LIVE_XSP_CANARY=false`;
+- trade `182` CLOSED at `$0.07`, spread P&L `-$0.26`, XSP realized P&L `-$26`;
+- zero OPEN XSP trades and zero nonterminal XSP intents;
+- Schwab XSP positions empty and both same-day orders terminal `FILLED`;
+- `/health` OK, `/ready` ready, restart count `0`; and
+- no unsafe/error/traceback startup log.
+
+Full manual-flatten rehearsal: **PASS**.
