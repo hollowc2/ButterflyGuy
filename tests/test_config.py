@@ -136,6 +136,7 @@ def test_xsp_config_uses_independent_noisy_product_controls():
     assert config.strategy.vix_width_buckets[1].widths == [3, 4, 5]
     assert config.execution.paper_slippage_per_spread == 0.005
     assert config.execution.paper_commission_per_contract == 0.65
+    assert config.risk.max_weekly_loss is None
     assert config.profit_management.regimes["morning"].drawdown_threshold == 0.80
     assert config.profit_management.regimes["morning"].confirmation_polls == 3
     assert config.profit_management.regimes["morning"].min_peak_profit_ratio == 1.25

@@ -112,6 +112,22 @@ async def test_can_trade_ok():
 
 
 @pytest.mark.asyncio
+async def test_can_trade_skips_weekly_halt_when_disabled():
+    engine, queries = make_risk_engine()
+    engine.settings.max_weekly_loss = None
+    queries.get_weekly_pnl = AsyncMock(return_value=-10_000.0)
+
+    from unittest.mock import patch
+    with patch("butterfly_guy.risk.risk_engine.is_market_open", return_value=True), \
+         patch("butterfly_guy.risk.risk_engine.is_trading_day", return_value=True):
+        allowed, reason = await engine.can_trade()
+
+    assert allowed
+    assert reason == "ok"
+    queries.get_weekly_pnl.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_can_trade_warns_but_allows_on_consecutive_losses():
     notifier = MagicMock()
     notifier.notify_consecutive_loss_warning = AsyncMock()

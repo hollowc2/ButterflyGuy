@@ -90,11 +90,12 @@ class RiskEngine:
                 return False, f"insufficient_buying_power ({buying_power:.2f})"
 
         # Weekly loss circuit breaker
-        weekly_pnl = await self.risk_queries.get_weekly_pnl(self.underlying, today)
-        if weekly_pnl <= -self.settings.max_weekly_loss:
-            log.warning("max_weekly_loss_hit", weekly_pnl=weekly_pnl)
-            await self.risk_queries.set_halted(today, self.underlying)
-            return False, f"max_weekly_loss ({weekly_pnl:.4f})"
+        if self.settings.max_weekly_loss is not None:
+            weekly_pnl = await self.risk_queries.get_weekly_pnl(self.underlying, today)
+            if weekly_pnl <= -self.settings.max_weekly_loss:
+                log.warning("max_weekly_loss_hit", weekly_pnl=weekly_pnl)
+                await self.risk_queries.set_halted(today, self.underlying)
+                return False, f"max_weekly_loss ({weekly_pnl:.4f})"
 
         # Consecutive loss circuit breaker
         if self.settings.max_consecutive_losses > 0:

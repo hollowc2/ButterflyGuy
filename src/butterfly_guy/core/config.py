@@ -121,7 +121,7 @@ class RiskSettings(ConfigModel):
     max_daily_loss: float = 500.0
     max_trades_per_day: int = 1
     max_position_size: int = 1
-    max_weekly_loss: float = 1500.0        # 3x daily default; halt for week if exceeded
+    max_weekly_loss: float | None = 1500.0  # None disables the weekly entry halt
     max_consecutive_losses: int = 10        # warn after N consecutive losing trades (0 = disabled)
     min_buying_power: float = 500.0        # minimum buying power required to enter
     fail_safe_on_balance_error: bool = True  # if True, block trading when balance API unavailable
@@ -207,10 +207,11 @@ class AppConfig(BaseSettings):
             self.risk.max_daily_loss,
             self.risk.max_trades_per_day,
             self.risk.max_position_size,
-            self.risk.max_weekly_loss,
             self.risk.min_buying_power,
         ) <= 0:
             raise ValueError("risk limits must be positive")
+        if self.risk.max_weekly_loss is not None and self.risk.max_weekly_loss <= 0:
+            raise ValueError("max_weekly_loss must be positive when enabled")
         return self
 
 
