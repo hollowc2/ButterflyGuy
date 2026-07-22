@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Butterfly Guy — Application Architecture</title>
+  <style>
+    :root {
+      --bg: #071018; --panel: #0d1924; --panel2: #102231; --line: #22394a;
+      --text: #e8f5f5; --muted: #8ba7b2; --cyan: #3fe5dc; --lime: #b9f45f;
+      --violet: #a783ff; --amber: #ffca65; --red: #ff7c86; --blue: #67b7ff;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--text); background: radial-gradient(circle at 80% 0%, #143044 0, transparent 32rem), var(--bg); font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    a { color: var(--cyan); }
+    code { color: #bde6e3; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .shell { max-width: 1500px; margin: auto; padding: 0 28px 70px; }
+    header { padding: 56px 0 28px; display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: end; }
+    .eyebrow { color: var(--cyan); text-transform: uppercase; letter-spacing: .18em; font-size: 12px; font-weight: 800; }
+    h1 { margin: 8px 0 6px; font-size: clamp(38px, 6vw, 76px); line-height: .98; letter-spacing: -.05em; }
+    h2 { margin: 0 0 18px; font-size: 27px; letter-spacing: -.025em; }
+    h3 { margin: 0 0 8px; font-size: 16px; }
+    p { margin: 0 0 12px; }
+    .lede { max-width: 780px; color: var(--muted); font-size: 18px; }
+    .stamp { border: 1px solid var(--line); border-radius: 16px; padding: 13px 16px; color: var(--muted); background: #0b1720cc; font: 12px/1.6 ui-monospace, monospace; }
+    .toolbar { position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; padding: 12px 0; background: linear-gradient(var(--bg) 75%, transparent); overflow-x: auto; }
+    button, .json-link { white-space: nowrap; border: 1px solid var(--line); color: var(--muted); background: #0b1720; border-radius: 999px; padding: 9px 14px; cursor: pointer; font: inherit; text-decoration: none; }
+    button:hover, button.active, .json-link:hover { color: var(--bg); background: var(--cyan); border-color: var(--cyan); }
+    .json-link { margin-left: auto; }
+    .page { display: none; animation: rise .25s ease; }
+    .page.active { display: block; }
+    @keyframes rise { from { opacity: 0; transform: translateY(5px); } }
+    .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 18px 0 30px; }
+    .stat { padding: 15px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(150deg, #112536, #0b1720); }
+    .stat b { display: block; font-size: 24px; color: var(--cyan); }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .notice { border: 1px solid #9a6b21; border-left: 4px solid var(--amber); background: #2a2112; border-radius: 12px; padding: 14px 16px; color: #ffdfa1; margin: 20px 0; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+    .card { grid-column: span 4; border: 1px solid var(--line); border-radius: 17px; padding: 18px; background: linear-gradient(145deg, #102231, #0a151e); box-shadow: 0 12px 40px #0003; }
+    .card.wide { grid-column: span 6; } .card.full { grid-column: 1 / -1; }
+    .card p, .card li { color: var(--muted); }
+    .tag { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 8px; border: 1px solid #285064; border-radius: 99px; color: #a6dbdf; background: #0c202b; font-size: 11px; }
+    ul, ol { margin: 9px 0 0; padding-left: 20px; }
+    li + li { margin-top: 5px; }
+    .flow { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 27px; align-items: stretch; margin: 20px 0 36px; }
+    .node { position: relative; padding: 16px; min-height: 124px; border: 1px solid #2d5668; border-radius: 15px; background: #0e202c; }
+    .node:not(:last-child)::after { content: '→'; position: absolute; right: -23px; top: 43%; color: var(--cyan); font-size: 22px; }
+    .node strong { display: block; color: var(--cyan); margin-bottom: 6px; }
+    .node small { color: var(--muted); }
+    .node.hot { border-color: #725db4; background: #171b31; } .node.hot strong { color: var(--violet); }
+    .node.safe { border-color: #526f2c; background: #182316; } .node.safe strong { color: var(--lime); }
+    .swimlane { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; background: #09151e; padding: 14px; margin-bottom: 24px; }
+    .lane { min-width: 980px; display: grid; grid-template-columns: 150px repeat(6, 1fr); gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid #172a37; }
+    .lane:last-child { border: 0; }
+    .lane-name { color: var(--cyan); font-weight: 800; }
+    .step { min-height: 58px; padding: 9px; display: flex; align-items: center; border: 1px solid #284153; border-radius: 10px; background: #10212d; color: #bfd0d5; font-size: 12px; }
+    .step.blank { border-color: transparent; background: transparent; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; }
+    table { width: 100%; min-width: 760px; border-collapse: collapse; background: #0a161f; }
+    th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #1b3040; vertical-align: top; }
+    th { color: var(--cyan); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; background: #10212d; }
+    td { color: var(--muted); } td:first-child { color: var(--text); font-weight: 700; }
+    .module-tools { display: flex; gap: 10px; margin: 0 0 16px; }
+    input { width: min(440px, 100%); padding: 11px 14px; color: var(--text); background: #09151e; border: 1px solid var(--line); border-radius: 12px; outline: none; font: inherit; }
+    input:focus { border-color: var(--cyan); }
+    .modules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .module { border: 1px solid var(--line); border-radius: 15px; padding: 16px; background: #0d1b26; }
+    .module .path { color: var(--cyan); font: 11px ui-monospace, monospace; }
+    .module.hidden { display: none; }
+    .danger { color: var(--red) !important; } .ok { color: var(--lime) !important; }
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin: 8px 0 22px; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; background:var(--cyan); }
+    footer { margin-top: 45px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); }
+    @media (max-width: 1000px) { .stats { grid-template-columns: repeat(3, 1fr); } .card, .card.wide { grid-column: span 6; } .modules { grid-template-columns: repeat(2, 1fr); } .flow { grid-template-columns: 1fr; } .node:not(:last-child)::after { content: '↓'; right: 50%; top: auto; bottom: -27px; } }
+    @media (max-width: 650px) { .shell { padding: 0 15px 50px; } header { grid-template-columns: 1fr; } .stamp { display: none; } .stats { grid-template-columns: repeat(2, 1fr); } .card, .card.wide { grid-column: 1 / -1; } .modules { grid-template-columns: 1fr; } .json-link { margin-left: 0; } }
+    @media print { body { background: white; color: #111; } .toolbar { display:none; } .page { display:block !important; break-before:page; } .card,.module,.table-wrap,.swimlane,.node { background:white; color:#111; box-shadow:none; } p,li,td,.lede { color:#333 !important; } }
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header>
+    <div>
+      <div class="eyebrow">System atlas · refreshed 2026-07-22</div>
+      <h1>Butterfly Guy</h1>
+      <p class="lede">One-page visual architecture for the automated 0-DTE butterfly trading, research, equity scanning, reporting, and observability platform.</p>
+    </div>
+    <div class="stamp">PRIMARY&nbsp;&nbsp;SPX<br>EXPERIMENTAL&nbsp;&nbsp;NDX · XSP<br>DEFAULT&nbsp;&nbsp;PAPER TRADING<br>RUNTIME&nbsp;&nbsp;PYTHON 3.12 · ASYNCIO</div>
+  </header>
+
+  <nav class="toolbar" aria-label="Architecture views">
+    <button class="active" data-page="overview">Overview</button>
+    <button data-page="runtime">Live runtime</button>
+    <button data-page="modules">Modules</button>
+    <button data-page="data">Data & audit</button>
+    <button data-page="research">Research & ops</button>
+    <button data-page="deploy">Deployment</button>
+    <button data-page="handoff">Agent handoff</button>
+    <a class="json-link" href="application-architecture.json">Open JSON ↗</a>
+  </nav>
+
+  <section id="overview" class="page active">
+    <div class="stats">
+      <div class="stat"><b>13</b><span>application packages</span></div>
+      <div class="stat"><b>10</b><span>persistent tables</span></div>
+      <div class="stat"><b>5</b><span>concurrent runtime loops</span></div>
+      <div class="stat"><b>3</b><span>asset configurations</span></div>
+      <div class="stat"><b>4,148</b><span>graphify nodes</span></div>
+      <div class="stat"><b>6,863</b><span>graphify edges</span></div>
+    </div>
+    <div class="notice"><strong>Trading boundary.</strong> SPX is the primary path. NDX and XSP are separate experimental tuning paths. Paper trading is the safe default; live execution is guarded and reconciled against broker evidence.</div>
+    <h2>The system in one line</h2>
+    <div class="flow">
+      <div class="node"><strong>Charles Schwab</strong><small>Chains, spot, candles, account, positions, orders, transactions</small></div>
+      <div class="node"><strong>Collect + normalize</strong><small>SchwabClientWrapper · OptionChainCollector · domain schemas</small></div>
+      <div class="node hot"><strong>Decide + execute</strong><small>Strategy · RiskEngine · TradeService · OrderManager</small></div>
+      <div class="node safe"><strong>Monitor + exit</strong><small>PositionManager · ProfitStateMachine · PositionService</small></div>
+      <div class="node"><strong>Persist + observe</strong><small>TimescaleDB · Prometheus · Grafana · reports · notifications</small></div>
+    </div>
+    <div class="grid">
+      <article class="card wide"><h3>Operational core</h3><p><code>scripts/run_live.py</code> composes every high-impact runtime service, performs startup recovery/reconciliation, and owns the asyncio TaskGroup.</p><span class="tag">run_live.main</span><span class="tag">TradeService</span><span class="tag">PositionService</span><span class="tag">SchwabClientWrapper</span></article>
+      <article class="card wide"><h3>Historical backbone</h3><p>TimescaleDB is the replay and audit source of truth. Full chains are collected periodically; open-position legs are captured every monitor poll; decisions and broker intents preserve why an action occurred.</p><span class="tag">market history</span><span class="tag">trade lifecycle</span><span class="tag">audit evidence</span></article>
+      <article class="card"><h3>Strategy</h3><p>Gap/regime direction → active widths → candidate construction → cross-width selection by target cost, VIX, or reward/risk.</p></article>
+      <article class="card"><h3>Safety</h3><p>Validated config, buying-power checks, daily/weekly loss limits, DB uniqueness constraints, durable live intents, and fail-closed broker reconciliation.</p></article>
+      <article class="card"><h3>Research</h3><p>Shared config-backed DB replay is the live-parity path. CSV, Schwab cache, synthetic chains, classifier sweeps, and legacy simulations support exploration.</p></article>
+      <article class="card"><h3>Equity operations</h3><p>Weekly liquid-universe refresh plus a premarket quote, RVOL, news, catalyst, mover, and market-context scan delivered to Discord.</p></article>
+      <article class="card"><h3>Reporting</h3><p>Daily account report card, live performance HTML, weekend review, trade charts, selection parity, exit mark parity, and ladder traces.</p></article>
+      <article class="card"><h3>Observability</h3><p>Per-asset Prometheus endpoints feed Grafana; structured logs and decision events explain state; Alertmanager handles critical live ambiguity.</p></article>
+    </div>
+  </section>
+
+  <section id="runtime" class="page">
+    <h2>Live runtime: startup and continuous work</h2>
+    <div class="swimlane">
+      <div class="lane"><div class="lane-name">Startup</div><div class="step">Load + validate asset config</div><div class="step">DB pool + migrations</div><div class="step">Schwab OAuth client</div><div class="step">Classify regime</div><div class="step">Compose services</div><div class="step">Recover state + seed metrics</div></div>
+      <div class="lane"><div class="lane-name">Collector</div><div class="step">Check trading session</div><div class="step">Fetch SPX/NDX/XSP chain</div><div class="step">Normalize option rows</div><div class="step">Write full snapshot</div><div class="step">Write spot/VIX + bars</div><div class="step">Repeat on configured interval</div></div>
+      <div class="lane"><div class="lane-name">Entry</div><div class="step">Window + freshness guards</div><div class="step">Risk + buying power</div><div class="step">Direction + regime</div><div class="step">Build/select candidates</div><div class="step">Price ladder + fill</div><div class="step">Persist + hand to monitor</div></div>
+      <div class="lane"><div class="lane-name">Position</div><div class="step">Fetch chain every 2s</div><div class="step">Value legs + quote quality</div><div class="step">Track peak + tent</div><div class="step">Evaluate exit state</div><div class="step">Execute/retry exit</div><div class="step">Close + PnL + notify</div></div>
+      <div class="lane"><div class="lane-name">Live reconcile</div><div class="step">Read broker account</div><div class="step">Read orders/intents</div><div class="step">Compare DB quantities</div><div class="step">Repair explicit fills</div><div class="step">Resolve settlement</div><div class="step">Gate entry on ambiguity</div></div>
+    </div>
+    <div class="grid">
+      <article class="card wide"><h3>Entry pipeline</h3><ol><li>Trading day, time window, chain freshness.</li><li>Risk state and live buying power.</li><li>Spot, prior close, session open, VIX, current 0-DTE chain.</li><li>Gap/regime override or direction/bias signal.</li><li>Shared <code>select_entry_candidate</code> logic.</li><li>Candidate + parity audit persistence.</li><li>Paper simulation or durable live intent + Schwab order.</li><li>Trade persistence, risk/metrics update, Discord entry chart.</li></ol></article>
+      <article class="card wide"><h3>Position and exit pipeline</h3><ol><li>Compute fly bid/mark, PnL, time regime, quote quality.</li><li>Accept/reject peak updates and persist monitoring legs.</li><li>Evaluate peak trailer or profit protector.</li><li>Store signal, mark parity, and pending-exit evidence.</li><li>Execute exit; retry while the trade remains OPEN if unfilled.</li><li>Close on fill or supported cash-settlement evidence.</li></ol></article>
+      <article class="card"><h3>RiskEngine guards</h3><p>Daily and weekly loss, daily trade count, position size, consecutive loss warning, minimum buying power, and fail-safe behavior when balances cannot be read.</p></article>
+      <article class="card"><h3>OrderManager guarantees</h3><p>Three-leg order payloads, paper/live separation, broker status parsing, partial/terminal/ambiguous fill errors, intent linkage, and entry/exit ladder behavior.</p></article>
+      <article class="card"><h3>Recovery guarantees</h3><p>Open trade and peak survive restart. Metrics and risk state are rebuilt. Live broker positions, working orders, intents, and transaction settlements must agree before entry proceeds.</p></article>
+    </div>
+  </section>
+
+  <section id="modules" class="page">
+    <h2>Source packages</h2>
+    <div class="module-tools"><input id="module-search" type="search" placeholder="Filter by package, symbol, or responsibility…"></div>
+    <div class="modules" id="module-list">
+      <article class="module" data-key="core config logging metrics time AppConfig"><div class="path">src/butterfly_guy/core/</div><h3>core</h3><p>Config models/loading, structured logs, Prometheus metrics, and Eastern/Pacific market-time utilities.</p><span class="tag">AppConfig</span><span class="tag">load_config</span></article>
+      <article class="module" data-key="data schwab collector schema chain quote"><div class="path">src/butterfly_guy/data/</div><h3>data</h3><p>Schwab boundary, periodic collection, option-chain normalization, and core records.</p><span class="tag">SchwabClientWrapper</span><span class="tag">OptionChainCollector</span></article>
+      <article class="module" data-key="database db asyncpg sql migrations queries timescale"><div class="path">src/butterfly_guy/db/</div><h3>db</h3><p>Connection pool, ordered migrations, and query classes for every persistent concern.</p><span class="tag">DatabasePool</span><span class="tag">TradeQueries</span></article>
+      <article class="module" data-key="strategy butterfly direction regime selector width vix parity"><div class="path">src/butterfly_guy/strategy/</div><h3>strategy</h3><p>Direction/regime filters, candidate building, width dispatch, shared entry selection, and parity logic.</p><span class="tag">select_entry_candidate</span><span class="tag">RegimeClassifier</span></article>
+      <article class="module" data-key="execution order builder manager live paper broker fill intent"><div class="path">src/butterfly_guy/execution/</div><h3>execution</h3><p>Butterfly order specs, paper fills, live ladder, broker fill parsing, cancel/retry, and durable intents.</p><span class="tag">OrderManager</span></article>
+      <article class="module" data-key="position mark profit state machine exit tent quote quality"><div class="path">src/butterfly_guy/position/</div><h3>position</h3><p>Position valuation, peak/tent tracking, quote quality, profit policies, and exit signals.</p><span class="tag">PositionManager</span><span class="tag">ProfitStateMachine</span></article>
+      <article class="module" data-key="risk daily weekly loss halt buying power"><div class="path">src/butterfly_guy/risk/</div><h3>risk</h3><p>Persistent entry eligibility, trade count, buying power, and loss/halt controls.</p><span class="tag">RiskEngine</span></article>
+      <article class="module" data-key="services trade position notifier discord telegram alert chart calendar review"><div class="path">src/butterfly_guy/services/</div><h3>services</h3><p>Trade/position use cases, notifications, chart data, calendars, daily reports, and weekend review.</p><span class="tag">TradeService</span><span class="tag">PositionService</span></article>
+      <article class="module" data-key="backtest simulation csv db schwab loader cache metrics"><div class="path">src/butterfly_guy/backtest/</div><h3>backtest</h3><p>Historical loaders/cache, simulation models, drawdown dispatch, and performance metrics.</p><span class="tag">SimulationEngine</span><span class="tag">DbDataLoader</span></article>
+      <article class="module" data-key="quant black scholes iv synthetic chain scipy"><div class="path">src/butterfly_guy/quant_engine/</div><h3>quant_engine</h3><p>Black-Scholes pricing, implied-volatility skew, and synthetic option chains.</p><span class="tag">SyntheticChainGenerator</span></article>
+      <article class="module" data-key="equity scan universe news sec alpha volume rvol report"><div class="path">src/butterfly_guy/equity_scan/</div><h3>equity_scan</h3><p>Universe refresh, quotes, volume/RVOL, news catalysts, ranking, and scan reports.</p><span class="tag">ScanResults</span><span class="tag">fetch_news_impacts</span></article>
+      <article class="module" data-key="reports performance daily card chart drawdown html matplotlib"><div class="path">src/butterfly_guy/reports/</div><h3>reports</h3><p>Daily account analysis, live performance HTML, weekend stats, and PNG chart rendering.</p><span class="tag">DailyReportCard</span><span class="tag">ReportStats</span></article>
+      <article class="module" data-key="scripts cli runtime research reports operations"><div class="path">src/butterfly_guy/scripts/</div><h3>scripts</h3><p>CLI composition roots for live work, data collection, backtests, scans, audits, and reports.</p><span class="tag">run_live</span><span class="tag">run_backtest_db</span></article>
+    </div>
+  </section>
+
+  <section id="data" class="page">
+    <h2>Persistence, evidence, and consumers</h2>
+    <div class="table-wrap"><table><thead><tr><th>Table</th><th>Kind</th><th>Main writer</th><th>Main readers / purpose</th></tr></thead><tbody>
+      <tr><td>option_chain_snapshots</td><td>Timescale hypertable</td><td>OptionChainCollector</td><td>Freshness/parity checks, DB replay, entry inspection; periodic full chains.</td></tr>
+      <tr><td>spot_prices</td><td>Timescale hypertable</td><td>OptionChainCollector</td><td>VIX lookup, charts, backtests; underlying and volatility spots.</td></tr>
+      <tr><td>daily_bars</td><td>Table</td><td>OptionChainCollector</td><td>Regime classifier, official prior close, research.</td></tr>
+      <tr><td>butterfly_trades</td><td>Lifecycle table</td><td>Trade/Position services</td><td>OPEN/CLOSED/EXPIRED source of truth, recovery, reports, risk.</td></tr>
+      <tr><td>butterfly_candidates</td><td>Timescale hypertable</td><td>TradeService</td><td>Initial scan universe and selected candidate evidence.</td></tr>
+      <tr><td>decision_log</td><td>JSONB event log</td><td>Runtime services</td><td>Why entries/exits were selected, blocked, retried, or failed.</td></tr>
+      <tr><td>daily_risk_state</td><td>State table</td><td>RiskEngine</td><td>Per-date/per-underlying counts, realized PnL, halt state.</td></tr>
+      <tr><td>tent_boundaries</td><td>Timescale hypertable</td><td>PositionService</td><td>Grafana visualization of profitable strike region.</td></tr>
+      <tr><td>monitoring_leg_quotes</td><td>Timescale hypertable</td><td>PositionService</td><td>High-frequency live leg evidence for replay and exit parity.</td></tr>
+      <tr><td>broker_order_intents</td><td>Intent/outbox table</td><td>OrderManager</td><td>Reconciliation and durable entry/exit broker evidence.</td></tr>
+    </tbody></table></div>
+    <div class="grid" style="margin-top:16px">
+      <article class="card wide"><h3>Audit chain</h3><p><code>market snapshot → candidate rows → selection parity event → broker intent/fill evidence → butterfly trade → monitoring legs → exit parity event → closed trade/PnL</code></p></article>
+      <article class="card wide"><h3>Database-enforced invariants</h3><p>One OPEN trade per underlying/date, one active ENTRY intent per underlying/date, and one active EXIT intent per trade. Leg quotes cascade with their trade; filled broker intent can be linked back to the trade.</p></article>
+    </div>
+  </section>
+
+  <section id="research" class="page">
+    <h2>Research, scanning, and reports</h2>
+    <div class="grid">
+      <article class="card wide"><h3>Preferred live-parity replay</h3><p><code>run_backtest_db.py</code> loads TimescaleDB history, selects the asset config, and calls the same <code>strategy.entry_selection</code> used by live entry. Use this path for claims about live-selection parity.</p><span class="tag">DB chain history</span><span class="tag">asset config</span><span class="tag">shared selection</span></article>
+      <article class="card wide"><h3>Exploratory research</h3><p>CSV/Schwab loaders, chain cache, synthetic chains, parameter sweeps, paper replay, strategy discovery, and regime-classifier sweeps support research. <code>run_entry_analysis.py</code> and <code>SimulationEngine.simulate_day()</code> are explicitly legacy for parity.</p></article>
+      <article class="card"><h3>Morning equity scan</h3><p>Universe files → Schwab quotes/candles → RVOL/prior change → SEC/Alpha Vantage catalysts → rankings → archived text/JSON → Discord.</p></article>
+      <article class="card"><h3>Daily report card</h3><p>Schwab balances + orders + transactions + open positions → FIFO round trips/problem detection → equity candle charts → Discord/archive.</p></article>
+      <article class="card"><h3>Live performance</h3><p>Trade and decision history → PnL/drawdown/no-trade reasons → standalone HTML and matplotlib charts.</p></article>
+      <article class="card"><h3>Audit tools</h3><p>Historical entry inspection, entry-selection parity, exit-mark parity, trade price-ladder traces, and broker-order status inspection.</p></article>
+      <article class="card"><h3>Scheduled operations</h3><p>Cron definitions cover equity morning scans, daily report cards, and live-performance report generation. Universe refresh is the weekly Sunday workflow documented in AGENTS.md.</p></article>
+      <article class="card"><h3>External read sources</h3><p>Schwab, Yahoo Finance, NASDAQ/NYSE lists, SEC filings, Alpha Vantage, Wikipedia indexes, and Forex Factory calendar. Availability may limit enrichment without changing the trading core.</p></article>
+    </div>
+  </section>
+
+  <section id="deploy" class="page">
+    <h2>Docker and observability topology</h2>
+    <div class="table-wrap"><table><thead><tr><th>Asset service</th><th>Profile</th><th>Config</th><th>Metrics</th><th>Role</th></tr></thead><tbody>
+      <tr><td>butterfly_spx_app</td><td>default</td><td>configs/config.yaml</td><td>127.0.0.1:8000</td><td><span class="ok">Primary</span></td></tr>
+      <tr><td>butterfly_ndx_app</td><td>ndx</td><td>configs/config_ndx.yaml</td><td>127.0.0.1:8001</td><td>Experimental</td></tr>
+      <tr><td>butterfly_xsp_app</td><td>xsp</td><td>configs/config_xsp.yaml</td><td>127.0.0.1:8003</td><td>Experimental / canary guarded</td></tr>
+    </tbody></table></div>
+    <div class="grid" style="margin-top:16px">
+      <article class="card"><h3>Network</h3><p>All asset apps attach to the external <code>monitoring_net</code>, where TimescaleDB, Prometheus, Grafana, and Alertmanager are expected to be reachable.</p></article>
+      <article class="card"><h3>Container hardening</h3><p>Read-only filesystem, tmpfs at <code>/tmp</code>, no-new-privileges, all capabilities dropped, and explicit mounts for tokens, config, and chain data.</p></article>
+      <article class="card"><h3>Prometheus + Grafana</h3><p>Prometheus scrapes asset metrics. Provisioned dashboards cover overall trading, trade detail, and performance; TimescaleDB supports dashboard queries.</p></article>
+      <article class="card"><h3>Configuration boundary</h3><p>Asset behavior lives in YAML; secrets and runtime credentials remain in <code>.env</code> and <code>tokens.json</code>. Never copy their values into reports or this map.</p></article>
+      <article class="card"><h3>Notifications</h3><p>SPX can send Discord entry/exit charts. Telegram carries risk/operational warnings. Alertmanager receives critical live reconciliation, ambiguity, and settlement conditions.</p></article>
+      <article class="card"><h3>Runtime command</h3><p><code>docker compose -f infra/docker-compose.yml up -d</code> starts SPX. Add the <code>ndx</code>/<code>xsp</code> profiles only when those experimental paths are intended.</p></article>
+    </div>
+  </section>
+
+  <section id="handoff" class="page">
+    <h2>Next-agent operating map</h2>
+    <div class="notice"><strong>Read first:</strong> <code>AGENTS.md</code> → <code>README.md</code> → <code>graphify-out/GRAPH_REPORT.md</code> → <code>application-architecture.json</code> → only the relevant implementation and tests.</div>
+    <div class="grid">
+      <article class="card wide"><h3>Graph bridge nodes</h3><p>The current graph’s highest-impact application bridges are <code>StrategySettings</code>, <code>run_live.main</code>, <code>SchwabClientWrapper</code>, <code>TradeService</code>, <code>PositionService</code>, <code>_assert_broker_state_matches_db</code>, and <code>SimulationParams</code>. Factory helpers in tests are also highly connected.</p></article>
+      <article class="card wide"><h3>Verification contract</h3><p>Run the narrow relevant <code>uv run pytest … -v</code> target for Python behavior, full pytest for broad shared changes, <code>uv run ruff check .</code> for imports/formatting, and <code>graphify update .</code> after code changes.</p></article>
+      <article class="card"><h3>Entry selection change</h3><p><code>strategy/entry_selection.py</code>, builder/width selection, <code>services/trade_service.py</code>, focused entry and parity tests.</p></article>
+      <article class="card"><h3>Order change</h3><p>Order builder/manager, broker intent migration/query behavior, order-manager and broker-intent tests.</p></article>
+      <article class="card"><h3>Exit change</h3><p>Position manager, state machine, profit policy, PositionService, monitoring/parity and state-machine tests.</p></article>
+      <article class="card"><h3>Risk change</h3><p>RiskEngine, RiskQueries, config validation, tests. Treat limits and buying-power/account guards as high impact.</p></article>
+      <article class="card"><h3>Runtime/recovery change</h3><p><code>scripts/run_live.py</code>, OrderManager, PositionService, migrations/queries, and <code>tests/test_run_live.py</code>.</p></article>
+      <article class="card"><h3>Parity change</h3><p>DB backtest runner + shared entry/parity modules. Do not use legacy simulation paths as proof of live equivalence.</p></article>
+      <article class="card full"><h3 class="danger">Non-negotiable safety invariants</h3><ul><li>Do not change live/paper mode, account checks, routing, token handling, loss limits, or trade caps unless directly asked.</li><li>State the risk before any command that could place an order, call a Schwab write API, or alter live services.</li><li>Preserve mark-price paper fills and fail-closed broker reconciliation.</li><li>Never print or summarize secret values from <code>.env</code> or <code>tokens.json</code>.</li><li>Confirm graph-derived relationships in code/tests: the report has many isolated nodes and inferred edges.</li></ul></article>
+    </div>
+  </section>
+
+  <footer>This HTML is a human-oriented snapshot. <a href="application-architecture.json">application-architecture.json</a> is the structured next-agent handoff. Source of truth remains the repository code, tests, configuration, migrations, and current graphify output.</footer>
+</main>
+<script>
+  const buttons = [...document.querySelectorAll('[data-page]')];
+  const pages = [...document.querySelectorAll('.page')];
+  function showPage(id) {
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.page === id));
+    pages.forEach(p => p.classList.toggle('active', p.id === id));
+    history.replaceState(null, '', '#' + id);
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  }
+  buttons.forEach(b => b.addEventListener('click', () => showPage(b.dataset.page)));
+  const initial = location.hash.slice(1);
+  if (pages.some(p => p.id === initial)) showPage(initial);
+  const search = document.querySelector('#module-search');
+  search.addEventListener('input', () => {
+    const term = search.value.toLowerCase().trim();
+    document.querySelectorAll('.module').forEach(card => {
+      card.classList.toggle('hidden', term && !(card.dataset.key + ' ' + card.textContent).toLowerCase().includes(term));
+    });
+  });
+</script>
+</body>
+</html>

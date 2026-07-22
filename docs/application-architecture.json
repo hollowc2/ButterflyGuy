@@ -1,0 +1,227 @@
+{
+  "schema_version": "1.0.0",
+  "document": {
+    "title": "Butterfly Guy Application Architecture",
+    "generated_on": "2026-07-21",
+    "repository_root": "/home/corey/Desktop/ButterflyGuy",
+    "purpose": "Machine-oriented architecture handoff for the next coding agent.",
+    "authoritative_sources": [
+      "AGENTS.md",
+      "README.md",
+      "CLAUDE.md",
+      "graphify-out/GRAPH_REPORT.md",
+      "src/butterfly_guy/",
+      "configs/",
+      "infra/"
+    ],
+    "freshness": {
+      "graph_report_date": "2026-07-22",
+      "graph_commit": "d11f2d18",
+      "graph_stats": {"files": 251, "nodes": 4148, "edges": 6863, "communities": 327},
+      "warning": "Compare graph_commit with git rev-parse HEAD before trusting graph-derived edges."
+    }
+  },
+  "system": {
+    "name": "Butterfly Guy",
+    "type": "Automated 0-DTE butterfly options trading and research platform",
+    "primary_asset": "SPX",
+    "experimental_assets": ["NDX", "XSP"],
+    "broker": "Charles Schwab API",
+    "runtime": "Python 3.12, asyncio, Docker",
+    "persistence": "PostgreSQL with TimescaleDB",
+    "observability": ["Prometheus", "Grafana", "structured logs", "Alertmanager"],
+    "default_mode": "paper trading",
+    "critical_convention": "Paper fills use mark price (bid + ask) / 2; live mode requires explicit safety guards."
+  },
+  "external_systems": [
+    {"id": "schwab", "name": "Charles Schwab", "roles": ["OAuth", "option chains", "spot and candles", "account balances", "orders", "positions", "transactions"]},
+    {"id": "timescaledb", "name": "TimescaleDB", "roles": ["market history", "trade lifecycle", "risk state", "audit events", "replay source of truth"]},
+    {"id": "prometheus", "name": "Prometheus", "roles": ["scrape per-asset runtime metrics"]},
+    {"id": "grafana", "name": "Grafana", "roles": ["trading, trade detail, and performance dashboards"]},
+    {"id": "alertmanager", "name": "Alertmanager", "roles": ["critical live reconciliation and settlement alerts"]},
+    {"id": "discord", "name": "Discord", "roles": ["SPX trade events, charts, scans, reports"]},
+    {"id": "telegram", "name": "Telegram", "roles": ["risk warnings and operational alerts"]},
+    {"id": "market_news", "name": "Public market/news sources", "roles": ["NASDAQ/NYSE universes", "SEC filings", "Alpha Vantage news", "Forex Factory calendar", "Yahoo Finance research data"]}
+  ],
+  "runtime_topology": {
+    "entrypoint": "src/butterfly_guy/scripts/run_live.py",
+    "startup_sequence": [
+      "Load and validate YAML plus environment configuration",
+      "Start asset-labeled Prometheus metrics server",
+      "Initialize database pool and run ordered SQL migrations",
+      "Initialize Schwab client and query repositories",
+      "Classify market regime from daily bars and VIX",
+      "Construct risk, order, trade, position, and collector services",
+      "Reconcile broker and DB state in live mode",
+      "Recover open trade and persisted peak, then reseed metrics/risk state",
+      "Start concurrent TaskGroup loops"
+    ],
+    "concurrent_loops": [
+      {"name": "collector", "always": true, "component": "OptionChainCollector.run_loop", "responsibility": "Fetch chain/spot/daily-bar snapshots and persist them."},
+      {"name": "entry_loop", "always": true, "component": "TradeService + PositionService", "responsibility": "Attempt one eligible entry, then monitor the open trade."},
+      {"name": "daily_reset", "always": true, "component": "RiskQueries", "responsibility": "Initialize/reset per-session risk and metrics state."},
+      {"name": "broker_reconciler", "always": false, "condition": "live trading only", "responsibility": "Compare broker positions/orders to DB trades/intents and gate entries on ambiguity."},
+      {"name": "eod_charts", "always": false, "condition": "SPX Discord notifier configured", "responsibility": "Generate and send end-of-day trade charts."}
+    ],
+    "live_reconciliation": {
+      "gate": "BrokerStateGate",
+      "evidence": ["broker positions", "orders", "transactions", "broker_order_intents", "OPEN butterfly_trades"],
+      "invariants": ["DB and broker option quantities must match", "ambiguous fills do not silently become trades", "expired cash-settled positions need transaction evidence", "critical failures block new entries"]
+    }
+  },
+  "business_flows": {
+    "market_data": [
+      "SchwabClientWrapper fetches option chains and spots",
+      "OptionChainCollector normalizes OptionQuote records",
+      "ChainQueries/SpotQueries/DailyBarQueries write TimescaleDB",
+      "Live entry, monitoring parity, dashboards, and DB backtests consume the history"
+    ],
+    "entry": [
+      "Entry window and trading-day guards",
+      "RiskEngine checks daily/weekly loss, trade count, consecutive losses, position size, and buying power",
+      "Require a fresh collector chain snapshot",
+      "Fetch spot, prior close, regular-session open, VIX, and current chain",
+      "GapRegimeFilter and DirectionFilter/BiasScoreFilter choose CALL or PUT",
+      "select_entry_candidate builds candidates across active widths and applies TARGET_COST, VIX, or BEST_RR selection",
+      "Persist candidates and selection-parity audit data",
+      "OrderManager walks the debit-price ladder; paper mode simulates fills, live mode creates broker order intents",
+      "Persist butterfly_trades, update risk state/metrics, notify Discord",
+      "Pass TradeRecord and ButterflyCandidate to PositionService"
+    ],
+    "position_and_exit": [
+      "Poll current option chain every 2 seconds",
+      "PositionManager computes fly value, quote quality, tent boundaries, PnL, accepted peak, and time regime",
+      "Persist monitoring_leg_quotes, peak_value, tent_boundaries, and decision events",
+      "ProfitStateMachine evaluates configured peak trailer or profit protector policy",
+      "On signal, capture exit-mark parity and pending-exit metadata",
+      "OrderManager executes exit; failures leave the position OPEN for retry",
+      "On fill or cash settlement, close trade, record PnL in RiskEngine, update metrics, and notify"
+    ],
+    "backtest_and_research": [
+      "run_backtest_db loads TimescaleDB chain/spot history and the asset config",
+      "It shares strategy.entry_selection with live entry selection and is the preferred parity path",
+      "SimulationEngine and loaders support CSV, DB, Schwab, cache, synthetic, sweep, and legacy experiments",
+      "inspect_entry and parity reports explain historical decisions and live-vs-replay differences",
+      "run_entry_analysis and SimulationEngine.simulate_day are legacy research paths, not live-parity evidence"
+    ],
+    "equity_morning_scan": [
+      "Weekly refresh seeds NASDAQ/NYSE symbols and validates price and 20-day average volume through Schwab",
+      "Morning scan loads configured universes and batches Schwab equity quotes",
+      "Volume module adds RVOL and prior-session changes",
+      "News module adds SEC and optional Alpha Vantage catalysts",
+      "Scanner filters/ranks movers, opening focus, catalysts, and market context",
+      "Report module archives text/JSON and Discord sends the report"
+    ],
+    "reporting": [
+      "Daily report card combines Schwab balances, transactions, orders, positions, and candle charts",
+      "Live performance reads trade/decision data and renders HTML plus performance charts",
+      "Weekend review produces weekly/month-to-date summaries and end-of-day charts",
+      "Ladder and parity scripts interrogate persisted audit evidence"
+    ]
+  },
+  "modules": [
+    {"id": "core", "path": "src/butterfly_guy/core", "responsibility": "Configuration, logging, metrics, and market-time utilities", "key_symbols": ["AppConfig", "load_config", "start_metrics_server", "session_date"], "depends_on": ["pydantic-settings", "PyYAML", "prometheus-client"]},
+    {"id": "data", "path": "src/butterfly_guy/data", "responsibility": "Schwab boundary, collection, chain normalization, and domain schemas", "key_symbols": ["SchwabClientWrapper", "OptionChainCollector", "OptionQuote", "ButterflyCandidate", "TradeRecord"], "depends_on": ["core", "db", "schwab-py"]},
+    {"id": "db", "path": "src/butterfly_guy/db", "responsibility": "asyncpg pool, migrations, and repository-style query classes", "key_symbols": ["DatabasePool", "ChainQueries", "TradeQueries", "RiskQueries", "DecisionQueries", "OrderIntentQueries"], "depends_on": ["asyncpg", "TimescaleDB"]},
+    {"id": "strategy", "path": "src/butterfly_guy/strategy", "responsibility": "Direction, regime, construction, width selection, candidate selection, and parity", "key_symbols": ["ButterflyBuilder", "ButterflySelector", "select_entry_candidate", "RegimeClassifier", "GapRegimeFilter", "BiasScoreFilter"], "depends_on": ["core", "data"]},
+    {"id": "execution", "path": "src/butterfly_guy/execution", "responsibility": "Schwab butterfly order payloads, paper fills, live price ladder, status parsing, and intent persistence", "key_symbols": ["ButterflyOrderBuilder", "OrderManager", "BrokerFill", "AmbiguousOrderError"], "depends_on": ["core", "data", "db", "Schwab"]},
+    {"id": "risk", "path": "src/butterfly_guy/risk", "responsibility": "Conservative pre-entry guards and persistent daily/weekly loss accounting", "key_symbols": ["RiskEngine"], "depends_on": ["core", "db", "Telegram notifier"]},
+    {"id": "position", "path": "src/butterfly_guy/position", "responsibility": "Butterfly valuation, quote-quality filters, peak tracking, tent calculations, and exit policy", "key_symbols": ["PositionManager", "PositionState", "ProfitStateMachine", "profitprotector_floor_decision"], "depends_on": ["core", "data"]},
+    {"id": "services", "path": "src/butterfly_guy/services", "responsibility": "Use-case orchestration, notifications, charts, calendars, report delivery, and weekend review", "key_symbols": ["TradeService", "PositionService", "DiscordNotifier", "TelegramNotifier", "AlertmanagerNotifier"], "depends_on": ["all domain modules", "external notification endpoints"]},
+    {"id": "backtest", "path": "src/butterfly_guy/backtest", "responsibility": "Historical/synthetic loading, caching, simulation models, and performance metrics", "key_symbols": ["SimulationEngine", "SimulationParams", "DbDataLoader", "CsvDataLoader", "SchwabDataLoader"], "depends_on": ["strategy", "data", "quant_engine", "DB/CSV/cache"]},
+    {"id": "quant_engine", "path": "src/butterfly_guy/quant_engine", "responsibility": "Black-Scholes pricing, IV skew model, and synthetic option chains", "key_symbols": ["SyntheticChainGenerator"], "depends_on": ["SciPy"]},
+    {"id": "equity_scan", "path": "src/butterfly_guy/equity_scan", "responsibility": "Universe maintenance, quote parsing, filters/ranking, volume enrichment, catalysts, and reports", "key_symbols": ["EquityScanSettings", "ScanResults", "fetch_news_impacts", "rank_scan_results"], "depends_on": ["Schwab", "SEC", "Alpha Vantage", "NASDAQ/NYSE lists"]},
+    {"id": "reports", "path": "src/butterfly_guy/reports", "responsibility": "Daily account report, live performance HTML, drawdowns, and PNG charts", "key_symbols": ["DailyReportCard", "TradePoint", "ReportStats", "build_equity_trade_chart_png"], "depends_on": ["services", "DB rows", "Schwab payloads", "matplotlib"]},
+    {"id": "scripts", "path": "src/butterfly_guy/scripts", "responsibility": "Operational and research CLI entrypoints", "key_symbols": ["run_live", "run_collector", "run_backtest_db", "run_morning_scan"], "depends_on": ["application modules"]}
+  ],
+  "database": {
+    "tables": [
+      {"name": "option_chain_snapshots", "kind": "hypertable", "writer": "OptionChainCollector", "readers": ["TradeService freshness/parity", "DB backtests", "inspection/report scripts"], "meaning": "Full periodic option-chain observations"},
+      {"name": "spot_prices", "kind": "hypertable", "writer": "OptionChainCollector", "readers": ["TradeService VIX lookup", "charts", "backtests"], "meaning": "Underlying and VIX spot history"},
+      {"name": "daily_bars", "kind": "table", "writer": "OptionChainCollector", "readers": ["RegimeClassifier", "direction inputs", "backtests"], "meaning": "Official daily OHLCV"},
+      {"name": "butterfly_trades", "kind": "lifecycle table", "writer": "TradeService/PositionService/reconciliation", "readers": ["startup recovery", "risk", "reports", "Grafana"], "meaning": "OPEN/CLOSED/EXPIRED trade source of truth"},
+      {"name": "butterfly_candidates", "kind": "hypertable", "writer": "TradeService", "readers": ["Grafana", "selection analysis"], "meaning": "Candidates from each initial scan, with selected flag"},
+      {"name": "decision_log", "kind": "JSONB event log", "writer": "runtime services", "readers": ["parity and operational reports", "debugging"], "meaning": "Audit trail for significant decisions and failures"},
+      {"name": "daily_risk_state", "kind": "state table", "writer": "RiskEngine/reset loop", "readers": ["RiskEngine", "startup", "reports"], "meaning": "Per-date, per-underlying trade count, PnL, and halt state"},
+      {"name": "tent_boundaries", "kind": "hypertable", "writer": "PositionService", "readers": ["Grafana"], "meaning": "Calculated position tent limits over time"},
+      {"name": "monitoring_leg_quotes", "kind": "hypertable", "writer": "PositionService", "readers": ["exit replay and parity reports"], "meaning": "High-frequency open-position leg evidence"},
+      {"name": "broker_order_intents", "kind": "intent/outbox table", "writer": "OrderManager and reconciler", "readers": ["reconciler", "broker status report"], "meaning": "Durable live entry/exit order intent and broker evidence"}
+    ],
+    "migration_order": ["001_initial", "002_fix_greeks_precision", "003_add_underlying", "004_add_chain_fields", "005_add_daily_bars", "006_tent_boundaries", "007_monitoring_leg_quotes", "008_one_open_trade_per_underlying_day", "009_broker_order_intents"]
+  },
+  "deployment": {
+    "network": "external Docker network monitoring_net",
+    "services": [
+      {"compose_service": "app_spx", "container": "butterfly_spx_app", "profile": "default", "config": "configs/config.yaml", "status": "primary", "metrics": "127.0.0.1:8000"},
+      {"compose_service": "app_ndx", "container": "butterfly_ndx_app", "profile": "ndx", "config": "configs/config_ndx.yaml", "status": "experimental", "metrics": "127.0.0.1:8001"},
+      {"compose_service": "app_xsp", "container": "butterfly_xsp_app", "profile": "xsp", "config": "configs/config_xsp.yaml", "status": "experimental/canary guarded", "metrics": "127.0.0.1:8003"}
+    ],
+    "container_security": ["read-only root filesystem", "tmpfs /tmp", "no-new-privileges", "all Linux capabilities dropped", "tokens/config/chains mounted explicitly"],
+    "monitoring": {"prometheus_config": "infra/prometheus.yml", "grafana_dashboards": "infra/grafana/dashboards/", "datasource_provisioning": "infra/grafana/provisioning/"},
+    "scheduled_jobs": [
+      {"file": "infra/cron/equity_morning_scan.cron", "purpose": "morning scan workflow"},
+      {"file": "infra/cron/daily_report_card.cron", "purpose": "daily account/trade report"},
+      {"file": "infra/cron/live_performance.cron", "purpose": "live performance report generation"}
+    ]
+  },
+  "entrypoints": [
+    {"path": "src/butterfly_guy/scripts/run_live.py", "category": "runtime", "purpose": "Full collector + entry + position orchestration", "risk": "high; may place orders when live guards are enabled"},
+    {"path": "src/butterfly_guy/scripts/run_collector.py", "category": "runtime", "purpose": "Market data collection only", "risk": "Schwab reads and DB writes"},
+    {"path": "src/butterfly_guy/scripts/run_backtest_db.py", "category": "research", "purpose": "Preferred config-backed historical replay and sweeps", "risk": "read-heavy DB research"},
+    {"path": "src/butterfly_guy/scripts/inspect_entry.py", "category": "research", "purpose": "Explain a historical entry selection", "risk": "read-only analysis"},
+    {"path": "src/butterfly_guy/scripts/run_morning_scan.py", "category": "operations", "purpose": "Equity quote/news scan and Discord report", "risk": "external reads and optional notification"},
+    {"path": "src/butterfly_guy/scripts/refresh_equity_universes.py", "category": "operations", "purpose": "Rebuild validated liquid universes", "risk": "network reads and config-universe writes"},
+    {"path": "src/butterfly_guy/scripts/generate_live_performance.py", "category": "report", "purpose": "Render performance HTML from DB", "risk": "DB reads and report writes"},
+    {"path": "src/butterfly_guy/scripts/report_selection_parity.py", "category": "audit", "purpose": "Compare live selection to replay selection", "risk": "DB reads"},
+    {"path": "src/butterfly_guy/scripts/report_exit_mark_parity.py", "category": "audit", "purpose": "Reconstruct exit marks from recorded legs", "risk": "DB reads"},
+    {"path": "src/butterfly_guy/scripts/report_broker_order_statuses.py", "category": "audit", "purpose": "Inspect broker order status payloads", "risk": "Schwab reads"}
+  ],
+  "configuration": {
+    "asset_configs": [
+      {"asset": "SPX", "path": "configs/config.yaml", "role": "default production research/paper path"},
+      {"asset": "NDX", "path": "configs/config_ndx.yaml", "role": "experimental tuning path"},
+      {"asset": "XSP", "path": "configs/config_xsp.yaml", "role": "experimental/canary tuning path"}
+    ],
+    "sections": ["schwab", "strategy", "entry", "execution", "profit_management", "risk", "collector", "database via environment", "monitoring"],
+    "other_configs": ["configs/equity_scan.yaml", "configs/daily_report_card.yaml", "configs/universes/*"],
+    "secrets": [".env", "tokens.json"],
+    "secret_rule": "Never print, summarize, commit, or rewrite secret values."
+  },
+  "safety_invariants": [
+    "SPX is primary; NDX and XSP do not imply production parity.",
+    "Paper trading is the default; live trading needs execution.allow_live_trading or ALLOW_LIVE_TRADING=true.",
+    "Do not alter account guards, order routing, loss/trade limits, paper/live mode, or tokens without direct user authorization.",
+    "Live startup/reconciliation must fail closed when broker evidence is ambiguous.",
+    "At most one active live entry intent per underlying/date and one active exit intent per trade are enforced in SQL.",
+    "At most one OPEN trade per underlying/date is enforced by migration 008.",
+    "Paper fill pricing must preserve the project mark-price convention.",
+    "TimescaleDB history plus decision/intents evidence is the audit and replay backbone."
+  ],
+  "agent_handoff": {
+    "first_reads": ["AGENTS.md", "README.md", "graphify-out/GRAPH_REPORT.md", "this JSON", "relevant source/tests"],
+    "god_nodes_from_graph": ["make_settings()", "make_candidate()", "make_order_manager()", "StrategySettings", "main()", "SchwabClientWrapper", "PositionService", "TradeService", "_assert_broker_state_matches_db()", "SimulationParams"],
+    "change_routing": {
+      "entry selection": ["strategy/entry_selection.py", "strategy/butterfly_builder.py", "strategy/width_selection.py", "services/trade_service.py", "tests/test_entry_selection.py"],
+      "order behavior": ["execution/order_builder.py", "execution/order_manager.py", "db/migrations/009_broker_order_intents.sql", "tests/test_order_manager.py", "tests/test_broker_order_intents.py"],
+      "exit behavior": ["position/position_manager.py", "position/state_machine.py", "position/profit_policy.py", "services/position_service.py", "tests/test_state_machine.py"],
+      "risk": ["risk/risk_engine.py", "db/queries.py", "core/config.py", "tests/test_risk_engine.py"],
+      "runtime/recovery": ["scripts/run_live.py", "execution/order_manager.py", "services/position_service.py", "tests/test_run_live.py"],
+      "backtest parity": ["scripts/run_backtest_db.py", "strategy/entry_selection.py", "strategy/entry_selection_parity.py", "tests/test_simulation_parity.py"],
+      "equity scan": ["equity_scan/", "scripts/run_morning_scan.py", "configs/equity_scan.yaml", "tests/test_equity_scan.py"],
+      "observability": ["core/metrics.py", "infra/prometheus.yml", "infra/grafana/", "tests/test_metrics_readiness.py"]
+    },
+    "verification": {
+      "focused_python": "uv run pytest <relevant test> -v",
+      "broad": "uv run pytest",
+      "lint": "uv run ruff check .",
+      "graph_after_code_changes": "graphify update .",
+      "runtime_inspection": "docker compose -f infra/docker-compose.yml ps"
+    },
+    "known_caveats": [
+      "The graph report lists 1972 isolated nodes and many inferred edges; confirm behavior in code/tests.",
+      "README labels SimulationEngine.simulate_day and run_entry_analysis as legacy for parity purposes.",
+      "CLAUDE.md has useful context but AGENTS.md takes precedence.",
+      "Do not run commands that can place orders or call Schwab write APIs without stating the risk first."
+    ]
+  }
+}
