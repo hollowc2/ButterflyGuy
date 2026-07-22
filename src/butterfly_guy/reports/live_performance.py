@@ -40,6 +40,7 @@ class TradePoint:
     vix: float | None
     entry_spot: float | None
     dd_at_exit_pct: float | None
+    paper_fill_model: str = "legacy"
 
 
 @dataclass(frozen=True)
@@ -189,6 +190,7 @@ def trade_point_from_row(row: dict[str, Any]) -> TradePoint:
         vix=float(metadata["vix"]) if metadata.get("vix") is not None else None,
         entry_spot=float(metadata["entry_spot"]) if metadata.get("entry_spot") is not None else None,
         dd_at_exit_pct=float(dd_at_exit) if dd_at_exit is not None else None,
+        paper_fill_model=str(metadata.get("paper_fill_model") or "legacy"),
     )
 
 
@@ -212,6 +214,7 @@ def chart_payload(trades: list[TradePoint]) -> list[dict[str, Any]]:
             "exit_reason": trade.exit_reason or "—",
             "dd_at_exit_pct": trade.dd_at_exit_pct,
             "is_drawdown_exit": is_drawdown_exit(trade.exit_reason),
+            "paper_fill_model": trade.paper_fill_model,
             "pnl": trade.pnl_dollars,
             "equity": equity,
             "drawdown_dollars": dd.drawdown_dollars,
@@ -248,7 +251,7 @@ def render_trade_table_rows(trades: list[TradePoint], no_trade_days: list[NoTrad
                 f"<td>{html.escape(day.status)}</td>"
                 "<td>—</td><td>—</td><td>—</td><td>—</td>"
                 "<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>"
-                "<td>—</td><td>—</td><td>—</td>"
+                "<td>—</td><td>—</td><td>—</td><td>—</td>"
                 f"<td>{html.escape(day.reason)}</td>"
                 "<td>—</td><td>—</td>"
                 "</tr>"
@@ -268,6 +271,7 @@ def _render_trade_row(trade: TradePoint) -> str:
         "<tr data-row-type='trade'>"
         f"<td>{trade.trade_date.isoformat()}</td>"
         "<td>Trade</td>"
+        f"<td>{html.escape(trade.paper_fill_model)}</td>"
         f"<td>{html.escape(trade.direction)}</td>"
         f"<td>{trade.wing_width}W</td>"
         f"<td>{trade.center_strike:.0f}</td>"
@@ -314,15 +318,30 @@ def render_report_html(
     no_trade_days: list[NoTradeDay],
     generated_at: dt.datetime,
 ) -> str:
-    pnls = [t.pnl_dollars for t in trades]
+    active_fill_model = trades[-1].paper_fill_model
+    active_trades = [t for t in trades if t.paper_fill_model == active_fill_model]
+    pnls = [t.pnl_dollars for t in active_trades]
     stats = compute_stats(pnls)
-    chart_data = chart_payload(trades)
+    chart_data = chart_payload(active_trades)
     table_rows = render_trade_table_rows(trades, no_trade_days)
     stamp = generated_at.astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z")
-    date_start = trades[0].trade_date.isoformat()
-    date_end = trades[-1].trade_date.isoformat()
+    date_start = active_trades[0].trade_date.isoformat()
+    date_end = active_trades[-1].trade_date.isoformat()
     max_dd_pct = max((p["drawdown_pct"] for p in chart_data), default=0.0)
     chart_json = json.dumps(chart_data)
+    cohorts: dict[str, list[TradePoint]] = {}
+    for trade in trades:
+        cohorts.setdefault(trade.paper_fill_model, []).append(trade)
+    cohort_cards = "".join(
+        (
+            "<div class='stat'>"
+            f"<div class='label'>{html.escape(model)}</div>"
+            f"<div class='value'>{len(model_trades)} trades</div>"
+            f"<div class='sub'>PnL ${sum(t.pnl_dollars for t in model_trades):+.0f}</div>"
+            "</div>"
+        )
+        for model, model_trades in cohorts.items()
+    )
 
     return f"""<!doctype html>
 <html lang="en">
@@ -343,7 +362,7 @@ def render_report_html(
       <h1>Butterfly Guy — {html.escape(underlying)} Live Performance</h1>
       <div class="sub">
         <span class="badge">Paper Trading</span>
-        {stats.trade_count} trades · {date_start} to {date_end} · Updated {html.escape(stamp)}
+        Current cohort: {html.escape(active_fill_model)} · {stats.trade_count} trades · {date_start} to {date_end} · Updated {html.escape(stamp)}
       </div>
     </div>
   </header>
@@ -357,6 +376,9 @@ def render_report_html(
     <div class="stat"><div class="label">Profit Factor</div><div class="value">{stats.profit_factor:.2f}</div></div>
     <div class="stat"><div class="label">Max Drawdown</div><div class="value neg">${stats.max_drawdown:.0f}</div></div>
   </section>
+
+  <h2>Fill Model Cohorts</h2>
+  <section class="stats">{cohort_cards}</section>
 
   <h2>Equity Curve</h2>
   <section class="panel chart-panel">
@@ -394,7 +416,7 @@ def render_report_html(
     <table>
       <thead>
         <tr>
-          <th>Date</th><th>Status</th><th>Dir</th><th>Width</th><th>Center</th><th>Strikes</th>
+          <th>Date</th><th>Status</th><th>Fill Model</th><th>Dir</th><th>Width</th><th>Center</th><th>Strikes</th>
           <th>VIX</th><th>Spot</th><th>Entry</th><th>Exit</th><th>Min</th>
           <th>Entry$</th><th>Peak$</th><th>Exit$</th><th>Exit Reason</th><th>DD at Exit</th><th>PnL</th>
         </tr>

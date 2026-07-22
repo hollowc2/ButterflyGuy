@@ -269,6 +269,8 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
         "fill_time": dt.datetime(2026, 7, 14, 14, 0, tzinfo=dt.timezone.utc),
         "intent_id": 42,
         "broker_fill_evidence": {"status": "FILLED"},
+        "paper_fill_model": "mark_v1",
+        "execution_diagnostics": {"estimated_execution_drag": 0.25},
     }
     order_manager.intent_queries = AsyncMock()
     chain_queries = MagicMock()
@@ -342,4 +344,9 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
         await service.attempt_entry()
 
     order_manager.execute_single_attempt.assert_awaited_once()
+    inserted = trade_queries.insert_trade.await_args.args[0]
+    assert inserted["metadata"]["paper_fill_model"] == "mark_v1"
+    assert inserted["metadata"]["entry_execution_diagnostics"] == {
+        "estimated_execution_drag": 0.25
+    }
     service._release_entry_lock.assert_awaited_once()

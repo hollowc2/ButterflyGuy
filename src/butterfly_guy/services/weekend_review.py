@@ -145,7 +145,11 @@ def format_combined_performance_caption(
     monthly: list[TradePoint],
     all_time: list[TradePoint],
 ) -> str:
-    lines = ["📊 **Performance Summary**"]
+    fill_model = next(
+        (trade.paper_fill_model for trades in (weekly, monthly, all_time) for trade in trades),
+        "legacy",
+    )
+    lines = [f"📊 **Performance Summary · {fill_model}**"]
     for label, trades in (
         ("Weekly", weekly),
         ("Monthly", monthly),
@@ -178,6 +182,14 @@ async def fetch_closed_trades(db: DatabasePool, underlying: str) -> list[dict[st
 
 def closed_trades_to_points(rows: list[dict[str, Any]]) -> list[TradePoint]:
     return [trade_point_from_row(row) for row in rows]
+
+
+def latest_fill_model_cohort(trades: list[TradePoint]) -> list[TradePoint]:
+    """Keep performance math within the most recent paper fill model."""
+    if not trades:
+        return []
+    fill_model = trades[-1].paper_fill_model
+    return [trade for trade in trades if trade.paper_fill_model == fill_model]
 
 
 async def build_eod_chart_for_row(
@@ -267,8 +279,10 @@ async def send_weekend_review(
         )
         return ReviewResult(skipped=True, reason="no_weekly_trades")
 
-    weekly_points = trades_in_range(all_points, windows.week_start, windows.week_end)
-    monthly_points = trades_in_range(all_points, windows.month_start, windows.month_end)
+    cohort_points = latest_fill_model_cohort(all_points)
+    fill_model = cohort_points[-1].paper_fill_model
+    weekly_points = trades_in_range(cohort_points, windows.week_start, windows.week_end)
+    monthly_points = trades_in_range(cohort_points, windows.month_start, windows.month_end)
 
     if dry_run and dry_run_dir is not None:
         dry_run_dir.mkdir(parents=True, exist_ok=True)
@@ -309,14 +323,14 @@ async def send_weekend_review(
         messages_sent += 1
 
     performance_periods = [
-        ("Weekly", weekly_points),
-        ("Monthly", monthly_points),
-        ("All-Time", all_points),
+        (f"Weekly · {fill_model}", weekly_points),
+        (f"Monthly · {fill_model}", monthly_points),
+        (f"All-Time · {fill_model}", cohort_points),
     ]
     combined_caption = format_combined_performance_caption(
         weekly_points,
         monthly_points,
-        all_points,
+        cohort_points,
     )
     combined_png = build_combined_performance_chart_png(performance_periods)
     await _post_with_delay(

@@ -562,6 +562,16 @@ class TradeService:
                         "entry_attempts": entry_attempts,
                         "selection_parity": selection_parity_report,
                         "broker_fill_evidence": fill.get("broker_fill_evidence"),
+                        **(
+                            {
+                                "paper_fill_model": fill["paper_fill_model"],
+                                "entry_execution_diagnostics": fill[
+                                    "execution_diagnostics"
+                                ],
+                            }
+                            if fill.get("paper_fill_model")
+                            else {}
+                        ),
                     },
                 }
                 try:

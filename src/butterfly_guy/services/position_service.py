@@ -463,6 +463,16 @@ class PositionService:
                                 "exit_mark_parity": exit_mark_parity,
                                 "broker_fill_evidence": fill.get("broker_fill_evidence"),
                                 "exit_secondary_work_pending": True,
+                                **(
+                                    {
+                                        "paper_fill_model": fill["paper_fill_model"],
+                                        "exit_execution_diagnostics": fill[
+                                            "execution_diagnostics"
+                                        ],
+                                    }
+                                    if fill.get("paper_fill_model")
+                                    else {}
+                                ),
                             },
                         )
                         if not closed:

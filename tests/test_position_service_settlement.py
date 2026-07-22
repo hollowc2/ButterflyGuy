@@ -229,6 +229,7 @@ async def test_live_cash_settlement_closes_from_broker_transactions() -> None:
     ],
 )
 async def test_monitor_stops_after_unsafe_broker_result(error: RuntimeError) -> None:
+    set_readiness(None)
     service = PositionService.__new__(PositionService)
     service.config = MagicMock()
     service.config.strategy.underlying = "XSP"
@@ -297,6 +298,8 @@ async def test_monitor_never_resubmits_after_fill_when_risk_update_fails() -> No
         "fill_price": 1.25,
         "fill_time": dt.datetime.now(dt.timezone.utc),
         "broker_fill_evidence": {"status": "FILLED"},
+        "paper_fill_model": "mark_v1",
+        "execution_diagnostics": {"estimated_execution_drag": 0.20},
     }
     service.trade_queries = MagicMock(
         close_trade=AsyncMock(return_value=True),
@@ -347,6 +350,10 @@ async def test_monitor_never_resubmits_after_fill_when_risk_update_fails() -> No
     service.trade_queries.close_trade.assert_awaited_once()
     metadata = service.trade_queries.close_trade.await_args.kwargs["metadata"]
     assert metadata["exit_secondary_work_pending"] is True
+    assert metadata["paper_fill_model"] == "mark_v1"
+    assert metadata["exit_execution_diagnostics"] == {
+        "estimated_execution_drag": 0.20
+    }
     assert not any(
         call.args == (7, {"exit_secondary_work_pending": False})
         for call in service.trade_queries.merge_metadata.await_args_list
@@ -355,6 +362,7 @@ async def test_monitor_never_resubmits_after_fill_when_risk_update_fails() -> No
 
 @pytest.mark.asyncio
 async def test_settlement_failure_keeps_trade_open() -> None:
+    set_readiness(None)
     service = PositionService.__new__(PositionService)
     service.config = MagicMock()
     service.config.strategy.underlying = "SPX"
