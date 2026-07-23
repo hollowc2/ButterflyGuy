@@ -10,6 +10,15 @@ def test_paper_entry_commission_matches_live_formula():
     assert params.paper_entry_commission() == pytest.approx(0.026)
 
 
+def test_paper_exit_price_matches_mark_fill_with_commission():
+    params = SimulationParams(
+        paper_commission_per_contract=0.65,
+        quantity=1,
+        slippage=0.0,
+    )
+    assert params.paper_exit_price(2.0) == pytest.approx(1.974)
+
+
 def test_exit_before_close_defaults_to_disabled_like_live_config():
     params = SimulationParams()
     assert params.exit_before_close_minutes == 0

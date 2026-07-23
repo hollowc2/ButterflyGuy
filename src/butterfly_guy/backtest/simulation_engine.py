@@ -80,6 +80,10 @@ class SimulationParams:
         """Paper trading commission: 4 legs × quantity × rate."""
         return 4 * self.quantity * self.paper_commission_per_contract / 100
 
+    def paper_exit_price(self, mark: float) -> float:
+        """Paper close fill at mark minus slippage and four-leg commission."""
+        return max(0.05, mark - self.slippage - self.paper_entry_commission())
+
 
 @dataclass
 class RegimeDispatch:
@@ -340,7 +344,7 @@ class SimulationEngine:
                 and minutes_to_close <= params.exit_before_close_minutes
             ):
                 result.exit_time = bar.ts
-                result.exit_price = max(0.05, current_value - params.slippage)
+                result.exit_price = params.paper_exit_price(current_value)
                 result.exit_reason = "end_of_day"
                 result.peak_value = peak_value
                 result.pnl = result.exit_price - result.entry_price
@@ -355,7 +359,7 @@ class SimulationEngine:
                 loss_from_cost = (result.entry_price - current_value) / result.entry_price
                 if loss_from_cost >= params.max_loss_from_cost:
                     result.exit_time = bar.ts
-                    result.exit_price = max(0.05, current_value - params.slippage)
+                    result.exit_price = params.paper_exit_price(current_value)
                     result.exit_reason = "absolute_loss_stop"
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
@@ -392,7 +396,7 @@ class SimulationEngine:
                         continue
 
                     result.exit_time = bar.ts
-                    result.exit_price = max(0.05, current_value - params.slippage)
+                    result.exit_price = params.paper_exit_price(current_value)
                     result.exit_reason = exit_reason
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
@@ -432,7 +436,7 @@ class SimulationEngine:
                 else:
                     current_value = 0.0
                 result.exit_time = last_bar.ts
-                result.exit_price = max(0.05, current_value - params.slippage)
+                result.exit_price = current_value
                 result.exit_reason = "end_of_day"
                 result.peak_value = peak_value
                 result.pnl = result.exit_price - result.entry_price
@@ -517,7 +521,7 @@ class SimulationEngine:
                 and minutes_to_close <= params.exit_before_close_minutes
             ):
                 result.exit_time = bar.ts
-                result.exit_price = max(0.05, current_value - params.slippage)
+                result.exit_price = params.paper_exit_price(current_value)
                 result.exit_reason = "end_of_day"
                 result.peak_value = peak_value
                 result.pnl = result.exit_price - result.entry_price
@@ -531,7 +535,7 @@ class SimulationEngine:
                 loss_from_cost = (result.entry_price - current_value) / result.entry_price
                 if loss_from_cost >= params.max_loss_from_cost:
                     result.exit_time = bar.ts
-                    result.exit_price = max(0.05, current_value - params.slippage)
+                    result.exit_price = params.paper_exit_price(current_value)
                     result.exit_reason = "absolute_loss_stop"
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
@@ -567,7 +571,7 @@ class SimulationEngine:
                         continue
 
                     result.exit_time = bar.ts
-                    result.exit_price = max(0.05, current_value - params.slippage)
+                    result.exit_price = params.paper_exit_price(current_value)
                     result.exit_reason = exit_reason
                     result.peak_value = peak_value
                     result.pnl = result.exit_price - result.entry_price
@@ -604,7 +608,7 @@ class SimulationEngine:
                 else:
                     current_value = 0.0
                 result.exit_time = last_bar.ts
-                result.exit_price = max(0.05, current_value - params.slippage)
+                result.exit_price = current_value
                 result.exit_reason = "end_of_day"
                 result.peak_value = peak_value
                 result.pnl = result.exit_price - result.entry_price

@@ -33,6 +33,44 @@ services:
     ports:
       - "127.0.0.1:8000:8000"  # Prometheus metrics
 
+  app_spx_candidate:
+    profiles: [spx-candidate]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: butterfly_spx_candidate
+    restart: unless-stopped
+    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "configs/config_spx_candidate.yaml"]
+    env_file:
+      - ../.env
+    volumes:
+      - ../tokens.json:/app/tokens.json:ro
+      - ../configs/config_spx_candidate.yaml:/app/configs/config_spx_candidate.yaml:ro
+    environment:
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__NAME: butterfly_guy_spx_candidate
+      DATABASE__USER: butterfly
+      EXECUTION__PAPER_TRADING: "true"
+      EXECUTION__ALLOW_LIVE_TRADING: "false"
+      ALLOW_LIVE_TRADING: "false"
+      DISCORD_WEBHOOK_URL: ""
+      TELEGRAM_BOT_TOKEN: ""
+      TELEGRAM_CHAT_ID: ""
+      ALERTMANAGER_URL: ""
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/data/chains
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - monitoring_net
+    ports:
+      - "127.0.0.1:8005:8000"
+
   app_ndx:
     profiles: [ndx]
     build:

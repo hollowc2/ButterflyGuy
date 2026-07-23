@@ -29,12 +29,12 @@ import datetime as dt
 import html
 import itertools
 import math
+import statistics
 from collections import defaultdict
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import asyncpg
-import yfinance as yf
 
 from butterfly_guy.backtest.chain_cache import ChainDay
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
@@ -111,7 +111,7 @@ def load_asset_config(asset: str) -> AppConfig:
 
 
 def backtest_entry_price(cost: float, live_config: AppConfig, slippage: float) -> float:
-    """Entry fill price with slippage and paper commission (matches live OrderManager)."""
+    """Paper entry at mark plus optional stress slippage and commission."""
     commission = 4 * live_config.execution.paper_commission_per_contract / 100
     return cost + slippage + commission
 
@@ -356,12 +356,15 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--entry-time", type=_timelist_pst, default=None,
                    metavar="T[,T]",
                    help="Entry window start time(s) in PST, e.g. 7:00,7:10,7:30. "
-                        "Each defines a 10-minute entry window. Default: 7:00.")
+                        "Default: asset live config.")
+    p.add_argument("--entry-window-minutes", type=int, default=None,
+                   help="Minutes to scan for the first qualifying entry. "
+                        "Default: asset live-config window length.")
 
     p.add_argument("--slippage", type=float, default=None,
                    help=(
-                       "Per-spread slippage applied to entry and exit. "
-                       "Default: asset live config."
+                       "Optional per-spread execution stress applied to entry and exit. "
+                       "Default: 0 for mark_v1 paper accounting."
                    ))
     p.add_argument("--vix-max", type=float, default=None,
                    help="Skip days where VIX at entry exceeds this threshold.")
@@ -442,6 +445,15 @@ def parse_args() -> argparse.Namespace:
         args.method = [live_config.entry.strike_selection_method]
     if args.entry_time is None:
         args.entry_time = [_parse_config_time(live_config.entry.start_time)]
+    if args.entry_window_minutes is None:
+        start = _parse_config_time(live_config.entry.start_time)
+        end = _parse_config_time(live_config.entry.end_time)
+        args.entry_window_minutes = (
+            dt.datetime.combine(dt.date.min, end)
+            - dt.datetime.combine(dt.date.min, start)
+        ).seconds // 60
+    if args.entry_window_minutes <= 0:
+        p.error("--entry-window-minutes must be positive")
     if args.dd_schedule is None:
         args.dd_schedule = [None]
     parity_defaults = _sim_parity_fields(live_config)
@@ -456,7 +468,7 @@ def parse_args() -> argparse.Namespace:
     if args.use_abs_stop is None:
         args.use_abs_stop = live_config.profit_management.use_absolute_loss_stop
     if args.slippage is None:
-        args.slippage = live_config.execution.paper_slippage_per_spread
+        args.slippage = 0.0
     valid_profit_strategies = {"peakvaluetrailer", "profitprotector"}
     args.profit_strategy = [s.lower() for s in args.profit_strategy]
     invalid_profit_strategies = [
@@ -606,7 +618,7 @@ async def load_monitoring_chains(
     option_types: list[str],
     trade_id: int | None = None,
 ) -> ChainDay:
-    """Load monitor quotes for specific legs, preferring 2s live polls when available."""
+    """Load collector quotes, adding 2s polls only for a pinned live trade."""
     collector_rows = await conn.fetch(
         """
         SELECT snapshot_time, strike, option_type, bid, ask, mark, last,
@@ -625,7 +637,7 @@ async def load_monitoring_chains(
     has_monitoring_table = await conn.fetchval(
         "SELECT to_regclass('public.monitoring_leg_quotes') IS NOT NULL"
     )
-    if has_monitoring_table:
+    if has_monitoring_table and trade_id is not None:
         monitor_rows = await conn.fetch(
             """
             SELECT ts AS snapshot_time, strike, option_type, bid, ask, mark,
@@ -811,9 +823,20 @@ async def get_vix_prev_close(conn: asyncpg.Connection, date: dt.date) -> float:
 
 
 async def get_vix_at(conn: asyncpg.Connection, at_time: dt.datetime) -> float:
-    row = await conn.fetchval(
+    snapshot = await get_vix_snapshot_at(conn, at_time)
+    if snapshot is not None:
+        return snapshot[0]
+    return 18.0
+
+
+async def get_vix_snapshot_at(
+    conn: asyncpg.Connection,
+    at_time: dt.datetime,
+) -> tuple[float, dt.datetime] | None:
+    """Return the latest recorded VIX no later than *at_time*."""
+    row = await conn.fetchrow(
         """
-        SELECT price
+        SELECT price, ts
         FROM spot_prices
         WHERE underlying = '$VIX' AND ts <= $1
         ORDER BY ts DESC
@@ -821,13 +844,92 @@ async def get_vix_at(conn: asyncpg.Connection, at_time: dt.datetime) -> float:
         """,
         at_time,
     )
-    if row:
-        return float(row)
-    date = at_time.date()
-    hist = yf.Ticker("^VIX").history(start=date, end=date + dt.timedelta(days=1), interval="1d")
-    if not hist.empty:
-        return float(hist["Close"].iloc[0])
-    return 18.0
+    if not row:
+        return None
+    ts = row["ts"]
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=dt.timezone.utc)
+    return float(row["price"]), ts
+
+
+async def find_entry_in_window(
+    conn: asyncpg.Connection,
+    *,
+    data: dict,
+    date: dt.date,
+    asset: str,
+    direction_arg: str,
+    entry_pst: dt.time,
+    args: argparse.Namespace,
+    config: AppConfig,
+    wing_widths: list[int] | None,
+    vix_cache: dict[dt.datetime, tuple[float, dt.datetime] | None] | None = None,
+) -> tuple[MinuteBar, float, str, ButterflyCandidate] | None:
+    """Return the first qualifying paper entry inside the configured window."""
+    entry_et = _pst_to_et(entry_pst)
+    start = dt.datetime.combine(date, entry_et, tzinfo=EASTERN)
+    end = start + dt.timedelta(minutes=args.entry_window_minutes)
+    cache = vix_cache if vix_cache is not None else {}
+
+    for bar in data["bars"]:
+        if bar.ts < start or bar.ts > end:
+            continue
+        if bar.ts not in cache:
+            cache[bar.ts] = await get_vix_snapshot_at(conn, bar.ts)
+        vix_snapshot = cache[bar.ts]
+        if vix_snapshot is None:
+            continue
+        vix, vix_ts = vix_snapshot
+        if (
+            config.entry.strike_selection_method == "VIX"
+            and config.strategy.vix_width_buckets
+            and (bar.ts - vix_ts).total_seconds() > config.entry.max_vix_age_seconds
+        ):
+            continue
+        if args.vix_max is not None and vix > args.vix_max:
+            continue
+
+        direction = (
+            "CALL" if data["open_spot"] >= data["prev_close"] else "PUT"
+        ) if direction_arg == "auto" else direction_arg
+        gap_pct = (data["open_spot"] - data["prev_close"]) / data["prev_close"]
+        if args.gap_filter is not None:
+            if gap_pct < args.gap_filter:
+                continue
+            direction = "CALL"
+        elif args.strategy_f:
+            regime = _regime_classifier.classify(data["day"].recent_closes, vix)
+            if (
+                gap_pct < 0.0025
+                or regime != Regime.BULL
+                or vix >= data["vix_prev_close"]
+            ):
+                continue
+            direction = "CALL"
+        else:
+            regime = _regime_classifier.classify(data["day"].recent_closes, vix)
+            override, skip_reason = GapRegimeFilter(
+                bull_call_bias=args.bull_call_bias,
+                min_gap_pct=args.min_gap_pct,
+            ).apply(data["open_spot"], data["prev_close"], regime)
+            if skip_reason:
+                continue
+            if override:
+                direction = override
+
+        quotes = nearest_snapshot(data["chains"], bar.ts) or []
+        selection = select_entry_candidate(
+            quotes=quotes,
+            spot=bar.close,
+            direction=direction,
+            vix=vix,
+            config=config,
+            asset=asset,
+            wing_widths=wing_widths,
+        )
+        if selection.candidate is not None:
+            return bar, vix, direction, selection.candidate
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -992,6 +1094,12 @@ def _summarize_combo(
     traded = [(date, r) for date, r in day_results if r is not None and r.traded]
     pnls = [r.pnl for _, r in traded]
     wins = sum(1 for p in pnls if p > 0)
+    gross_wins = sum(p for p in pnls if p > 0)
+    top3_win_share = (
+        sum(sorted((p for p in pnls if p > 0), reverse=True)[:3]) / gross_wins
+        if gross_wins > 0
+        else 0.0
+    )
     exit_reasons = [r.exit_reason for _, r in traded]
 
     base = {**combo_label, "trade_count": len(traded)}
@@ -999,6 +1107,7 @@ def _summarize_combo(
         return {
             **base,
             "win_rate": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0,
+            "median_pnl": 0.0, "top3_win_share": 0.0,
             "sharpe": 0.0, "max_drawdown": 0.0, "profit_factor": 0.0,
             "max_consec_losses": 0,
             "exit_morning_dd": 0, "exit_late_morning_dd": 0,
@@ -1011,6 +1120,8 @@ def _summarize_combo(
         "win_rate": round(wins / len(traded), 4),
         "total_pnl": round(sum(pnls), 4),
         "avg_pnl": round(sum(pnls) / len(traded), 4),
+        "median_pnl": round(statistics.median(pnls), 4),
+        "top3_win_share": round(top3_win_share, 4),
         "sharpe": round(_sharpe(pnls), 4),
         "max_drawdown": round(_max_drawdown(pnls), 4),
         "profit_factor": _profit_factor(pnls),
@@ -2043,91 +2154,23 @@ async def run_single(args: argparse.Namespace) -> None:
                 print(" SKIPPED (no data)")
                 continue
 
-            if args.vix_max and d["vix"] > args.vix_max:
-                print(f" SKIPPED (VIX {d['vix']:.1f} > {args.vix_max})")
-                continue
-
-            if direction_arg == "auto":
-                direction = "CALL" if d["open_spot"] >= d["prev_close"] else "PUT"
-            else:
-                direction = direction_arg
-
-            if args.gap_filter is not None:
-                gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
-                if gap_pct < args.gap_filter:
-                    print(f" SKIPPED (gap {gap_pct:.3%} < {args.gap_filter:.3%})")
-                    continue
-                direction = "CALL"
-
-            if args.strategy_f:
-                gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
-                regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
-                if gap_pct < 0.0025:
-                    print(f" SKIPPED [F] gap {gap_pct:.3%} < 0.250%")
-                    continue
-                if regime != Regime.BULL:
-                    print(f" SKIPPED [F] regime={regime.value}")
-                    continue
-                if d["vix"] >= d["vix_prev_close"]:
-                    print(
-                        f" SKIPPED [F] VIX not gap-down "
-                        f"({d['vix']:.1f} >= prev {d['vix_prev_close']:.1f})"
-                    )
-                    continue
-                direction = "CALL"
-
-            if not args.gap_filter and not args.strategy_f:
-                gap_regime_filter = GapRegimeFilter(
-                    bull_call_bias=args.bull_call_bias,
-                    min_gap_pct=args.min_gap_pct,
-                )
-                regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
-                override, skip_reason = gap_regime_filter.apply(
-                    d["open_spot"],
-                    d["prev_close"],
-                    regime,
-                )
-                if skip_reason:
-                    print(f" SKIPPED (gap_regime: {skip_reason})")
-                    continue
-            if override:
-                direction = override
-
             entry_pst = args.entry_time[0]
-            entry_et = _pst_to_et(entry_pst)
-            entry_target = dt.datetime(
-                date.year,
-                date.month,
-                date.day,
-                entry_et.hour,
-                entry_et.minute,
-                tzinfo=EASTERN,
-            )
-            entry_bar = _find_entry_bar_at(
-                d["bars"],
-                entry_target,
-                max_lag_seconds=None if args.allow_late_entry_fallback else 120,
-            )
-            if entry_bar is None:
-                print(f" SKIPPED (no entry bar within 120s of {entry_et:%H:%M} ET)")
-                continue
-            entry_spot = entry_bar.close
-
-            entry_quotes = nearest_snapshot(d["chains"], entry_bar.ts) or []
-            selection = select_entry_candidate(
-                quotes=entry_quotes,
-                spot=entry_spot,
-                direction=direction,
-                vix=d["vix"],
-                config=selection_config,
+            entry = await find_entry_in_window(
+                conn,
+                data=d,
+                date=date,
                 asset=args.asset,
+                direction_arg=direction_arg,
+                entry_pst=entry_pst,
+                args=args,
+                config=selection_config,
                 wing_widths=wing_widths if args.wing_provided else None,
             )
-            chosen = selection.candidate
-
-            if not chosen:
-                print(" SKIPPED (no qualifying butterfly)")
+            if entry is None:
+                print(" SKIPPED (no qualifying entry in window)")
                 continue
+            entry_bar, entry_vix, direction, chosen = entry
+            entry_spot = entry_bar.close
 
             print(f" {chosen.wing_width}W {direction} center={chosen.center_strike:.0f}  "
                   f"R/R={chosen.reward_risk:.1f}  cost=${chosen.cost:.2f}")
@@ -2186,7 +2229,12 @@ async def run_single(args: argparse.Namespace) -> None:
                 restore_se()
 
             # Drop heavy chain/bar data before storing — only keep scalars needed for output
-            d_slim = {k: d[k] for k in ("date", "vix", "entry_spot", "prev_close")}
+            d_slim = {
+                "date": d["date"],
+                "vix": entry_vix,
+                "entry_spot": entry_spot,
+                "prev_close": d["prev_close"],
+            }
             day_rows.append(
                 {
                     "data": d_slim,
@@ -2243,10 +2291,14 @@ async def run_single(args: argparse.Namespace) -> None:
     print(f"  Win rate    : {len(wins)}/{n_traded}  ({len(wins)/n_traded*100:.0f}%)")
     print(f"  Total PnL   : ${sum(pnls_ct):+.2f} / contract")
     print(f"  Avg PnL     : ${sum(pnls_ct)/n_traded:+.2f} / contract")
+    print(f"  Median PnL  : ${statistics.median(pnls_ct):+.2f} / contract")
     print(f"  Best day    : ${max(pnls_ct):+.2f} / contract")
     print(f"  Worst day   : ${min(pnls_ct):+.2f} / contract")
     print(f"  Sharpe      : {_sharpe([p/100 for p in pnls_ct]):.3f}")
     print(f"  Profit factor: {_profit_factor(pnls_ct):.3f}")
+    gross_wins = sum(wins)
+    top3_share = sum(sorted(wins, reverse=True)[:3]) / gross_wins if gross_wins else 0.0
+    print(f"  Top-3 win share: {top3_share * 100:.1f}%")
     print("  Exit reasons: "
           + "  ".join(f"{k}={v}" for k, v in sorted(exit_counts.items())))
     print(f"{'='*90}")
@@ -2349,9 +2401,6 @@ async def run_sweep(args: argparse.Namespace) -> None:
             if d is None:
                 print(f"    {date} SKIPPED (no data)")
                 continue
-            if args.vix_max and d["vix"] > args.vix_max:
-                print(f"    {date} SKIPPED (VIX {d['vix']:.1f} > {args.vix_max})")
-                continue
             print(f"    {date}  VIX={d['vix']:.1f}  spot={d['entry_spot']:.0f}")
             usable_dates.append(date)
 
@@ -2359,6 +2408,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
             per_combo: list[tuple] = []
             needed_strikes: set[float] = set()
             needed_types: set[str] = set()
+            vix_cache: dict[dt.datetime, tuple[float, dt.datetime] | None] = {}
 
             for (
                 wing,
@@ -2375,75 +2425,27 @@ async def run_sweep(args: argparse.Namespace) -> None:
                 method,
                 entry_pst,
             ) in param_grid:
-                entry_et = _pst_to_et(entry_pst)
-                entry_target = dt.datetime(date.year, date.month, date.day,
-                                           entry_et.hour, entry_et.minute, tzinfo=EASTERN)
-                entry_bar_combo = _find_entry_bar_at(
-                    d["bars"],
-                    entry_target,
-                    max_lag_seconds=None if args.allow_late_entry_fallback else 120,
-                )
-                if entry_bar_combo is None:
-                    per_combo.append((None, None, None, None))
-                    continue
-
-                entry_quotes = nearest_snapshot(d["chains"], entry_bar_combo.ts) or []
-                entry_spot = entry_bar_combo.close
-                resolved_direction = (
-                    ("CALL" if d["open_spot"] >= d["prev_close"] else "PUT")
-                    if direction == "auto"
-                    else direction
-                )
-
-                if args.gap_filter is not None:
-                    gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
-                    if gap_pct < args.gap_filter:
-                        per_combo.append((None, None, None, None))
-                        continue
-                    resolved_direction = "CALL"
-
-                if args.strategy_f:
-                    gap_pct = (d["open_spot"] - d["prev_close"]) / d["prev_close"]
-                    regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
-                    if (gap_pct < 0.0025
-                            or regime != Regime.BULL
-                            or d["vix"] >= d["vix_prev_close"]):
-                        per_combo.append((None, None, None, None))
-                        continue
-                    resolved_direction = "CALL"
-
-                if not args.gap_filter and not args.strategy_f:
-                    gap_regime_filter = GapRegimeFilter(
-                        bull_call_bias=args.bull_call_bias,
-                        min_gap_pct=args.min_gap_pct,
-                    )
-                    regime = _regime_classifier.classify(d["day"].recent_closes, d["vix"])
-                    override, skip_reason = gap_regime_filter.apply(
-                        d["open_spot"],
-                        d["prev_close"],
-                        regime,
-                    )
-                    if skip_reason:
-                        per_combo.append((None, None, None, None))
-                        continue
-                    if override:
-                        resolved_direction = override
-
                 selection_config = entry_selection_config(
                     live_config,
                     selection_method=method if args.method_provided else None,
                     rr_min=rr_min if args.rr_min_provided else None,
                 )
-                selection = select_entry_candidate(
-                    quotes=entry_quotes,
-                    spot=entry_spot,
-                    direction=resolved_direction,
-                    vix=d["vix"],
-                    config=selection_config,
+                entry = await find_entry_in_window(
+                    conn,
+                    data=d,
+                    date=date,
                     asset=args.asset,
+                    direction_arg=direction,
+                    entry_pst=entry_pst,
+                    args=args,
+                    config=selection_config,
                     wing_widths=[wing] if wing is not None else None,
+                    vix_cache=vix_cache,
                 )
-                chosen = selection.candidate
+                if entry is None:
+                    per_combo.append((None, None, None, None))
+                    continue
+                entry_bar_combo, _entry_vix, resolved_direction, chosen = entry
                 if chosen is not None:
                     needed_strikes |= {
                         chosen.lower_strike,
@@ -2451,8 +2453,11 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         chosen.upper_strike,
                     }
                     needed_types.add(chosen.direction)
-                    et_end_total = entry_et.hour * 60 + entry_et.minute + 10
-                    entry_et_end = dt.time(et_end_total // 60, et_end_total % 60)
+                    entry_et = _pst_to_et(entry_pst)
+                    entry_et_end = (
+                        dt.datetime.combine(date, entry_et)
+                        + dt.timedelta(minutes=args.entry_window_minutes)
+                    ).time()
                     sim_params = SimulationParams(
                         wing_width=chosen.wing_width,
                         direction_override=resolved_direction,
@@ -2478,8 +2483,6 @@ async def run_sweep(args: argparse.Namespace) -> None:
                             "min_hold_minutes": min_hold_minutes,
                         },
                     )
-                else:
-                    sim_params = None
                 per_combo.append((resolved_direction, chosen, sim_params, entry_bar_combo.ts))
 
             # Phase 2: load monitoring chains for all needed strikes, patch once
@@ -2613,6 +2616,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
         "dd_schedule", "min_hold_minutes", "drawdown_confirmation_polls",
         "min_peak_profit_ratio",
         "trade_count", "win_rate", "total_pnl", "avg_pnl",
+        "median_pnl", "top3_win_share",
         "sharpe", "max_drawdown", "profit_factor", "max_consec_losses",
         "exit_morning_dd", "exit_late_morning_dd", "exit_afternoon_dd",
         "exit_drawdown", "exit_eod", "exit_expired", "exit_abs_stop",

@@ -2,8 +2,8 @@
   "schema_version": "1.0.0",
   "document": {
     "title": "Butterfly Guy Application Architecture",
-    "generated_on": "2026-07-21",
-    "repository_root": "/home/corey/Desktop/ButterflyGuy",
+    "generated_on": "2026-07-22",
+    "repository_root": ".",
     "purpose": "Machine-oriented architecture handoff for the next coding agent.",
     "authoritative_sources": [
       "AGENTS.md",
@@ -16,8 +16,8 @@
     ],
     "freshness": {
       "graph_report_date": "2026-07-22",
-      "graph_commit": "d11f2d18",
-      "graph_stats": {"files": 251, "nodes": 4148, "edges": 6863, "communities": 327},
+      "graph_commit": "8677abab",
+      "graph_stats": {"files": 253, "nodes": 4173, "edges": 6908, "communities": 325},
       "warning": "Compare graph_commit with git rev-parse HEAD before trusting graph-derived edges."
     }
   },
@@ -84,7 +84,7 @@
       "GapRegimeFilter and DirectionFilter/BiasScoreFilter choose CALL or PUT",
       "select_entry_candidate builds candidates across active widths and applies TARGET_COST, VIX, or BEST_RR selection",
       "Persist candidates and selection-parity audit data",
-      "OrderManager walks the debit-price ladder; paper mode simulates fills, live mode creates broker order intents",
+      "OrderManager fills paper entries immediately at observed mark plus commission; live mode walks the debit-price ladder and creates broker order intents",
       "Persist butterfly_trades, update risk state/metrics, notify Discord",
       "Pass TradeRecord and ButterflyCandidate to PositionService"
     ],
@@ -98,8 +98,8 @@
       "On fill or cash settlement, close trade, record PnL in RiskEngine, update metrics, and notify"
     ],
     "backtest_and_research": [
-      "run_backtest_db loads TimescaleDB chain/spot history and the asset config",
-      "It shares strategy.entry_selection with live entry selection and is the preferred parity path",
+      "run_backtest_db loads TimescaleDB chain/spot history and the asset config, scans the configured entry window, and uses only VIX observations available at each candidate time",
+      "It shares strategy.entry_selection with live entry selection; hypothetical sweeps use collector snapshots while live-pinned replay may also use recorded monitoring legs",
       "SimulationEngine and loaders support CSV, DB, Schwab, cache, synthetic, sweep, and legacy experiments",
       "inspect_entry and parity reports explain historical decisions and live-vs-replay differences",
       "run_entry_analysis and SimulationEngine.simulate_day are legacy research paths, not live-parity evidence"
@@ -153,6 +153,7 @@
     "network": "external Docker network monitoring_net",
     "services": [
       {"compose_service": "app_spx", "container": "butterfly_spx_app", "profile": "default", "config": "configs/config.yaml", "status": "primary", "metrics": "127.0.0.1:8000"},
+      {"compose_service": "app_spx_candidate", "container": "butterfly_spx_candidate", "profile": "spx-candidate", "config": "configs/config_spx_candidate.yaml", "status": "isolated paper candidate; 20-trade forward gate", "database": "butterfly_guy_spx_candidate", "metrics": "127.0.0.1:8005"},
       {"compose_service": "app_ndx", "container": "butterfly_ndx_app", "profile": "ndx", "config": "configs/config_ndx.yaml", "status": "experimental", "metrics": "127.0.0.1:8001"},
       {"compose_service": "app_xsp", "container": "butterfly_xsp_app", "profile": "xsp", "config": "configs/config_xsp.yaml", "status": "experimental/canary guarded", "metrics": "127.0.0.1:8003"}
     ],
@@ -179,6 +180,7 @@
   "configuration": {
     "asset_configs": [
       {"asset": "SPX", "path": "configs/config.yaml", "role": "default production research/paper path"},
+      {"asset": "SPX candidate", "path": "configs/config_spx_candidate.yaml", "role": "BEST_RR paper-only forward test with separate DB and notifications disabled"},
       {"asset": "NDX", "path": "configs/config_ndx.yaml", "role": "experimental tuning path"},
       {"asset": "XSP", "path": "configs/config_xsp.yaml", "role": "experimental/canary tuning path"}
     ],
@@ -195,6 +197,7 @@
     "At most one active live entry intent per underlying/date and one active exit intent per trade are enforced in SQL.",
     "At most one OPEN trade per underlying/date is enforced by migration 008.",
     "Paper fill pricing must preserve the project mark-price convention.",
+    "The SPX candidate remains paper-only, uses a separate database, and cannot replace the primary before its 20-trade forward review.",
     "TimescaleDB history plus decision/intents evidence is the audit and replay backbone."
   ],
   "agent_handoff": {

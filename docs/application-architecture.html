@@ -105,10 +105,10 @@
       <div class="stat"><b>10</b><span>persistent tables</span></div>
       <div class="stat"><b>5</b><span>concurrent runtime loops</span></div>
       <div class="stat"><b>3</b><span>asset configurations</span></div>
-      <div class="stat"><b>4,148</b><span>graphify nodes</span></div>
-      <div class="stat"><b>6,863</b><span>graphify edges</span></div>
+      <div class="stat"><b>4,173</b><span>graphify nodes</span></div>
+      <div class="stat"><b>6,908</b><span>graphify edges</span></div>
     </div>
-    <div class="notice"><strong>Trading boundary.</strong> SPX is the primary path. NDX and XSP are separate experimental tuning paths. Paper trading is the safe default; live execution is guarded and reconciled against broker evidence.</div>
+    <div class="notice"><strong>Trading boundary.</strong> SPX is the primary path. The SPX candidate is an isolated paper-only forward test with a separate database and a 20-trade review gate. NDX and XSP are separate experimental tuning paths. Live execution is guarded and reconciled against broker evidence.</div>
     <h2>The system in one line</h2>
     <div class="flow">
       <div class="node"><strong>Charles Schwab</strong><small>Chains, spot, candles, account, positions, orders, transactions</small></div>
@@ -134,7 +134,7 @@
     <div class="swimlane">
       <div class="lane"><div class="lane-name">Startup</div><div class="step">Load + validate asset config</div><div class="step">DB pool + migrations</div><div class="step">Schwab OAuth client</div><div class="step">Classify regime</div><div class="step">Compose services</div><div class="step">Recover state + seed metrics</div></div>
       <div class="lane"><div class="lane-name">Collector</div><div class="step">Check trading session</div><div class="step">Fetch SPX/NDX/XSP chain</div><div class="step">Normalize option rows</div><div class="step">Write full snapshot</div><div class="step">Write spot/VIX + bars</div><div class="step">Repeat on configured interval</div></div>
-      <div class="lane"><div class="lane-name">Entry</div><div class="step">Window + freshness guards</div><div class="step">Risk + buying power</div><div class="step">Direction + regime</div><div class="step">Build/select candidates</div><div class="step">Price ladder + fill</div><div class="step">Persist + hand to monitor</div></div>
+      <div class="lane"><div class="lane-name">Entry</div><div class="step">Window + freshness guards</div><div class="step">Risk + buying power</div><div class="step">Direction + regime</div><div class="step">Build/select candidates</div><div class="step">Paper mark fill or live ladder</div><div class="step">Persist + hand to monitor</div></div>
       <div class="lane"><div class="lane-name">Position</div><div class="step">Fetch chain every 2s</div><div class="step">Value legs + quote quality</div><div class="step">Track peak + tent</div><div class="step">Evaluate exit state</div><div class="step">Execute/retry exit</div><div class="step">Close + PnL + notify</div></div>
       <div class="lane"><div class="lane-name">Live reconcile</div><div class="step">Read broker account</div><div class="step">Read orders/intents</div><div class="step">Compare DB quantities</div><div class="step">Repair explicit fills</div><div class="step">Resolve settlement</div><div class="step">Gate entry on ambiguity</div></div>
     </div>
@@ -190,7 +190,7 @@
   <section id="research" class="page">
     <h2>Research, scanning, and reports</h2>
     <div class="grid">
-      <article class="card wide"><h3>Preferred live-parity replay</h3><p><code>run_backtest_db.py</code> loads TimescaleDB history, selects the asset config, and calls the same <code>strategy.entry_selection</code> used by live entry. Use this path for claims about live-selection parity.</p><span class="tag">DB chain history</span><span class="tag">asset config</span><span class="tag">shared selection</span></article>
+      <article class="card wide"><h3>Preferred live-parity replay</h3><p><code>run_backtest_db.py</code> scans the configured entry window with timestamp-correct VIX, uses collector snapshots for hypothetical sweeps, and calls the same <code>strategy.entry_selection</code> used by live entry. Recorded monitoring legs are reserved for live-pinned replay.</p><span class="tag">DB chain history</span><span class="tag">no future VIX</span><span class="tag">shared selection</span></article>
       <article class="card wide"><h3>Exploratory research</h3><p>CSV/Schwab loaders, chain cache, synthetic chains, parameter sweeps, paper replay, strategy discovery, and regime-classifier sweeps support research. <code>run_entry_analysis.py</code> and <code>SimulationEngine.simulate_day()</code> are explicitly legacy for parity.</p></article>
       <article class="card"><h3>Morning equity scan</h3><p>Universe files → Schwab quotes/candles → RVOL/prior change → SEC/Alpha Vantage catalysts → rankings → archived text/JSON → Discord.</p></article>
       <article class="card"><h3>Daily report card</h3><p>Schwab balances + orders + transactions + open positions → FIFO round trips/problem detection → equity candle charts → Discord/archive.</p></article>
@@ -205,16 +205,17 @@
     <h2>Docker and observability topology</h2>
     <div class="table-wrap"><table><thead><tr><th>Asset service</th><th>Profile</th><th>Config</th><th>Metrics</th><th>Role</th></tr></thead><tbody>
       <tr><td>butterfly_spx_app</td><td>default</td><td>configs/config.yaml</td><td>127.0.0.1:8000</td><td><span class="ok">Primary</span></td></tr>
+      <tr><td>butterfly_spx_candidate</td><td>spx-candidate</td><td>configs/config_spx_candidate.yaml</td><td>127.0.0.1:8005</td><td>Paper-only · separate DB · 20-trade gate</td></tr>
       <tr><td>butterfly_ndx_app</td><td>ndx</td><td>configs/config_ndx.yaml</td><td>127.0.0.1:8001</td><td>Experimental</td></tr>
       <tr><td>butterfly_xsp_app</td><td>xsp</td><td>configs/config_xsp.yaml</td><td>127.0.0.1:8003</td><td>Experimental / canary guarded</td></tr>
     </tbody></table></div>
     <div class="grid" style="margin-top:16px">
       <article class="card"><h3>Network</h3><p>All asset apps attach to the external <code>monitoring_net</code>, where TimescaleDB, Prometheus, Grafana, and Alertmanager are expected to be reachable.</p></article>
       <article class="card"><h3>Container hardening</h3><p>Read-only filesystem, tmpfs at <code>/tmp</code>, no-new-privileges, all capabilities dropped, and explicit mounts for tokens, config, and chain data.</p></article>
-      <article class="card"><h3>Prometheus + Grafana</h3><p>Prometheus scrapes asset metrics. Provisioned dashboards cover overall trading, trade detail, and performance; TimescaleDB supports dashboard queries.</p></article>
+      <article class="card"><h3>Prometheus + Grafana</h3><p>Prometheus scrapes asset and candidate metrics. The candidate dashboard reads its separate TimescaleDB and tracks the 20-trade forward gate.</p></article>
       <article class="card"><h3>Configuration boundary</h3><p>Asset behavior lives in YAML; secrets and runtime credentials remain in <code>.env</code> and <code>tokens.json</code>. Never copy their values into reports or this map.</p></article>
       <article class="card"><h3>Notifications</h3><p>SPX can send Discord entry/exit charts. Telegram carries risk/operational warnings. Alertmanager receives critical live reconciliation, ambiguity, and settlement conditions.</p></article>
-      <article class="card"><h3>Runtime command</h3><p><code>docker compose -f infra/docker-compose.yml up -d</code> starts SPX. Add the <code>ndx</code>/<code>xsp</code> profiles only when those experimental paths are intended.</p></article>
+      <article class="card"><h3>Runtime command</h3><p><code>docker compose -f infra/docker-compose.yml up -d</code> starts primary SPX. The paper twin requires the explicit <code>spx-candidate</code> profile; NDX and XSP retain their own profiles.</p></article>
     </div>
   </section>
 

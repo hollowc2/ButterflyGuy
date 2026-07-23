@@ -36,6 +36,8 @@ def test_spx_backtest_drawdown_defaults_match_live_config(monkeypatch):
     assert args.profit_strategy == ["peakvaluetrailer"]
     assert args.wing_provided is False
     assert args.entry_time == [dt.time(7, 0)]
+    assert args.entry_window_minutes == 45
+    assert args.slippage == 0.0
     assert args.use_abs_stop is False
     assert args.method_provided is False
     assert args.rr_min_provided is False
@@ -89,7 +91,7 @@ def test_xsp_backtest_drawdown_defaults_match_live_config(monkeypatch):
     assert args.morning_dd == [0.80]
     assert args.late_morning_dd == [0.90]
     assert args.afternoon_dd == [0.85]
-    assert args.slippage == 0.005
+    assert args.slippage == 0.0
     parity = _sim_parity_fields(load_asset_config("XSP"))
     assert parity["drawdown_confirmation_polls"] == 3
     assert parity["min_peak_profit_ratio"] == 1.25

@@ -8,6 +8,11 @@ scrape_configs:
       - targets: ["app_spx:8000"]
     metrics_path: /metrics
 
+  - job_name: "butterfly_spx_candidate"
+    static_configs:
+      - targets: ["app_spx_candidate:8000"]
+    metrics_path: /metrics
+
   - job_name: "butterfly_ndx"
     static_configs:
       - targets: ["app_ndx:8000"]
