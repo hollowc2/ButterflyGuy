@@ -1,0 +1,55 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "type": "table",
+      "title": "Trades and exits",
+      "datasource": {"uid": "$candidate_datasource"},
+      "targets": [{
+        "format": "table",
+        "rawQuery": true,
+        "rawSql": "SELECT id, trade_date, direction, wing_width, center_strike, entry_price, entry_time, exit_price, exit_time, exit_reason, pnl * 100 AS pnl_dollars, status, metadata->>'feed_instance' AS feed_instance, metadata->>'feed_sequence' AS feed_sequence, metadata->>'config_hash' AS config_hash, metadata->>'git_sha' AS git_sha FROM butterfly_trades ORDER BY entry_time DESC LIMIT 100"
+      }],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "type": "table",
+      "title": "Decisions and entry evidence",
+      "datasource": {"uid": "$candidate_datasource"},
+      "targets": [{
+        "format": "table",
+        "rawQuery": true,
+        "rawSql": "SELECT ts, event_type, data FROM decision_log WHERE $__timeFilter(ts) ORDER BY ts DESC LIMIT 500"
+      }],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Monitoring legs",
+      "datasource": {"uid": "$candidate_datasource"},
+      "targets": [{
+        "format": "time_series",
+        "rawQuery": true,
+        "rawSql": "SELECT ts AS time, mark, symbol AS metric FROM monitoring_leg_quotes WHERE $__timeFilter(ts) ORDER BY ts"
+      }],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["butterfly-guy", "candidate-fleet"],
+  "templating": {
+    "list": [{
+      "name": "candidate_datasource",
+      "label": "Candidate",
+      "type": "datasource",
+      "query": "postgres",
+      "regex": "/^Candidate /",
+      "current": {}
+    }]
+  },
+  "time": {"from": "now-24h", "to": "now"},
+  "title": "SPX Candidate Detail",
+  "uid": "spx-candidate-detail",
+  "version": 1
+}

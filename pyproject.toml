@@ -21,6 +21,9 @@ dependencies = [
     "matplotlib>=3.9.0",
 ]
 
+[project.scripts]
+candidatectl = "butterfly_guy.scripts.candidatectl:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

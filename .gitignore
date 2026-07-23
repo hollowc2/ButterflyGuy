@@ -53,12 +53,15 @@ logs/
 
 # Docker volumes (don't commit)
 infra/grafana/provisioning/alerting/
+infra/generated/
 .worktrees/
 
 # Local Codex and Graphify runtime artifacts
 .codex/
 graphify-out/.graphify_root
+graphify-out/.graphify_labels.json
 graphify-out/cache/
+graphify-out/20??-??-??/
 
 # Local research output (intentionally untracked)
 /reports/

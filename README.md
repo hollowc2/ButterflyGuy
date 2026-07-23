@@ -125,6 +125,48 @@ Metrics ports from the compose file:
 - NDX: `127.0.0.1:8001`
 - XSP: `127.0.0.1:8003`
 
+## Shared SPX candidate fleet
+
+The candidate fleet is a separate, paper-only runtime. The primary SPX service
+continues to read Schwab directly and does not depend on the fleet.
+
+`configs/candidates.yaml` is the source of truth for up to ten YAML variants.
+Each enabled candidate has its own container and PostgreSQL database. Slots
+`0` through `9` map to host metrics ports `8100` through `8109`. The existing
+BEST_RR database is registered as `butterfly_guy_spx_candidate` and is disabled
+by default so its history is preserved until the rollout gate is approved.
+
+Validate and inspect generated runtime changes:
+
+```bash
+uv run candidatectl validate
+uv run candidatectl render
+uv run candidatectl plan
+```
+
+Generated Compose, Prometheus file-discovery, and Grafana datasource files live
+under ignored `infra/generated/`. `apply` creates missing databases and starts
+enabled services; it never drops databases. Disabled containers are stopped
+only when explicitly requested:
+
+```bash
+uv run candidatectl apply
+uv run candidatectl apply --stop-disabled
+```
+
+The shared `spx_candidate_feed` performs candidate-side Schwab reads and keeps a
+full immutable snapshot. It polls every 60 seconds while idle and every two
+seconds while an evaluator has an entry or position lease. Candidate containers
+have no project `.env`, Schwab credentials, token mount, account ID, broker
+client, or live-order executor. Paper entries are accepted only after the feed
+snapshot has been pinned in `butterfly_guy_candidate_market`; position monitors
+request and persist only their three leg quotes.
+
+Roll out conservatively: run the feed for a full-session parity probe, migrate
+BEST_RR for one observed session, then gate expansion at three, five, and ten
+candidates. The legacy `app_spx_candidate` Compose profile remains available
+for one rollback cycle and continues to use the preserved BEST_RR database.
+
 ### 4) Run the live orchestrator directly
 
 The live runner starts collection, entry logic, and position monitoring together.

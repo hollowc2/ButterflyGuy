@@ -1,0 +1,37 @@
+FROM python:3.12-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+RUN groupadd --gid 1001 butterfly \
+    && useradd --uid 1001 --gid butterfly --create-home --shell /usr/sbin/nologin butterfly
+
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+ENV MPLCONFIGDIR=/tmp/matplotlib
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY src/ ./src/
+COPY configs/config.yaml configs/config.yaml
+RUN uv sync --frozen --no-dev --no-editable \
+    && cp -r src/butterfly_guy/db/migrations/*.sql \
+        .venv/lib/python3.12/site-packages/butterfly_guy/db/migrations/ \
+    && rm -rf \
+        src/butterfly_guy/execution \
+        .venv/lib/python3.12/site-packages/butterfly_guy/execution \
+    && rm -f \
+        src/butterfly_guy/data/schwab_client.py \
+        src/butterfly_guy/services/trade_service.py \
+        src/butterfly_guy/services/position_service.py \
+        src/butterfly_guy/scripts/run_live.py \
+        .venv/lib/python3.12/site-packages/butterfly_guy/data/schwab_client.py \
+        .venv/lib/python3.12/site-packages/butterfly_guy/services/trade_service.py \
+        .venv/lib/python3.12/site-packages/butterfly_guy/services/position_service.py \
+        .venv/lib/python3.12/site-packages/butterfly_guy/scripts/run_live.py
+
+RUN chown -R butterfly:butterfly /app
+USER butterfly
+
+CMD ["python", "-m", "butterfly_guy.scripts.run_candidate"]

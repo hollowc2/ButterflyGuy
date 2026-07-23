@@ -1,0 +1,62 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Evaluator health",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "up{job=\"spx_candidate_evaluator\"}", "legendFormat": "{{candidate_id}}"}],
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Feed sequence",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "candidate_feed_sequence"}],
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Feed age",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "candidate_feed_snapshot_age_seconds"}],
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "type": "table",
+      "title": "Review gate progress",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{
+        "expr": "candidate_evaluator_review_progress_ratio",
+        "legendFormat": "{{candidate_id}}"
+      }],
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Candidate total P&L",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "candidate_evaluator_realized_pnl_dollars", "legendFormat": "{{candidate_id}}"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}
+    },
+    {
+      "type": "table",
+      "title": "Win rate and drawdown",
+      "description": "Detailed win-rate and drawdown history is available from each isolated candidate datasource.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "candidate_evaluator_win_rate", "legendFormat": "{{candidate_id}} win rate"},
+        {"expr": "candidate_evaluator_max_drawdown_dollars", "legendFormat": "{{candidate_id}} drawdown"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5}
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["butterfly-guy", "candidate-fleet"],
+  "templating": {"list": []},
+  "time": {"from": "now-24h", "to": "now"},
+  "title": "SPX Candidate Fleet",
+  "uid": "spx-candidate-fleet",
+  "version": 1
+}

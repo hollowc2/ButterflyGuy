@@ -1,0 +1,63 @@
+groups:
+  - name: spx-candidate-fleet
+    rules:
+      - alert: CandidateFeedDown
+        expr: up{job="spx_candidate_feed"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Shared SPX candidate feed is down
+
+      - alert: CandidateFeedStale
+        expr: candidate_feed_snapshot_age_seconds > 65
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Shared SPX candidate snapshot is stale
+
+      - alert: CandidateFeedRepeatedFailures
+        expr: increase(candidate_feed_failures_total[5m]) >= 3
+        labels:
+          severity: warning
+        annotations:
+          summary: Shared SPX candidate feed is repeatedly failing
+
+      - alert: CandidateEvaluatorDown
+        expr: up{job="spx_candidate_evaluator"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Candidate evaluator {{ $labels.candidate_id }} is down
+
+      - alert: CandidatePositionLeaseMissing
+        expr: candidate_evaluator_open_positions > 0 unless on(candidate_id) candidate_feed_lease_active{kind="position"} == 1
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: Candidate {{ $labels.candidate_id }} has an open position without a lease
+
+      - alert: CandidateArchiveFailure
+        expr: increase(candidate_feed_archive_failures_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: Candidate feed snapshot archival failed
+
+      - alert: CandidateDatabasePoolPressure
+        expr: (butterfly_database_pool_size - butterfly_database_pool_idle) / butterfly_database_pool_max > 0.9
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Candidate PostgreSQL pool is near capacity
+
+      - alert: CandidateFeedSchwab429
+        expr: increase(butterfly_schwab_api_errors_total{endpoint=~"candidate_.*"}[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Candidate feed observed Schwab throttling or API errors
