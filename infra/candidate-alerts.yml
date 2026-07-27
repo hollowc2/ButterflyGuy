@@ -10,7 +10,7 @@ groups:
           summary: Shared SPX candidate feed is down
 
       - alert: CandidateFeedStale
-        expr: candidate_feed_snapshot_age_seconds > 65
+        expr: candidate_feed_snapshot_age_seconds > 65 and on(instance, job) candidate_feed_market_open == 1
         for: 1m
         labels:
           severity: critical
@@ -18,7 +18,7 @@ groups:
           summary: Shared SPX candidate snapshot is stale
 
       - alert: CandidateFeedRepeatedFailures
-        expr: increase(candidate_feed_failures_total[5m]) >= 3
+        expr: increase(candidate_feed_failures_total[5m]) >= 3 and on(instance, job) candidate_feed_market_open == 1
         labels:
           severity: warning
         annotations:
@@ -56,7 +56,7 @@ groups:
           summary: Candidate PostgreSQL pool is near capacity
 
       - alert: CandidateFeedSchwab429
-        expr: increase(butterfly_schwab_api_errors_total{endpoint=~"candidate_.*"}[5m]) > 0
+        expr: increase(butterfly_schwab_api_errors_total{endpoint=~"candidate_.*"}[5m]) > 0 and on(instance, job) candidate_feed_market_open == 1
         labels:
           severity: warning
         annotations:

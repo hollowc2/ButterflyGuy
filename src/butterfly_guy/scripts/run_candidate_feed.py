@@ -52,7 +52,6 @@ async def main() -> None:
         LeaseRegistry(ttl_seconds=30),
         archive,
     )
-    await feed.collect_once()
     runner = web.AppRunner(create_app(feed))
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", args.port)

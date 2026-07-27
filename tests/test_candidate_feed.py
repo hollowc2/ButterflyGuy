@@ -1,7 +1,9 @@
+import asyncio
 import datetime as dt
 
 import pytest
 
+import butterfly_guy.candidate_fleet.feed as feed_module
 from butterfly_guy.candidate_fleet.feed import (
     AtomicSnapshotStore,
     CandidateFeed,
@@ -74,6 +76,29 @@ async def test_active_feed_fetches_chain_each_cycle_and_context_once_per_minute(
     assert market.chain_calls == 2
     assert market.context_calls == 4
     assert archive.archived == [(1, True)]
+
+
+@pytest.mark.asyncio
+async def test_feed_makes_no_market_data_calls_while_market_is_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    market = FakeMarket()
+    feed = CandidateFeed(
+        market,  # type: ignore[arg-type]
+        AtomicSnapshotStore("feed-closed"),
+        LeaseRegistry(),
+        FakeArchive(),  # type: ignore[arg-type]
+    )
+    monkeypatch.setattr(feed_module, "is_market_open", lambda: False)
+
+    task = asyncio.create_task(feed.run())
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert market.context_calls == 0
+    assert market.chain_calls == 0
 
 
 class FakePool:

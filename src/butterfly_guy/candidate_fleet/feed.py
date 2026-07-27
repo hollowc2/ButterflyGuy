@@ -20,7 +20,12 @@ from butterfly_guy.candidate_fleet.models import (
 )
 from butterfly_guy.candidate_fleet.schwab_market_data import ReadOnlySchwabMarketDataClient
 from butterfly_guy.core.logging import get_logger
-from butterfly_guy.core.time_utils import EASTERN, MARKET_OPEN, get_0dte_expiration
+from butterfly_guy.core.time_utils import (
+    EASTERN,
+    MARKET_OPEN,
+    get_0dte_expiration,
+    is_market_open,
+)
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import OptionQuote
 from butterfly_guy.db.connection import DatabasePool
@@ -29,6 +34,10 @@ log = get_logger(__name__)
 
 feed_sequence = Gauge("candidate_feed_sequence", "Latest atomically published sequence")
 feed_snapshot_age = Gauge("candidate_feed_snapshot_age_seconds", "Age of latest snapshot")
+feed_market_open = Gauge(
+    "candidate_feed_market_open",
+    "Whether the US cash market is currently open",
+)
 feed_active_leases = Gauge(
     "candidate_feed_active_leases",
     "Unexpired demand leases",
@@ -332,6 +341,11 @@ class CandidateFeed:
 
     async def run(self) -> None:
         while True:
+            if not is_market_open():
+                feed_market_open.set(0)
+                await asyncio.sleep(30)
+                continue
+            feed_market_open.set(1)
             started = asyncio.get_running_loop().time()
             try:
                 await self.collect_once()
@@ -460,6 +474,7 @@ async def _ready(request: web.Request) -> web.Response:
 
 async def _metrics(request: web.Request) -> web.Response:
     feed: CandidateFeed = request.app["feed"]
+    feed_market_open.set(1 if is_market_open() else 0)
     snapshot = feed.store.peek()
     if snapshot is not None:
         feed_snapshot_age.set(snapshot.age_seconds())
