@@ -17,10 +17,14 @@ At a high level, the system:
 - manages open positions with profit and drawdown logic,
 - supports paper trading and controlled live trading,
 - replays historical data for backtests and parity checks,
-- runs equity universe scans for the morning workflow,
 - publishes metrics and dashboards for monitoring.
 
 The runtime is split so you can run collection, trading, or the full stack.
+
+This README covers the Butterfly Guy options system only. The repository also
+contains personal equity-research utilities that reuse the local Schwab OAuth
+authentication; they are not part of Butterfly Guy, its strategy, or its
+runtime.
 
 ## Core repo layout
 
@@ -33,7 +37,6 @@ The runtime is split so you can run collection, trading, or the full stack.
 | `src/butterfly_guy/risk/` | Daily loss limits, trade caps, and buying-power guards |
 | `src/butterfly_guy/data/` | Schwab client, chain collection, and DB-facing data models |
 | `src/butterfly_guy/backtest/` | DB replay and simulation engine |
-| `src/butterfly_guy/equity_scan/` | Morning stock-universe scan and report generation |
 | `configs/` | SPX, NDX, and XSP configuration files |
 | `infra/` | Docker compose and observability wiring |
 | `tests/` | Focused test coverage |
@@ -209,14 +212,7 @@ uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03
 uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --method VIX
 ```
 
-### 7) Run the morning equity scan
-
-```bash
-uv run python src/butterfly_guy/scripts/run_morning_scan.py --dry-run
-uv run python src/butterfly_guy/scripts/refresh_equity_universes.py --dry-run
-```
-
-### 8) Generate or compare reports
+### 7) Generate or compare reports
 
 ```bash
 uv run python src/butterfly_guy/scripts/report_trade_ladders.py 2026-05-20 --underlying SPX
@@ -224,24 +220,6 @@ uv run python src/butterfly_guy/scripts/report_selection_parity.py 2026-05-15 20
 uv run python src/butterfly_guy/scripts/report_exit_mark_parity.py --trade-id 87
 uv run python src/butterfly_guy/scripts/generate_live_performance.py
 ```
-
-### 9) Capture equity candles and Level II for trade review
-
-Backfill recent one-minute candles after the session:
-
-```bash
-uv run python -m butterfly_guy.scripts.backfill_equity_candles BMNR 2026-07-23
-```
-
-Record BMNR's live NYSE chart, Level I, and Level II streams for a future review:
-
-```bash
-uv run python -m butterfly_guy.scripts.record_equity_market_data BMNR --venue nyse
-```
-
-Order-book history is not backfilled: the recorder must be running during the
-session. See [`docs/equity-market-data.md`](docs/equity-market-data.md) for output
-formats, limitations, and a bounded connectivity test.
 
 ## Backtesting
 
