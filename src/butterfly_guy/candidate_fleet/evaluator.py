@@ -12,7 +12,11 @@ from typing import Any
 
 from prometheus_client import Counter, Gauge
 
-from butterfly_guy.candidate_fleet.models import MarketSnapshot, SnapshotIdentity
+from butterfly_guy.candidate_fleet.models import (
+    MarketSnapshot,
+    SessionCloseUnavailableError,
+    SnapshotIdentity,
+)
 from butterfly_guy.candidate_fleet.provider import MarketDataProvider
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
@@ -30,7 +34,7 @@ from butterfly_guy.db.queries import (
     TentQueries,
     TradeQueries,
 )
-from butterfly_guy.position.position_manager import PositionManager
+from butterfly_guy.position.position_manager import PositionManager, fly_settlement_value
 from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.strategy.direction_filter import DirectionFilter
@@ -65,7 +69,12 @@ candidate_realized_pnl = Gauge(
 )
 candidate_trade_count = Gauge(
     "candidate_evaluator_trade_count",
-    "Persisted paper trades for the candidate",
+    "Persisted mark_v1 paper trades for the candidate, including open positions",
+    ["candidate_id"],
+)
+candidate_closed_trade_count = Gauge(
+    "candidate_evaluator_closed_trade_count",
+    "Closed mark_v1 paper trades eligible for candidate review",
     ["candidate_id"],
 )
 candidate_win_rate = Gauge(
@@ -85,7 +94,37 @@ candidate_review_progress = Gauge(
 )
 candidate_open_positions = Gauge(
     "candidate_evaluator_open_positions",
-    "Persisted OPEN candidate positions",
+    "Persisted OPEN mark_v1 candidate positions",
+    ["candidate_id"],
+)
+candidate_average_pnl = Gauge(
+    "candidate_evaluator_average_pnl_dollars",
+    "Average closed-trade PnL for the mark_v1 cohort",
+    ["candidate_id"],
+)
+candidate_profit_factor = Gauge(
+    "candidate_evaluator_profit_factor",
+    "Gross winning PnL divided by absolute gross losing PnL for closed mark_v1 trades",
+    ["candidate_id"],
+)
+candidate_largest_winner_share = Gauge(
+    "candidate_evaluator_largest_winner_share_ratio",
+    "Largest winner divided by gross winning PnL for closed mark_v1 trades",
+    ["candidate_id"],
+)
+candidate_pnl_without_largest_winner = Gauge(
+    "candidate_evaluator_pnl_without_largest_winner_dollars",
+    "Closed mark_v1 total PnL after removing the largest winning trade",
+    ["candidate_id"],
+)
+candidate_data_quality_failures = Gauge(
+    "candidate_evaluator_data_quality_failures",
+    "Persisted feed or entry-data failures for the candidate",
+    ["candidate_id"],
+)
+candidate_parity_failures = Gauge(
+    "candidate_evaluator_parity_failures",
+    "Persisted strategy or paper-fill entry/exit parity failures for the candidate",
     ["candidate_id"],
 )
 
@@ -112,6 +151,10 @@ def assert_candidate_safety(config: AppConfig, environ: dict[str, str] | None = 
         errors.append("execution.allow_live_trading must be false")
     if config.risk.max_position_size != 1:
         errors.append("risk.max_position_size must be 1")
+    if config.risk.max_trades_per_day != 1:
+        errors.append("risk.max_trades_per_day must be 1")
+    if config.monitoring.metrics_port != 8000:
+        errors.append("monitoring.metrics_port must be 8000")
     env = environ if environ is not None else dict(os.environ)
     leaked = sorted(key for key in FORBIDDEN_CANDIDATE_ENV if env.get(key))
     if leaked:
@@ -145,6 +188,87 @@ class CandidateAuditContext:
                 }
             )
         return data
+
+
+@dataclass(frozen=True)
+class CandidatePerformanceStats:
+    closed_trade_count: int
+    total_pnl: float
+    average_pnl: float
+    win_rate: float
+    profit_factor: float
+    max_drawdown: float
+    largest_winner_share: float
+    pnl_without_largest_winner: float
+
+
+def candidate_performance_stats(pnls: list[float]) -> CandidatePerformanceStats:
+    """Summarize one chronological, closed mark_v1 PnL cohort."""
+    closed = len(pnls)
+    gross_profit = sum(pnl for pnl in pnls if pnl > 0)
+    gross_loss = abs(sum(pnl for pnl in pnls if pnl < 0))
+    largest_winner = max((pnl for pnl in pnls if pnl > 0), default=0.0)
+    equity = 0.0
+    peak = 0.0
+    drawdown = 0.0
+    for pnl in pnls:
+        equity += pnl
+        peak = max(peak, equity)
+        drawdown = max(drawdown, peak - equity)
+    return CandidatePerformanceStats(
+        closed_trade_count=closed,
+        total_pnl=sum(pnls),
+        average_pnl=sum(pnls) / closed if closed else 0.0,
+        win_rate=sum(pnl > 0 for pnl in pnls) / closed if closed else 0.0,
+        profit_factor=gross_profit / gross_loss if gross_loss else (999.0 if gross_profit else 0.0),
+        max_drawdown=drawdown,
+        largest_winner_share=largest_winner / gross_profit if gross_profit else 0.0,
+        pnl_without_largest_winner=sum(pnls) - largest_winner,
+    )
+
+
+def candidate_fill_parity_failures(rows: list[Any]) -> int:
+    """Count mark_v1 rows whose fills disagree with their recorded evidence."""
+    failures = 0
+    for row in rows:
+        metadata = row.get("metadata") or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        entry_diagnostics = metadata.get("entry_execution_diagnostics") or {}
+        entry_observed = entry_diagnostics.get("observed_mark")
+        try:
+            entry_matches = (
+                entry_observed is not None
+                and abs(float(row["entry_price"]) - float(entry_observed)) <= 0.0001
+            )
+        except (KeyError, TypeError, ValueError):
+            entry_matches = False
+        if not entry_matches:
+            failures += 1
+            continue
+        if row["status"] != "CLOSED":
+            continue
+        exit_diagnostics = metadata.get("exit_execution_diagnostics") or {}
+        exit_observed = exit_diagnostics.get(
+            "observed_mark",
+            exit_diagnostics.get("observed_value"),
+        )
+        try:
+            exit_matches = (
+                exit_observed is not None
+                and row.get("exit_price") is not None
+                and abs(float(row["exit_price"]) - float(exit_observed)) <= 0.0001
+            )
+        except (TypeError, ValueError):
+            exit_matches = False
+        if not exit_matches:
+            failures += 1
+    return failures
 
 
 class CandidateDecisionQueries:
@@ -208,7 +332,7 @@ class CandidatePaperExecutor:
             "order_id": "CANDIDATE_PAPER",
             "fill_price": round(mark, 4),
             "fill_time": snapshot.captured_at,
-            "paper_fill_model": "shared_feed_mark_v1",
+            "paper_fill_model": "mark_v1",
             "execution_diagnostics": {
                 "side": side,
                 "observed_mark": round(mark, 4),
@@ -231,7 +355,7 @@ class CandidateEvaluator:
         decision_queries: DecisionQueries,
         monitoring_leg_queries: MonitoringLegQueries,
         tent_queries: TentQueries,
-        review_trade_count: int = 1,
+        review_trade_count: int = 20,
     ) -> None:
         self.candidate_id = candidate_id
         self.config = config
@@ -246,7 +370,9 @@ class CandidateEvaluator:
         self.executor = CandidatePaperExecutor(provider, audit)
         self.position_manager = PositionManager("SPX", config.profit_management)
         self.state_machine = ProfitStateMachine(config.profit_management)
-        self.review_trade_count = max(1, review_trade_count)
+        if review_trade_count < 20:
+            raise ValueError("candidate review gate requires at least 20 closed trades")
+        self.review_trade_count = review_trade_count
         self._last_identity: SnapshotIdentity | None = None
 
     async def run(self) -> None:
@@ -288,6 +414,39 @@ class CandidateEvaluator:
                 max_age_seconds=65,
             )
             self._observe_snapshot(snapshot)
+            min_gap_pct = self.config.entry.min_gap_pct
+            if min_gap_pct is not None:
+                if snapshot.previous_close <= 0:
+                    await self.decisions.log(
+                        "entry_data_blocked",
+                        {
+                            "reason": "invalid_previous_close",
+                            "session_open": snapshot.session_open,
+                            "previous_close": snapshot.previous_close,
+                            "min_gap_pct": min_gap_pct,
+                        },
+                        snapshot,
+                    )
+                    candidate_data_quality_failures.labels(
+                        candidate_id=self.candidate_id
+                    ).inc()
+                    return None
+                gap_pct = (
+                    snapshot.session_open - snapshot.previous_close
+                ) / snapshot.previous_close
+                if abs(gap_pct) < min_gap_pct:
+                    await self.decisions.log(
+                        "entry_gap_filtered",
+                        {
+                            "reason": "gap_below_min",
+                            "session_open": snapshot.session_open,
+                            "previous_close": snapshot.previous_close,
+                            "gap_pct": gap_pct,
+                            "min_gap_pct": min_gap_pct,
+                        },
+                        snapshot,
+                    )
+                    return None
             direction = DirectionFilter().get_direction(
                 snapshot.session_open,
                 snapshot.previous_close,
@@ -373,6 +532,7 @@ class CandidateEvaluator:
             return trade, best
         except Exception as exc:
             await self.decisions.log("entry_feed_blocked", {"error": str(exc)})
+            candidate_data_quality_failures.labels(candidate_id=self.candidate_id).inc()
             log.warning("candidate_entry_feed_blocked", error=str(exc))
             return None
         finally:
@@ -464,12 +624,46 @@ class CandidateEvaluator:
                         "position_feed_blocked",
                         {"trade_id": trade.trade_id, "error": str(exc)},
                     )
+                    candidate_data_quality_failures.labels(
+                        candidate_id=self.candidate_id
+                    ).inc()
                     log.warning(
                         "candidate_position_feed_blocked",
                         trade_id=trade.trade_id,
                         error=str(exc),
                     )
                     await asyncio.sleep(2)
+            while True:
+                try:
+                    await self._cash_settle_position(trade, candidate)
+                    return
+                except SessionCloseUnavailableError as exc:
+                    await self.decisions.log(
+                        "settlement_feed_blocked",
+                        {"trade_id": trade.trade_id, "error": str(exc)},
+                    )
+                    candidate_data_quality_failures.labels(
+                        candidate_id=self.candidate_id
+                    ).inc()
+                    log.warning(
+                        "candidate_settlement_feed_blocked",
+                        trade_id=trade.trade_id,
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(30)
+                except Exception as exc:
+                    await self.decisions.log(
+                        "settlement_failed",
+                        {"trade_id": trade.trade_id, "error": str(exc)},
+                    )
+                    candidate_data_quality_failures.labels(
+                        candidate_id=self.candidate_id
+                    ).inc()
+                    log.exception(
+                        "candidate_settlement_failed",
+                        trade_id=trade.trade_id,
+                    )
+                    await asyncio.sleep(30)
         finally:
             lease_task.cancel()
             await asyncio.gather(lease_task, return_exceptions=True)
@@ -478,6 +672,63 @@ class CandidateEvaluator:
                 candidate_id=self.candidate_id,
                 kind="position",
             ).set(0)
+
+    async def _cash_settle_position(
+        self,
+        trade: TradeRecord,
+        candidate: ButterflyCandidate,
+    ) -> None:
+        evidence = await self.provider.session_close(trade.trade_date)
+        settlement_value = fly_settlement_value(candidate, evidence.close)
+        pnl = settlement_value - trade.entry_price
+        peak_value = max(trade.peak_value, settlement_value)
+        diagnostics = {
+            "side": "settlement",
+            "observed_value": settlement_value,
+            "settlement_spot": evidence.close,
+            "settlement_source": evidence.source,
+            "settlement_bar_timestamp": evidence.bar_timestamp.isoformat(),
+            "settlement_observed_at": evidence.observed_at.isoformat(),
+            "settlement_feed_instance": evidence.feed_instance,
+            **self.audit.metadata(),
+        }
+        closed = await self.trades.close_trade(
+            trade.trade_id,
+            settlement_value,
+            evidence.bar_timestamp,
+            "cash_settled",
+            pnl,
+            peak_value,
+            metadata={
+                "paper_fill_model": "mark_v1",
+                "exit_execution_diagnostics": diagnostics,
+                "settlement_spot": evidence.close,
+                "settlement_source": evidence.source,
+                "settlement_bar_timestamp": evidence.bar_timestamp.isoformat(),
+                "settlement_observed_at": evidence.observed_at.isoformat(),
+                "settlement_feed_instance": evidence.feed_instance,
+            },
+        )
+        if not closed:
+            log.warning(
+                "candidate_cash_settlement_already_completed",
+                trade_id=trade.trade_id,
+            )
+            await self.refresh_metrics()
+            return
+        await self.risk.record_pnl(pnl * 100, trade.trade_date)
+        await self.decisions.log(
+            "trade_exited",
+            {
+                "trade_id": trade.trade_id,
+                "exit_reason": "cash_settled",
+                "fill_price": settlement_value,
+                "pnl": pnl,
+                "peak_value": peak_value,
+                **diagnostics,
+            },
+        )
+        await self.refresh_metrics()
 
     async def _lease_heartbeat(self, kind: str) -> None:
         while True:
@@ -564,34 +815,90 @@ class CandidateEvaluator:
     async def refresh_metrics(self) -> None:
         rows = await self.trades.db.pool.fetch(
             """
-            SELECT status, COALESCE(pnl, 0) * 100 * COALESCE(quantity, 1) AS pnl
+            SELECT
+                status,
+                entry_price,
+                exit_price,
+                metadata,
+                COALESCE(pnl, 0) * 100 * COALESCE(quantity, 1) AS pnl
             FROM butterfly_trades
             WHERE underlying = 'SPX'
+              AND metadata->>'paper_fill_model' = 'mark_v1'
             ORDER BY COALESCE(exit_time, entry_time), id
             """
         )
         pnls = [float(row["pnl"]) for row in rows if row["status"] == "CLOSED"]
         total = len(rows)
-        closed = len(pnls)
-        wins = sum(pnl > 0 for pnl in pnls)
-        equity = 0.0
-        peak = 0.0
-        drawdown = 0.0
-        for pnl in pnls:
-            equity += pnl
-            peak = max(peak, equity)
-            drawdown = max(drawdown, peak - equity)
-        candidate_trade_count.labels(candidate_id=self.candidate_id).set(total)
-        candidate_realized_pnl.labels(candidate_id=self.candidate_id).set(sum(pnls))
-        candidate_win_rate.labels(candidate_id=self.candidate_id).set(
-            wins / closed if closed else 0
+        stats = candidate_performance_stats(pnls)
+        failure_row = await self.trades.db.pool.fetchrow(
+            """
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE event_type IN (
+                        'entry_feed_blocked',
+                        'position_feed_blocked',
+                        'entry_data_blocked',
+                        'settlement_feed_blocked',
+                        'settlement_failed'
+                    )
+                ) AS data_quality_failures,
+                COUNT(*) FILTER (
+                    WHERE (
+                        event_type = 'entry_selection_parity'
+                        AND (
+                            data->>'available' = 'false'
+                            OR data->>'width_match' = 'false'
+                            OR data->>'center_match' = 'false'
+                        )
+                    ) OR (
+                        event_type = 'exit_mark_parity'
+                        AND (
+                            data->>'available' = 'false'
+                            OR data->>'replay_would_miss_drawdown' = 'true'
+                        )
+                    )
+                ) AS parity_failures
+            FROM decision_log
+            WHERE underlying = 'SPX'
+              AND data->>'candidate_id' = $1
+            """,
+            self.candidate_id,
         )
-        candidate_max_drawdown.labels(candidate_id=self.candidate_id).set(drawdown)
+        candidate_trade_count.labels(candidate_id=self.candidate_id).set(total)
+        candidate_closed_trade_count.labels(candidate_id=self.candidate_id).set(
+            stats.closed_trade_count
+        )
+        candidate_realized_pnl.labels(candidate_id=self.candidate_id).set(stats.total_pnl)
+        candidate_win_rate.labels(candidate_id=self.candidate_id).set(
+            stats.win_rate
+        )
+        candidate_max_drawdown.labels(candidate_id=self.candidate_id).set(
+            stats.max_drawdown
+        )
         candidate_review_progress.labels(candidate_id=self.candidate_id).set(
-            min(1, total / self.review_trade_count)
+            min(1, stats.closed_trade_count / self.review_trade_count)
         )
         candidate_open_positions.labels(candidate_id=self.candidate_id).set(
             sum(row["status"] == "OPEN" for row in rows)
+        )
+        candidate_average_pnl.labels(candidate_id=self.candidate_id).set(
+            stats.average_pnl
+        )
+        candidate_profit_factor.labels(candidate_id=self.candidate_id).set(
+            stats.profit_factor
+        )
+        candidate_largest_winner_share.labels(candidate_id=self.candidate_id).set(
+            stats.largest_winner_share
+        )
+        candidate_pnl_without_largest_winner.labels(
+            candidate_id=self.candidate_id
+        ).set(stats.pnl_without_largest_winner)
+        candidate_data_quality_failures.labels(candidate_id=self.candidate_id).set(
+            int(failure_row["data_quality_failures"] or 0)
+        )
+        candidate_parity_failures.labels(candidate_id=self.candidate_id).set(
+            int(failure_row["parity_failures"] or 0)
+            + candidate_fill_parity_failures(rows)
         )
 
 

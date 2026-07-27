@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 from collections.abc import Awaitable, Callable
 from typing import Protocol, runtime_checkable
 
@@ -11,6 +12,8 @@ import httpx
 from butterfly_guy.candidate_fleet.models import (
     LeaseKind,
     MarketSnapshot,
+    SessionClose,
+    SessionCloseUnavailableError,
     SnapshotIdentity,
     SnapshotUnavailableError,
 )
@@ -42,6 +45,8 @@ class MarketDataProvider(Protocol):
     async def release_lease(self, candidate_id: str) -> None: ...
 
     async def pin(self, identity: SnapshotIdentity) -> None: ...
+
+    async def session_close(self, session_date: dt.date) -> SessionClose: ...
 
     async def close(self) -> None: ...
 
@@ -112,6 +117,22 @@ class HttpMarketDataProvider:
         )
         response.raise_for_status()
 
+    async def session_close(self, session_date: dt.date) -> SessionClose:
+        try:
+            response = await self._request_with_retry(
+                "GET",
+                f"/v1/sessions/{session_date.isoformat()}/close",
+            )
+            response.raise_for_status()
+            evidence = SessionClose.from_dict(response.json())
+            if evidence.session_date != session_date:
+                raise ValueError("candidate feed returned a different session date")
+            return evidence
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            raise SessionCloseUnavailableError(
+                f"candidate feed session close unavailable: {exc}"
+            ) from exc
+
     async def close(self) -> None:
         if self._owns_client:
             await self._client.aclose()
@@ -174,9 +195,11 @@ class SchwabMarketDataProvider:
         self,
         snapshot_loader: Callable[[], Awaitable[MarketSnapshot]],
         *,
+        session_close_loader: Callable[[dt.date], Awaitable[SessionClose]] | None = None,
         close_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._snapshot_loader = snapshot_loader
+        self._session_close_loader = session_close_loader
         self._close_callback = close_callback
 
     async def snapshot(
@@ -219,6 +242,18 @@ class SchwabMarketDataProvider:
 
     async def pin(self, identity: SnapshotIdentity) -> None:
         return None
+
+    async def session_close(self, session_date: dt.date) -> SessionClose:
+        if self._session_close_loader is None:
+            raise SessionCloseUnavailableError(
+                "direct provider has no session-close loader"
+            )
+        evidence = await self._session_close_loader(session_date)
+        if evidence.session_date != session_date:
+            raise SessionCloseUnavailableError(
+                "direct provider returned a different session date"
+            )
+        return evidence
 
     async def close(self) -> None:
         if self._close_callback is not None:

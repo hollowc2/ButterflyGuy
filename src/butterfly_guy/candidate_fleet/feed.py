@@ -15,6 +15,8 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, generate_late
 from butterfly_guy.candidate_fleet.models import (
     LeaseKind,
     MarketSnapshot,
+    SessionClose,
+    SessionCloseUnavailableError,
     SnapshotIdentity,
     SnapshotUnavailableError,
 )
@@ -25,12 +27,16 @@ from butterfly_guy.core.time_utils import (
     MARKET_OPEN,
     get_0dte_expiration,
     is_market_open,
+    is_trading_day,
+    market_close_time,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import OptionQuote
 from butterfly_guy.db.connection import DatabasePool
 
 log = get_logger(__name__)
+
+SESSION_CLOSE_SOURCE = "schwab_spx_intraday_1m_regular_session_close"
 
 feed_sequence = Gauge("candidate_feed_sequence", "Latest atomically published sequence")
 feed_snapshot_age = Gauge("candidate_feed_snapshot_age_seconds", "Age of latest snapshot")
@@ -79,6 +85,14 @@ SELECT create_hypertable(
 );
 CREATE UNIQUE INDEX IF NOT EXISTS candidate_market_snapshot_identity
     ON candidate_market_snapshots (feed_instance, sequence, captured_at);
+CREATE TABLE IF NOT EXISTS candidate_session_closes (
+    session_date DATE PRIMARY KEY,
+    close DOUBLE PRECISION NOT NULL CHECK (close > 0),
+    bar_timestamp TIMESTAMPTZ NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL,
+    source TEXT NOT NULL,
+    feed_instance TEXT NOT NULL
+);
 ALTER TABLE candidate_market_snapshots SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'feed_instance',
@@ -280,6 +294,52 @@ class SnapshotArchive:
         if result == "UPDATE 0":
             raise SnapshotUnavailableError("snapshot is no longer available to pin")
 
+    async def archive_session_close(self, evidence: SessionClose) -> SessionClose:
+        """Persist once and return the canonical evidence for this session."""
+        await self.db.pool.execute(
+            """
+            INSERT INTO candidate_session_closes (
+                session_date, close, bar_timestamp, observed_at, source, feed_instance
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (session_date) DO NOTHING
+            """,
+            evidence.session_date,
+            evidence.close,
+            evidence.bar_timestamp,
+            evidence.observed_at,
+            evidence.source,
+            evidence.feed_instance,
+        )
+        row = await self.db.pool.fetchrow(
+            """
+            SELECT session_date, close, bar_timestamp, observed_at, source, feed_instance
+            FROM candidate_session_closes
+            WHERE session_date = $1
+            """,
+            evidence.session_date,
+        )
+        if row is None:
+            raise SessionCloseUnavailableError(
+                "session-close evidence was not persisted"
+            )
+        persisted = SessionClose(
+            session_date=row["session_date"],
+            close=float(row["close"]),
+            bar_timestamp=row["bar_timestamp"],
+            observed_at=row["observed_at"],
+            source=str(row["source"]),
+            feed_instance=str(row["feed_instance"]),
+        )
+        if (
+            persisted.close != evidence.close
+            or persisted.bar_timestamp != evidence.bar_timestamp
+            or persisted.source != evidence.source
+        ):
+            raise SessionCloseUnavailableError(
+                "persisted session-close evidence conflicts with the feed"
+            )
+        return persisted
+
 
 @dataclass(frozen=True)
 class SessionContext:
@@ -308,6 +368,8 @@ class CandidateFeed:
         self._context: SessionContext | None = None
         self._last_baseline_minute: dt.datetime | None = None
         self._observed_lease_labels: set[tuple[str, LeaseKind]] = set()
+        self._session_closes: dict[dt.date, SessionClose] = {}
+        self._session_close_lock = asyncio.Lock()
 
     async def collect_once(self) -> MarketSnapshot:
         now = dt.datetime.now(dt.timezone.utc)
@@ -371,6 +433,66 @@ class CandidateFeed:
                 await asyncio.sleep(max(0.05, 2.0 - elapsed))
             else:
                 await self.leases.wait_for_demand(max(0.05, 60.0 - elapsed))
+
+    async def session_close(
+        self,
+        session_day: dt.date,
+        *,
+        now: dt.datetime | None = None,
+    ) -> SessionClose:
+        """Return one cached, verified final regular-session SPX close per date."""
+        observed_at = now or dt.datetime.now(dt.timezone.utc)
+        if observed_at.tzinfo is None:
+            raise ValueError("session close observation time must be timezone-aware")
+        observed_at = observed_at.astimezone(dt.timezone.utc)
+        observed_et = observed_at.astimezone(EASTERN)
+        if not is_trading_day(session_day):
+            raise SessionCloseUnavailableError(
+                f"{session_day.isoformat()} is not a trading session"
+            )
+        if session_day > observed_et.date():
+            raise SessionCloseUnavailableError("future session close is unavailable")
+        close_time = market_close_time(session_day)
+        if session_day == observed_et.date() and observed_et.time() < close_time:
+            raise SessionCloseUnavailableError("session close is not final yet")
+
+        cached = self._session_closes.get(session_day)
+        if cached is not None:
+            return cached
+
+        async with self._session_close_lock:
+            cached = self._session_closes.get(session_day)
+            if cached is not None:
+                return cached
+            try:
+                candles = await self.market.intraday_bars(session_day)
+                final_bar = _final_regular_session_close(
+                    candles,
+                    session_day,
+                    close_time=close_time,
+                )
+                if final_bar is None:
+                    raise SessionCloseUnavailableError(
+                        "final regular-session SPX 1-minute bar is unavailable"
+                    )
+                bar_timestamp, close = final_bar
+                evidence = SessionClose(
+                    session_date=session_day,
+                    close=close,
+                    bar_timestamp=bar_timestamp,
+                    observed_at=observed_at,
+                    source=SESSION_CLOSE_SOURCE,
+                    feed_instance=self.store.instance,
+                )
+                evidence = await self.archive.archive_session_close(evidence)
+            except SessionCloseUnavailableError:
+                raise
+            except Exception as exc:
+                raise SessionCloseUnavailableError(
+                    f"SPX session-close collection failed: {exc}"
+                ) from exc
+            self._session_closes[session_day] = evidence
+            return evidence
 
     async def _refresh_context(self, now: dt.datetime) -> SessionContext:
         session_day = now.astimezone(EASTERN).date()
@@ -443,6 +565,7 @@ def create_app(feed: CandidateFeed) -> web.Application:
     app.router.add_get("/metrics", _metrics)
     app.router.add_get("/v1/snapshot", _snapshot)
     app.router.add_get("/v1/legs", _legs)
+    app.router.add_get("/v1/sessions/{session_date}/close", _session_close)
     app.router.add_put("/v1/leases/{candidate_id}", _put_lease)
     app.router.add_delete("/v1/leases/{candidate_id}", _delete_lease)
     app.router.add_post(
@@ -512,6 +635,23 @@ async def _legs(request: web.Request) -> web.Response:
         snapshot.require_fresh(3)
         return web.json_response(snapshot.leg_quotes(symbols).to_dict())
     except (SnapshotUnavailableError, KeyError) as exc:
+        return web.json_response({"error": str(exc)}, status=503)
+
+
+async def _session_close(request: web.Request) -> web.Response:
+    feed: CandidateFeed = request.app["feed"]
+    try:
+        session_day = dt.date.fromisoformat(request.match_info["session_date"])
+    except ValueError:
+        return web.json_response(
+            {"error": "session_date must use YYYY-MM-DD"},
+            status=400,
+        )
+    try:
+        close = await feed.session_close(session_day)
+        return web.json_response(close.to_dict())
+    except SessionCloseUnavailableError as exc:
+        feed_failures.labels(operation="session_close").inc()
         return web.json_response({"error": str(exc)}, status=503)
 
 
@@ -592,3 +732,32 @@ def _previous_close(candles: list[dict[str, Any]], day: dt.date) -> float | None
         if candle_day < day:
             values.append((candle_day, float(candle["close"])))
     return max(values)[1] if values else None
+
+
+def _final_regular_session_close(
+    candles: list[dict[str, Any]],
+    day: dt.date,
+    *,
+    close_time: dt.time,
+) -> tuple[dt.datetime, float] | None:
+    """Select only a final (15:59/16:00 normally) regular-session 1-minute bar."""
+    values: list[tuple[dt.datetime, float]] = []
+    for candle in candles:
+        if candle.get("datetime") is None or candle.get("close") is None:
+            continue
+        timestamp = dt.datetime.fromtimestamp(
+            float(candle["datetime"]) / 1000,
+            tz=dt.timezone.utc,
+        ).astimezone(EASTERN)
+        if (
+            timestamp.date() == day
+            and MARKET_OPEN <= timestamp.time() <= close_time
+        ):
+            values.append((timestamp, float(candle["close"])))
+    if not values:
+        return None
+    final_bar = max(values, key=lambda value: value[0])
+    close_at = dt.datetime.combine(day, close_time, tzinfo=EASTERN)
+    if final_bar[0] < close_at - dt.timedelta(minutes=1):
+        return None
+    return final_bar

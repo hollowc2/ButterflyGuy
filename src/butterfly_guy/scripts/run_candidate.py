@@ -66,7 +66,7 @@ async def main() -> None:
         decision_queries=DecisionQueries(db),
         monitoring_leg_queries=MonitoringLegQueries(db),
         tent_queries=TentQueries(db),
-        review_trade_count=int(os.getenv("CANDIDATE_REVIEW_TRADE_COUNT", "1")),
+        review_trade_count=int(os.getenv("CANDIDATE_REVIEW_TRADE_COUNT", "20")),
     )
     set_readiness(None)
     try:

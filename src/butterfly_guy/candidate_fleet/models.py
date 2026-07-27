@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import math
 from dataclasses import asdict, dataclass, replace
 from types import MappingProxyType
 from typing import Any, Iterable, Literal, Mapping
@@ -180,6 +181,55 @@ class StaleSnapshotError(SnapshotUnavailableError):
         super().__init__(
             f"snapshot is stale ({age_seconds:.3f}s > {max_age_seconds:.3f}s)"
         )
+
+
+@dataclass(frozen=True)
+class SessionClose:
+    """Auditable final regular-session SPX close supplied by the shared feed."""
+
+    session_date: dt.date
+    close: float
+    bar_timestamp: dt.datetime
+    observed_at: dt.datetime
+    source: str
+    feed_instance: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "bar_timestamp", _aware_utc(self.bar_timestamp))
+        object.__setattr__(self, "observed_at", _aware_utc(self.observed_at))
+        if not math.isfinite(self.close) or self.close <= 0:
+            raise ValueError("session close must be a positive finite price")
+        if not self.source:
+            raise ValueError("session close source is required")
+        if not self.feed_instance:
+            raise ValueError("session close feed instance is required")
+        if self.observed_at < self.bar_timestamp:
+            raise ValueError("session close cannot be observed before its source bar")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "session_date": self.session_date.isoformat(),
+            "close": self.close,
+            "bar_timestamp": self.bar_timestamp.isoformat(),
+            "observed_at": self.observed_at.isoformat(),
+            "source": self.source,
+            "feed_instance": self.feed_instance,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> SessionClose:
+        return cls(
+            session_date=dt.date.fromisoformat(str(payload["session_date"])),
+            close=float(payload["close"]),
+            bar_timestamp=dt.datetime.fromisoformat(str(payload["bar_timestamp"])),
+            observed_at=dt.datetime.fromisoformat(str(payload["observed_at"])),
+            source=str(payload["source"]),
+            feed_instance=str(payload["feed_instance"]),
+        )
+
+
+class SessionCloseUnavailableError(RuntimeError):
+    """No verified final regular-session close is available from the shared feed."""
 
 
 LeaseKind = Literal["entry", "position"]

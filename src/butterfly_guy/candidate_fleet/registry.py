@@ -15,17 +15,30 @@ from butterfly_guy.core.config import AppConfig
 
 ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DATABASE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+RESERVED_DATABASE_NAMES = frozenset(
+    {
+        "butterfly_guy",
+        "butterfly_guy_candidate_market",
+        "butterfly_guy_spx_candidate",
+    }
+)
+STANDALONE_CANDIDATE_ID = "best-rr"
+STANDALONE_CANDIDATE_RESOURCES = {
+    "slot": 0,
+    "config_path": "configs/config_spx_candidate.yaml",
+    "database_name": "butterfly_guy_spx_candidate",
+}
 
 
 class CandidateRegistration(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    enabled: bool = True
+    enabled: bool = False
     slot: int = Field(ge=0, le=9)
     config_path: str
     database_name: str
-    review_trade_count: int = Field(gt=0)
+    review_trade_count: int = Field(ge=20)
 
 
 class CandidateRegistry(BaseModel):
@@ -68,12 +81,28 @@ def validate_registry(
 ) -> list[str]:
     root = Path(repository_root).resolve()
     errors: list[str] = []
+    risk_profiles: dict[str, dict[str, Any]] = {}
     for candidate in registry.candidates:
         prefix = candidate.id
         if not ID_PATTERN.fullmatch(candidate.id):
             errors.append(f"{prefix}: id must be a stable lowercase slug")
+        if candidate.id == STANDALONE_CANDIDATE_ID:
+            for field, expected in STANDALONE_CANDIDATE_RESOURCES.items():
+                if getattr(candidate, field) != expected:
+                    errors.append(
+                        f"{prefix}: {field} must remain {expected!r} for the "
+                        "standalone candidate"
+                    )
         if not DATABASE_PATTERN.fullmatch(candidate.database_name):
             errors.append(f"{prefix}: invalid PostgreSQL database name")
+        if (
+            candidate.id != STANDALONE_CANDIDATE_ID
+            and candidate.database_name in RESERVED_DATABASE_NAMES
+        ):
+            errors.append(
+                f"{prefix}: database_name is reserved for production, feed, or "
+                "standalone candidate use"
+            )
         config_path = (root / candidate.config_path).resolve()
         try:
             config_path.relative_to(root)
@@ -86,6 +115,8 @@ def validate_registry(
         try:
             with config_path.open() as config_file:
                 payload = yaml.safe_load(config_file) or {}
+            if "database" in payload:
+                errors.append(f"{prefix}: candidate config must not override database")
             payload["schwab"] = {}
             config = AppConfig(**payload)
         except Exception as exc:
@@ -99,8 +130,25 @@ def validate_registry(
             errors.append(f"{prefix}: execution.allow_live_trading must be false")
         if config.risk.max_position_size != 1:
             errors.append(f"{prefix}: risk.max_position_size must be 1")
+        if config.risk.max_trades_per_day != 1:
+            errors.append(f"{prefix}: risk.max_trades_per_day must be 1")
+        if config.monitoring.metrics_port != 8000:
+            errors.append(f"{prefix}: monitoring.metrics_port must be 8000")
         if "notifications" in payload:
             errors.append(f"{prefix}: candidate notification config is not allowed")
+        risk_profiles[prefix] = config.risk.model_dump()
+    if risk_profiles:
+        reference_id = (
+            STANDALONE_CANDIDATE_ID
+            if STANDALONE_CANDIDATE_ID in risk_profiles
+            else next(iter(risk_profiles))
+        )
+        reference = risk_profiles[reference_id]
+        for candidate_id, profile in risk_profiles.items():
+            if profile != reference:
+                errors.append(
+                    f"{candidate_id}: risk settings must match {reference_id}"
+                )
     return errors
 
 
@@ -121,13 +169,15 @@ def render_runtime(
                 "--port",
                 "8099",
             ],
-            "env_file": ["../../.env"],
             "volumes": ["../../tokens.json:/app/tokens.json:ro"],
             "environment": {
                 "DATABASE_HOST": "timescaledb",
                 "DATABASE_PORT": "5432",
                 "DATABASE_NAME": "butterfly_guy_candidate_market",
                 "DATABASE_USER": "butterfly",
+                "DATABASE_PASSWORD": "${DATABASE_PASSWORD}",
+                "SCHWAB_API_KEY": "${SCHWAB_API_KEY}",
+                "SCHWAB_SECRET_KEY": "${SCHWAB_SECRET_KEY}",
                 "SCHWAB_TOKEN_PATH": "tokens.json",
             },
             "read_only": True,

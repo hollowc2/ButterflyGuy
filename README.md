@@ -135,6 +135,10 @@ Each enabled candidate has its own container and PostgreSQL database. Slots
 `0` through `9` map to host metrics ports `8100` through `8109`. The existing
 BEST_RR database is registered as `butterfly_guy_spx_candidate` and is disabled
 by default so its history is preserved until the rollout gate is approved.
+Five additional evaluators are registered and enabled: `vix-center`,
+`target-cost`, `gap-conviction`, `peak-trailer`, and `absolute-stop`. They use
+slots 1–5, isolated databases, and the same shared feed. The standalone
+`best-rr` entry remains disabled.
 
 Validate and inspect generated runtime changes:
 
@@ -161,6 +165,10 @@ have no project `.env`, Schwab credentials, token mount, account ID, broker
 client, or live-order executor. Paper entries are accepted only after the feed
 snapshot has been pinned in `butterfly_guy_candidate_market`; position monitors
 request and persist only their three leg quotes.
+Paper fills use the canonical `mark_v1` cohort. At expiration, the shared feed
+serves one cached final regular-session SPX close so evaluators can cash-settle
+without Schwab credentials. Review progress counts only closed `mark_v1` trades,
+with a minimum gate of 20 closed trades per candidate.
 
 Roll out conservatively: run the feed for a full-session parity probe, migrate
 BEST_RR for one observed session, then gate expansion at three, five, and ten

@@ -83,7 +83,7 @@ async def test_candidate_entry_pins_before_mark_fill() -> None:
 
     assert provider.pinned == [snapshot.identity]
     assert fill["fill_price"] == 1.0
-    assert fill["paper_fill_model"] == "shared_feed_mark_v1"
+    assert fill["paper_fill_model"] == "mark_v1"
     assert not hasattr(executor, "place_order")
     assert not hasattr(executor, "cancel_order")
     assert not hasattr(executor, "get_order_status")
@@ -111,3 +111,7 @@ def test_candidate_safety_rejects_live_or_credentialed_runtime() -> None:
         assert_candidate_safety(live, {})
     with pytest.raises(RuntimeError, match="SCHWAB_API_KEY"):
         assert_candidate_safety(AppConfig(), {"SCHWAB_API_KEY": "secret"})
+
+    too_many_trades = AppConfig(risk={"max_trades_per_day": 2})
+    with pytest.raises(RuntimeError, match="max_trades_per_day"):
+        assert_candidate_safety(too_many_trades, {})

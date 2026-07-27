@@ -6,6 +6,7 @@ import pytest
 from butterfly_guy.candidate_fleet.feed import AtomicSnapshotStore, LeaseRegistry
 from butterfly_guy.candidate_fleet.models import (
     MarketSnapshot,
+    SessionClose,
     SnapshotIdentity,
     SnapshotUnavailableError,
     StaleSnapshotError,
@@ -61,6 +62,35 @@ def test_snapshot_rejects_stale_data() -> None:
     )
     with pytest.raises(StaleSnapshotError):
         old.require_fresh(3)
+
+
+def test_session_close_round_trip_preserves_timezone_aware_evidence() -> None:
+    original = SessionClose(
+        session_date=dt.date(2026, 7, 23),
+        close=6305.25,
+        bar_timestamp=dt.datetime(2026, 7, 23, 15, 59, tzinfo=dt.timezone.utc),
+        observed_at=dt.datetime(2026, 7, 23, 16, 1, tzinfo=dt.timezone.utc),
+        source="schwab_spx_intraday_1m_regular_session_close",
+        feed_instance="feed-a",
+    )
+
+    restored = SessionClose.from_dict(original.to_dict())
+
+    assert restored == original
+    assert restored.bar_timestamp.tzinfo == dt.timezone.utc
+    assert restored.observed_at.tzinfo == dt.timezone.utc
+
+
+def test_session_close_rejects_unauditable_timestamps() -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        SessionClose(
+            session_date=dt.date(2026, 7, 23),
+            close=6305.25,
+            bar_timestamp=dt.datetime(2026, 7, 23, 15, 59),
+            observed_at=dt.datetime(2026, 7, 23, 16, 1, tzinfo=dt.timezone.utc),
+            source="schwab_spx_intraday_1m_regular_session_close",
+            feed_instance="feed-a",
+        )
 
 
 @pytest.mark.asyncio

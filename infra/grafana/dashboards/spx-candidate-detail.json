@@ -9,9 +9,21 @@
       "targets": [{
         "format": "table",
         "rawQuery": true,
-        "rawSql": "SELECT id, trade_date, direction, wing_width, center_strike, entry_price, entry_time, exit_price, exit_time, exit_reason, pnl * 100 AS pnl_dollars, status, metadata->>'feed_instance' AS feed_instance, metadata->>'feed_sequence' AS feed_sequence, metadata->>'config_hash' AS config_hash, metadata->>'git_sha' AS git_sha FROM butterfly_trades ORDER BY entry_time DESC LIMIT 100"
+        "rawSql": "SELECT id, trade_date, direction, wing_width, center_strike, entry_price, entry_time, exit_price, exit_time, exit_reason, pnl * 100 * quantity AS pnl_dollars, status, metadata->>'paper_fill_model' AS paper_fill_model, metadata->>'feed_instance' AS feed_instance, metadata->>'feed_sequence' AS feed_sequence, metadata->>'config_hash' AS config_hash, metadata->>'git_sha' AS git_sha FROM butterfly_trades WHERE metadata->>'paper_fill_model' = 'mark_v1' ORDER BY entry_time DESC LIMIT 100"
       }],
       "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "type": "table",
+      "title": "Mark-v1 evaluation summary",
+      "description": "Closed canonical mark_v1 cohort only. Largest-winner share is relative to gross winning P&L.",
+      "datasource": {"uid": "$candidate_datasource"},
+      "targets": [{
+        "format": "table",
+        "rawQuery": true,
+        "rawSql": "WITH closed AS (SELECT pnl * 100 * quantity AS pnl_dollars FROM butterfly_trades WHERE status = 'CLOSED' AND metadata->>'paper_fill_model' = 'mark_v1'), totals AS (SELECT COUNT(*) AS closed_trades, COALESCE(SUM(pnl_dollars), 0) AS total_pnl, COALESCE(AVG(pnl_dollars), 0) AS average_pnl, COALESCE(AVG((pnl_dollars > 0)::int), 0) AS win_rate, COALESCE(SUM(pnl_dollars) FILTER (WHERE pnl_dollars > 0), 0) AS gross_profit, ABS(COALESCE(SUM(pnl_dollars) FILTER (WHERE pnl_dollars < 0), 0)) AS gross_loss, COALESCE(MAX(pnl_dollars) FILTER (WHERE pnl_dollars > 0), 0) AS largest_winner FROM closed) SELECT closed_trades, total_pnl, average_pnl, win_rate, CASE WHEN gross_loss > 0 THEN gross_profit / gross_loss WHEN gross_profit > 0 THEN 999 ELSE 0 END AS profit_factor, CASE WHEN gross_profit > 0 THEN largest_winner / gross_profit ELSE 0 END AS largest_winner_share, total_pnl - largest_winner AS pnl_without_largest_winner FROM totals"
+      }],
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 8}
     },
     {
       "type": "table",
@@ -22,7 +34,7 @@
         "rawQuery": true,
         "rawSql": "SELECT ts, event_type, data FROM decision_log WHERE $__timeFilter(ts) ORDER BY ts DESC LIMIT 500"
       }],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15}
     },
     {
       "type": "timeseries",
@@ -33,7 +45,31 @@
         "rawQuery": true,
         "rawSql": "SELECT ts AS time, mark, symbol AS metric FROM monitoring_leg_quotes WHERE $__timeFilter(ts) ORDER BY ts"
       }],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15}
+    },
+    {
+      "type": "table",
+      "title": "Gate failures",
+      "description": "Data-quality or parity failures must be investigated before promotion.",
+      "datasource": {"uid": "$candidate_datasource"},
+      "targets": [{
+        "format": "table",
+        "rawQuery": true,
+        "rawSql": "SELECT COUNT(*) FILTER (WHERE event_type IN ('entry_feed_blocked', 'position_feed_blocked', 'entry_data_blocked', 'settlement_feed_blocked', 'settlement_failed')) AS data_quality_failures, COUNT(*) FILTER (WHERE (event_type = 'entry_selection_parity' AND (data->>'available' = 'false' OR data->>'width_match' = 'false' OR data->>'center_match' = 'false')) OR (event_type = 'exit_mark_parity' AND (data->>'available' = 'false' OR data->>'replay_would_miss_drawdown' = 'true'))) AS strategy_parity_failures FROM decision_log"
+      }],
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 23}
+    },
+    {
+      "type": "table",
+      "title": "Fill-accounting parity failures",
+      "description": "Entry and exit values must exactly match their recorded mark_v1 evidence.",
+      "datasource": {"uid": "$candidate_datasource"},
+      "targets": [{
+        "format": "table",
+        "rawQuery": true,
+        "rawSql": "SELECT id, trade_date, status, entry_price, NULLIF(metadata #>> '{entry_execution_diagnostics,observed_mark}', '')::double precision AS entry_observed_mark, exit_price, COALESCE(NULLIF(metadata #>> '{exit_execution_diagnostics,observed_mark}', '')::double precision, NULLIF(metadata #>> '{exit_execution_diagnostics,observed_value}', '')::double precision) AS exit_observed_value FROM butterfly_trades WHERE metadata->>'paper_fill_model' = 'mark_v1' AND (NULLIF(metadata #>> '{entry_execution_diagnostics,observed_mark}', '')::double precision IS NULL OR ABS(entry_price - NULLIF(metadata #>> '{entry_execution_diagnostics,observed_mark}', '')::double precision) > 0.0001 OR (status = 'CLOSED' AND (COALESCE(NULLIF(metadata #>> '{exit_execution_diagnostics,observed_mark}', '')::double precision, NULLIF(metadata #>> '{exit_execution_diagnostics,observed_value}', '')::double precision) IS NULL OR ABS(exit_price - COALESCE(NULLIF(metadata #>> '{exit_execution_diagnostics,observed_mark}', '')::double precision, NULLIF(metadata #>> '{exit_execution_diagnostics,observed_value}', '')::double precision)) > 0.0001))) ORDER BY trade_date DESC, id DESC"
+      }],
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 29}
     }
   ],
   "schemaVersion": 39,
