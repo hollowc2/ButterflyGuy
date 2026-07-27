@@ -5,7 +5,10 @@
     {
       "type": "table",
       "title": "Trades and exits",
-      "datasource": {"uid": "$candidate_datasource"},
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${candidate_datasource}"
+      },
       "targets": [{
         "format": "table",
         "rawQuery": true,
@@ -17,7 +20,10 @@
       "type": "table",
       "title": "Mark-v1 evaluation summary",
       "description": "Closed canonical mark_v1 cohort only. Largest-winner share is relative to gross winning P&L.",
-      "datasource": {"uid": "$candidate_datasource"},
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${candidate_datasource}"
+      },
       "targets": [{
         "format": "table",
         "rawQuery": true,
@@ -28,7 +34,10 @@
     {
       "type": "table",
       "title": "Decisions and entry evidence",
-      "datasource": {"uid": "$candidate_datasource"},
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${candidate_datasource}"
+      },
       "targets": [{
         "format": "table",
         "rawQuery": true,
@@ -39,7 +48,10 @@
     {
       "type": "timeseries",
       "title": "Monitoring legs",
-      "datasource": {"uid": "$candidate_datasource"},
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${candidate_datasource}"
+      },
       "targets": [{
         "format": "time_series",
         "rawQuery": true,
@@ -51,7 +63,10 @@
       "type": "table",
       "title": "Gate failures",
       "description": "Data-quality or parity failures must be investigated before promotion.",
-      "datasource": {"uid": "$candidate_datasource"},
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${candidate_datasource}"
+      },
       "targets": [{
         "format": "table",
         "rawQuery": true,
@@ -63,7 +78,10 @@
       "type": "table",
       "title": "Fill-accounting parity failures",
       "description": "Entry and exit values must exactly match their recorded mark_v1 evidence.",
-      "datasource": {"uid": "$candidate_datasource"},
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${candidate_datasource}"
+      },
       "targets": [{
         "format": "table",
         "rawQuery": true,
@@ -79,9 +97,15 @@
       "name": "candidate_datasource",
       "label": "Candidate",
       "type": "datasource",
-      "query": "postgres",
+      "query": "grafana-postgresql-datasource",
       "regex": "/^Candidate /",
-      "current": {}
+      "refresh": 1,
+      "options": [],
+      "current": {
+        "selected": true,
+        "text": "Candidate vix-center",
+        "value": "candidate-vix-center"
+      }
     }]
   },
   "time": {"from": "now-24h", "to": "now"},

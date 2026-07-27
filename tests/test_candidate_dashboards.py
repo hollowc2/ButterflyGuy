@@ -49,3 +49,30 @@ def test_candidate_detail_dashboard_never_mixes_fill_models() -> None:
     assert any("entry_execution_diagnostics" in query for query in trade_queries)
     assert any("exit_execution_diagnostics" in query for query in trade_queries)
     assert any("settlement_feed_blocked" in query for query in queries)
+
+
+def test_candidate_detail_dashboard_uses_grafana_postgres_datasources() -> None:
+    dashboard = json.loads(
+        (ROOT / "infra/grafana/dashboards/spx-candidate-detail.json").read_text()
+    )
+    candidate_variable = next(
+        variable
+        for variable in dashboard["templating"]["list"]
+        if variable["name"] == "candidate_datasource"
+    )
+
+    assert candidate_variable["type"] == "datasource"
+    assert candidate_variable["query"] == "grafana-postgresql-datasource"
+    assert candidate_variable["refresh"] == 1
+    assert candidate_variable["current"] == {
+        "selected": True,
+        "text": "Candidate vix-center",
+        "value": "candidate-vix-center",
+    }
+    assert all(
+        panel["datasource"] == {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${candidate_datasource}",
+        }
+        for panel in dashboard["panels"]
+    )

@@ -65,8 +65,8 @@
     "semantic_hash": ""
   },
   "infra/grafana/dashboards/spx-candidate-detail.json": {
-    "mtime": 1785171140.2532969,
-    "ast_hash": "cdd7d75550407936e068da80dc90923d",
+    "mtime": 1785190288.062856,
+    "ast_hash": "c48e9552513b3aea6c05c2f7a6ebf5b2",
     "semantic_hash": ""
   },
   "infra/grafana/dashboards/spx-candidate-fleet.json": {
@@ -1270,8 +1270,8 @@
     "semantic_hash": ""
   },
   "tests/test_candidate_dashboards.py": {
-    "mtime": 1785171140.5432913,
-    "ast_hash": "4e382a69e97eada79c14137131ef8d49",
+    "mtime": 1785190288.3458502,
+    "ast_hash": "8856206360c8915de9e345541e51ef7c",
     "semantic_hash": ""
   },
   "tests/test_candidate_settlement.py": {
