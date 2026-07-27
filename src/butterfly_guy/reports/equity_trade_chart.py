@@ -484,6 +484,7 @@ def _draw_viewfinder(
 
 
 def _draw_depth_overlay(ax: plt.Axes, series: list[dict]) -> None:
+    """Draw a schematic background; this is not recorded Level II data."""
     y0, y1 = ax.get_ylim()
     levels = [y0 + (y1 - y0) * step / 8 for step in range(1, 8)]
     for idx, level in enumerate(levels):
@@ -506,7 +507,7 @@ def _draw_depth_overlay(ax: plt.Axes, series: list[dict]) -> None:
     ax.text(
         0.02,
         0.92,
-        "L2 DEPTH  |  BID LIQ / ASK LIQ",
+        "SCHEMATIC DEPTH  |  NO RECORDED L2",
         transform=ax.transAxes,
         color=_MUTED,
         fontsize=7,
@@ -560,7 +561,11 @@ def build_equity_trade_chart_png(trade: TradeResult, candles: list[dict]) -> byt
         exit_mark[1] if exit_mark else None,
     )
     zoom_ax.set_title(
-        "DETAIL ZOOM  |  2m candles + Level 2 depth", color=_TEXT, fontsize=9, pad=7, loc="left"
+        "DETAIL ZOOM  |  2m candles + schematic depth",
+        color=_TEXT,
+        fontsize=9,
+        pad=7,
+        loc="left",
     )
     _draw_volume_overlay(day_ax, series)
     _draw_candles(day_ax, series)

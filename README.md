@@ -217,6 +217,24 @@ uv run python src/butterfly_guy/scripts/report_exit_mark_parity.py --trade-id 87
 uv run python src/butterfly_guy/scripts/generate_live_performance.py
 ```
 
+### 9) Capture equity candles and Level II for trade review
+
+Backfill recent one-minute candles after the session:
+
+```bash
+uv run python -m butterfly_guy.scripts.backfill_equity_candles BMNR 2026-07-23
+```
+
+Record BMNR's live NYSE chart, Level I, and Level II streams for a future review:
+
+```bash
+uv run python -m butterfly_guy.scripts.record_equity_market_data BMNR --venue nyse
+```
+
+Order-book history is not backfilled: the recorder must be running during the
+session. See [`docs/equity-market-data.md`](docs/equity-market-data.md) for output
+formats, limitations, and a bounded connectivity test.
+
 ## Backtesting
 
 > `run_entry_analysis.py` and `SimulationEngine.simulate_day()` are legacy research paths

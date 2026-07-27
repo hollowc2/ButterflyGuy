@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -68,3 +69,24 @@ async def test_place_order_missing_location_does_not_retry():
 
     schwab.client.place_order.assert_awaited_once()
     schwab._retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_intraday_bars_for_day_requests_extended_hours():
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    schwab._client = MagicMock()
+    schwab.client.PriceHistory.PeriodType.DAY = "day"
+    schwab.client.PriceHistory.FrequencyType.MINUTE = "minute"
+    schwab.client.PriceHistory.Frequency.EVERY_MINUTE = 1
+    response = MagicMock()
+    response.json.return_value = {"candles": [{"datetime": 1, "close": 17.10}]}
+    schwab._retry = AsyncMock(return_value=response)
+
+    candles = await schwab.get_intraday_bars_for_day(
+        "BMNR",
+        dt.date(2026, 7, 23),
+        include_extended_hours=True,
+    )
+
+    assert candles == [{"datetime": 1, "close": 17.10}]
+    assert schwab._retry.await_args.kwargs["need_extended_hours_data"] is True

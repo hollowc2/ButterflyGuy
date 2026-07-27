@@ -196,7 +196,13 @@ class SchwabClientWrapper:
         data = resp.json()
         return data.get("candles", [])
 
-    async def get_intraday_bars_for_day(self, symbol: str, day: dt.date) -> list[dict]:
+    async def get_intraday_bars_for_day(
+        self,
+        symbol: str,
+        day: dt.date,
+        *,
+        include_extended_hours: bool = True,
+    ) -> list[dict]:
         """Fetch 1-minute bars for one session."""
         start = dt.datetime.combine(day, dt.time(6, 0), tzinfo=EASTERN)
         close = dt.datetime.combine(day, market_close_time(day), tzinfo=EASTERN)
@@ -211,6 +217,7 @@ class SchwabClientWrapper:
             frequency=self.client.PriceHistory.Frequency.EVERY_MINUTE,
             start_datetime=start,
             end_datetime=end,
+            need_extended_hours_data=include_extended_hours,
             endpoint="get_price_history",
         )
         data = resp.json()
