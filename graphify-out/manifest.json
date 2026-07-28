@@ -165,8 +165,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/candidate_fleet/schwab_market_data.py": {
-    "mtime": 1784827732.9167485,
-    "ast_hash": "d688d5cb49a038552ca4cf17cddaf4ca",
+    "mtime": 1785198956.485753,
+    "ast_hash": "a4613e0c3affa920f4c587b733b7096a",
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/__init__.py": {
@@ -1100,8 +1100,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1785184675.6216764,
-    "ast_hash": "16ba7252b13b38724c161953c970caef",
+    "mtime": 1785195789.1264527,
+    "ast_hash": "62fdc017cb6ffa8f24865caa073a4b4f",
     "semantic_hash": ""
   },
   "configs/candidates.yaml": {
@@ -1282,6 +1282,11 @@
   "tests/test_candidate_variants.py": {
     "mtime": 1785170992.2800906,
     "ast_hash": "1003017cc2d49492ed07482df23bb600",
+    "semantic_hash": ""
+  },
+  "tests/test_candidate_schwab_market_data.py": {
+    "mtime": 1785198923.2513967,
+    "ast_hash": "e02b273ab22a68dc42193b90b6f13491",
     "semantic_hash": ""
   }
 }

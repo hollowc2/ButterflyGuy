@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 import httpx
@@ -21,18 +23,29 @@ class ReadOnlySchwabMarketDataClient:
     def __init__(self, settings: SchwabSettings) -> None:
         self._settings = settings
         self._client: Any = None
+        self._token: dict[str, Any] | None = None
 
     async def initialize(self) -> None:
-        from schwab.auth import client_from_token_file
+        from schwab.auth import client_from_access_functions
 
-        self._client = client_from_token_file(
-            token_path=self._settings.token_path,
+        self._client = client_from_access_functions(
             api_key=self._settings.api_key,
             app_secret=self._settings.secret_key,
+            token_read_func=self._read_token,
+            token_write_func=self._retain_token,
             asyncio=True,
             enforce_enums=False,
         )
         log.info("candidate_market_data_client_initialized")
+
+    def _read_token(self) -> dict[str, Any]:
+        if self._token is None:
+            with Path(self._settings.token_path).open(encoding="utf-8") as token_file:
+                self._token = json.load(token_file)
+        return self._token
+
+    def _retain_token(self, token: dict[str, Any], *_args: Any, **_kwargs: Any) -> None:
+        self._token = token
 
     @property
     def client(self) -> Any:
@@ -92,6 +105,7 @@ class ReadOnlySchwabMarketDataClient:
     async def close(self) -> None:
         client = self._client
         self._client = None
+        self._token = None
         session = getattr(client, "session", None)
         close = getattr(session, "aclose", None)
         if close is not None:
