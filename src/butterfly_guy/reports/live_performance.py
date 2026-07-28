@@ -318,15 +318,13 @@ def render_report_html(
     no_trade_days: list[NoTradeDay],
     generated_at: dt.datetime,
 ) -> str:
-    active_fill_model = trades[-1].paper_fill_model
-    active_trades = [t for t in trades if t.paper_fill_model == active_fill_model]
-    pnls = [t.pnl_dollars for t in active_trades]
+    pnls = [t.pnl_dollars for t in trades]
     stats = compute_stats(pnls)
-    chart_data = chart_payload(active_trades)
+    chart_data = chart_payload(trades)
     table_rows = render_trade_table_rows(trades, no_trade_days)
     stamp = generated_at.astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z")
-    date_start = active_trades[0].trade_date.isoformat()
-    date_end = active_trades[-1].trade_date.isoformat()
+    date_start = trades[0].trade_date.isoformat()
+    date_end = trades[-1].trade_date.isoformat()
     max_dd_pct = max((p["drawdown_pct"] for p in chart_data), default=0.0)
     chart_json = json.dumps(chart_data)
     cohorts: dict[str, list[TradePoint]] = {}
@@ -362,7 +360,7 @@ def render_report_html(
       <h1>Butterfly Guy — {html.escape(underlying)} Live Performance</h1>
       <div class="sub">
         <span class="badge">Paper Trading</span>
-        Current cohort: {html.escape(active_fill_model)} · {stats.trade_count} trades · {date_start} to {date_end} · Updated {html.escape(stamp)}
+        Entire history · {stats.trade_count} trades · {date_start} to {date_end} · Updated {html.escape(stamp)}
       </div>
     </div>
   </header>

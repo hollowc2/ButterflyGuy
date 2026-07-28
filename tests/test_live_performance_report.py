@@ -148,7 +148,7 @@ def test_render_report_html_contains_sections() -> None:
     assert "max_trades_reached (1)" in html_doc
 
 
-def test_performance_report_segments_fill_model_cohorts() -> None:
+def test_performance_report_shows_entire_history_and_fill_model_cohorts() -> None:
     legacy = _trade(trade_date=dt.date(2026, 7, 20), pnl_dollars=500.0)
     mark = TradePoint(
         **{
@@ -166,7 +166,11 @@ def test_performance_report_segments_fill_model_cohorts() -> None:
         generated_at=dt.datetime(2026, 7, 22, tzinfo=dt.timezone.utc),
     )
 
-    assert "Current cohort: mark_v1 · 1 trades" in html_doc
+    assert "Entire history · 2 trades · 2026-07-20 to 2026-07-21" in html_doc
+    assert "<span class=\"summary-meta\">2 trades</span>" in html_doc
+    assert "const chartData = " in html_doc
+    assert html_doc.count('"paper_fill_model": "legacy"') == 1
+    assert html_doc.count('"paper_fill_model": "mark_v1"') == 1
     assert "Fill Model Cohorts" in html_doc
     assert "legacy" in html_doc
     assert "PnL $+500" in html_doc
