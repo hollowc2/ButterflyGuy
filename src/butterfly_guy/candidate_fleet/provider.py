@@ -16,6 +16,7 @@ from butterfly_guy.candidate_fleet.models import (
     SessionCloseUnavailableError,
     SnapshotIdentity,
     SnapshotUnavailableError,
+    SnapshotWaitTimeoutError,
 )
 
 
@@ -158,6 +159,11 @@ class HttpMarketDataProvider:
     ) -> MarketSnapshot:
         try:
             response = await self._request_with_retry("GET", path, params=params)
+            if (
+                response.status_code == 503
+                and _response_error(response) == "no newer snapshot is available"
+            ):
+                raise SnapshotWaitTimeoutError("no newer snapshot is available")
             response.raise_for_status()
             return MarketSnapshot.from_dict(response.json()).require_fresh(max_age_seconds)
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
@@ -175,6 +181,11 @@ class HttpMarketDataProvider:
                 response = await self._client.request(method, path, **kwargs)
                 if response.status_code < 500:
                     return response
+                if (
+                    response.status_code == 503
+                    and _response_error(response) == "no newer snapshot is available"
+                ):
+                    return response
                 last_error = httpx.HTTPStatusError(
                     "candidate feed server error",
                     request=response.request,
@@ -186,6 +197,17 @@ class HttpMarketDataProvider:
                 await asyncio.sleep(0.2 * 2**attempt)
         assert last_error is not None
         raise last_error
+
+
+def _response_error(response: httpx.Response) -> str | None:
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    error = payload.get("error")
+    return str(error) if error is not None else None
 
 
 class SchwabMarketDataProvider:

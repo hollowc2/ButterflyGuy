@@ -8,6 +8,7 @@ from butterfly_guy.candidate_fleet.models import (
     SessionClose,
     SessionCloseUnavailableError,
     SnapshotIdentity,
+    SnapshotWaitTimeoutError,
 )
 from butterfly_guy.candidate_fleet.provider import (
     HttpMarketDataProvider,
@@ -128,6 +129,30 @@ async def test_http_provider_retries_server_failures() -> None:
 
     assert (await provider.snapshot()).sequence == 7
     assert calls == 3
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_http_provider_surfaces_no_newer_snapshot_without_server_retries() -> None:
+    calls = 0
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            503,
+            json={"error": "no newer snapshot is available"},
+        )
+
+    client = httpx.AsyncClient(
+        base_url="http://candidate-feed",
+        transport=httpx.MockTransport(handler),
+    )
+    provider = HttpMarketDataProvider("http://candidate-feed", client=client)
+
+    with pytest.raises(SnapshotWaitTimeoutError, match="no newer snapshot"):
+        await provider.legs(("L", "C", "U"), wait_seconds=3)
+    assert calls == 1
     await client.aclose()
 
 

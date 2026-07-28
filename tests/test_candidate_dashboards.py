@@ -128,6 +128,21 @@ def test_trading_dashboard_selects_one_strategy_source_without_metric_pollution(
     )
 
 
+def test_trading_breakeven_chart_uses_candidate_monitoring_spot_fallback() -> None:
+    dashboard = _dashboard("butterfly_trading.json")
+    panels = {panel["title"]: panel for panel in _panels(dashboard)}
+    queries = [
+        target["rawSql"]
+        for target in panels["$underlying vs Breakevens"]["targets"]
+    ]
+
+    assert "monitoring_leg_quotes" in queries[0]
+    assert "monitoring_leg_quotes" in queries[1]
+    assert "metadata->>'entry_spot'" in queries[2]
+    assert "q.spot_price" in queries[2]
+    assert "COALESCE(sp.price, q.spot_price" in queries[3]
+
+
 def test_trade_detail_defaults_to_primary_spx_and_selects_strategy_datasource() -> None:
     dashboard = _dashboard("butterfly_trade_detail.json")
     variables = {variable["name"]: variable for variable in dashboard["templating"]["list"]}

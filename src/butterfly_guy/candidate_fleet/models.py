@@ -174,6 +174,10 @@ class SnapshotUnavailableError(RuntimeError):
     """No complete snapshot is currently available."""
 
 
+class SnapshotWaitTimeoutError(SnapshotUnavailableError):
+    """A long poll completed normally before a newer snapshot was published."""
+
+
 class StaleSnapshotError(SnapshotUnavailableError):
     def __init__(self, age_seconds: float, max_age_seconds: float) -> None:
         self.age_seconds = age_seconds

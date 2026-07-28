@@ -55,8 +55,8 @@
     "semantic_hash": ""
   },
   "infra/grafana/dashboards/butterfly_trading.json": {
-    "mtime": 1785260342.445921,
-    "ast_hash": "d8133dec4a2d7f112d7728732f6a567d",
+    "mtime": 1785261734.1927378,
+    "ast_hash": "23a65ba26929febd742cc89a37cb26a9",
     "semantic_hash": ""
   },
   "infra/grafana/dashboards/performance.json": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/candidate_fleet/evaluator.py": {
-    "mtime": 1785171434.9696186,
-    "ast_hash": "705c5ac9857aad4a3f6c6d4ff2a59691",
+    "mtime": 1785261795.599448,
+    "ast_hash": "d55e0812df22bf052fff44a0c1ccc8ae",
     "semantic_hash": ""
   },
   "src/butterfly_guy/candidate_fleet/feed.py": {
@@ -135,13 +135,13 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/candidate_fleet/models.py": {
-    "mtime": 1785170606.7043664,
-    "ast_hash": "0e05eeaf5c7fa83aba1439cd8abecff3",
+    "mtime": 1785261619.2201564,
+    "ast_hash": "6a2c49461fd1dd412fea41ded1a31eb5",
     "semantic_hash": ""
   },
   "src/butterfly_guy/candidate_fleet/provider.py": {
-    "mtime": 1785170653.088424,
-    "ast_hash": "7a557ae981a813af0983adff4c596a93",
+    "mtime": 1785261619.480151,
+    "ast_hash": "5b75de7d0ea4ea4375e0d8bc85b40d99",
     "semantic_hash": ""
   },
   "src/butterfly_guy/candidate_fleet/registry.py": {
@@ -730,8 +730,8 @@
     "semantic_hash": ""
   },
   "tests/test_candidate_provider.py": {
-    "mtime": 1785170710.9322488,
-    "ast_hash": "c71cbcc70177ee00f84f4c29ad284719",
+    "mtime": 1785261620.0481389,
+    "ast_hash": "69afbad834984b575d4e7271ed95eaec",
     "semantic_hash": ""
   },
   "tests/test_candidate_registry.py": {
@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   "tests/test_candidate_dashboards.py": {
-    "mtime": 1785260362.0344658,
-    "ast_hash": "cf139eba051fff9ca48fbd388ce2668e",
+    "mtime": 1785261734.481732,
+    "ast_hash": "74f6dd161ba775e1400426c94e602e75",
     "semantic_hash": ""
   },
   "tests/test_candidate_settlement.py": {

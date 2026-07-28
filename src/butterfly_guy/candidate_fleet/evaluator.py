@@ -16,6 +16,7 @@ from butterfly_guy.candidate_fleet.models import (
     MarketSnapshot,
     SessionCloseUnavailableError,
     SnapshotIdentity,
+    SnapshotWaitTimeoutError,
 )
 from butterfly_guy.candidate_fleet.provider import MarketDataProvider
 from butterfly_guy.core.config import AppConfig
@@ -530,6 +531,8 @@ class CandidateEvaluator:
                 snapshot,
             )
             return trade, best
+        except SnapshotWaitTimeoutError:
+            return None
         except Exception as exc:
             await self.decisions.log("entry_feed_blocked", {"error": str(exc)})
             candidate_data_quality_failures.labels(candidate_id=self.candidate_id).inc()
@@ -618,6 +621,8 @@ class CandidateEvaluator:
                     )
                     await self.refresh_metrics()
                     return
+                except SnapshotWaitTimeoutError:
+                    continue
                 except Exception as exc:
                     # Fail closed: no state-machine evaluation or persistence based on stale data.
                     await self.decisions.log(
