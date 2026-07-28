@@ -50,33 +50,18 @@
     "semantic_hash": ""
   },
   "infra/grafana/dashboards/butterfly_trade_detail.json": {
-    "mtime": 1784824038.1940937,
-    "ast_hash": "463e0c4815f1fa412a325cf58289ffa3",
+    "mtime": 1785258684.711763,
+    "ast_hash": "49bdf6115f0ed21c373e816dd467112c",
     "semantic_hash": ""
   },
   "infra/grafana/dashboards/butterfly_trading.json": {
-    "mtime": 1784824038.2500927,
-    "ast_hash": "779cc8f29daacfd27917ab232856d9c2",
+    "mtime": 1785258685.4517481,
+    "ast_hash": "8214dd6e452c1cfdcf5222903645fc2b",
     "semantic_hash": ""
   },
   "infra/grafana/dashboards/performance.json": {
-    "mtime": 1784824038.3080916,
-    "ast_hash": "49fcce77a051e69a1e317279743e1729",
-    "semantic_hash": ""
-  },
-  "infra/grafana/dashboards/spx-candidate-detail.json": {
-    "mtime": 1785190288.062856,
-    "ast_hash": "c48e9552513b3aea6c05c2f7a6ebf5b2",
-    "semantic_hash": ""
-  },
-  "infra/grafana/dashboards/spx-candidate-fleet.json": {
-    "mtime": 1785171048.7850294,
-    "ast_hash": "4d403a91ce8bbe67160765ce10f41d48",
-    "semantic_hash": ""
-  },
-  "infra/grafana/dashboards/spx-candidate.json": {
-    "mtime": 1784824038.351091,
-    "ast_hash": "938da6cb5e7d79338890ea0aba5b9c81",
+    "mtime": 1785258685.1407542,
+    "ast_hash": "58d7f89cb7b544b0521a9e99022c6761",
     "semantic_hash": ""
   },
   "pyproject.toml": {
@@ -1270,8 +1255,8 @@
     "semantic_hash": ""
   },
   "tests/test_candidate_dashboards.py": {
-    "mtime": 1785190288.3458502,
-    "ast_hash": "8856206360c8915de9e345541e51ef7c",
+    "mtime": 1785259010.4852371,
+    "ast_hash": "937ef9ba9a37bfd93eee1174b3837980",
     "semantic_hash": ""
   },
   "tests/test_candidate_settlement.py": {

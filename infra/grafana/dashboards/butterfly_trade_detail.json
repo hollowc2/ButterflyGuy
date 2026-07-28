@@ -2,8 +2,28 @@
   "title": "Butterfly Trade Detail",
   "uid": "butterfly-trade-detail",
   "tags": ["options", "trading", "index", "postmortem"],
+  "links": [
+    {
+      "title": "Trading",
+      "type": "link",
+      "url": "/d/butterfly-trading/butterfly-trading",
+      "icon": "external link",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Performance",
+      "type": "link",
+      "url": "/d/butterfly-performance/butterfly-performance",
+      "icon": "external link",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    }
+  ],
   "schemaVersion": 38,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
   "time": {
     "from": "now-1d",
@@ -14,28 +34,49 @@
   "templating": {
     "list": [
       {
-        "name": "underlying",
-        "label": "Underlying",
-        "type": "custom",
-        "query": "SPX : SPX,NDX : NDX,XSP : XSP",
-        "current": { "text": "SPX", "value": "SPX" },
-        "options": [
-          { "text": "SPX", "value": "SPX", "selected": true },
-          { "text": "NDX", "value": "NDX", "selected": false },
-          { "text": "XSP", "value": "XSP", "selected": false }
-        ],
+        "name": "strategy_datasource",
+        "label": "Strategy",
+        "type": "datasource",
+        "query": "grafana-postgresql-datasource",
+        "regex": "/^(TimescaleDB|Candidate .*)$/",
+        "current": {
+          "selected": true,
+          "text": "TimescaleDB",
+          "value": "timescaledb"
+        },
+        "options": [],
         "multi": false,
         "includeAll": false,
         "hide": 0,
-        "refresh": 0
+        "refresh": 1
+      },
+      {
+        "name": "underlying",
+        "label": "Underlying",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${strategy_datasource}"
+        },
+        "query": "SELECT 'SPX' AS __text, 'SPX' AS __value UNION SELECT DISTINCT underlying AS __text, underlying AS __value FROM butterfly_trades WHERE underlying <> 'SPX' ORDER BY 1",
+        "definition": "SELECT 'SPX' AS __text, 'SPX' AS __value UNION SELECT DISTINCT underlying AS __text, underlying AS __value FROM butterfly_trades WHERE underlying <> 'SPX' ORDER BY 1",
+        "current": { "text": "SPX", "value": "SPX" },
+        "options": [],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "refresh": 1
       },
       {
         "name": "trade_id",
         "label": "Trade",
         "type": "query",
-        "datasource": { "type": "postgres", "uid": "timescaledb" },
-        "query": "SELECT to_char(trade_date, 'YYYY-MM-DD') || ' #' || id || ' ' || status || ' ' || direction || ' ' || center_strike::text || 'w' || wing_width::text || ' P&L $' || COALESCE(ROUND((pnl * 100 * quantity)::numeric, 2)::text, 'open') AS __text, id::text AS __value FROM butterfly_trades WHERE underlying = '$underlying' ORDER BY entry_time DESC LIMIT 250",
-        "definition": "SELECT to_char(trade_date, 'YYYY-MM-DD') || ' #' || id || ' ' || status || ' ' || direction || ' ' || center_strike::text || 'w' || wing_width::text || ' P&L $' || COALESCE(ROUND((pnl * 100 * quantity)::numeric, 2)::text, 'open') AS __text, id::text AS __value FROM butterfly_trades WHERE underlying = '$underlying' ORDER BY entry_time DESC LIMIT 250",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${strategy_datasource}"
+        },
+        "query": "SELECT to_char(trade_date, 'YYYY-MM-DD') || ' #' || id || ' ' || status || ' ' || direction || ' ' || center_strike::text || 'w' || wing_width::text || ' P&L $' || COALESCE(ROUND((pnl * 100 * quantity)::numeric, 2)::text, 'open') AS __text, id::text AS __value FROM butterfly_trades WHERE underlying = '$underlying' AND ('${strategy_datasource:raw}' = 'timescaledb' OR metadata->>'paper_fill_model' = 'mark_v1') ORDER BY entry_time DESC LIMIT 250",
+        "definition": "SELECT to_char(trade_date, 'YYYY-MM-DD') || ' #' || id || ' ' || status || ' ' || direction || ' ' || center_strike::text || 'w' || wing_width::text || ' P&L $' || COALESCE(ROUND((pnl * 100 * quantity)::numeric, 2)::text, 'open') AS __text, id::text AS __value FROM butterfly_trades WHERE underlying = '$underlying' AND ('${strategy_datasource:raw}' = 'timescaledb' OR metadata->>'paper_fill_model' = 'mark_v1') ORDER BY entry_time DESC LIMIT 250",
         "current": {},
         "refresh": 1,
         "sort": 0,
@@ -50,7 +91,7 @@
       "id": 1,
       "type": "table",
       "title": "Trade Header",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 6 },
       "options": {
         "showHeader": true,
@@ -58,9 +99,9 @@
       },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
-          "rawSql": "SELECT id AS trade_id, underlying, trade_date, status, direction, lower_strike::float AS lower_strike, center_strike::float AS center_strike, upper_strike::float AS upper_strike, wing_width, entry_time, exit_time, (entry_price * 100 * quantity)::float AS entry_price, (exit_price * 100 * quantity)::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, (peak_value * 100 * quantity)::float AS peak_value, exit_reason, quantity, (metadata->>'entry_spot')::float AS entry_spot, (metadata->>'vix')::float AS vix, metadata->>'selection_method' AS selection_method, lower_symbol, center_symbol, upper_symbol FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id",
+          "rawSql": "SELECT id AS trade_id, underlying, COALESCE(metadata->>'candidate_id', 'primary') AS strategy, trade_date, status, direction, lower_strike::float AS lower_strike, center_strike::float AS center_strike, upper_strike::float AS upper_strike, wing_width, entry_time, exit_time, (entry_price * 100 * quantity)::float AS entry_price, (exit_price * 100 * quantity)::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, (peak_value * 100 * quantity)::float AS peak_value, exit_reason, quantity, (metadata->>'entry_spot')::float AS entry_spot, (metadata->>'vix')::float AS vix, metadata->>'selection_method' AS selection_method, metadata->>'paper_fill_model' AS fill_model, metadata->>'config_hash' AS config_hash, metadata->>'git_sha' AS git_sha, NULLIF(metadata #>> '{entry_execution_diagnostics,observed_mark}', '')::float AS entry_observed_mark, COALESCE(NULLIF(metadata #>> '{exit_execution_diagnostics,observed_mark}', '')::float, NULLIF(metadata #>> '{exit_execution_diagnostics,observed_value}', '')::float) AS exit_observed_value, lower_symbol, center_symbol, upper_symbol FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id",
           "format": "table",
           "refId": "A"
         }
@@ -102,7 +143,7 @@
       "id": 2,
       "type": "timeseries",
       "title": "Spot Path vs Butterfly Tent",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
       "gridPos": { "x": 0, "y": 6, "w": 24, "h": 12 },
       "fieldConfig": {
         "defaults": {
@@ -136,30 +177,30 @@
       },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
-          "rawSql": "WITH trade AS (SELECT entry_time, COALESCE(exit_time, NOW()) AS end_time FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id) SELECT sp.ts AS time, sp.price::float AS \"$underlying Spot\" FROM spot_prices sp, trade t WHERE sp.underlying = '$underlying' AND sp.ts BETWEEN t.entry_time - interval '10 minutes' AND t.end_time + interval '10 minutes' ORDER BY sp.ts",
+          "rawSql": "WITH trade AS (SELECT entry_time, COALESCE(exit_time, NOW()) AS end_time FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id), spot_path AS (SELECT sp.ts AS time, sp.price::float AS price, 0 AS source_priority FROM spot_prices sp, trade t WHERE sp.underlying = '$underlying' AND sp.ts BETWEEN t.entry_time - interval '10 minutes' AND t.end_time + interval '10 minutes' UNION ALL SELECT q.ts AS time, q.spot_price::float AS price, 1 AS source_priority FROM monitoring_leg_quotes q WHERE q.underlying = '$underlying' AND q.trade_id = $trade_id AND q.spot_price IS NOT NULL) SELECT DISTINCT ON (time) time, price AS \"$underlying Spot\" FROM spot_path ORDER BY time, source_priority",
           "format": "time_series",
           "refId": "A"
         },
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
-          "rawSql": "WITH trade AS (SELECT entry_time, COALESCE(exit_time, NOW()) AS end_time, center_strike, lower_strike + entry_price AS lower_be, upper_strike - entry_price AS upper_be FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id) SELECT sp.ts AS time, t.center_strike::float AS \"Center\", t.lower_be::float AS \"Lower BE\", t.upper_be::float AS \"Upper BE\" FROM spot_prices sp, trade t WHERE sp.underlying = '$underlying' AND sp.ts BETWEEN t.entry_time - interval '10 minutes' AND t.end_time + interval '10 minutes' ORDER BY sp.ts",
+          "rawSql": "WITH trade AS (SELECT entry_time, COALESCE(exit_time, NOW()) AS end_time, center_strike, lower_strike + entry_price AS lower_be, upper_strike - entry_price AS upper_be FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id), timeline AS (SELECT generate_series(entry_time - interval '10 minutes', end_time + interval '10 minutes', interval '1 minute') AS time, center_strike, lower_be, upper_be FROM trade) SELECT time, center_strike::float AS \"Center\", lower_be::float AS \"Lower BE\", upper_be::float AS \"Upper BE\" FROM timeline ORDER BY time",
           "format": "time_series",
           "refId": "B"
         },
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
-          "rawSql": "SELECT t.entry_time AS time, sp.price::float AS \"Entry\" FROM butterfly_trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp WHERE t.underlying = '$underlying' AND t.id = $trade_id",
+          "rawSql": "SELECT t.entry_time AS time, COALESCE(sp.price, q.spot_price, NULLIF(t.metadata->>'entry_spot', '')::numeric)::float AS \"Entry\" FROM butterfly_trades t LEFT JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp ON TRUE LEFT JOIN LATERAL (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = $trade_id AND spot_price IS NOT NULL ORDER BY ts LIMIT 1) q ON TRUE WHERE t.underlying = '$underlying' AND t.id = $trade_id",
           "format": "time_series",
           "refId": "C"
         },
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
-          "rawSql": "SELECT t.exit_time AS time, sp.price::float AS \"Exit\" FROM butterfly_trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1) sp WHERE t.underlying = '$underlying' AND t.id = $trade_id AND t.exit_time IS NOT NULL",
+          "rawSql": "SELECT t.exit_time AS time, COALESCE(sp.price, q.spot_price)::float AS \"Exit\" FROM butterfly_trades t LEFT JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1) sp ON TRUE LEFT JOIN LATERAL (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = $trade_id AND spot_price IS NOT NULL ORDER BY ts DESC LIMIT 1) q ON TRUE WHERE t.underlying = '$underlying' AND t.id = $trade_id AND t.exit_time IS NOT NULL",
           "format": "time_series",
           "refId": "D"
         }
@@ -169,7 +210,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "Trade Lifecycle Values",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
       "gridPos": { "x": 0, "y": 18, "w": 14, "h": 9 },
       "fieldConfig": {
         "defaults": {
@@ -200,7 +241,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
           "rawSql": "SELECT d.ts AS time, (NULLIF(d.data->>'mark_value', '')::float * 100 * t.quantity) AS \"Mark\", (NULLIF(d.data->>'peak_value', '')::float * 100 * t.quantity) AS \"Peak\", NULLIF(d.data->>'drawdown_pct', '')::float AS \"Drawdown %\" FROM decision_log d JOIN butterfly_trades t ON t.id = $trade_id AND t.underlying = '$underlying' WHERE d.underlying = '$underlying' AND d.data->>'trade_id' = '$trade_id' AND d.event_type IN ('profit_state_transition', 'exit_signal_fired', 'trade_exited') ORDER BY d.ts",
           "format": "time_series",
@@ -212,7 +253,7 @@
       "id": 4,
       "type": "table",
       "title": "Lifecycle Events",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
       "gridPos": { "x": 14, "y": 18, "w": 10, "h": 9 },
       "options": {
         "showHeader": true,
@@ -222,7 +263,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
           "rawSql": "SELECT d.ts AS time, d.event_type, COALESCE(d.data->>'from', '') AS from_state, COALESCE(d.data->>'to', '') AS to_state, COALESCE(d.data->>'reason', d.data->>'exit_reason', '') AS reason, (NULLIF(d.data->>'mark_value', '')::float * 100 * t.quantity) AS mark_value, (NULLIF(d.data->>'peak_value', '')::float * 100 * t.quantity) AS peak_value, NULLIF(d.data->>'drawdown_pct', '')::float AS drawdown_pct, (NULLIF(d.data->>'pnl', '')::float * 100 * t.quantity) AS pnl FROM decision_log d JOIN butterfly_trades t ON t.id = $trade_id AND t.underlying = '$underlying' WHERE d.underlying = '$underlying' AND d.data->>'trade_id' = '$trade_id' AND d.event_type IN ('profit_state_transition', 'exit_signal_fired', 'trade_exited', 'exit_order_failed') ORDER BY d.ts",
           "format": "table",
@@ -266,7 +307,7 @@
       "id": 5,
       "type": "table",
       "title": "Entry Ladder",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
       "gridPos": { "x": 0, "y": 27, "w": 12, "h": 8 },
       "options": {
         "showHeader": true,
@@ -276,7 +317,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
           "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id), payload AS (SELECT COALESCE(NULLIF(t.metadata->'entry_attempts', 'null'::jsonb), dl.data->'entry_attempts', '[]'::jsonb) AS attempts, t.quantity FROM trade t LEFT JOIN LATERAL (SELECT data FROM decision_log WHERE underlying = t.underlying AND event_type = 'entry_ladder_trace' AND data->>'trade_id' = t.id::text ORDER BY ts DESC LIMIT 1) dl ON TRUE) SELECT COALESCE(NULLIF(e->>'step', '')::int, ord - 1) AS step, (NULLIF(e->>'limit', '')::float * 100 * quantity) AS limit, (NULLIF(e->>'bid', '')::float * 100 * quantity) AS bid, (NULLIF(e->>'mark', '')::float * 100 * quantity) AS mark, (NULLIF(e->>'ask', '')::float * 100 * quantity) AS ask, NULLIF(e->>'center', '')::float AS center, NULLIF(e->>'width', '')::int AS width, NULLIF(e->>'reward_risk', '')::float AS reward_risk FROM payload, jsonb_array_elements(attempts) WITH ORDINALITY AS arr(e, ord) ORDER BY step",
           "format": "table",
@@ -299,7 +340,7 @@
       "id": 6,
       "type": "table",
       "title": "Exit Ladder",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
       "gridPos": { "x": 12, "y": 27, "w": 12, "h": 8 },
       "options": {
         "showHeader": true,
@@ -309,7 +350,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
           "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id), payload AS (SELECT COALESCE(NULLIF(t.metadata->'exit_ladder_steps', 'null'::jsonb), dl.data->'exit_ladder_steps', '[]'::jsonb) AS steps, t.quantity FROM trade t LEFT JOIN LATERAL (SELECT data FROM decision_log WHERE underlying = t.underlying AND event_type = 'exit_ladder_trace' AND data->>'trade_id' = t.id::text ORDER BY ts DESC LIMIT 1) dl ON TRUE) SELECT COALESCE(NULLIF(e->>'step', '')::int, ord - 1) AS step, (NULLIF(e->>'limit', '')::float * 100 * quantity) AS limit, (NULLIF(e->>'bid', '')::float * 100 * quantity) AS bid, (NULLIF(e->>'mark', '')::float * 100 * quantity) AS mark, (NULLIF(e->>'ask', '')::float * 100 * quantity) AS ask, COALESCE(NULLIF(e->>'filled', '')::boolean, false) AS filled FROM payload, jsonb_array_elements(steps) WITH ORDINALITY AS arr(e, ord) ORDER BY step",
           "format": "table",
@@ -348,7 +389,7 @@
       "id": 7,
       "type": "table",
       "title": "Candidate Context Around Entry",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
       "gridPos": { "x": 0, "y": 35, "w": 24, "h": 10 },
       "options": {
         "showHeader": true,
@@ -359,7 +400,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
           "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id) SELECT c.scan_time AS time, c.direction, c.wing_width AS width, c.center_strike::float AS center, c.lower_strike::float AS lower_strike, c.upper_strike::float AS upper_strike, (c.cost * 100)::float AS cost, (c.max_profit * 100)::float AS max_profit, c.reward_risk::float AS reward_risk, c.lower_be::float AS lower_be, c.upper_be::float AS upper_be, c.distance_from_spot::float AS distance_from_spot, c.spot_price::float AS spot_price, (c.selected OR (c.center_strike = t.center_strike AND c.wing_width = t.wing_width AND c.direction = t.direction)) AS selected_match FROM butterfly_candidates c JOIN trade t ON c.underlying = t.underlying WHERE c.scan_time BETWEEN t.entry_time - interval '10 minutes' AND t.entry_time + interval '5 minutes' AND c.direction = t.direction ORDER BY selected_match DESC, c.scan_time DESC, c.reward_risk DESC LIMIT 100",
           "format": "table",
@@ -401,7 +442,7 @@
       "id": 8,
       "type": "table",
       "title": "Raw Audit Timeline",
-      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
       "gridPos": { "x": 0, "y": 45, "w": 24, "h": 12 },
       "options": {
         "showHeader": true,
@@ -411,7 +452,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
           "rawQuery": true,
           "rawSql": "WITH trade AS (SELECT entry_time, COALESCE(exit_time, NOW()) AS end_time, quantity FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id) SELECT d.ts AS time, d.event_type, CASE d.event_type WHEN 'trade_entered' THEN 'fill=' || COALESCE(to_char((NULLIF(d.data->>'cost', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' width=' || COALESCE(d.data->>'width', '?') || ' center=' || COALESCE(d.data->>'center', '?') || ' direction=' || COALESCE(d.data->>'direction', '?') WHEN 'entry_ladder_trace' THEN 'entry attempts=' || COALESCE(jsonb_array_length(d.data->'entry_attempts')::text, '0') || ' method=' || COALESCE(d.data->>'selection_method', '?') WHEN 'profit_state_transition' THEN COALESCE(d.data->>'from', 'null') || ' -> ' || COALESCE(d.data->>'to', '?') || ' mark=' || COALESCE(to_char((NULLIF(d.data->>'mark_value', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' peak=' || COALESCE(to_char((NULLIF(d.data->>'peak_value', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') WHEN 'exit_signal_fired' THEN 'reason=' || COALESCE(d.data->>'reason', '?') || ' mark=' || COALESCE(to_char((NULLIF(d.data->>'mark_value', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' peak=' || COALESCE(to_char((NULLIF(d.data->>'peak_value', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' drawdown=' || COALESCE(d.data->>'drawdown_pct', '?') || '%' WHEN 'trade_exited' THEN 'reason=' || COALESCE(d.data->>'exit_reason', '?') || ' fill=' || COALESCE(to_char((NULLIF(d.data->>'fill_price', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' pnl=' || COALESCE(to_char((NULLIF(d.data->>'pnl', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') WHEN 'exit_ladder_trace' THEN 'exit steps=' || COALESCE(jsonb_array_length(d.data->'exit_ladder_steps')::text, '0') || ' forced=' || COALESCE(d.data->>'forced', 'false') ELSE d.data::text END AS details, d.data::text AS raw_json FROM decision_log d CROSS JOIN trade t WHERE d.underlying = '$underlying' AND ((d.data->>'trade_id') = '$trade_id' OR (d.ts BETWEEN t.entry_time - interval '10 minutes' AND t.end_time + interval '10 minutes' AND d.event_type IN ('entry_blocked', 'gap_regime_skip', 'bias_filter_no_signal', 'no_candidates', 'entry_step_unfilled', 'entry_exhausted'))) ORDER BY d.ts",
           "format": "table",
@@ -431,6 +472,191 @@
           }
         ]
       }
+    },
+    {
+      "id": 90,
+      "type": "row",
+      "title": "Candidate Strategy Review",
+      "description": "Optional mark_v1 cohort and evidence checks for the strategy selected above. The primary SPX trade view remains unchanged while this row is collapsed.",
+      "collapsed": true,
+      "gridPos": { "x": 0, "y": 57, "w": 24, "h": 1 },
+      "panels": [
+        {
+          "id": 91,
+          "type": "table",
+          "title": "Mark-v1 Cohort Scorecard",
+          "description": "Closed canonical mark_v1 trades for the selected strategy and underlying. Largest-winner share is relative to gross winning P&L.",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "gridPos": { "x": 0, "y": 58, "w": 12, "h": 7 },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${strategy_datasource}"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "WITH closed AS (SELECT pnl * 100 * quantity AS pnl_dollars FROM butterfly_trades WHERE underlying = '$underlying' AND status = 'CLOSED' AND metadata->>'paper_fill_model' = 'mark_v1'), totals AS (SELECT COUNT(*) AS closed_trades, COALESCE(SUM(pnl_dollars), 0) AS total_pnl, COALESCE(AVG(pnl_dollars), 0) AS average_pnl, COALESCE(AVG((pnl_dollars > 0)::int), 0) AS win_rate, COALESCE(SUM(pnl_dollars) FILTER (WHERE pnl_dollars > 0), 0) AS gross_profit, ABS(COALESCE(SUM(pnl_dollars) FILTER (WHERE pnl_dollars < 0), 0)) AS gross_loss, COALESCE(MAX(pnl_dollars) FILTER (WHERE pnl_dollars > 0), 0) AS largest_winner FROM closed) SELECT closed_trades, total_pnl, average_pnl, win_rate, CASE WHEN gross_loss > 0 THEN gross_profit / gross_loss WHEN gross_profit > 0 THEN 999 ELSE 0 END AS profit_factor, CASE WHEN gross_profit > 0 THEN largest_winner / gross_profit ELSE 0 END AS largest_winner_share, total_pnl - largest_winner AS pnl_without_largest_winner FROM totals",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "align": "auto", "displayMode": "auto" }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "total_pnl|average_pnl|pnl_without_largest_winner" },
+                "properties": [
+                  { "id": "unit", "value": "currencyUSD" },
+                  { "id": "decimals", "value": 2 }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": "win_rate|largest_winner_share" },
+                "properties": [
+                  { "id": "unit", "value": "percentunit" },
+                  { "id": "decimals", "value": 1 }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 92,
+          "type": "table",
+          "title": "Promotion Gate Failures",
+          "description": "Any nonzero data-quality, strategy-parity, or fill-accounting count requires investigation before candidate promotion.",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "gridPos": { "x": 12, "y": 58, "w": 12, "h": 7 },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${strategy_datasource}"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "WITH decision_failures AS (SELECT COUNT(*) FILTER (WHERE event_type IN ('entry_feed_blocked', 'position_feed_blocked', 'entry_data_blocked', 'settlement_feed_blocked', 'settlement_failed')) AS data_quality_failures, COUNT(*) FILTER (WHERE (event_type = 'entry_selection_parity' AND (data->>'available' = 'false' OR data->>'width_match' = 'false' OR data->>'center_match' = 'false')) OR (event_type = 'exit_mark_parity' AND (data->>'available' = 'false' OR data->>'replay_would_miss_drawdown' = 'true'))) AS strategy_parity_failures FROM decision_log WHERE underlying = '$underlying'), fill_failures AS (SELECT COUNT(*) AS fill_accounting_failures FROM butterfly_trades WHERE underlying = '$underlying' AND metadata->>'paper_fill_model' = 'mark_v1' AND (NULLIF(metadata #>> '{entry_execution_diagnostics,observed_mark}', '')::double precision IS NULL OR ABS(entry_price - NULLIF(metadata #>> '{entry_execution_diagnostics,observed_mark}', '')::double precision) > 0.0001 OR (status = 'CLOSED' AND (COALESCE(NULLIF(metadata #>> '{exit_execution_diagnostics,observed_mark}', '')::double precision, NULLIF(metadata #>> '{exit_execution_diagnostics,observed_value}', '')::double precision) IS NULL OR ABS(exit_price - COALESCE(NULLIF(metadata #>> '{exit_execution_diagnostics,observed_mark}', '')::double precision, NULLIF(metadata #>> '{exit_execution_diagnostics,observed_value}', '')::double precision)) > 0.0001)))) SELECT data_quality_failures, strategy_parity_failures, fill_accounting_failures FROM decision_failures CROSS JOIN fill_failures",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 93,
+          "type": "timeseries",
+          "title": "Selected Trade Monitoring Values",
+          "description": "Per-poll butterfly mark, peak, and drawdown for only the selected trade.",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "gridPos": { "x": 0, "y": 65, "w": 14, "h": 9 },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${strategy_datasource}"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT q.ts AS time, (MAX(q.fly_mark) * 100 * t.quantity)::float AS \"Mark\", (MAX(q.peak_value) * 100 * t.quantity)::float AS \"Peak\", MAX(q.drawdown_pct)::float AS \"Drawdown %\" FROM monitoring_leg_quotes q JOIN butterfly_trades t ON t.underlying = q.underlying AND t.id = q.trade_id WHERE q.underlying = '$underlying' AND q.trade_id = $trade_id AND t.metadata->>'paper_fill_model' = 'mark_v1' GROUP BY q.ts, t.quantity ORDER BY q.ts",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 2,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 0,
+                "showPoints": "never"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byRegexp", "options": "Mark|Peak" },
+                "properties": [
+                  { "id": "unit", "value": "currencyUSD" }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Drawdown %" },
+                "properties": [
+                  { "id": "unit", "value": "percent" },
+                  { "id": "custom.axisPlacement", "value": "right" }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 95,
+          "type": "timeseries",
+          "title": "Selected Trade Leg Marks",
+          "description": "Recorded mark prices for only the selected trade's three option legs.",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "gridPos": { "x": 14, "y": 65, "w": 10, "h": 9 },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${strategy_datasource}"
+              },
+              "format": "time_series",
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS time, mark, COALESCE(symbol, strike::text || ' ' || option_type) AS metric FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = $trade_id ORDER BY ts",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 4,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 0,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 94,
+          "type": "table",
+          "title": "Selected Trade Fill Accounting",
+          "description": "The stored mark_v1 entry and exit values should match their recorded execution evidence.",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "gridPos": { "x": 0, "y": 74, "w": 24, "h": 6 },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${strategy_datasource}"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT id AS trade_id, metadata->>'paper_fill_model' AS fill_model, entry_price, NULLIF(metadata #>> '{entry_execution_diagnostics,observed_mark}', '')::double precision AS entry_observed_mark, entry_price - NULLIF(metadata #>> '{entry_execution_diagnostics,observed_mark}', '')::double precision AS entry_variance, exit_price, COALESCE(NULLIF(metadata #>> '{exit_execution_diagnostics,observed_mark}', '')::double precision, NULLIF(metadata #>> '{exit_execution_diagnostics,observed_value}', '')::double precision) AS exit_observed_value, exit_price - COALESCE(NULLIF(metadata #>> '{exit_execution_diagnostics,observed_mark}', '')::double precision, NULLIF(metadata #>> '{exit_execution_diagnostics,observed_value}', '')::double precision) AS exit_variance FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id AND metadata->>'paper_fill_model' = 'mark_v1'",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

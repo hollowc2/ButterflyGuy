@@ -2,8 +2,28 @@
   "title": "Butterfly Performance",
   "uid": "butterfly-performance",
   "tags": ["options", "trading", "index"],
+  "links": [
+    {
+      "title": "Trading",
+      "type": "link",
+      "url": "/d/butterfly-trading/butterfly-trading",
+      "icon": "external link",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Trade Detail",
+      "type": "link",
+      "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-strategy_datasource=timescaledb&var-underlying=SPX",
+      "icon": "external link",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    }
+  ],
   "schemaVersion": 38,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
   "time": {
     "from": "now-90d",
@@ -729,7 +749,7 @@
                 "value": [
                   {
                     "title": "Open trade detail",
-                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-underlying=${__data.fields.underlying}&var-trade_id=${__value.raw}"
+                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-strategy_datasource=timescaledb&var-underlying=${__data.fields.underlying}&var-trade_id=${__value.raw}"
                   }
                 ]
               }
@@ -1210,7 +1230,7 @@
       ]
     },
     {
-      "id": 30,
+      "id": 50,
       "type": "stat",
       "title": "XSP Win Rate",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
@@ -1246,7 +1266,7 @@
       ]
     },
     {
-      "id": 31,
+      "id": 51,
       "type": "stat",
       "title": "XSP Avg Win",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
@@ -1280,7 +1300,7 @@
       ]
     },
     {
-      "id": 32,
+      "id": 52,
       "type": "stat",
       "title": "XSP Avg Loss",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
@@ -1315,7 +1335,7 @@
       ]
     },
     {
-      "id": 33,
+      "id": 53,
       "type": "stat",
       "title": "XSP Profit Factor",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
@@ -1351,7 +1371,7 @@
       ]
     },
     {
-      "id": 34,
+      "id": 54,
       "type": "stat",
       "title": "XSP Total Trades",
       "datasource": { "type": "postgres", "uid": "timescaledb" },
@@ -1779,7 +1799,7 @@
                 "value": [
                   {
                     "title": "Open trade detail",
-                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-underlying=${__data.fields.underlying}&var-trade_id=${__value.raw}"
+                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-strategy_datasource=timescaledb&var-underlying=${__data.fields.underlying}&var-trade_id=${__value.raw}"
                   }
                 ]
               }
@@ -1794,6 +1814,187 @@
           "rawSql": "SELECT id AS trade_id, trade_date, underlying, direction, wing_width, center_strike::float AS center_strike, (entry_price * 100 * quantity)::float AS entry_price, (exit_price * 100 * quantity)::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, (peak_value * 100 * quantity)::float AS peak_value, exit_reason, ROUND(EXTRACT(EPOCH FROM (exit_time - entry_time)) / 3600.0, 1)::float AS duration_hrs FROM butterfly_trades WHERE status='CLOSED' AND ('$fill_model' = 'all' OR COALESCE(metadata->>'paper_fill_model', 'legacy') = '$fill_model') AND underlying IN ('SPX', 'NDX', 'XSP') ORDER BY trade_date DESC, entry_time DESC",
           "format": "table",
           "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 100,
+      "type": "row",
+      "title": "SPX Candidate Comparison",
+      "description": "Optional paper-only candidate review. Primary SPX performance remains the default view while this row is collapsed.",
+      "collapsed": true,
+      "gridPos": { "x": 0, "y": 65, "w": 24, "h": 1 },
+      "panels": [
+        {
+          "id": 101,
+          "type": "table",
+          "title": "Review Gate Progress",
+          "description": "Progress is based only on closed paper trades in the canonical mark_v1 cohort.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 0, "y": 66, "w": 6, "h": 5 },
+          "targets": [
+            {
+              "expr": "candidate_evaluator_review_progress_ratio",
+              "legendFormat": "{{candidate_id}}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 0
+            }
+          }
+        },
+        {
+          "id": 102,
+          "type": "table",
+          "title": "Review-eligible Closed Trades",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 6, "y": 66, "w": 6, "h": 5 },
+          "targets": [
+            {
+              "expr": "candidate_evaluator_closed_trade_count",
+              "legendFormat": "{{candidate_id}}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0
+            }
+          }
+        },
+        {
+          "id": 103,
+          "type": "table",
+          "title": "Promotion Blockers",
+          "description": "Any nonzero parity or data-quality count requires investigation before promotion.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 12, "y": 66, "w": 12, "h": 5 },
+          "targets": [
+            {
+              "expr": "candidate_evaluator_parity_failures",
+              "legendFormat": "{{candidate_id}} parity",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "candidate_evaluator_data_quality_failures",
+              "legendFormat": "{{candidate_id}} data quality",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0
+            }
+          }
+        },
+        {
+          "id": 104,
+          "type": "timeseries",
+          "title": "Candidate Total P&L",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 0, "y": 71, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "candidate_evaluator_realized_pnl_dollars",
+              "legendFormat": "{{candidate_id}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            }
+          }
+        },
+        {
+          "id": 105,
+          "type": "table",
+          "title": "Average P&L and Profit Factor",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 12, "y": 71, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "candidate_evaluator_average_pnl_dollars",
+              "legendFormat": "{{candidate_id}} average P&L",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "candidate_evaluator_profit_factor",
+              "legendFormat": "{{candidate_id}} profit factor",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            }
+          ]
+        },
+        {
+          "id": 106,
+          "type": "table",
+          "title": "Win Rate and Drawdown",
+          "description": "All values use closed mark_v1 paper trades only.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 0, "y": 79, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "candidate_evaluator_win_rate",
+              "legendFormat": "{{candidate_id}} win rate",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "candidate_evaluator_max_drawdown_dollars",
+              "legendFormat": "{{candidate_id}} drawdown",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            }
+          ]
+        },
+        {
+          "id": 107,
+          "type": "table",
+          "title": "Winner Concentration",
+          "description": "A high largest-winner share or negative P&L without the largest winner signals outlier dependence.",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "x": 12, "y": 79, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "candidate_evaluator_largest_winner_share_ratio",
+              "legendFormat": "{{candidate_id}} largest-winner share",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "candidate_evaluator_pnl_without_largest_winner_dollars",
+              "legendFormat": "{{candidate_id}} P&L without largest winner",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            }
+          ]
         }
       ]
     }
