@@ -68,6 +68,66 @@ def test_candidate_runtime_health_is_folded_into_trading() -> None:
     } <= _expressions(dashboard)
 
 
+def test_trading_dashboard_selects_one_strategy_source_without_metric_pollution() -> None:
+    dashboard = _dashboard("butterfly_trading.json")
+    variables = {variable["name"]: variable for variable in dashboard["templating"]["list"]}
+    strategy = variables["strategy_datasource"]
+    panels = {panel["title"]: panel for panel in _panels(dashboard)}
+
+    assert strategy["label"] == "Source"
+    assert strategy["type"] == "datasource"
+    assert strategy["query"] == "grafana-postgresql-datasource"
+    assert strategy["regex"] == "/^(TimescaleDB|Candidate .*)$/"
+    assert strategy["current"] == {
+        "selected": True,
+        "text": "TimescaleDB",
+        "value": "timescaledb",
+    }
+
+    sql_panels = [
+        panel
+        for panel in _panels(dashboard)
+        if any("rawSql" in target for target in panel.get("targets", []))
+    ]
+    assert sql_panels
+    assert all(
+        panel["datasource"]
+        == {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}",
+        }
+        for panel in sql_panels
+    )
+    assert all(
+        target["datasource"]["uid"] == "${strategy_datasource}"
+        for panel in sql_panels
+        for target in panel.get("targets", [])
+        if "rawSql" in target
+    )
+
+    for title in (
+        "Position Value",
+        "Peak vs Current Value",
+        "Daily Trade Count",
+        "Active Trades",
+    ):
+        assert all("rawSql" in target for target in panels[title]["targets"])
+
+    primary_runtime_titles = (
+        "Chain Snapshots (1h rate)",
+        "Butterfly Candidates Found",
+        "Order Fill Duration (p95)",
+        "Schwab API Errors",
+        "Rows in Last Snapshot",
+        "Snapshot Collect Duration",
+    )
+    assert all(
+        'job=~"butterfly_(spx|ndx|xsp)"' in target["expr"]
+        for title in primary_runtime_titles
+        for target in panels[title]["targets"]
+    )
+
+
 def test_trade_detail_defaults_to_primary_spx_and_selects_strategy_datasource() -> None:
     dashboard = _dashboard("butterfly_trade_detail.json")
     variables = {variable["name"]: variable for variable in dashboard["templating"]["list"]}
@@ -154,7 +214,13 @@ def test_trade_detail_uses_selected_trade_monitoring_as_candidate_spot_fallback(
     assert all("trade_id = $trade_id" in query for query in monitoring_queries)
 
 
-def test_primary_trade_links_pin_the_main_strategy_datasource() -> None:
-    for name in ("performance.json", "butterfly_trading.json"):
-        serialized = json.dumps(_dashboard(name))
-        assert "var-strategy_datasource=timescaledb" in serialized
+def test_performance_trade_links_pin_the_main_strategy_datasource() -> None:
+    serialized = json.dumps(_dashboard("performance.json"))
+    assert "var-strategy_datasource=timescaledb" in serialized
+
+
+def test_trading_trade_links_preserve_the_selected_strategy_datasource() -> None:
+    serialized = json.dumps(_dashboard("butterfly_trading.json"))
+
+    assert "var-strategy_datasource=${strategy_datasource:raw}" in serialized
+    assert "var-strategy_datasource=timescaledb" not in serialized
