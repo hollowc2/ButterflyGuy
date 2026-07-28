@@ -230,6 +230,16 @@ def _exit_chart_series(
     return series
 
 
+def _exit_marker_point(
+    spec: ButterflyChartSpec,
+    series: list[tuple[dt.datetime, float]],
+) -> tuple[dt.datetime, float]:
+    if spec.exit_time is None:
+        return series[-1]
+    exit_et = spec.exit_time.astimezone(EASTERN)
+    return min(series, key=lambda point: abs(point[0] - exit_et))
+
+
 def summarize_exit_chart(
     spec: ButterflyChartSpec,
     candles: list[dict],
@@ -283,8 +293,8 @@ def build_exit_chart_png(
                    label="Entry", edgecolors="white", linewidths=0.5)
 
     if series:
-        exit_price = series[-1][1]
-        ax.scatter([series[-1][0]], [exit_price], color=_EXIT_MARKER, s=60, zorder=5,
+        exit_time, exit_price = _exit_marker_point(spec, series)
+        ax.scatter([exit_time], [exit_price], color=_EXIT_MARKER, s=60, zorder=5,
                    label="Exit", edgecolors="white", linewidths=0.5)
 
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=EASTERN))

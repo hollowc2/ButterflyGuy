@@ -13,7 +13,7 @@ from dotenv import dotenv_values
 
 from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
-from butterfly_guy.core.time_utils import is_premarket_window, now_eastern
+from butterfly_guy.core.time_utils import is_premarket_window, is_trading_day, now_eastern
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.equity_scan.config import load_equity_scan_config
 from butterfly_guy.equity_scan.news import fetch_news_impacts
@@ -77,6 +77,11 @@ async def run_scan(
     dry_run: bool = False,
     open_scan: bool = False,
 ) -> list[str]:
+    generated_at = now_eastern()
+    if not is_trading_day(generated_at.date()):
+        log.info("equity_scan_skipped", reason="not_trading_day", date=str(generated_at.date()))
+        return []
+
     app_config = load_config(app_config_path)
     scan_config = load_equity_scan_config(scan_config_path)
     env = {**dotenv_values(".env"), **os.environ}
@@ -105,7 +110,6 @@ async def run_scan(
     schwab = SchwabClientWrapper(app_config.schwab)
     await schwab.initialize()
     try:
-        generated_at = now_eastern()
         log.info(
             "equity_scan_start",
             universes=scan_config.universes,

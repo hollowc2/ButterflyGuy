@@ -4,9 +4,7 @@ on:
   push:
     branches:
       - main
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -14,23 +12,137 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Validate
-        working-directory: /opt/butterflyguy
         run: |
           uv run pytest -q
+          touch .env
           docker compose -f infra/docker-compose.yml config >/dev/null
           uv run ruff check .
 
-      - name: Deploy
+      - name: Check runtime is flat
+        if: github.event_name == 'workflow_dispatch'
+        id: safety
         working-directory: /opt/butterflyguy
         run: |
-          git pull --ff-only origin main
+          unsafe=$(docker exec butterfly_timescaledb psql -U butterfly -d butterfly_guy -tAc "
+            SELECT
+              (SELECT count(*) FROM butterfly_trades WHERE status = 'OPEN') +
+              (SELECT count(*) FROM broker_order_intents
+               WHERE status IS NULL OR status NOT IN ('FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'))
+          ")
+          test "$unsafe" = "0"
+          docker exec -i butterfly_spx_app python - <<'PY'
+          import asyncio
+          import datetime as dt
+
+          from butterfly_guy.core.config import load_config
+          from butterfly_guy.core.time_utils import session_date
+          from butterfly_guy.data.schwab_client import SchwabClientWrapper
+          from butterfly_guy.execution.order_manager import (
+              CANCEL_PENDING_STATUSES,
+              PARTIAL_FILL_STATUSES,
+              TERMINAL_ORDER_STATUSES,
+              WORKING_ORDER_STATUSES,
+              order_statuses,
+              walk_orders,
+          )
+          from butterfly_guy.scripts.run_live import (
+              _broker_option_positions,
+              _matches_underlying,
+              _order_symbols,
+          )
+
+
+          async def check() -> None:
+              schwab = SchwabClientWrapper(load_config("configs/config.yaml").schwab)
+              await schwab.initialize()
+              try:
+                  today = session_date()
+                  response = await schwab._retry(
+                      schwab.client.get_orders_for_account,
+                      schwab.account_hash,
+                      from_entered_datetime=dt.datetime.combine(
+                          today - dt.timedelta(days=59), dt.time.min
+                      ),
+                      to_entered_datetime=dt.datetime.combine(today, dt.time.max),
+                      endpoint="deployment_order_gate",
+                  )
+                  broker_orders = response.json()
+                  if not isinstance(broker_orders, list):
+                      raise RuntimeError("Schwab order history response is not a list")
+                  snapshot = await schwab.get_account_snapshot()
+                  known_statuses = (
+                      WORKING_ORDER_STATUSES
+                      | PARTIAL_FILL_STATUSES
+                      | CANCEL_PENDING_STATUSES
+                      | TERMINAL_ORDER_STATUSES
+                  )
+                  active_statuses = (
+                      WORKING_ORDER_STATUSES
+                      | PARTIAL_FILL_STATUSES
+                      | CANCEL_PENDING_STATUSES
+                  )
+                  for underlying in ("SPX", "NDX", "XSP"):
+                      positions = _broker_option_positions(snapshot, underlying)
+                      if positions:
+                          raise RuntimeError(
+                              f"Broker has {len(positions)} {underlying} option "
+                              "position(s) while the DB is flat"
+                          )
+                      relevant = [
+                          order
+                          for order in broker_orders
+                          if any(
+                              _matches_underlying(symbol, underlying)
+                              for symbol in _order_symbols(order)
+                          )
+                      ]
+                      if any(
+                          not node.get("status")
+                          for order in relevant
+                          for node in walk_orders(order)
+                      ):
+                          raise RuntimeError(
+                              f"Broker has missing {underlying} order status"
+                          )
+                      statuses = set().union(
+                          *(order_statuses(order) for order in relevant)
+                      )
+                      unknown = statuses - known_statuses
+                      if unknown:
+                          raise RuntimeError(
+                              f"Broker has unmapped {underlying} order status(es)"
+                          )
+                      if statuses & active_statuses:
+                          raise RuntimeError(
+                              f"Broker has active {underlying} order(s)"
+                          )
+              finally:
+                  await schwab.close()
+
+
+          asyncio.run(check())
+          PY
+
+      - name: Deploy
+        if: github.event_name == 'workflow_dispatch' && steps.safety.outcome == 'success'
+        working-directory: /opt/butterflyguy
+        run: |
+          git fetch origin main
+          git merge --ff-only "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           docker compose -f infra/docker-compose.yml --profile ndx --profile xsp up --build -d app_spx app_ndx app_xsp
-          for i in {1..30}; do
-            curl --fail --silent --show-error http://127.0.0.1:8000/health >/dev/null && break
-            sleep 2
+          for port in 8000 8001 8003; do
+            ready=false
+            for i in {1..30}; do
+              if curl --fail --silent --show-error "http://127.0.0.1:${port}/ready" >/dev/null; then
+                ready=true
+                break
+              fi
+              sleep 2
+            done
+            "$ready"
           done
-          curl --fail --silent --show-error http://127.0.0.1:8000/health >/dev/null
           docker image prune -f

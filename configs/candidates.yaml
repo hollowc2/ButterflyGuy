@@ -1,0 +1,37 @@
+candidates:
+  - id: best-rr
+    enabled: false
+    slot: 0
+    config_path: configs/config_spx_candidate.yaml
+    database_name: butterfly_guy_spx_candidate
+    review_trade_count: 20
+  - id: vix-center
+    enabled: true
+    slot: 1
+    config_path: configs/config_spx_candidate_vix_center.yaml
+    database_name: butterfly_guy_spx_candidate_vix_center
+    review_trade_count: 20
+  - id: target-cost
+    enabled: true
+    slot: 2
+    config_path: configs/config_spx_candidate_target_cost.yaml
+    database_name: butterfly_guy_spx_candidate_target_cost
+    review_trade_count: 20
+  - id: gap-conviction
+    enabled: true
+    slot: 3
+    config_path: configs/config_spx_candidate_gap_conviction.yaml
+    database_name: butterfly_guy_spx_candidate_gap_conviction
+    review_trade_count: 20
+  - id: peak-trailer
+    enabled: true
+    slot: 4
+    config_path: configs/config_spx_candidate_peak_trailer.yaml
+    database_name: butterfly_guy_spx_candidate_peak_trailer
+    review_trade_count: 20
+  - id: absolute-stop
+    enabled: true
+    slot: 5
+    config_path: configs/config_spx_candidate_absolute_stop.yaml
+    database_name: butterfly_guy_spx_candidate_absolute_stop
+    review_trade_count: 20

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 
@@ -11,6 +12,59 @@ from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.time_utils import EASTERN, now_eastern
 
 log = get_logger(__name__)
+
+
+class AlertmanagerNotifier:
+    """Sends centrally deduplicated critical alerts through Alertmanager."""
+
+    def __init__(self, url: str, underlying: str) -> None:
+        self.url = url
+        self.underlying = underlying.upper()
+        self._pending_resolutions: set[str] = set()
+
+    async def notify_critical(self, condition: str) -> bool:
+        from notify import send_alertmanager
+
+        self._pending_resolutions.discard(condition)
+        sent = await asyncio.to_thread(
+            send_alertmanager,
+            self.url,
+            condition,
+            self.underlying,
+        )
+        (log.info if sent else log.error)(
+            "critical_alert",
+            condition=condition,
+            underlying=self.underlying,
+            result="accepted" if sent else "failed",
+        )
+        return sent
+
+    async def resolve_critical(self, condition: str) -> bool:
+        from notify import send_alertmanager
+
+        resolved = await asyncio.to_thread(
+            send_alertmanager,
+            self.url,
+            condition,
+            self.underlying,
+            resolved=True,
+        )
+        if resolved:
+            self._pending_resolutions.discard(condition)
+        else:
+            self._pending_resolutions.add(condition)
+        (log.info if resolved else log.error)(
+            "critical_alert_resolution",
+            condition=condition,
+            underlying=self.underlying,
+            result="accepted" if resolved else "failed",
+        )
+        return resolved
+
+    async def retry_pending_resolutions(self) -> None:
+        for condition in tuple(self._pending_resolutions):
+            await self.resolve_critical(condition)
 
 
 class DiscordNotifier:
@@ -234,14 +288,6 @@ class DiscordNotifier:
             f"reset, or adjust risk manually."
         )
         await self._post(msg)
-
-    async def notify_startup(self) -> None:
-        await self._post(
-            "🚀 Butterfly Guy starting up!\n\n"
-            "✅ Updated auth token\n"
-            "📅 Ready for the trading week\n"
-            "🍀 Good luck traders"
-        )
 
     async def notify_weekly_calendar(self, calendar_text: str) -> None:
         await self._post(calendar_text)

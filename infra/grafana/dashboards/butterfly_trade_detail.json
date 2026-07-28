@@ -60,7 +60,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT id AS trade_id, underlying, trade_date, status, direction, lower_strike::float AS lower_strike, center_strike::float AS center_strike, upper_strike::float AS upper_strike, wing_width, entry_time, exit_time, entry_price::float AS entry_price, exit_price::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, peak_value::float AS peak_value, exit_reason, quantity, (metadata->>'entry_spot')::float AS entry_spot, (metadata->>'vix')::float AS vix, metadata->>'selection_method' AS selection_method, lower_symbol, center_symbol, upper_symbol FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id",
+          "rawSql": "SELECT id AS trade_id, underlying, trade_date, status, direction, lower_strike::float AS lower_strike, center_strike::float AS center_strike, upper_strike::float AS upper_strike, wing_width, entry_time, exit_time, (entry_price * 100 * quantity)::float AS entry_price, (exit_price * 100 * quantity)::float AS exit_price, (pnl * 100 * quantity)::float AS pnl, (peak_value * 100 * quantity)::float AS peak_value, exit_reason, quantity, (metadata->>'entry_spot')::float AS entry_spot, (metadata->>'vix')::float AS vix, metadata->>'selection_method' AS selection_method, lower_symbol, center_symbol, upper_symbol FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id",
           "format": "table",
           "refId": "A"
         }
@@ -92,7 +92,7 @@
             "matcher": { "id": "byRegexp", "options": ".*price|peak_value" },
             "properties": [
               { "id": "unit", "value": "currencyUSD" },
-              { "id": "decimals", "value": 4 }
+              { "id": "decimals", "value": 2 }
             ]
           }
         ]
@@ -202,7 +202,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT ts AS time, NULLIF(data->>'mark_value', '')::float AS \"Mark\", NULLIF(data->>'peak_value', '')::float AS \"Peak\", NULLIF(data->>'drawdown_pct', '')::float AS \"Drawdown %\" FROM decision_log WHERE underlying = '$underlying' AND data->>'trade_id' = '$trade_id' AND event_type IN ('profit_state_transition', 'exit_signal_fired', 'trade_exited') ORDER BY ts",
+          "rawSql": "SELECT d.ts AS time, (NULLIF(d.data->>'mark_value', '')::float * 100 * t.quantity) AS \"Mark\", (NULLIF(d.data->>'peak_value', '')::float * 100 * t.quantity) AS \"Peak\", NULLIF(d.data->>'drawdown_pct', '')::float AS \"Drawdown %\" FROM decision_log d JOIN butterfly_trades t ON t.id = $trade_id AND t.underlying = '$underlying' WHERE d.underlying = '$underlying' AND d.data->>'trade_id' = '$trade_id' AND d.event_type IN ('profit_state_transition', 'exit_signal_fired', 'trade_exited') ORDER BY d.ts",
           "format": "time_series",
           "refId": "A"
         }
@@ -224,7 +224,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "SELECT d.ts AS time, d.event_type, COALESCE(d.data->>'from', '') AS from_state, COALESCE(d.data->>'to', '') AS to_state, COALESCE(d.data->>'reason', d.data->>'exit_reason', '') AS reason, NULLIF(d.data->>'mark_value', '')::float AS mark_value, NULLIF(d.data->>'peak_value', '')::float AS peak_value, NULLIF(d.data->>'drawdown_pct', '')::float AS drawdown_pct, (NULLIF(d.data->>'pnl', '')::float * 100 * t.quantity) AS pnl FROM decision_log d JOIN butterfly_trades t ON t.id = $trade_id AND t.underlying = '$underlying' WHERE d.underlying = '$underlying' AND d.data->>'trade_id' = '$trade_id' AND d.event_type IN ('profit_state_transition', 'exit_signal_fired', 'trade_exited', 'exit_order_failed') ORDER BY d.ts",
+          "rawSql": "SELECT d.ts AS time, d.event_type, COALESCE(d.data->>'from', '') AS from_state, COALESCE(d.data->>'to', '') AS to_state, COALESCE(d.data->>'reason', d.data->>'exit_reason', '') AS reason, (NULLIF(d.data->>'mark_value', '')::float * 100 * t.quantity) AS mark_value, (NULLIF(d.data->>'peak_value', '')::float * 100 * t.quantity) AS peak_value, NULLIF(d.data->>'drawdown_pct', '')::float AS drawdown_pct, (NULLIF(d.data->>'pnl', '')::float * 100 * t.quantity) AS pnl FROM decision_log d JOIN butterfly_trades t ON t.id = $trade_id AND t.underlying = '$underlying' WHERE d.underlying = '$underlying' AND d.data->>'trade_id' = '$trade_id' AND d.event_type IN ('profit_state_transition', 'exit_signal_fired', 'trade_exited', 'exit_order_failed') ORDER BY d.ts",
           "format": "table",
           "refId": "A"
         }
@@ -234,6 +234,13 @@
           "custom": { "align": "auto", "displayMode": "auto" }
         },
         "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "mark_value|peak_value" },
+            "properties": [
+              { "id": "unit", "value": "currencyUSD" },
+              { "id": "decimals", "value": 2 }
+            ]
+          },
           {
             "matcher": { "id": "byName", "options": "pnl" },
             "properties": [
@@ -271,11 +278,22 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id), payload AS (SELECT COALESCE(NULLIF(t.metadata->'entry_attempts', 'null'::jsonb), dl.data->'entry_attempts', '[]'::jsonb) AS attempts FROM trade t LEFT JOIN LATERAL (SELECT data FROM decision_log WHERE underlying = t.underlying AND event_type = 'entry_ladder_trace' AND data->>'trade_id' = t.id::text ORDER BY ts DESC LIMIT 1) dl ON TRUE) SELECT COALESCE(NULLIF(e->>'step', '')::int, ord - 1) AS step, NULLIF(e->>'limit', '')::float AS limit, NULLIF(e->>'bid', '')::float AS bid, NULLIF(e->>'mark', '')::float AS mark, NULLIF(e->>'ask', '')::float AS ask, NULLIF(e->>'center', '')::float AS center, NULLIF(e->>'width', '')::int AS width, NULLIF(e->>'reward_risk', '')::float AS reward_risk FROM payload, jsonb_array_elements(attempts) WITH ORDINALITY AS arr(e, ord) ORDER BY step",
+          "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id), payload AS (SELECT COALESCE(NULLIF(t.metadata->'entry_attempts', 'null'::jsonb), dl.data->'entry_attempts', '[]'::jsonb) AS attempts, t.quantity FROM trade t LEFT JOIN LATERAL (SELECT data FROM decision_log WHERE underlying = t.underlying AND event_type = 'entry_ladder_trace' AND data->>'trade_id' = t.id::text ORDER BY ts DESC LIMIT 1) dl ON TRUE) SELECT COALESCE(NULLIF(e->>'step', '')::int, ord - 1) AS step, (NULLIF(e->>'limit', '')::float * 100 * quantity) AS limit, (NULLIF(e->>'bid', '')::float * 100 * quantity) AS bid, (NULLIF(e->>'mark', '')::float * 100 * quantity) AS mark, (NULLIF(e->>'ask', '')::float * 100 * quantity) AS ask, NULLIF(e->>'center', '')::float AS center, NULLIF(e->>'width', '')::int AS width, NULLIF(e->>'reward_risk', '')::float AS reward_risk FROM payload, jsonb_array_elements(attempts) WITH ORDINALITY AS arr(e, ord) ORDER BY step",
           "format": "table",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "limit|bid|mark|ask" },
+            "properties": [
+              { "id": "unit", "value": "currencyUSD" },
+              { "id": "decimals", "value": 2 }
+            ]
+          }
+        ]
+      }
     },
     {
       "id": 6,
@@ -293,13 +311,20 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id), payload AS (SELECT COALESCE(NULLIF(t.metadata->'exit_ladder_steps', 'null'::jsonb), dl.data->'exit_ladder_steps', '[]'::jsonb) AS steps FROM trade t LEFT JOIN LATERAL (SELECT data FROM decision_log WHERE underlying = t.underlying AND event_type = 'exit_ladder_trace' AND data->>'trade_id' = t.id::text ORDER BY ts DESC LIMIT 1) dl ON TRUE) SELECT COALESCE(NULLIF(e->>'step', '')::int, ord - 1) AS step, NULLIF(e->>'limit', '')::float AS limit, NULLIF(e->>'bid', '')::float AS bid, NULLIF(e->>'mark', '')::float AS mark, NULLIF(e->>'ask', '')::float AS ask, COALESCE(NULLIF(e->>'filled', '')::boolean, false) AS filled FROM payload, jsonb_array_elements(steps) WITH ORDINALITY AS arr(e, ord) ORDER BY step",
+          "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id), payload AS (SELECT COALESCE(NULLIF(t.metadata->'exit_ladder_steps', 'null'::jsonb), dl.data->'exit_ladder_steps', '[]'::jsonb) AS steps, t.quantity FROM trade t LEFT JOIN LATERAL (SELECT data FROM decision_log WHERE underlying = t.underlying AND event_type = 'exit_ladder_trace' AND data->>'trade_id' = t.id::text ORDER BY ts DESC LIMIT 1) dl ON TRUE) SELECT COALESCE(NULLIF(e->>'step', '')::int, ord - 1) AS step, (NULLIF(e->>'limit', '')::float * 100 * quantity) AS limit, (NULLIF(e->>'bid', '')::float * 100 * quantity) AS bid, (NULLIF(e->>'mark', '')::float * 100 * quantity) AS mark, (NULLIF(e->>'ask', '')::float * 100 * quantity) AS ask, COALESCE(NULLIF(e->>'filled', '')::boolean, false) AS filled FROM payload, jsonb_array_elements(steps) WITH ORDINALITY AS arr(e, ord) ORDER BY step",
           "format": "table",
           "refId": "A"
         }
       ],
       "fieldConfig": {
         "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "limit|bid|mark|ask" },
+            "properties": [
+              { "id": "unit", "value": "currencyUSD" },
+              { "id": "decimals", "value": 2 }
+            ]
+          },
           {
             "matcher": { "id": "byName", "options": "filled" },
             "properties": [
@@ -336,7 +361,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id) SELECT c.scan_time AS time, c.direction, c.wing_width AS width, c.center_strike::float AS center, c.lower_strike::float AS lower_strike, c.upper_strike::float AS upper_strike, c.cost::float AS cost, c.max_profit::float AS max_profit, c.reward_risk::float AS reward_risk, c.lower_be::float AS lower_be, c.upper_be::float AS upper_be, c.distance_from_spot::float AS distance_from_spot, c.spot_price::float AS spot_price, (c.selected OR (c.center_strike = t.center_strike AND c.wing_width = t.wing_width AND c.direction = t.direction)) AS selected_match FROM butterfly_candidates c JOIN trade t ON c.underlying = t.underlying WHERE c.scan_time BETWEEN t.entry_time - interval '10 minutes' AND t.entry_time + interval '5 minutes' AND c.direction = t.direction ORDER BY selected_match DESC, c.scan_time DESC, c.reward_risk DESC LIMIT 100",
+          "rawSql": "WITH trade AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id) SELECT c.scan_time AS time, c.direction, c.wing_width AS width, c.center_strike::float AS center, c.lower_strike::float AS lower_strike, c.upper_strike::float AS upper_strike, (c.cost * 100)::float AS cost, (c.max_profit * 100)::float AS max_profit, c.reward_risk::float AS reward_risk, c.lower_be::float AS lower_be, c.upper_be::float AS upper_be, c.distance_from_spot::float AS distance_from_spot, c.spot_price::float AS spot_price, (c.selected OR (c.center_strike = t.center_strike AND c.wing_width = t.wing_width AND c.direction = t.direction)) AS selected_match FROM butterfly_candidates c JOIN trade t ON c.underlying = t.underlying WHERE c.scan_time BETWEEN t.entry_time - interval '10 minutes' AND t.entry_time + interval '5 minutes' AND c.direction = t.direction ORDER BY selected_match DESC, c.scan_time DESC, c.reward_risk DESC LIMIT 100",
           "format": "table",
           "refId": "A"
         }
@@ -346,6 +371,13 @@
           "custom": { "align": "auto", "displayMode": "auto" }
         },
         "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "cost|max_profit" },
+            "properties": [
+              { "id": "unit", "value": "currencyUSD" },
+              { "id": "decimals", "value": 2 }
+            ]
+          },
           {
             "matcher": { "id": "byName", "options": "selected_match" },
             "properties": [
@@ -381,7 +413,7 @@
         {
           "datasource": { "type": "postgres", "uid": "timescaledb" },
           "rawQuery": true,
-          "rawSql": "WITH trade AS (SELECT entry_time, COALESCE(exit_time, NOW()) AS end_time FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id) SELECT d.ts AS time, d.event_type, CASE d.event_type WHEN 'trade_entered' THEN 'fill=' || COALESCE(d.data->>'cost', '?') || ' width=' || COALESCE(d.data->>'width', '?') || ' center=' || COALESCE(d.data->>'center', '?') || ' direction=' || COALESCE(d.data->>'direction', '?') WHEN 'entry_ladder_trace' THEN 'entry attempts=' || COALESCE(jsonb_array_length(d.data->'entry_attempts')::text, '0') || ' method=' || COALESCE(d.data->>'selection_method', '?') WHEN 'profit_state_transition' THEN COALESCE(d.data->>'from', 'null') || ' -> ' || COALESCE(d.data->>'to', '?') || ' mark=' || COALESCE(d.data->>'mark_value', '?') || ' peak=' || COALESCE(d.data->>'peak_value', '?') WHEN 'exit_signal_fired' THEN 'reason=' || COALESCE(d.data->>'reason', '?') || ' mark=' || COALESCE(d.data->>'mark_value', '?') || ' peak=' || COALESCE(d.data->>'peak_value', '?') || ' drawdown=' || COALESCE(d.data->>'drawdown_pct', '?') || '%' WHEN 'trade_exited' THEN 'reason=' || COALESCE(d.data->>'exit_reason', '?') || ' fill=' || COALESCE(d.data->>'fill_price', '?') || ' pnl=' || COALESCE(d.data->>'pnl', '?') WHEN 'exit_ladder_trace' THEN 'exit steps=' || COALESCE(jsonb_array_length(d.data->'exit_ladder_steps')::text, '0') || ' forced=' || COALESCE(d.data->>'forced', 'false') ELSE d.data::text END AS details, d.data::text AS raw_json FROM decision_log d CROSS JOIN trade t WHERE d.underlying = '$underlying' AND ((d.data->>'trade_id') = '$trade_id' OR (d.ts BETWEEN t.entry_time - interval '10 minutes' AND t.end_time + interval '10 minutes' AND d.event_type IN ('entry_blocked', 'gap_regime_skip', 'bias_filter_no_signal', 'no_candidates', 'entry_step_unfilled', 'entry_exhausted'))) ORDER BY d.ts",
+          "rawSql": "WITH trade AS (SELECT entry_time, COALESCE(exit_time, NOW()) AS end_time, quantity FROM butterfly_trades WHERE underlying = '$underlying' AND id = $trade_id) SELECT d.ts AS time, d.event_type, CASE d.event_type WHEN 'trade_entered' THEN 'fill=' || COALESCE(to_char((NULLIF(d.data->>'cost', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' width=' || COALESCE(d.data->>'width', '?') || ' center=' || COALESCE(d.data->>'center', '?') || ' direction=' || COALESCE(d.data->>'direction', '?') WHEN 'entry_ladder_trace' THEN 'entry attempts=' || COALESCE(jsonb_array_length(d.data->'entry_attempts')::text, '0') || ' method=' || COALESCE(d.data->>'selection_method', '?') WHEN 'profit_state_transition' THEN COALESCE(d.data->>'from', 'null') || ' -> ' || COALESCE(d.data->>'to', '?') || ' mark=' || COALESCE(to_char((NULLIF(d.data->>'mark_value', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' peak=' || COALESCE(to_char((NULLIF(d.data->>'peak_value', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') WHEN 'exit_signal_fired' THEN 'reason=' || COALESCE(d.data->>'reason', '?') || ' mark=' || COALESCE(to_char((NULLIF(d.data->>'mark_value', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' peak=' || COALESCE(to_char((NULLIF(d.data->>'peak_value', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' drawdown=' || COALESCE(d.data->>'drawdown_pct', '?') || '%' WHEN 'trade_exited' THEN 'reason=' || COALESCE(d.data->>'exit_reason', '?') || ' fill=' || COALESCE(to_char((NULLIF(d.data->>'fill_price', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') || ' pnl=' || COALESCE(to_char((NULLIF(d.data->>'pnl', '')::float * 100 * t.quantity)::numeric, 'FM$999999990.00'), '?') WHEN 'exit_ladder_trace' THEN 'exit steps=' || COALESCE(jsonb_array_length(d.data->'exit_ladder_steps')::text, '0') || ' forced=' || COALESCE(d.data->>'forced', 'false') ELSE d.data::text END AS details, d.data::text AS raw_json FROM decision_log d CROSS JOIN trade t WHERE d.underlying = '$underlying' AND ((d.data->>'trade_id') = '$trade_id' OR (d.ts BETWEEN t.entry_time - interval '10 minutes' AND t.end_time + interval '10 minutes' AND d.event_type IN ('entry_blocked', 'gap_regime_skip', 'bias_filter_no_signal', 'no_candidates', 'entry_step_unfilled', 'entry_exhausted'))) ORDER BY d.ts",
           "format": "table",
           "refId": "A"
         }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from collections.abc import Iterator
 from typing import NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
@@ -13,7 +14,7 @@ from butterfly_guy.core.metrics import (
     orders_filled,
     orders_placed,
 )
-from butterfly_guy.core.time_utils import get_0dte_expiration, now_utc
+from butterfly_guy.core.time_utils import get_0dte_expiration, now_utc, session_date
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
@@ -26,10 +27,183 @@ WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
 PARTIAL_FILL_STATUSES = {"PARTIAL", "PARTIAL_FILL", "PARTIALLY_FILLED"}
 CANCEL_PENDING_STATUSES = {"CANCEL_PENDING", "PENDING_CANCEL", "CANCEL_REQUESTED"}
 TERMINAL_ORDER_STATUSES = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+TERMINAL_FAILURE_STATUSES = {"REJECTED", "EXPIRED"}
+
+
+def walk_orders(order: dict) -> Iterator[dict]:
+    yield order
+    for child in order.get("childOrderStrategies") or []:
+        yield from walk_orders(child)
+
+
+def order_ids(order: dict) -> set[str]:
+    return {
+        str(order_id)
+        for node in walk_orders(order)
+        if (order_id := node.get("orderId") or node.get("order_id"))
+    }
+
+
+def order_statuses(order: dict) -> set[str]:
+    return {str(node["status"]) for node in walk_orders(order) if node.get("status")}
 
 
 class PartialFillError(RuntimeError):
     """Broker reported a partial fill; operator reconciliation is required."""
+
+
+class TerminalOrderError(RuntimeError):
+    """Broker rejected or expired an order; the ladder must stop."""
+
+    def __init__(self, status: str, order_id: str) -> None:
+        self.status = status
+        self.order_id = order_id
+        super().__init__(f"Order {order_id} reached terminal status {status}")
+
+
+class BrokerFillError(RuntimeError):
+    """Broker reported FILLED without complete, consistent execution evidence."""
+
+
+class AmbiguousOrderError(RuntimeError):
+    """A broker write may have succeeded; reconciliation is required."""
+
+
+class BrokerFill(NamedTuple):
+    order_id: str
+    net_fill_price: float
+    execution_time: dt.datetime
+    requested_quantity: float
+    filled_quantity: float
+    remaining_quantity: float
+    evidence: dict[str, object]
+
+
+def _broker_time(value: object) -> dt.datetime:
+    if not isinstance(value, str) or not value:
+        raise BrokerFillError("filled order is missing broker execution time")
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise BrokerFillError("filled order has invalid broker execution time") from exc
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+
+
+def parse_broker_fill(
+    order: dict,
+    requested_quantity: int | float,
+    order_id: str | None = None,
+) -> BrokerFill:
+    """Return a validated net butterfly fill derived only from broker executions."""
+    if order.get("status") != "FILLED":
+        raise BrokerFillError("order is not FILLED")
+
+    try:
+        requested = float(requested_quantity)
+        broker_requested = float(order["quantity"])
+        filled = float(order["filledQuantity"])
+        remaining = float(order["remainingQuantity"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise BrokerFillError("filled order is missing broker quantities") from exc
+    if requested <= 0 or broker_requested != requested or filled != requested or remaining != 0:
+        raise BrokerFillError("filled order quantity does not match the request")
+
+    legs: dict[int, tuple[str, float]] = {}
+    for node in walk_orders(order):
+        for leg in node.get("orderLegCollection") or []:
+            try:
+                leg_id = int(leg["legId"])
+                instruction = str(leg["instruction"])
+                quantity = float(leg["quantity"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise BrokerFillError("filled order has incomplete leg evidence") from exc
+            current = legs.setdefault(leg_id, (instruction, quantity))
+            if current != (instruction, quantity):
+                raise BrokerFillError("filled order has inconsistent leg evidence")
+
+    quantities = sorted(quantity for _, quantity in legs.values())
+    if len(quantities) != 3 or quantities != sorted([requested, requested, 2 * requested]):
+        raise BrokerFillError("filled order has an incorrect butterfly leg ratio")
+
+    execution_totals = {leg_id: 0.0 for leg_id in legs}
+    cash_flow = 0.0
+    execution_times: list[dt.datetime] = []
+    evidence_executions: list[dict[str, object]] = []
+    for node in walk_orders(order):
+        for activity in node.get("orderActivityCollection") or []:
+            for execution in activity.get("executionLegs") or []:
+                try:
+                    leg_id = int(execution["legId"])
+                    price = float(execution["price"])
+                    quantity = float(execution["quantity"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise BrokerFillError("filled order has incomplete execution evidence") from exc
+                if leg_id not in legs or price < 0 or quantity <= 0:
+                    raise BrokerFillError("filled order has invalid execution evidence")
+                instruction = legs[leg_id][0]
+                if instruction.startswith("SELL"):
+                    sign = 1
+                elif instruction.startswith("BUY"):
+                    sign = -1
+                else:
+                    raise BrokerFillError("filled order has unknown leg instruction")
+                execution_time = _broker_time(execution.get("time"))
+                execution_totals[leg_id] += quantity
+                cash_flow += sign * price * quantity
+                execution_times.append(execution_time)
+                evidence_executions.append(
+                    {
+                        "instruction": instruction,
+                        "quantity": quantity,
+                        "price": price,
+                        "time": execution_time.isoformat(),
+                    }
+                )
+
+    if not execution_times or execution_totals != {
+        leg_id: quantity for leg_id, (_, quantity) in legs.items()
+    }:
+        raise BrokerFillError("filled order executions do not match the butterfly legs")
+
+    order_type = order.get("orderType")
+    if order_type == "NET_DEBIT":
+        net_fill = -cash_flow / requested
+    elif order_type == "NET_CREDIT":
+        net_fill = cash_flow / requested
+    else:
+        raise BrokerFillError("filled order has unknown net order type")
+    if net_fill < 0:
+        raise BrokerFillError("filled order executions contradict its net order type")
+
+    return BrokerFill(
+        order_id=str(order_id or order.get("orderId") or ""),
+        net_fill_price=round(net_fill, 4),
+        execution_time=max(execution_times),
+        requested_quantity=requested,
+        filled_quantity=filled,
+        remaining_quantity=remaining,
+        evidence={
+            "status": "FILLED",
+            "order_type": order_type,
+            "requested_quantity": requested,
+            "filled_quantity": filled,
+            "remaining_quantity": remaining,
+            "executions": evidence_executions,
+        },
+    )
+
+
+def _fill_result(fill: BrokerFill, intent_id: int | None = None) -> dict[str, object]:
+    return {
+        "order_id": fill.order_id,
+        "fill_price": fill.net_fill_price,
+        "fill_time": fill.execution_time,
+        "requested_quantity": fill.requested_quantity,
+        "filled_quantity": fill.filled_quantity,
+        "remaining_quantity": fill.remaining_quantity,
+        "broker_fill_evidence": fill.evidence,
+        "intent_id": intent_id,
+    }
 
 
 class LiveSpread(NamedTuple):
@@ -94,9 +268,15 @@ class OrderManager:
                 chain_data, expiration, direction=candidate.direction
             ):
                 if strike in target_strikes:
-                    bids[strike] = opt.get("bid", 0)
-                    marks[strike] = opt.get("mark", 0)
-                    asks[strike] = opt.get("ask", 0)
+                    bid = opt.get("bid", 0)
+                    mark = opt.get("mark", 0)
+                    ask = opt.get("ask", 0)
+                    if min(bid, mark, ask) < 0 or bid > ask:
+                        log.warning("live_spread_invalid_quote", strike=strike)
+                        return None
+                    bids[strike] = bid
+                    marks[strike] = mark
+                    asks[strike] = ask
                     ois[strike] = opt.get("openInterest", 0)
 
             if len(marks) < 3:
@@ -127,31 +307,54 @@ class OrderManager:
         legs = 4
         return legs * quantity * self.settings.paper_commission_per_contract / 100
 
-    def _paper_exit_fill_price(self, fill_ref: float, quantity: int) -> float:
-        return round(
-            max(
-                0.05,
-                fill_ref
-                - self.settings.paper_fill_buffer
+    def _mark_paper_fill(
+        self,
+        side: str,
+        mark: float,
+        quantity: int,
+        spread: LiveSpread | None,
+    ) -> dict[str, object]:
+        """Return canonical strategy P&L at mark, with execution drag as metadata."""
+        commission = self._commission(quantity)
+        if side == "entry":
+            fill_price = round(mark + commission, 2)
+            marketable = round(
+                (spread.ask if spread is not None else mark)
+                + self.settings.paper_slippage_per_spread
+                + commission,
+                2,
+            )
+            drag = marketable - fill_price
+        else:
+            fill_price = round(mark - commission, 2)
+            marketable = round(
+                (spread.bid if spread is not None else mark)
                 - self.settings.paper_slippage_per_spread
-                - self._commission(quantity),
-            ),
-            2,
-        )
+                - commission,
+                2,
+            )
+            drag = fill_price - marketable
 
-    def _paper_forced_fill_ref(
-        self, bid_floor: float | None, current_value: float
-    ) -> float:
-        """Ignore collapsed post-close bids that no longer reflect mark at signal."""
-        if bid_floor is None:
-            return current_value
-        if current_value > 0 and bid_floor < current_value * 0.5:
-            return current_value
-        return bid_floor
+        return {
+            "order_id": "PAPER",
+            "fill_price": fill_price,
+            "fill_time": now_utc(),
+            "paper_fill_model": "mark_v1",
+            "execution_diagnostics": {
+                "observed_bid": spread.bid if spread is not None else None,
+                "observed_mark": spread.mark if spread is not None else mark,
+                "observed_ask": spread.ask if spread is not None else None,
+                f"marketable_{side}_estimate": marketable,
+                "estimated_execution_drag": round(max(0.0, drag), 2),
+                "configured_slippage": self.settings.paper_slippage_per_spread,
+                "configured_fill_buffer": self.settings.paper_fill_buffer,
+            },
+        }
 
     async def _entry_blocked_by_working_orders(
         self, exclude_intent_id: int | None = None
     ) -> bool:
+        today = session_date()
         try:
             todays_orders = await self.schwab.get_todays_orders()
         except Exception as e:
@@ -163,7 +366,7 @@ class OrderManager:
             try:
                 known_order_ids = await self.intent_queries.active_broker_order_ids(
                     self.underlying,
-                    dt.date.today(),
+                    today,
                     exclude_intent_id=exclude_intent_id,
                 )
             except Exception as e:
@@ -172,8 +375,8 @@ class OrderManager:
 
         working = [
             o for o in todays_orders
-            if o.get("status") in WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES
-            and str(o.get("orderId") or "") not in known_order_ids
+            if order_statuses(o) & (WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES)
+            and order_ids(o).isdisjoint(known_order_ids)
         ]
         if not working:
             return False
@@ -197,7 +400,7 @@ class OrderManager:
         Returns fill dict on success, None otherwise.
         The retry loop and re-scanning live in TradeService — this is a single shot.
 
-        Paper trading: checks live spread; fills if limit_price >= spread.ask + buffer.
+        Paper trading: fills immediately at the observed mark plus commission.
         Live trading: places order, waits retry_interval_seconds, cancels if unfilled.
         """
         log.info("entry_attempt", price=limit_price, center=candidate.center_strike,
@@ -208,35 +411,13 @@ class OrderManager:
             if spread is None:
                 log.warning("paper_entry_no_spread", center=candidate.center_strike)
                 return None
-            fill_threshold = spread.ask + self.settings.paper_fill_buffer
-            log.debug(
-                "paper_entry_spread",
-                bid=spread.bid,
+            result = self._mark_paper_fill("entry", spread.mark, quantity, spread)
+            log.info(
+                "paper_entry_filled_at_mark",
+                fill_price=result["fill_price"],
                 mark=spread.mark,
-                ask=spread.ask,
-                limit=limit_price,
-                fill_threshold=fill_threshold,
             )
-            if limit_price >= fill_threshold:
-                fill_price = round(
-                    spread.ask
-                    + self.settings.paper_slippage_per_spread
-                    + self._commission(quantity),
-                    2,
-                )
-                log.info("paper_entry_filled", limit=limit_price, fill_price=fill_price)
-                return {
-                    "order_id": "PAPER",
-                    "fill_price": fill_price,
-                    "fill_time": now_utc(),
-                }
-            log.debug(
-                "paper_entry_not_filled",
-                limit=limit_price,
-                ask=spread.ask,
-                fill_threshold=fill_threshold,
-            )
-            return None
+            return result
 
         if await self._entry_blocked_by_working_orders(exclude_intent_id=intent_id):
             return None
@@ -267,19 +448,15 @@ class OrderManager:
                 order_id,
                 self.settings.retry_interval_seconds,
                 intent_id=intent_id,
+                requested_quantity=quantity,
             )
 
             if fill:
                 elapsed = (now_utc() - start_time).total_seconds()
                 order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                 orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
-                log.info("entry_filled", order_id=order_id, price=limit_price)
-                return {
-                    "order_id": order_id,
-                    "fill_price": limit_price,
-                    "fill_time": now_utc(),
-                    "intent_id": intent_id,
-                }
+                log.info("entry_filled", order_id=order_id, price=fill.net_fill_price)
+                return _fill_result(fill, intent_id)
 
             if intent_id is not None and self.intent_queries is not None:
                 await self.intent_queries.update_broker_status(
@@ -288,17 +465,18 @@ class OrderManager:
             await self.schwab.cancel_order(order_id)
             log.info("entry_unfilled_cancelled", price=limit_price)
             post_fill = await self._check_post_cancel_fill(
-                order_id, limit_price, intent_id=intent_id
+                order_id, quantity, intent_id=intent_id
             )
             if post_fill:
                 return post_fill
 
-        except PartialFillError:
+        except (BrokerFillError, PartialFillError, TerminalOrderError):
             raise
         except Exception as e:
             if intent_id is not None and self.intent_queries is not None:
                 await self.intent_queries.mark_unknown(intent_id, str(e))
             log.error("entry_attempt_failed", error=str(e))
+            raise AmbiguousOrderError("entry order outcome is unknown") from e
 
         return None
 
@@ -306,8 +484,7 @@ class OrderManager:
         self, candidate: ButterflyCandidate, quantity: int = 1
     ) -> dict | None:
         """
-        Execute entry with price ladder: reprice from live mark each step,
-        step up by price_ladder_step, retry until filled or order_timeout_seconds expires.
+        Execute entry at mark in paper mode, or use the live price ladder.
         """
         step = self.settings.price_ladder_step
         max_steps = self.settings.price_ladder_steps
@@ -315,58 +492,7 @@ class OrderManager:
         timeout = self.settings.order_timeout_seconds
 
         if self.settings.paper_trading:
-            deadline = now_utc() + dt.timedelta(seconds=timeout)
-
-            while True:
-                if now_utc() >= deadline:
-                    log.warning("paper_entry_timeout", candidate_center=candidate.center_strike)
-                    return None
-
-                for i in range(max_steps):
-                    if now_utc() >= deadline:
-                        log.warning("paper_entry_timeout", candidate_center=candidate.center_strike)
-                        return None
-
-                    spread = await self._fetch_live_spread(candidate)
-                    mid_price = spread.mark if spread is not None else candidate.cost
-
-                    limit_price = round(mid_price + i * step, 2)
-                    log.debug(
-                        "paper_entry_step",
-                        step=i,
-                        price=limit_price,
-                        bid=spread.bid if spread is not None else None,
-                        mark=spread.mark if spread is not None else None,
-                        ask=spread.ask if spread is not None else None,
-                    )
-
-                    if spread is not None:
-                        fill_threshold = spread.ask + self.settings.paper_fill_buffer
-                        if limit_price >= fill_threshold:
-                            fill_price = round(
-                                limit_price
-                                + self.settings.paper_slippage_per_spread
-                                + self._commission(quantity),
-                                2,
-                            )
-                            log.info(
-                                "paper_entry_filled",
-                                price=limit_price,
-                                fill_price=fill_price,
-                                step=i,
-                            )
-                            return {
-                                "order_id": "PAPER",
-                                "fill_price": fill_price,
-                                "fill_time": now_utc(),
-                            }
-
-                    await asyncio.sleep(retry_interval)
-
-                log.debug(
-                    "paper_entry_ladder_exhausted_repricing",
-                    candidate_center=candidate.center_strike,
-                )
+            return await self.execute_single_attempt(candidate, candidate.cost, quantity)
 
         if await self._entry_blocked_by_working_orders():
             return None
@@ -397,29 +523,31 @@ class OrderManager:
 
                 try:
                     order_id = await self.schwab.place_order(order_spec)
-                    fill = await self._wait_for_fill(order_id, retry_interval)
+                    fill = await self._wait_for_fill(
+                        order_id, retry_interval, requested_quantity=quantity
+                    )
 
                     if fill:
                         elapsed = (now_utc() - start_time).total_seconds()
                         order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                         orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
-                        log.info("entry_filled", order_id=order_id, price=limit_price, step=i)
-                        return {
-                            "order_id": order_id,
-                            "fill_price": limit_price,
-                            "fill_time": now_utc(),
-                        }
+                        log.info(
+                            "entry_filled", order_id=order_id,
+                            price=fill.net_fill_price, step=i,
+                        )
+                        return _fill_result(fill)
 
                     await self.schwab.cancel_order(order_id)
                     log.debug("entry_step_cancelled", step=i, price=limit_price)
-                    post_fill = await self._check_post_cancel_fill(order_id, limit_price)
+                    post_fill = await self._check_post_cancel_fill(order_id, quantity)
                     if post_fill:
                         return post_fill
 
-                except PartialFillError:
+                except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
                     raise
                 except Exception as e:
                     log.error("entry_step_failed", step=i, error=str(e))
+                    raise AmbiguousOrderError("entry order outcome is unknown") from e
 
             log.info("entry_ladder_exhausted_repricing", candidate_center=candidate.center_strike)
 
@@ -432,8 +560,7 @@ class OrderManager:
         trade_id: int | None = None,
     ) -> dict | None:
         """
-        Execute exit with reverse price ladder: reprice from live mark each step,
-        step down, retry until filled or order_timeout_seconds expires.
+        Execute exit at the signal mark in paper mode, or use the live price ladder.
         """
         step = self.settings.price_ladder_step
         max_steps = self.settings.price_ladder_steps
@@ -441,106 +568,21 @@ class OrderManager:
         timeout = self.settings.order_timeout_seconds
 
         if self.settings.paper_trading:
-            if exit_reason == "end_of_day":
-                fill_price = self._paper_exit_fill_price(current_value, quantity)
-                log.info(
-                    "paper_exit_eod_immediate_fill",
-                    fill_price=fill_price,
-                    mark=current_value,
-                )
-                return {
-                    "order_id": "PAPER",
-                    "fill_price": fill_price,
-                    "fill_time": now_utc(),
-                    "forced": False,
-                    "eod_immediate": True,
-                    "ladder_steps": [],
-                }
-
-            deadline = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=timeout)
-            bid_floor: float | None = None
-            step_trace: list[dict[str, float | int | bool | None]] = []
-
-            while True:
-                if dt.datetime.now(dt.timezone.utc) >= deadline:
-                    fill_ref = self._paper_forced_fill_ref(bid_floor, current_value)
-                    fill_price = self._paper_exit_fill_price(fill_ref, quantity)
-                    log.warning(
-                        "paper_exit_forced_fill",
-                        fill_price=fill_price,
-                        fill_ref=fill_ref,
-                        bid_floor=bid_floor,
-                        mark_at_signal=current_value,
-                    )
-                    return {
-                        "order_id": "PAPER",
-                        "fill_price": fill_price,
-                        "fill_time": now_utc(),
-                        "forced": True,
-                        "ladder_steps": step_trace,
-                    }
-
-                for i in range(max_steps):
-                    spread = await self._fetch_live_spread(candidate)
-                    if spread is not None:
-                        bid_floor = spread.bid if bid_floor is None else min(bid_floor, spread.bid)
-
-                    if dt.datetime.now(dt.timezone.utc) >= deadline:
-                        fill_ref = self._paper_forced_fill_ref(bid_floor, current_value)
-                        fill_price = self._paper_exit_fill_price(fill_ref, quantity)
-                        log.warning(
-                            "paper_exit_forced_fill",
-                            fill_price=fill_price,
-                            fill_ref=fill_ref,
-                            bid_floor=bid_floor,
-                            mark_at_signal=current_value,
-                        )
-                        return {
-                            "order_id": "PAPER",
-                            "fill_price": fill_price,
-                            "fill_time": now_utc(),
-                            "forced": True,
-                            "ladder_steps": step_trace,
-                        }
-
-                    mid_price = bid_floor if bid_floor is not None else current_value
-                    limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
-                    log.debug("paper_exit_step", step=i, price=limit_price,
-                              bid=spread.bid if spread is not None else None,
-                              mark=spread.mark if spread is not None else None)
-                    step_trace.append({
-                        "step": i,
-                        "limit": limit_price,
-                        "bid": spread.bid if spread is not None else None,
-                        "mark": spread.mark if spread is not None else None,
-                        "ask": spread.ask if spread is not None else None,
-                        "filled": False,
-                    })
-
-                    if spread is not None:
-                        fill_threshold = spread.bid - self.settings.paper_fill_buffer
-                        if limit_price <= fill_threshold:
-                            fill_price = self._paper_exit_fill_price(limit_price, quantity)
-                            log.info(
-                                "paper_exit_filled",
-                                price=limit_price,
-                                fill_price=fill_price,
-                                step=i,
-                            )
-                            step_trace[-1]["filled"] = True
-                            return {
-                                "order_id": "PAPER",
-                                "fill_price": fill_price,
-                                "fill_time": now_utc(),
-                                "spread_bid": spread.bid,
-                                "spread_mark": spread.mark,
-                                "spread_ask": spread.ask,
-                                "ladder_steps": step_trace,
-                            }
-
-                    await asyncio.sleep(retry_interval)
-
-                log.debug("paper_exit_ladder_exhausted_repricing")
+            spread = await self._fetch_live_spread(candidate)
+            result = self._mark_paper_fill("exit", current_value, quantity, spread)
+            log.info(
+                "paper_exit_filled_at_mark",
+                fill_price=result["fill_price"],
+                mark=current_value,
+            )
+            return {
+                **result,
+                "spread_bid": spread.bid if spread is not None else None,
+                "spread_mark": spread.mark if spread is not None else current_value,
+                "spread_ask": spread.ask if spread is not None else None,
+                "forced": False,
+                "ladder_steps": [],
+            }
 
         deadline = now_utc() + dt.timedelta(seconds=timeout)
         bid_floor: float | None = None
@@ -599,19 +641,22 @@ class OrderManager:
                     if intent_id is not None and self.intent_queries is not None:
                         await self.intent_queries.mark_broker_order_id(intent_id, order_id)
                     fill = await self._wait_for_fill(
-                        order_id, retry_interval, intent_id=intent_id
+                        order_id,
+                        retry_interval,
+                        intent_id=intent_id,
+                        requested_quantity=quantity,
                     )
 
                     if fill:
                         elapsed = (now_utc() - start_time).total_seconds()
                         order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                         orders_filled.labels(underlying=self.underlying, order_type="exit").inc()
-                        log.info("exit_filled", order_id=order_id, price=limit_price, step=i)
+                        log.info(
+                            "exit_filled", order_id=order_id,
+                            price=fill.net_fill_price, step=i,
+                        )
                         return {
-                            "order_id": order_id,
-                            "fill_price": limit_price,
-                            "fill_time": now_utc(),
-                            "intent_id": intent_id,
+                            **_fill_result(fill, intent_id),
                             "spread_bid": spread.bid if spread is not None else None,
                             "spread_mark": spread.mark if spread is not None else None,
                             "spread_ask": spread.ask if spread is not None else None,
@@ -634,7 +679,7 @@ class OrderManager:
                         )
                     await self.schwab.cancel_order(order_id)
                     post_fill = await self._check_post_cancel_fill(
-                        order_id, limit_price, order_type="exit", intent_id=intent_id
+                        order_id, quantity, order_type="exit", intent_id=intent_id
                     )
                     if post_fill:
                         return {
@@ -648,19 +693,20 @@ class OrderManager:
                             ],
                         }
 
-                except PartialFillError:
+                except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
                     raise
                 except Exception as e:
                     if intent_id is not None and self.intent_queries is not None:
                         await self.intent_queries.mark_unknown(intent_id, str(e))
                     log.error("exit_step_failed", step=i, error=str(e))
+                    raise AmbiguousOrderError("exit order outcome is unknown") from e
 
             log.warning("exit_ladder_exhausted")
 
     async def _check_post_cancel_fill(
         self,
         order_id: str,
-        limit_price: float,
+        requested_quantity: int,
         order_type: str = "entry",
         intent_id: int | None = None,
     ) -> dict | None:
@@ -668,36 +714,53 @@ class OrderManager:
         try:
             status = await self.schwab.get_order_status(order_id)
             order_status = status.get("status")
+            statuses = order_statuses(status)
+            terminal_failure = next(
+                (value for value in ("REJECTED", "EXPIRED") if value in statuses),
+                None,
+            )
             if intent_id is not None and self.intent_queries is not None and order_status:
-                await self.intent_queries.update_broker_status(intent_id, order_status, status)
+                await self.intent_queries.update_broker_status(
+                    intent_id, terminal_failure or order_status, status
+                )
+            if statuses & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES):
+                raise PartialFillError(
+                    f"Order {order_id} is partially filled after cancel; reconcile broker state"
+                )
+            if terminal_failure:
+                raise TerminalOrderError(terminal_failure, order_id)
             if order_status == "FILLED":
+                fill = parse_broker_fill(status, requested_quantity, order_id)
                 log.warning(
                     "post_cancel_fill_detected",
                     order_id=order_id,
-                    price=limit_price,
+                    price=fill.net_fill_price,
                     order_type=order_type,
                 )
                 orders_filled.labels(underlying=self.underlying, order_type=order_type).inc()
                 return {
-                    "order_id": order_id,
-                    "fill_price": limit_price,
-                    "fill_time": now_utc(),
+                    **_fill_result(fill, intent_id),
                     "post_cancel": True,
-                    "intent_id": intent_id,
                 }
-            if order_status in PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES:
-                raise PartialFillError(
-                    f"Order {order_id} is partially filled after cancel; reconcile broker state"
-                )
         except Exception as e:
-            if isinstance(e, PartialFillError):
+            if isinstance(
+                e,
+                (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError),
+            ):
                 raise
             log.warning("post_cancel_check_failed", error=str(e))
+            if intent_id is not None and self.intent_queries is not None:
+                await self.intent_queries.mark_unknown(intent_id, str(e))
+            raise AmbiguousOrderError("post-cancel broker state is unknown") from e
         return None
 
     async def _wait_for_fill(
-        self, order_id: str, timeout: int, intent_id: int | None = None
-    ) -> bool:
+        self,
+        order_id: str,
+        timeout: int,
+        intent_id: int | None = None,
+        requested_quantity: int = 1,
+    ) -> BrokerFill | None:
         """Poll order status until filled or timeout."""
         elapsed = 0
         poll_interval = 2
@@ -706,23 +769,35 @@ class OrderManager:
             try:
                 status = await self.schwab.get_order_status(order_id)
                 order_status = status.get("status", "")
+                statuses = order_statuses(status)
+                terminal_failure = next(
+                    (value for value in ("REJECTED", "EXPIRED") if value in statuses),
+                    None,
+                )
                 if intent_id is not None and self.intent_queries is not None:
                     await self.intent_queries.update_broker_status(
-                        intent_id, order_status, status
+                        intent_id, terminal_failure or order_status, status
                     )
 
-                if order_status == "FILLED":
-                    return True
-                if order_status in PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES:
+                if statuses & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES):
                     raise PartialFillError(
                         f"Order {order_id} is partially filled; reconcile broker state"
                     )
-                if order_status in TERMINAL_ORDER_STATUSES - {"FILLED"}:
+                if terminal_failure:
+                    log.warning(
+                        "order_terminal_status",
+                        status=terminal_failure,
+                        order_id=order_id,
+                    )
+                    raise TerminalOrderError(terminal_failure, order_id)
+                if order_status == "FILLED":
+                    return parse_broker_fill(status, requested_quantity, order_id)
+                if order_status == "CANCELED":
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False
 
             except Exception as e:
-                if isinstance(e, PartialFillError):
+                if isinstance(e, (BrokerFillError, PartialFillError, TerminalOrderError)):
                     raise
                 log.warning("order_poll_error", error=str(e))
 

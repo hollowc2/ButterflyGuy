@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import datetime as dt
 
+import pytest
+
 from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.equity_scan.config import EquityScanSettings
 from butterfly_guy.equity_scan.news import NewsImpact
@@ -22,10 +24,32 @@ from butterfly_guy.equity_scan.volume import (
     prior_session_pct_change,
     symbols_needing_rvol_fetch,
 )
+from butterfly_guy.scripts import run_morning_scan
 
 
 def _premarket_et() -> dt.datetime:
     return dt.datetime(2026, 6, 8, 8, 0, tzinfo=EASTERN)
+
+
+@pytest.mark.asyncio
+async def test_run_scan_skips_market_holiday_before_schwab(monkeypatch):
+    class SchwabShouldNotStart:
+        def __init__(self, *_args, **_kwargs):
+            raise AssertionError("Schwab client should not be initialized on holidays")
+
+    monkeypatch.setattr(
+        run_morning_scan,
+        "now_eastern",
+        lambda: dt.datetime(2026, 7, 3, 8, 0, tzinfo=EASTERN),
+    )
+    monkeypatch.setattr(run_morning_scan, "SchwabClientWrapper", SchwabShouldNotStart)
+
+    messages = await run_morning_scan.run_scan(
+        app_config_path="missing.yaml",
+        scan_config_path="missing.yaml",
+    )
+
+    assert messages == []
 
 
 def _quote_payload(

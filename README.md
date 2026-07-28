@@ -17,10 +17,14 @@ At a high level, the system:
 - manages open positions with profit and drawdown logic,
 - supports paper trading and controlled live trading,
 - replays historical data for backtests and parity checks,
-- runs equity universe scans for the morning workflow,
 - publishes metrics and dashboards for monitoring.
 
 The runtime is split so you can run collection, trading, or the full stack.
+
+This README covers the Butterfly Guy options system only. The repository also
+contains personal equity-research utilities that reuse the local Schwab OAuth
+authentication; they are not part of Butterfly Guy, its strategy, or its
+runtime.
 
 ## Core repo layout
 
@@ -33,7 +37,6 @@ The runtime is split so you can run collection, trading, or the full stack.
 | `src/butterfly_guy/risk/` | Daily loss limits, trade caps, and buying-power guards |
 | `src/butterfly_guy/data/` | Schwab client, chain collection, and DB-facing data models |
 | `src/butterfly_guy/backtest/` | DB replay and simulation engine |
-| `src/butterfly_guy/equity_scan/` | Morning stock-universe scan and report generation |
 | `configs/` | SPX, NDX, and XSP configuration files |
 | `infra/` | Docker compose and observability wiring |
 | `tests/` | Focused test coverage |
@@ -125,6 +128,56 @@ Metrics ports from the compose file:
 - NDX: `127.0.0.1:8001`
 - XSP: `127.0.0.1:8003`
 
+## Shared SPX candidate fleet
+
+The candidate fleet is a separate, paper-only runtime. The primary SPX service
+continues to read Schwab directly and does not depend on the fleet.
+
+`configs/candidates.yaml` is the source of truth for up to ten YAML variants.
+Each enabled candidate has its own container and PostgreSQL database. Slots
+`0` through `9` map to host metrics ports `8100` through `8109`. The existing
+BEST_RR database is registered as `butterfly_guy_spx_candidate` and is disabled
+by default so its history is preserved until the rollout gate is approved.
+Five additional evaluators are registered and enabled: `vix-center`,
+`target-cost`, `gap-conviction`, `peak-trailer`, and `absolute-stop`. They use
+slots 1–5, isolated databases, and the same shared feed. The standalone
+`best-rr` entry remains disabled.
+
+Validate and inspect generated runtime changes:
+
+```bash
+uv run candidatectl validate
+uv run candidatectl render
+uv run candidatectl plan
+```
+
+Generated Compose, Prometheus file-discovery, and Grafana datasource files live
+under ignored `infra/generated/`. `apply` creates missing databases and starts
+enabled services; it never drops databases. Disabled containers are stopped
+only when explicitly requested:
+
+```bash
+uv run candidatectl apply
+uv run candidatectl apply --stop-disabled
+```
+
+The shared `spx_candidate_feed` performs candidate-side Schwab reads and keeps a
+full immutable snapshot. It polls every 60 seconds while idle and every two
+seconds while an evaluator has an entry or position lease. Candidate containers
+have no project `.env`, Schwab credentials, token mount, account ID, broker
+client, or live-order executor. Paper entries are accepted only after the feed
+snapshot has been pinned in `butterfly_guy_candidate_market`; position monitors
+request and persist only their three leg quotes.
+Paper fills use the canonical `mark_v1` cohort. At expiration, the shared feed
+serves one cached final regular-session SPX close so evaluators can cash-settle
+without Schwab credentials. Review progress counts only closed `mark_v1` trades,
+with a minimum gate of 20 closed trades per candidate.
+
+Roll out conservatively: run the feed for a full-session parity probe, migrate
+BEST_RR for one observed session, then gate expansion at three, five, and ten
+candidates. The legacy `app_spx_candidate` Compose profile remains available
+for one rollback cycle and continues to use the preserved BEST_RR database.
+
 ### 4) Run the live orchestrator directly
 
 The live runner starts collection, entry logic, and position monitoring together.
@@ -159,14 +212,7 @@ uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03
 uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --method VIX
 ```
 
-### 7) Run the morning equity scan
-
-```bash
-uv run python src/butterfly_guy/scripts/run_morning_scan.py --dry-run
-uv run python src/butterfly_guy/scripts/refresh_equity_universes.py --dry-run
-```
-
-### 8) Generate or compare reports
+### 7) Generate or compare reports
 
 ```bash
 uv run python src/butterfly_guy/scripts/report_trade_ladders.py 2026-05-20 --underlying SPX
@@ -176,6 +222,10 @@ uv run python src/butterfly_guy/scripts/generate_live_performance.py
 ```
 
 ## Backtesting
+
+> `run_entry_analysis.py` and `SimulationEngine.simulate_day()` are legacy research paths
+> with independent asset/selection defaults. Do not treat their output as live-parity
+> evidence; use `run_backtest_db.py` for config-backed shared entry selection.
 
 `run_backtest_db.py` replays historical data from TimescaleDB using the same strategy components the live system uses.
 

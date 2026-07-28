@@ -1,0 +1,24 @@
+{
+  "status": "FILLED",
+  "orderType": "NET_DEBIT",
+  "quantity": 1.0,
+  "filledQuantity": 1.0,
+  "remainingQuantity": 0.0,
+  "orderLegCollection": [
+    {"legId": 1, "instruction": "BUY_TO_OPEN", "quantity": 1.0},
+    {"legId": 2, "instruction": "SELL_TO_OPEN", "quantity": 2.0},
+    {"legId": 3, "instruction": "BUY_TO_OPEN", "quantity": 1.0}
+  ],
+  "orderActivityCollection": [
+    {
+      "activityType": "EXECUTION",
+      "quantity": 1.0,
+      "orderRemainingQuantity": 0.0,
+      "executionLegs": [
+        {"legId": 1, "price": 0.05, "quantity": 1.0, "time": "2026-07-13T14:00:16+0000"},
+        {"legId": 2, "price": 0.14, "quantity": 2.0, "time": "2026-07-13T14:00:16+0000"},
+        {"legId": 3, "price": 0.64, "quantity": 1.0, "time": "2026-07-13T14:00:16+0000"}
+      ]
+    }
+  ]
+}

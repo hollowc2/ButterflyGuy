@@ -36,9 +36,14 @@ def test_spx_backtest_drawdown_defaults_match_live_config(monkeypatch):
     assert args.profit_strategy == ["peakvaluetrailer"]
     assert args.wing_provided is False
     assert args.entry_time == [dt.time(7, 0)]
+    assert args.entry_window_minutes == 45
+    assert args.slippage == 0.0
     assert args.use_abs_stop is False
     assert args.method_provided is False
     assert args.rr_min_provided is False
+    assert args.min_hold_minutes == [0]
+    assert args.drawdown_confirmation_polls == [1]
+    assert args.min_peak_profit_ratio == [1.0]
 
 
 def test_backtest_tracks_explicit_selection_overrides(monkeypatch):
@@ -56,13 +61,37 @@ def test_backtest_tracks_explicit_selection_overrides(monkeypatch):
     assert args.rr_min_provided is True
 
 
+def test_backtest_parses_exit_arm_sweep_overrides(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_backtest_db.py",
+            "--asset",
+            "SPX",
+            "--min-hold-minutes",
+            "30,45",
+            "--drawdown-confirmation-polls",
+            "3,5",
+            "--min-peak-profit-ratio",
+            "1.0,1.25",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.min_hold_minutes == [30.0, 45.0]
+    assert args.drawdown_confirmation_polls == [3, 5]
+    assert args.min_peak_profit_ratio == [1.0, 1.25]
+
+
 def test_xsp_backtest_drawdown_defaults_match_live_config(monkeypatch):
     args = _parse_for_asset(monkeypatch, "XSP")
 
     assert args.morning_dd == [0.80]
     assert args.late_morning_dd == [0.90]
     assert args.afternoon_dd == [0.85]
-    assert args.slippage == 0.005
+    assert args.slippage == 0.0
     parity = _sim_parity_fields(load_asset_config("XSP"))
     assert parity["drawdown_confirmation_polls"] == 3
     assert parity["min_peak_profit_ratio"] == 1.25

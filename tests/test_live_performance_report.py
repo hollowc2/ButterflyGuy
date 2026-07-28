@@ -19,6 +19,7 @@ from butterfly_guy.reports.live_performance import (
     render_report_html,
     render_trade_table_rows,
     trade_pnl_dollars,
+    trade_point_from_row,
 )
 
 
@@ -145,6 +146,49 @@ def test_render_report_html_contains_sections() -> None:
     assert "hideNoTradesToggle" in html_doc
     assert "<details class=\"panel trade-log-panel\" open>" in html_doc
     assert "max_trades_reached (1)" in html_doc
+
+
+def test_performance_report_segments_fill_model_cohorts() -> None:
+    legacy = _trade(trade_date=dt.date(2026, 7, 20), pnl_dollars=500.0)
+    mark = TradePoint(
+        **{
+            **_trade(
+                trade_date=dt.date(2026, 7, 21), pnl_dollars=-50.0
+            ).__dict__,
+            "paper_fill_model": "mark_v1",
+        }
+    )
+
+    html_doc = render_report_html(
+        underlying="SPX",
+        trades=[legacy, mark],
+        no_trade_days=[],
+        generated_at=dt.datetime(2026, 7, 22, tzinfo=dt.timezone.utc),
+    )
+
+    assert "Current cohort: mark_v1 · 1 trades" in html_doc
+    assert "Fill Model Cohorts" in html_doc
+    assert "legacy" in html_doc
+    assert "PnL $+500" in html_doc
+    assert "PnL $-50" in html_doc
+
+
+def test_trade_point_reads_fill_model_from_json_metadata() -> None:
+    row = {
+        "trade_date": dt.date(2026, 7, 21),
+        "direction": "CALL",
+        "wing_width": 30,
+        "center_strike": 5000.0,
+        "lower_strike": 4970.0,
+        "upper_strike": 5030.0,
+        "entry_price": 2.5,
+        "exit_price": 1.0,
+        "pnl": -1.5,
+        "quantity": 1,
+        "metadata": '{"paper_fill_model":"mark_v1"}',
+    }
+
+    assert trade_point_from_row(row).paper_fill_model == "mark_v1"
 
 
 def test_render_trade_table_rows_include_no_trade_day() -> None:

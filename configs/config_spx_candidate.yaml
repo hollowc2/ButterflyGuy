@@ -1,0 +1,93 @@
+schwab:
+  token_path: "tokens.json"
+  max_token_age: 518400
+
+strategy:
+  underlying: "SPX"
+  wing_widths: [10, 20, 30]
+  vix_width_buckets:
+    - vix_max: 17.0
+      widths: [20, 25, 30]
+    - vix_max: 24.5
+      widths: [20, 30, 40]
+    - vix_max: 32.0
+      widths: [40, 45, 50]
+    - vix_max: 9999.0
+      widths: [50, 55, 65]
+  spot_range: 100
+  rr_min: 8.0
+  max_cost_per_width:
+    10: 1.00
+    20: 2.00
+    25: 2.50
+    30: 3.00
+    35: 3.50
+    40: 4.00
+    45: 4.50
+    50: 5.00
+    55: 5.50
+    65: 6.50
+
+entry:
+  start_time: "06:45"
+  end_time: "07:30"
+  timezone: "America/Los_Angeles"
+  strike_selection_method: "BEST_RR"
+  center_tolerance: 15.0
+
+execution:
+  price_ladder_step: 0.10
+  price_ladder_steps: 4
+  retry_interval_seconds: 20
+  order_timeout_seconds: 300
+  paper_trading: true
+  allow_live_trading: false
+  paper_fill_buffer: 0.00
+
+profit_management:
+  strategy: "profitprotector"
+  profitprotector:
+    breakeven_activation_profit: 1.00
+    breakeven_floor_profit: 0.00
+    profit_lock_activation_profit: 2.00
+    profit_lock_floor_profit: 0.75
+    large_peak_profit_ratio: 2.00
+    large_peak_drawdown_threshold: 0.50
+  regimes:
+    morning:
+      start_minutes_after_open: 0
+      end_minutes_after_open: 120
+      drawdown_threshold: 0.45
+      confirmation_polls: 2
+      min_peak_profit_ratio: 1.0
+    late_morning:
+      start_minutes_after_open: 120
+      end_minutes_after_open: 240
+      drawdown_threshold: 0.65
+      confirmation_polls: 2
+      min_peak_profit_ratio: 1.0
+    afternoon:
+      start_minutes_after_open: 240
+      end_minutes_after_open: 390
+      drawdown_threshold: 0.55
+      confirmation_polls: 2
+      min_peak_profit_ratio: 1.0
+  exit_before_close_minutes: 0
+  max_loss_from_cost: 0.50
+  use_absolute_loss_stop: false
+  quote_quality:
+    enabled: false
+    min_bid_to_mark_ratio: 0.0
+    max_spread_width_ratio: null
+
+risk:
+  max_daily_loss: 500.0
+  max_trades_per_day: 1
+  max_position_size: 1
+
+collector:
+  snapshot_interval_seconds: 60
+
+monitoring:
+  metrics_port: 8000
+  log_level: "INFO"

@@ -1,0 +1,44 @@
+{
+  "date": "2026-07-16",
+  "generated_at": "2026-07-16T16:08:15.729835+00:00",
+  "orders": [
+    {
+      "child_status_categories": [],
+      "child_statuses": [],
+      "close_time": "2026-07-16T16:01:37+0000",
+      "complex_order_strategy_type": "BUTTERFLY",
+      "entered_time": "2026-07-16T16:01:37+0000",
+      "filled_quantity": 1.0,
+      "order_strategy_type": "SINGLE",
+      "quantity": 1.0,
+      "remaining_quantity": 0.0,
+      "status": "FILLED",
+      "status_category": "filled",
+      "symbol_roots": [
+        "XSP"
+      ]
+    },
+    {
+      "child_status_categories": [],
+      "child_statuses": [],
+      "close_time": "2026-07-16T14:00:32+0000",
+      "complex_order_strategy_type": "BUTTERFLY",
+      "entered_time": "2026-07-16T14:00:31+0000",
+      "filled_quantity": 1.0,
+      "order_strategy_type": "SINGLE",
+      "quantity": 1.0,
+      "remaining_quantity": 0.0,
+      "status": "FILLED",
+      "status_category": "filled",
+      "symbol_roots": [
+        "XSP"
+      ]
+    }
+  ],
+  "status_category_counts": {
+    "filled": 2
+  },
+  "status_counts": {
+    "FILLED": 2
+  }
+}

@@ -1,11 +1,40 @@
 from __future__ import annotations
 
+import datetime as dt
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from butterfly_guy.core.config import SchwabSettings
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
+
+
+@pytest.mark.asyncio
+async def test_initialize_does_not_log_account_identifiers(monkeypatch):
+    response = MagicMock(status_code=200)
+    response.json.return_value = [{"accountNumber": "123", "hashValue": "SECRET_HASH"}]
+    client = MagicMock(get_account_numbers=AsyncMock(return_value=response))
+    client_factory = MagicMock(return_value=client)
+    log_info = MagicMock()
+    monkeypatch.setattr("schwab.auth.client_from_token_file", client_factory)
+    monkeypatch.setattr("butterfly_guy.data.schwab_client.log.info", log_info)
+
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    await schwab.initialize()
+
+    log_info.assert_called_once_with("schwab_client_initialized")
+
+
+@pytest.mark.asyncio
+async def test_initialize_fails_closed_when_authentication_fails(monkeypatch):
+    response = MagicMock(status_code=401)
+    client = MagicMock(get_account_numbers=AsyncMock(return_value=response))
+    monkeypatch.setattr(
+        "schwab.auth.client_from_token_file", MagicMock(return_value=client)
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to get account numbers: 401"):
+        await SchwabClientWrapper(SchwabSettings(account_id="redacted")).initialize()
 
 
 @pytest.mark.asyncio
@@ -40,3 +69,24 @@ async def test_place_order_missing_location_does_not_retry():
 
     schwab.client.place_order.assert_awaited_once()
     schwab._retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_intraday_bars_for_day_requests_extended_hours():
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    schwab._client = MagicMock()
+    schwab.client.PriceHistory.PeriodType.DAY = "day"
+    schwab.client.PriceHistory.FrequencyType.MINUTE = "minute"
+    schwab.client.PriceHistory.Frequency.EVERY_MINUTE = 1
+    response = MagicMock()
+    response.json.return_value = {"candles": [{"datetime": 1, "close": 17.10}]}
+    schwab._retry = AsyncMock(return_value=response)
+
+    candles = await schwab.get_intraday_bars_for_day(
+        "BMNR",
+        dt.date(2026, 7, 23),
+        include_extended_hours=True,
+    )
+
+    assert candles == [{"datetime": 1, "close": 17.10}]
+    assert schwab._retry.await_args.kwargs["need_extended_hours_data"] is True

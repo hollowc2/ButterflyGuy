@@ -10,6 +10,7 @@ RUN groupadd --gid 1001 butterfly \
 # Activate venv for all subsequent RUN/CMD steps
 ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
+ENV MPLCONFIGDIR=/tmp/matplotlib
 
 # Install dependencies (cached layer — only invalidates if pyproject.toml/uv.lock change)
 COPY pyproject.toml uv.lock ./

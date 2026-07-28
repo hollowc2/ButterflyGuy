@@ -12,6 +12,7 @@ from butterfly_guy.services.weekend_review import (
     ReviewWindows,
     calendar_month_to_date,
     format_performance_caption,
+    latest_fill_model_cohort,
     previous_mon_fri,
     review_windows,
     send_weekend_review,
@@ -97,6 +98,18 @@ def test_format_performance_caption_includes_stats() -> None:
     assert "Weekly Performance" in caption
     assert "Trades: 2" in caption
     assert "Win rate: 50%" in caption
+
+
+def test_latest_fill_model_cohort_does_not_mix_legacy_and_mark_v1() -> None:
+    legacy = _trade_point(dt.date(2026, 7, 20), 500.0)
+    mark = TradePoint(
+        **{
+            **_trade_point(dt.date(2026, 7, 21), -50.0).__dict__,
+            "paper_fill_model": "mark_v1",
+        }
+    )
+
+    assert latest_fill_model_cohort([legacy, mark]) == [mark]
 
 
 @pytest.mark.asyncio

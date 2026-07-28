@@ -15,8 +15,11 @@ from butterfly_guy.core.config import AppConfig, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.core.metrics import (
     butterfly_candidates_found,
+    clear_readiness,
     daily_pnl,
     daily_trade_count,
+    entry_loop_errors,
+    set_readiness,
     start_metrics_server,
     trades_active,
 )
@@ -25,6 +28,7 @@ from butterfly_guy.core.time_utils import (
     is_trading_day,
     market_close_time,
     now_eastern,
+    session_date,
 )
 from butterfly_guy.data.collector import OptionChainCollector
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
@@ -47,14 +51,31 @@ from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 from butterfly_guy.execution.order_manager import (
     CANCEL_PENDING_STATUSES,
     PARTIAL_FILL_STATUSES,
+    TERMINAL_ORDER_STATUSES,
     WORKING_ORDER_STATUSES,
+    AmbiguousOrderError,
+    BrokerFill,
+    BrokerFillError,
     OrderManager,
     PartialFillError,
+    TerminalOrderError,
+    order_ids,
+    order_statuses,
+    parse_broker_fill,
+    walk_orders,
 )
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
-from butterfly_guy.services.notifier import DiscordNotifier, TelegramNotifier
-from butterfly_guy.services.position_service import PositionService
+from butterfly_guy.services.notifier import (
+    AlertmanagerNotifier,
+    DiscordNotifier,
+    TelegramNotifier,
+)
+from butterfly_guy.services.position_service import (
+    PositionService,
+    SettlementEvidenceError,
+    broker_cash_settlement_from_transactions,
+)
 from butterfly_guy.services.trade_service import TradeService
 from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
@@ -64,7 +85,9 @@ from butterfly_guy.strategy.regime_classifier import RegimeClassifier
 
 log = get_logger("run_live")
 
-LIVE_UNDERLYING = "SPX"
+LIVE_ACCOUNT_ALLOCATION = 20_000.0
+LIVE_MAX_DAILY_LOSS = {"SPX": 500.0, "XSP": 50.0}
+ENTRY_LOOP_ERROR_THRESHOLD = 3
 
 
 def _matches_underlying(symbol: str, underlying: str) -> bool:
@@ -72,48 +95,51 @@ def _matches_underlying(symbol: str, underlying: str) -> bool:
     return normalized.startswith(underlying.upper())
 
 
-def _broker_option_position_symbols(
+def _broker_option_positions(
     account_snapshot: dict[str, Any], underlying: str
-) -> set[str]:
+) -> dict[str, float]:
     acct = account_snapshot.get("securitiesAccount", account_snapshot)
-    symbols: set[str] = set()
+    positions: dict[str, float] = {}
     for pos in acct.get("positions") or []:
         instrument = pos.get("instrument") or {}
         if instrument.get("assetType") != "OPTION":
             continue
-        qty = float(pos.get("longQuantity") or 0) + float(pos.get("shortQuantity") or 0)
-        if qty == 0:
-            continue
         symbol = str(instrument.get("symbol") or "")
         underlier = str(instrument.get("underlyingSymbol") or "")
         if _matches_underlying(symbol, underlying) or _matches_underlying(underlier, underlying):
-            symbols.add(symbol)
-    return symbols
+            quantity = float(pos.get("longQuantity") or 0) - float(
+                pos.get("shortQuantity") or 0
+            )
+            positions[symbol] = positions.get(symbol, 0) + quantity
+    return {symbol: quantity for symbol, quantity in positions.items() if quantity}
 
 
 def _order_symbols(order: dict[str, Any]) -> set[str]:
     symbols: set[str] = set()
-    for leg in order.get("orderLegCollection") or []:
-        instrument = leg.get("instrument") or {}
-        symbol = instrument.get("symbol")
-        if symbol:
-            symbols.add(str(symbol))
-    for child in order.get("childOrderStrategies") or []:
-        symbols.update(_order_symbols(child))
+    for node in walk_orders(order):
+        for leg in node.get("orderLegCollection") or []:
+            symbol = (leg.get("instrument") or {}).get("symbol")
+            if symbol:
+                symbols.add(str(symbol))
     return symbols
 
 
-def _open_trade_symbols(open_rows: list[dict]) -> set[str]:
-    symbols: set[str] = set()
+def _open_trade_positions(open_rows: list[dict]) -> dict[str, float]:
+    positions: dict[str, float] = {}
     for row in open_rows:
-        for key in ("lower_symbol", "center_symbol", "upper_symbol"):
-            if row.get(key):
-                symbols.add(str(row[key]))
-    return symbols
-
-
-def _order_id(order: dict[str, Any]) -> str:
-    return str(order.get("orderId") or order.get("order_id") or "")
+        raw_quantity = row.get("quantity")
+        quantity = float(1 if raw_quantity is None else raw_quantity)
+        symbols = tuple(
+            str(row.get(key) or "")
+            for key in ("lower_symbol", "center_symbol", "upper_symbol")
+        )
+        if not all(symbols):
+            raise RuntimeError("DB OPEN butterfly is missing leg symbol(s)")
+        if len(set(symbols)) != 3 or quantity <= 0:
+            raise RuntimeError("DB OPEN butterfly has invalid leg symbols or quantity")
+        for symbol, multiplier in zip(symbols, (1, -2, 1), strict=True):
+            positions[symbol] = positions.get(symbol, 0) + quantity * multiplier
+    return {symbol: quantity for symbol, quantity in positions.items() if quantity}
 
 
 def _intent_order_ids(intents: list[dict[str, Any]]) -> set[str]:
@@ -132,61 +158,33 @@ def _json_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _snapshot_symbols(snapshot: dict[str, Any]) -> set[str]:
-    return {
-        str(snapshot[key])
-        for key in ("lower_symbol", "center_symbol", "upper_symbol")
-        if snapshot.get(key)
-    }
-
-
-def _parse_broker_time(value: Any) -> dt.datetime | None:
-    if isinstance(value, dt.datetime):
-        return value
-    if not isinstance(value, str) or not value:
-        return None
-    text = value.replace("Z", "+00:00")
-    try:
-        parsed = dt.datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
-
-
-def _explicit_fill_details(order: dict[str, Any]) -> tuple[float, dt.datetime] | None:
+def _explicit_fill_details(
+    order: dict[str, Any], requested_quantity: int | float
+) -> BrokerFill | None:
     if order.get("status") != "FILLED":
         return None
-    activities = order.get("orderActivityCollection") or [{}]
-    executions = activities[0].get("executionLegs") or [{}]
-    price = (
-        order.get("filledPrice")
-        or order.get("averageFillPrice")
-        or order.get("averagePrice")
-    )
-    fill_time = _parse_broker_time(
-        order.get("closeTime")
-        or order.get("enteredTime")
-        or executions[0].get("time")
-    )
-    if price is None or fill_time is None:
-        return None
-    return float(price), fill_time
+    return parse_broker_fill(order, requested_quantity)
 
 
 async def _repair_filled_entry_intent(
     intent: dict[str, Any],
-    broker_symbols: set[str],
+    broker_positions: dict[str, float],
     trade_queries: TradeQueries,
 ) -> dict[str, Any]:
     payload = _json_dict(intent.get("raw_broker_payload"))
-    fill = _explicit_fill_details(payload)
     snapshot = _json_dict(intent.get("candidate_snapshot"))
+    quantity = intent.get("quantity")
+    quantity = 1 if quantity is None else quantity
+    expected_positions = _open_trade_positions(
+        [{**snapshot, "quantity": quantity}]
+    )
+    if expected_positions != broker_positions:
+        raise RuntimeError("filled entry intent legs/quantities do not match broker positions")
+    fill = _explicit_fill_details(payload, quantity)
     if fill is None:
         raise RuntimeError("filled entry intent missing explicit fill price/time")
-    if _snapshot_symbols(snapshot) != broker_symbols:
-        raise RuntimeError("filled entry intent legs do not match broker positions")
 
-    fill_price, fill_time = fill
+    fill_price, fill_time = fill.net_fill_price, fill.execution_time
     trade_id = await trade_queries.insert_trade(
         {
             "underlying": intent["underlying"],
@@ -201,8 +199,11 @@ async def _repair_filled_entry_intent(
             "lower_symbol": snapshot.get("lower_symbol"),
             "center_symbol": snapshot.get("center_symbol"),
             "upper_symbol": snapshot.get("upper_symbol"),
-            "quantity": intent.get("quantity") or 1,
-            "metadata": {"broker_reconciled_entry_intent_id": intent["id"]},
+            "quantity": quantity,
+            "metadata": {
+                "broker_reconciled_entry_intent_id": intent["id"],
+                "broker_fill_evidence": fill.evidence,
+            },
         }
     )
     return {**intent, "trade_id": trade_id}
@@ -214,22 +215,58 @@ async def _repair_filled_exit_intent(
     trade_queries: TradeQueries,
 ) -> None:
     payload = _json_dict(intent.get("raw_broker_payload"))
-    fill = _explicit_fill_details(payload)
+    quantity = intent.get("quantity")
+    quantity = 1 if quantity is None else quantity
+    fill = _explicit_fill_details(payload, quantity)
     if fill is None:
         raise RuntimeError("filled exit intent missing explicit fill price/time")
-    fill_price, fill_time = fill
+    fill_price, fill_time = fill.net_fill_price, fill.execution_time
     entry_price = float(open_trade["entry_price"])
     pnl = fill_price - entry_price
     snapshot = _json_dict(intent.get("candidate_snapshot"))
-    await trade_queries.close_trade(
+    closed = await trade_queries.close_trade(
         int(open_trade["id"]),
         fill_price,
         fill_time,
         str(snapshot.get("exit_reason") or "broker_reconciled_exit"),
         pnl,
         float(open_trade.get("peak_value") or entry_price),
-        metadata={"broker_reconciled_exit_intent_id": intent["id"]},
+        metadata={
+            "broker_reconciled_exit_intent_id": intent["id"],
+            "broker_fill_evidence": fill.evidence,
+        },
     )
+    if not closed:
+        raise RuntimeError("filled exit intent did not close exactly one OPEN trade")
+
+
+async def _expired_trade_has_broker_settlement(
+    schwab: SchwabClientWrapper,
+    row: dict[str, Any],
+    today: dt.date,
+) -> bool:
+    trade_date = row.get("trade_date")
+    if not isinstance(trade_date, dt.date) or trade_date >= today:
+        return False
+    transactions: list[dict[str, Any]] = []
+    day = trade_date
+    while day <= today:
+        transactions.extend(await schwab.get_transactions_for_day(day))
+        day += dt.timedelta(days=1)
+    trade = TradeRecord(
+        trade_id=int(row["id"]),
+        trade_date=trade_date,
+        direction=str(row["direction"]),
+        lower_strike=float(row["lower_strike"]),
+        center_strike=float(row["center_strike"]),
+        upper_strike=float(row["upper_strike"]),
+        entry_price=float(row["entry_price"]),
+        lower_symbol=str(row["lower_symbol"]),
+        center_symbol=str(row["center_symbol"]),
+        upper_symbol=str(row["upper_symbol"]),
+        quantity=int(row.get("quantity") or 1),
+    )
+    return broker_cash_settlement_from_transactions(transactions, trade) is not None
 
 
 class BrokerStateGate:
@@ -253,12 +290,14 @@ async def _assert_broker_state_matches_db(
     open_rows: list[dict],
     intent_queries: OrderIntentQueries | None = None,
     trade_queries: TradeQueries | None = None,
+    trade_date: dt.date | None = None,
 ) -> None:
+    today = trade_date or session_date()
     account_snapshot = await schwab.get_account_snapshot()
-    broker_symbols = _broker_option_position_symbols(account_snapshot, underlying)
-    expected_symbols = _open_trade_symbols(open_rows)
+    broker_positions = _broker_option_positions(account_snapshot, underlying)
+    expected_positions = _open_trade_positions(open_rows)
     intents = (
-        await intent_queries.intents_for_day(underlying, dt.date.today())
+        await intent_queries.intents_for_day(underlying, today)
         if intent_queries is not None
         else []
     )
@@ -271,31 +310,57 @@ async def _assert_broker_state_matches_db(
             for intent in intents
             if intent.get("broker_order_id")
         }
-        for order in todays_orders:
-            intent = intent_by_order_id.get(_order_id(order))
-            if intent is not None and order.get("status"):
+        for top_order in todays_orders:
+            for order in walk_orders(top_order):
+                order_id = str(order.get("orderId") or order.get("order_id") or "")
+                intent = intent_by_order_id.get(order_id)
+                if intent is None or not order.get("status"):
+                    continue
                 intent["status"] = str(order["status"])
                 intent["raw_broker_payload"] = order
                 await intent_queries.update_broker_status(
                     int(intent["id"]), str(order["status"]), order
                 )
 
-    working_orders = [
-        order for order in todays_orders
-        if order.get("status") in WORKING_ORDER_STATUSES | CANCEL_PENDING_STATUSES
-        and any(_matches_underlying(sym, underlying) for sym in _order_symbols(order))
-        and _order_id(order) not in known_order_ids
+    relevant_orders = [
+        order
+        for order in todays_orders
+        if any(_matches_underlying(sym, underlying) for sym in _order_symbols(order))
     ]
-    if working_orders:
+    if any(not node.get("status") for order in relevant_orders for node in walk_orders(order)):
+        raise RuntimeError(f"Broker has missing {underlying} order status")
+
+    known_statuses = (
+        WORKING_ORDER_STATUSES
+        | PARTIAL_FILL_STATUSES
+        | CANCEL_PENDING_STATUSES
+        | TERMINAL_ORDER_STATUSES
+    )
+    unmapped_statuses = set().union(
+        *(order_statuses(order) - known_statuses for order in relevant_orders)
+    )
+    if unmapped_statuses:
         raise RuntimeError(
-            f"Broker has {len(working_orders)} unknown working {underlying} order(s); "
+            f"Broker has unmapped {underlying} order status(es): "
+            f"{', '.join(sorted(unmapped_statuses))}"
+        )
+
+    active_orders = [
+        order for order in relevant_orders
+        if order_statuses(order)
+        & (WORKING_ORDER_STATUSES | PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES)
+        and order_ids(order).isdisjoint(known_order_ids)
+    ]
+    if active_orders:
+        raise RuntimeError(
+            f"Broker has {len(active_orders)} unknown active {underlying} order(s); "
             "refusing live startup"
         )
 
     unsafe_known = [
         order for order in todays_orders
-        if _order_id(order) in known_order_ids
-        and order.get("status") in PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
+        if not order_ids(order).isdisjoint(known_order_ids)
+        and order_statuses(order) & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES)
     ]
     if unsafe_known:
         raise RuntimeError(
@@ -303,7 +368,7 @@ async def _assert_broker_state_matches_db(
             f"{underlying} order(s); manual reconciliation required"
         )
 
-    if broker_symbols and not open_rows:
+    if broker_positions and not open_rows:
         filled_entries = [
             intent for intent in intents
             if intent.get("side") == "ENTRY"
@@ -313,7 +378,7 @@ async def _assert_broker_state_matches_db(
         if trade_queries is not None and len(filled_entries) == 1:
             repaired = await _repair_filled_entry_intent(
                 filled_entries[0],
-                broker_symbols,
+                broker_positions,
                 trade_queries,
             )
             if intent_queries is not None:
@@ -325,10 +390,10 @@ async def _assert_broker_state_matches_db(
             )
             return
         raise RuntimeError(
-            f"Broker has {len(broker_symbols)} {underlying} option position(s) "
+            f"Broker has {len(broker_positions)} {underlying} option position(s) "
             "but DB has no OPEN trade"
         )
-    if open_rows and not broker_symbols:
+    if open_rows and not broker_positions:
         filled_exits = [
             intent for intent in intents
             if intent.get("side") == "EXIT"
@@ -343,14 +408,72 @@ async def _assert_broker_state_matches_db(
                 trade_id=open_rows[0]["id"],
             )
             return
+        if len(open_rows) == 1 and await _expired_trade_has_broker_settlement(
+            schwab, open_rows[0], today
+        ):
+            log.info(
+                "broker_cash_settlement_ready_for_db_close",
+                trade_id=open_rows[0]["id"],
+            )
+            return
         raise RuntimeError(
             f"DB has {len(open_rows)} OPEN {underlying} trade(s) but broker is flat"
         )
-    if expected_symbols and not expected_symbols.issubset(broker_symbols):
+    if expected_positions != broker_positions:
+        expected_symbols = set(expected_positions)
+        broker_symbols = set(broker_positions)
         missing = sorted(expected_symbols - broker_symbols)
-        raise RuntimeError(
-            f"Broker positions missing DB OPEN leg symbol(s): {', '.join(missing)}"
+        unexpected = sorted(broker_symbols - expected_symbols)
+        wrong_quantity = sorted(
+            symbol
+            for symbol in expected_symbols & broker_symbols
+            if expected_positions[symbol] != broker_positions[symbol]
         )
+        details = []
+        if missing:
+            details.append(f"missing broker leg symbol(s): {', '.join(missing)}")
+        if unexpected:
+            details.append(f"unexpected broker leg symbol(s): {', '.join(unexpected)}")
+        if wrong_quantity:
+            details.append(
+                "quantity mismatch(es): "
+                + ", ".join(
+                    f"{symbol} expected {expected_positions[symbol]:g}, "
+                    f"broker {broker_positions[symbol]:g}"
+                    for symbol in wrong_quantity
+                )
+            )
+        raise RuntimeError(
+            f"Broker/DB OPEN {underlying} leg mismatch; {'; '.join(details)}"
+        )
+
+
+async def _reconcile_broker_state(
+    schwab: SchwabClientWrapper,
+    underlying: str,
+    open_rows: list[dict] | None,
+    intent_queries: OrderIntentQueries | None,
+    trade_queries: TradeQueries | None,
+    critical_notifier: AlertmanagerNotifier | None,
+    trade_date: dt.date | None = None,
+) -> None:
+    try:
+        if open_rows is None:
+            if trade_queries is None:
+                raise RuntimeError("trade queries are required for runtime reconciliation")
+            open_rows = await trade_queries.get_open_trades(underlying)
+        await _assert_broker_state_matches_db(
+            schwab,
+            underlying,
+            open_rows,
+            intent_queries,
+            trade_queries,
+            trade_date,
+        )
+    except Exception:
+        if critical_notifier:
+            await critical_notifier.notify_critical("reconciliation_failure")
+        raise
 
 
 async def broker_reconciler_loop(
@@ -360,37 +483,70 @@ async def broker_reconciler_loop(
     intent_queries: OrderIntentQueries,
     gate: BrokerStateGate,
     interval_seconds: int = 15,
+    critical_notifier: AlertmanagerNotifier | None = None,
 ) -> None:
     while True:
         try:
-            open_rows = await trade_queries.get_open_trades(underlying)
-            await _assert_broker_state_matches_db(
+            await _reconcile_broker_state(
                 schwab,
                 underlying,
-                open_rows,
+                None,
                 intent_queries,
                 trade_queries,
+                critical_notifier,
             )
+            if critical_notifier:
+                await critical_notifier.retry_pending_resolutions()
             if gate.unsafe:
                 log.info("broker_state_gate_cleared")
-            gate.clear()
+                gate.clear()
+                clear_readiness("broker_reconciliation_unsafe")
+                if critical_notifier:
+                    await critical_notifier.resolve_critical("reconciliation_failure")
         except Exception as e:
             gate.set_unsafe(str(e))
+            set_readiness("broker_reconciliation_unsafe")
             log.error("broker_state_unsafe", error=str(e))
         await asyncio.sleep(interval_seconds)
 
 
 def _assert_live_config_supported(config: AppConfig) -> None:
+    def confirmed_float(name: str, expected: float) -> None:
+        try:
+            value = float(os.getenv(name, ""))
+        except ValueError as e:
+            raise RuntimeError(f"Live trading requires {name}={expected:g}") from e
+        if value != expected:
+            raise RuntimeError(f"Live trading requires {name}={expected:g}")
+
     if config.execution.paper_trading:
         return
     if not config.execution.allow_live_trading:
         raise RuntimeError(
             "Live trading requires execution.allow_live_trading=true or ALLOW_LIVE_TRADING=true"
         )
-    if config.strategy.underlying != LIVE_UNDERLYING:
+    underlying = config.strategy.underlying.upper()
+    if underlying not in LIVE_MAX_DAILY_LOSS:
         raise RuntimeError(
-            f"Live trading is {LIVE_UNDERLYING}-only; "
+            "Live trading is SPX/XSP-canary-only; "
             f"{config.strategy.underlying} must stay paper/research until explicitly approved"
+        )
+    if underlying == "XSP":
+        if os.getenv("LIVE_XSP_CANARY", "").lower() not in {"1", "true", "yes"}:
+            raise RuntimeError("XSP live trading requires LIVE_XSP_CANARY=true")
+        if config.risk.max_position_size != 1:
+            raise RuntimeError("XSP live trading requires risk.max_position_size=1")
+    expected_account = os.getenv("LIVE_EXPECTED_SCHWAB_ACCOUNT_ID", "")
+    if not expected_account or expected_account != config.schwab.account_id:
+        raise RuntimeError(
+            "Live trading requires LIVE_EXPECTED_SCHWAB_ACCOUNT_ID matching SCHWAB_ACCOUNT_ID"
+        )
+    confirmed_float("LIVE_ACCOUNT_ALLOCATION", LIVE_ACCOUNT_ALLOCATION)
+    max_daily_loss = LIVE_MAX_DAILY_LOSS[underlying]
+    confirmed_float("LIVE_MAX_ACCOUNT_DAILY_LOSS", max_daily_loss)
+    if config.risk.max_daily_loss != max_daily_loss:
+        raise RuntimeError(
+            f"Live trading requires risk.max_daily_loss={max_daily_loss:g}"
         )
 
 
@@ -401,10 +557,12 @@ async def entry_loop(
     recovered_candidate: ButterflyCandidate | None = None,
     recovered_peak: float | None = None,
     broker_gate: BrokerStateGate | None = None,
+    critical_notifier: AlertmanagerNotifier | None = None,
 ) -> None:
     """Periodically attempt entries during the entry window."""
     active_trade: TradeRecord | None = recovered_trade
     monitor_task: asyncio.Task | None = None
+    consecutive_errors = 0
 
     if recovered_trade is not None and recovered_candidate is not None:
         log.info("resuming_monitor_for_recovered_trade", trade_id=recovered_trade.trade_id)
@@ -427,8 +585,25 @@ async def entry_loop(
             exc = monitor_task.exception()
             if exc:
                 log.error("monitor_task_error", error=str(exc))
-                if isinstance(exc, PartialFillError):
+                if isinstance(
+                    exc,
+                    (
+                        BrokerFillError,
+                        AmbiguousOrderError,
+                        PartialFillError,
+                        SettlementEvidenceError,
+                        TerminalOrderError,
+                    ),
+                ):
+                    set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
+                    if critical_notifier:
+                        condition = (
+                            "settlement_failure"
+                            if isinstance(exc, SettlementEvidenceError)
+                            else "broker_ambiguity"
+                        )
+                        await critical_notifier.notify_critical(condition)
                     return
             active_trade = None
             monitor_task = None
@@ -441,6 +616,10 @@ async def entry_loop(
                 continue
             try:
                 result = await trade_service.attempt_entry()
+                if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
+                    clear_readiness("entry_loop_repeated_failures")
+                    log.info("entry_loop_recovered")
+                consecutive_errors = 0
                 if result:
                     active_trade, candidate = result
                     log.info("entry_loop_got_trade", trade_id=active_trade.trade_id)
@@ -450,9 +629,33 @@ async def entry_loop(
                     )
             except Exception as e:
                 log.error("entry_loop_error", error=str(e))
-                if isinstance(e, PartialFillError):
+                if isinstance(
+                    e,
+                    (
+                        AmbiguousOrderError,
+                        BrokerFillError,
+                        PartialFillError,
+                        TerminalOrderError,
+                    ),
+                ):
+                    set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
+                    if critical_notifier:
+                        await critical_notifier.notify_critical("broker_ambiguity")
                     return
+                consecutive_errors += 1
+                underlying = trade_service.config.strategy.underlying
+                entry_loop_errors.labels(underlying=underlying).inc()
+                if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
+                    set_readiness("entry_loop_repeated_failures")
+                try:
+                    await trade_service.decision_queries.log_event(
+                        "entry_loop_error",
+                        {"error": str(e), "consecutive_failures": consecutive_errors},
+                        underlying=underlying,
+                    )
+                except Exception as audit_error:
+                    log.error("entry_loop_audit_error", error=str(audit_error))
 
         await asyncio.sleep(15)
 
@@ -494,7 +697,7 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         )
         sleep_secs = (next_midnight - now).total_seconds()
         await asyncio.sleep(sleep_secs)
-        today = dt.date.today()
+        today = session_date()
         await risk_queries.get_or_create(today, underlying)
         daily_trade_count.labels(underlying=underlying).set(0)
         trades_active.labels(underlying=underlying).set(0)
@@ -556,6 +759,12 @@ async def main() -> None:
         "",
     )
     risk_notifier = TelegramNotifier()
+    alertmanager_url = os.getenv("ALERTMANAGER_URL", "")
+    critical_notifier = (
+        AlertmanagerNotifier(alertmanager_url, config.strategy.underlying)
+        if alertmanager_url
+        else None
+    )
     notifier = (
         DiscordNotifier(webhook)
         if webhook and config.strategy.underlying == "SPX"
@@ -637,23 +846,35 @@ async def main() -> None:
         daily_bar_queries=daily_bar_q,
     )
 
-    if notifier:
-        await notifier.notify_startup()
-
     # Recover any open trade and initialize daily metrics from DB
     underlying = config.strategy.underlying
     recovered_trade: TradeRecord | None = None
     recovered_candidate: ButterflyCandidate | None = None
 
     trades_active.labels(underlying=underlying).set(0)
+    entry_loop_errors.labels(underlying=underlying).inc(0)
 
     recovered_peak: float | None = None
 
+    today = session_date()
     open_rows = await trade_q.get_open_trades(underlying)
     if not config.execution.paper_trading:
-        await _assert_broker_state_matches_db(
-            schwab, underlying, open_rows, intent_q, trade_q
+        await _reconcile_broker_state(
+            schwab,
+            underlying,
+            open_rows,
+            intent_q,
+            trade_q,
+            critical_notifier,
+            today,
         )
+        if critical_notifier:
+            for condition in (
+                "reconciliation_failure",
+                "broker_ambiguity",
+                "settlement_failure",
+            ):
+                await critical_notifier.resolve_critical(condition)
         open_rows = await trade_q.get_open_trades(underlying)
 
     if open_rows:
@@ -703,7 +924,6 @@ async def main() -> None:
         )
 
     # Initialize daily counters from DB so metrics survive restarts
-    today = dt.date.today()
     today_trades = await trade_q.get_trades_for_date(today, underlying)
     daily_trade_count.labels(underlying=underlying).set(len(today_trades))
     await risk_engine.sync_trade_count(len(today_trades), today)
@@ -715,7 +935,7 @@ async def main() -> None:
 
     # Sync risk state PnL — if an open trade was recovered, include its entry cost as
     # worst-case committed exposure so the daily loss budget is correctly consumed.
-    if recovered_trade is not None:
+    if recovered_trade is not None and recovered_trade.trade_date == today:
         open_trade_entry = trade_pnl_dollars(
             recovered_trade.entry_price, recovered_trade.quantity
         )
@@ -740,14 +960,15 @@ async def main() -> None:
         WHERE underlying = $1
           AND scan_time = (
               SELECT MAX(scan_time) FROM butterfly_candidates
-              WHERE underlying = $1 AND scan_time::date = CURRENT_DATE
+              WHERE underlying = $1 AND scan_time::date = $2
           )
         """,
-        underlying,
+        underlying, today,
     )
     if last_scan_count:
         butterfly_candidates_found.labels(underlying=underlying).set(last_scan_count)
 
+    set_readiness(None)
     try:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(collector.run_loop(), name="collector")
@@ -759,6 +980,7 @@ async def main() -> None:
                     recovered_candidate,
                     recovered_peak,
                     broker_gate,
+                    critical_notifier,
                 ),
                 name="entry_loop",
             )
@@ -770,6 +992,7 @@ async def main() -> None:
                         trade_q,
                         intent_q,
                         broker_gate,
+                        critical_notifier=critical_notifier,
                     ),
                     name="broker_reconciler",
                 )
@@ -782,6 +1005,7 @@ async def main() -> None:
             if notifier:
                 await notifier.notify_error(str(exc), context="TaskGroup")
     finally:
+        set_readiness("shutting_down")
         await schwab.close()
         await db.close()
 

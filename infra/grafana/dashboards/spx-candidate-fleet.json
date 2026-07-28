@@ -1,0 +1,104 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Evaluator health",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "up{job=\"spx_candidate_evaluator\"}", "legendFormat": "{{candidate_id}}"}],
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Feed sequence",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "candidate_feed_sequence"}],
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Feed age",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "candidate_feed_snapshot_age_seconds"}],
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "type": "table",
+      "title": "Review gate progress",
+      "description": "Progress is based only on closed paper trades in the canonical mark_v1 cohort.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{
+        "expr": "candidate_evaluator_review_progress_ratio",
+        "legendFormat": "{{candidate_id}}"
+      }],
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Candidate total P&L",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "candidate_evaluator_realized_pnl_dollars", "legendFormat": "{{candidate_id}}"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}
+    },
+    {
+      "type": "table",
+      "title": "Average P&L and profit factor",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "candidate_evaluator_average_pnl_dollars", "legendFormat": "{{candidate_id}} average P&L"},
+        {"expr": "candidate_evaluator_profit_factor", "legendFormat": "{{candidate_id}} profit factor"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5}
+    },
+    {
+      "type": "table",
+      "title": "Win rate and drawdown",
+      "description": "All values use closed mark_v1 paper trades only.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "candidate_evaluator_win_rate", "legendFormat": "{{candidate_id}} win rate"},
+        {"expr": "candidate_evaluator_max_drawdown_dollars", "legendFormat": "{{candidate_id}} drawdown"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13}
+    },
+    {
+      "type": "table",
+      "title": "Winner concentration",
+      "description": "A high largest-winner share or negative P&L without the largest winner signals outlier dependence.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "candidate_evaluator_largest_winner_share_ratio", "legendFormat": "{{candidate_id}} largest-winner share"},
+        {"expr": "candidate_evaluator_pnl_without_largest_winner_dollars", "legendFormat": "{{candidate_id}} P&L without largest winner"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13}
+    },
+    {
+      "type": "table",
+      "title": "Review-eligible closed trades",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "candidate_evaluator_closed_trade_count", "legendFormat": "{{candidate_id}}"}
+      ],
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 21}
+    },
+    {
+      "type": "table",
+      "title": "Parity and data-quality failures",
+      "description": "Any nonzero count requires investigation before promotion.",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "candidate_evaluator_parity_failures", "legendFormat": "{{candidate_id}} parity"},
+        {"expr": "candidate_evaluator_data_quality_failures", "legendFormat": "{{candidate_id}} data quality"}
+      ],
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 21}
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["butterfly-guy", "candidate-fleet"],
+  "templating": {"list": []},
+  "time": {"from": "now-24h", "to": "now"},
+  "title": "SPX Candidate Fleet",
+  "uid": "spx-candidate-fleet",
+  "version": 1
+}

@@ -5,10 +5,10 @@ from __future__ import annotations
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.strategy.entry_selection import EntrySelectionResult
 
-RR_TARGET = 10.0
 
-
-def _candidate_payload(candidate: ButterflyCandidate | None) -> dict[str, float | int] | None:
+def _candidate_payload(
+    candidate: ButterflyCandidate | None, rr_target: float
+) -> dict[str, float | int] | None:
     if candidate is None:
         return None
     return {
@@ -17,11 +17,13 @@ def _candidate_payload(candidate: ButterflyCandidate | None) -> dict[str, float 
         "mark": round(candidate.cost, 4),
         "cost": round(candidate.cost, 4),
         "reward_risk": round(candidate.reward_risk, 4),
-        "rr_distance": round(abs(candidate.reward_risk - RR_TARGET), 4),
+        "rr_distance": round(abs(candidate.reward_risk - rr_target), 4),
     }
 
 
-def _per_width_payload(candidates: tuple[ButterflyCandidate, ...]) -> list[dict[str, float | int]]:
+def _per_width_payload(
+    candidates: tuple[ButterflyCandidate, ...], rr_target: float
+) -> list[dict[str, float | int]]:
     return [
         {
             "width": candidate.wing_width,
@@ -29,7 +31,7 @@ def _per_width_payload(candidates: tuple[ButterflyCandidate, ...]) -> list[dict[
             "mark": round(candidate.cost, 4),
             "cost": round(candidate.cost, 4),
             "reward_risk": round(candidate.reward_risk, 4),
-            "rr_distance": round(abs(candidate.reward_risk - RR_TARGET), 4),
+            "rr_distance": round(abs(candidate.reward_risk - rr_target), 4),
         }
         for candidate in candidates
     ]
@@ -43,6 +45,7 @@ def build_entry_selection_parity(
     db_snapshot_time: str | None,
     db_spot: float | None,
     live_spot: float,
+    rr_target: float = 10.0,
 ) -> dict[str, object]:
     """Return a JSON-serializable Schwab vs DB selection comparison."""
     live_pick = live.candidate
@@ -87,22 +90,22 @@ def build_entry_selection_parity(
         )
 
     live_pick_distance = (
-        abs(live_pick.reward_risk - RR_TARGET) if live_pick is not None else None
+        abs(live_pick.reward_risk - rr_target) if live_pick is not None else None
     )
-    db_pick_distance = abs(db_pick.reward_risk - RR_TARGET) if db_pick is not None else None
+    db_pick_distance = abs(db_pick.reward_risk - rr_target) if db_pick is not None else None
 
     return {
         "snapshot_lag_seconds": snapshot_lag_seconds,
         "db_snapshot_time": db_snapshot_time,
         "live_spot": round(live_spot, 2),
         "db_spot": round(db_spot, 2) if db_spot is not None else None,
-        "live_selected": _candidate_payload(live_pick),
-        "db_selected": _candidate_payload(db_pick),
+        "live_selected": _candidate_payload(live_pick, rr_target),
+        "db_selected": _candidate_payload(db_pick, rr_target),
         "width_match": width_match,
         "center_match": center_match,
         "ranking_flip": ranking_flip,
-        "live_per_width": _per_width_payload(live.per_width_bests),
-        "db_per_width": _per_width_payload(db.per_width_bests),
+        "live_per_width": _per_width_payload(live.per_width_bests, rr_target),
+        "db_per_width": _per_width_payload(db.per_width_bests, rr_target),
         "per_width_deltas": per_width_deltas,
         "live_pick_rr_distance": live_pick_distance,
         "db_pick_rr_distance": db_pick_distance,

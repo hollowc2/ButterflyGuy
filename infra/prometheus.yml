@@ -2,10 +2,25 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - "candidate-alerts.yml"
+
 scrape_configs:
   - job_name: "butterfly_spx"
     static_configs:
       - targets: ["app_spx:8000"]
+    metrics_path: /metrics
+
+  - job_name: "butterfly_spx_candidate"
+    static_configs:
+      - targets: ["app_spx_candidate:8000"]
+    metrics_path: /metrics
+
+  - job_name: "spx_candidate_fleet"
+    file_sd_configs:
+      - files:
+          - "generated/prometheus-candidates.json"
+        refresh_interval: 30s
     metrics_path: /metrics
 
   - job_name: "butterfly_ndx"

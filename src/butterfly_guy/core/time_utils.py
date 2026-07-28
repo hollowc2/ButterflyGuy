@@ -103,6 +103,11 @@ def now_eastern() -> dt.datetime:
     return dt.datetime.now(EASTERN)
 
 
+def session_date(at: dt.datetime | None = None) -> dt.date:
+    """Calendar date for the US/Eastern trading session."""
+    return (at or now_eastern()).astimezone(EASTERN).date()
+
+
 def now_pacific() -> dt.datetime:
     """Current time in US/Pacific."""
     return dt.datetime.now(PACIFIC)

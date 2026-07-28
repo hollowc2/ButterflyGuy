@@ -99,3 +99,17 @@ def test_build_entry_selection_parity_marks_match_when_widths_agree():
     assert report["ranking_flip"] is False
     assert report["width_match"] is True
     assert report["center_match"] is True
+
+
+def test_build_entry_selection_parity_uses_configured_rr_target():
+    selection = _selection(_candidate(width=25, center=7575.0, cost=2.5))
+    report = build_entry_selection_parity(
+        live=selection,
+        db=selection,
+        snapshot_lag_seconds=0,
+        db_snapshot_time=None,
+        db_spot=7525,
+        live_spot=7525,
+        rr_target=selection.candidate.reward_risk,
+    )
+    assert report["live_pick_rr_distance"] == 0
