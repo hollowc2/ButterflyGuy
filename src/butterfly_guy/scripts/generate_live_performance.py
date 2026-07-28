@@ -103,7 +103,9 @@ async def fetch_no_trade_days(
     return days
 
 
-async def build_report(conn: asyncpg.Connection, underlying: str) -> tuple[list[TradePoint], list[NoTradeDay]]:
+async def build_report(
+    conn: asyncpg.Connection, underlying: str
+) -> tuple[list[TradePoint], list[NoTradeDay]]:
     trades = await fetch_closed_trades(conn, underlying)
     if not trades:
         return [], []

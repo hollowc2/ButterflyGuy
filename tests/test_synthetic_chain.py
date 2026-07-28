@@ -3,10 +3,7 @@
 import datetime as dt
 from zoneinfo import ZoneInfo
 
-import pytest
-
 from butterfly_guy.quant_engine.synthetic_chain import SyntheticChainGenerator
-
 
 EASTERN = ZoneInfo("America/New_York")
 

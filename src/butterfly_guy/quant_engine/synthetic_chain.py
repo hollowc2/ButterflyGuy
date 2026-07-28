@@ -49,7 +49,6 @@ class SyntheticChainGenerator:
             strike_step: Strike increment (default 5.0)
         """
         # Time to expiration in years
-        snap_date = snapshot_time.date() if hasattr(snapshot_time, "date") else snapshot_time
         minutes_remaining = self._minutes_remaining(expiration, snapshot_time)
         T = minutes_remaining / MINUTES_PER_YEAR
 

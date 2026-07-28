@@ -19,10 +19,7 @@ jobs:
           uv run pytest -q
           touch .env
           docker compose -f infra/docker-compose.yml config >/dev/null
-          mapfile -t changed_python < <(git diff-tree --no-commit-id --name-only --diff-filter=ACMR -r "$GITHUB_SHA" -- '*.py')
-          if ((${#changed_python[@]})); then
-            uv run ruff check "${changed_python[@]}"
-          fi
+          uv run ruff check .
 
       - name: Check runtime is flat
         if: github.event_name == 'workflow_dispatch'

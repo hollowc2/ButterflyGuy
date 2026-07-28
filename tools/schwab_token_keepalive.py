@@ -5,6 +5,8 @@ This script raises one centrally deduplicated alert starting 8 hours before expi
 Also sends a weekly Sunday evening reminder to re-auth before the new week.
 
 Cron: run hourly plus a dedicated Sunday 6:50 PM PDT reminder.
+  0 * * * * /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
+  50 1 * * 1 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py --sunday-reminder >> /opt/butterflyguy/keepalive.log 2>&1
 """
 
 import json

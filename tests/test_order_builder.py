@@ -1,8 +1,6 @@
 """Tests for butterfly order builder."""
 
-import datetime as dt
 
-import pytest
 
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder

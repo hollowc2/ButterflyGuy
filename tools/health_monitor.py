@@ -207,10 +207,16 @@ def run_check_cycle(cfg: dict) -> list[dict]:
                 print(f"[ALERT] {key} is DOWN: {result['error']}")
             elif not state["was_healthy"]:
                 # Already down — just log, don't re-alert
-                print(f"[DOWN] {key} still down ({state['fail_count']} consecutive): {result['error']}")
+                print(
+                    f"[DOWN] {key} still down "
+                    f"({state['fail_count']} consecutive): {result['error']}"
+                )
             else:
                 # Below threshold, not alerting yet
-                print(f"[WARN] {key} failed ({state['fail_count']}/{cfg['failure_threshold']}): {result['error']}")
+                print(
+                    f"[WARN] {key} failed "
+                    f"({state['fail_count']}/{cfg['failure_threshold']}): {result['error']}"
+                )
 
         results.append(result)
     return results

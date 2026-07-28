@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 # Empirical: 0-DTE IV tends to run ~15% above VIX due to intraday vol premium
 VIX_0DTE_SCALAR = 1.15
 

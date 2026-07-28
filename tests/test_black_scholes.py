@@ -2,8 +2,6 @@
 
 import math
 
-import pytest
-
 from butterfly_guy.quant_engine.black_scholes import (
     bs_call_price,
     bs_delta,
