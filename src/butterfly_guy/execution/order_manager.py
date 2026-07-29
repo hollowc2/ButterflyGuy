@@ -206,6 +206,13 @@ def _fill_result(fill: BrokerFill, intent_id: int | None = None) -> dict[str, ob
     }
 
 
+def _assert_entry_fill_within_limit(fill_price: float, limit_price: float) -> None:
+    if fill_price > limit_price:
+        raise BrokerFillError(
+            f"Entry fill {fill_price:.4f} exceeds submitted limit {limit_price:.4f}"
+        )
+
+
 class LiveSpread(NamedTuple):
     bid: float   # lower_bid + upper_bid - 2 * center_ask  (market maker buys at this price)
     mark: float  # lower_mark + upper_mark - 2 * center_mark
@@ -412,6 +419,14 @@ class OrderManager:
                 log.warning("paper_entry_no_spread", center=candidate.center_strike)
                 return None
             result = self._mark_paper_fill("entry", spread.mark, quantity, spread)
+            if float(result["fill_price"]) > limit_price:
+                log.warning(
+                    "paper_entry_above_limit_blocked",
+                    fill_price=result["fill_price"],
+                    limit_price=limit_price,
+                    mark=spread.mark,
+                )
+                return None
             log.info(
                 "paper_entry_filled_at_mark",
                 fill_price=result["fill_price"],
@@ -452,6 +467,7 @@ class OrderManager:
             )
 
             if fill:
+                _assert_entry_fill_within_limit(fill.net_fill_price, limit_price)
                 elapsed = (now_utc() - start_time).total_seconds()
                 order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                 orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
@@ -465,7 +481,10 @@ class OrderManager:
             await self.schwab.cancel_order(order_id)
             log.info("entry_unfilled_cancelled", price=limit_price)
             post_fill = await self._check_post_cancel_fill(
-                order_id, quantity, intent_id=intent_id
+                order_id,
+                quantity,
+                intent_id=intent_id,
+                limit_price=limit_price,
             )
             if post_fill:
                 return post_fill
@@ -528,6 +547,9 @@ class OrderManager:
                     )
 
                     if fill:
+                        _assert_entry_fill_within_limit(
+                            fill.net_fill_price, limit_price
+                        )
                         elapsed = (now_utc() - start_time).total_seconds()
                         order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                         orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
@@ -539,7 +561,11 @@ class OrderManager:
 
                     await self.schwab.cancel_order(order_id)
                     log.debug("entry_step_cancelled", step=i, price=limit_price)
-                    post_fill = await self._check_post_cancel_fill(order_id, quantity)
+                    post_fill = await self._check_post_cancel_fill(
+                        order_id,
+                        quantity,
+                        limit_price=limit_price,
+                    )
                     if post_fill:
                         return post_fill
 
@@ -709,6 +735,7 @@ class OrderManager:
         requested_quantity: int,
         order_type: str = "entry",
         intent_id: int | None = None,
+        limit_price: float | None = None,
     ) -> dict | None:
         """After a cancel, confirm the order didn't sneak through as filled."""
         try:
@@ -731,6 +758,10 @@ class OrderManager:
                 raise TerminalOrderError(terminal_failure, order_id)
             if order_status == "FILLED":
                 fill = parse_broker_fill(status, requested_quantity, order_id)
+                if order_type == "entry" and limit_price is not None:
+                    _assert_entry_fill_within_limit(
+                        fill.net_fill_price, limit_price
+                    )
                 log.warning(
                     "post_cancel_fill_detected",
                     order_id=order_id,

@@ -491,6 +491,21 @@ async def test_single_attempt_creates_intent_before_live_submit_and_saves_order_
 
 
 @pytest.mark.asyncio
+async def test_single_attempt_rejects_broker_fill_above_submitted_limit():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    schwab.get_order_status = AsyncMock(return_value=filled_order())
+
+    with pytest.raises(BrokerFillError, match="exceeds submitted limit"):
+        await om.execute_single_attempt(
+            make_candidate(5900, 5950, 6000, 2.50),
+            limit_price=0.40,
+        )
+
+    schwab.place_order.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_entry_intent_db_failure_prevents_broker_write():
     om, schwab = make_order_manager(
         make_settings(paper_trading=False, retry_interval_seconds=0)
@@ -948,6 +963,23 @@ async def test_paper_single_attempt_requires_observed_spread():
         result = await om.execute_single_attempt(candidate, limit_price=5.00)
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_paper_single_attempt_blocks_fill_above_submitted_limit():
+    settings = make_settings(
+        paper_trading=True,
+        paper_commission_per_contract=0.65,
+    )
+    om, schwab = make_order_manager(settings, underlying="XSP")
+    candidate = make_candidate(5900, 5950, 6000, 0.34)
+    spread = LiveSpread(bid=0.20, mark=0.73, ask=0.81)
+
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)):
+        result = await om.execute_single_attempt(candidate, limit_price=0.40)
+
+    assert result is None
+    schwab.place_order.assert_not_awaited()
 
 
 @pytest.mark.asyncio

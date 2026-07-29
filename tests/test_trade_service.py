@@ -241,7 +241,7 @@ async def test_attempt_entry_does_not_restart_after_terminal_rejection():
          ), pytest.raises(TerminalOrderError, match="REJECTED"):
         await service.attempt_entry()
 
-    order_manager.execute_single_attempt.assert_awaited_once()
+    order_manager.execute_single_attempt.assert_awaited_once_with(best, 1.0)
 
 
 @pytest.mark.asyncio

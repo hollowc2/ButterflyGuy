@@ -38,7 +38,11 @@ from butterfly_guy.data.schwab_client import (
     SchwabClientWrapper,
 )
 from butterfly_guy.db.queries import CandidateQueries, ChainQueries, DecisionQueries, TradeQueries
-from butterfly_guy.execution.order_manager import AmbiguousOrderError, OrderManager
+from butterfly_guy.execution.order_manager import (
+    AmbiguousOrderError,
+    BrokerFillError,
+    OrderManager,
+)
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, build_entry_chart_png
@@ -460,11 +464,16 @@ class TradeService:
                 log.info("no_candidates", step=step, direction=direction)
                 break
 
-            # Price at fly's composite ask + per-step increment to sweeten the offer
-            limit_price = round(best.ask + step * price_step, 2)
+            # Never submit above the configured maximum debit for this width.
+            max_entry_price = self.config.strategy.max_cost_per_width[best.wing_width]
+            unconstrained_limit = round(best.ask + step * price_step, 2)
+            limit_price = round(min(unconstrained_limit, max_entry_price), 2)
             attempt_record = {
                 "step": step,
                 "limit": limit_price,
+                "unconstrained_limit": unconstrained_limit,
+                "max_entry_price": max_entry_price,
+                "limit_was_capped": limit_price < unconstrained_limit,
                 "bid": getattr(best, "bid", None),
                 "mark": best.cost,
                 "ask": best.ask,
@@ -497,6 +506,8 @@ class TradeService:
                 width=best.wing_width,
                 ask=best.ask,
                 limit=limit_price,
+                unconstrained_limit=unconstrained_limit,
+                max_entry_price=max_entry_price,
             )
 
             entry_lock: tuple[Any, str] | None = None
@@ -520,6 +531,19 @@ class TradeService:
 
             try:
                 fill = await self.order_manager.execute_single_attempt(best, limit_price)
+                if fill:
+                    fill_price = float(fill["fill_price"])
+                    if fill_price > max_entry_price:
+                        log.error(
+                            "entry_fill_above_strategy_limit",
+                            fill_price=fill_price,
+                            max_entry_price=max_entry_price,
+                            width=best.wing_width,
+                        )
+                        raise BrokerFillError(
+                            f"Entry fill {fill_price:.4f} exceeds configured "
+                            f"{best.wing_width}-wide maximum {max_entry_price:.4f}"
+                        )
             except Exception:
                 if entry_lock is not None:
                     await self._release_entry_lock(*entry_lock)
