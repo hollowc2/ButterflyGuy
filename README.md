@@ -136,12 +136,11 @@ continues to read Schwab directly and does not depend on the fleet.
 `configs/candidates.yaml` is the source of truth for up to ten YAML variants.
 Each enabled candidate has its own container and PostgreSQL database. Slots
 `0` through `9` map to host metrics ports `8100` through `8109`. The existing
-BEST_RR database is registered as `butterfly_guy_spx_candidate` and is disabled
-by default so its history is preserved until the rollout gate is approved.
-Five additional evaluators are registered and enabled: `vix-center`,
+BEST_RR database is registered as `butterfly_guy_spx_candidate`; its preserved
+history now continues under the fleet-native `best-rr` evaluator in slot 0.
+Five additional evaluators are enabled: `vix-center`,
 `target-cost`, `gap-conviction`, `peak-trailer`, and `absolute-stop`. They use
-slots 1–5, isolated databases, and the same shared feed. The standalone
-`best-rr` entry remains disabled.
+slots 1–5, isolated databases, and the same shared feed.
 
 Validate and inspect generated runtime changes:
 
@@ -173,10 +172,10 @@ serves one cached final regular-session SPX close so evaluators can cash-settle
 without Schwab credentials. Review progress counts only closed `mark_v1` trades,
 with a minimum gate of 20 closed trades per candidate.
 
-Roll out conservatively: run the feed for a full-session parity probe, migrate
-BEST_RR for one observed session, then gate expansion at three, five, and ten
-candidates. The legacy `app_spx_candidate` Compose profile remains available
-for one rollback cycle and continues to use the preserved BEST_RR database.
+All six evaluators use the shared feed and isolated candidate runtime. The
+legacy `app_spx_candidate` Compose profile remains stopped and available for
+one rollback cycle; it must not run concurrently with the fleet-native
+`best-rr` evaluator because both use the preserved BEST_RR database.
 
 ### 4) Run the live orchestrator directly
 

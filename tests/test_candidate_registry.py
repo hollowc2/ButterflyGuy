@@ -108,7 +108,7 @@ def test_approved_candidate_registry_is_activated_isolated_and_safe() -> None:
     approved = load_registry(ROOT / "configs/candidates.yaml")
 
     assert [(item.id, item.slot, item.enabled) for item in approved.candidates] == [
-        ("best-rr", 0, False),
+        ("best-rr", 0, True),
         ("vix-center", 1, True),
         ("target-cost", 2, True),
         ("gap-conviction", 3, True),
@@ -137,10 +137,7 @@ def test_approved_candidate_registry_is_activated_isolated_and_safe() -> None:
     assert feed["cap_drop"] == ["ALL"]
     for item in approved.candidates:
         service = compose["services"][f"spx_candidate_{item.id.replace('-', '_')}"]
-        if item.id == "best-rr":
-            assert service["profiles"] == ["candidate-disabled"]
-        else:
-            assert "profiles" not in service
+        assert "profiles" not in service
         assert service["ports"] == [f"127.0.0.1:{8100 + item.slot}:8000"]
         assert service["environment"]["DATABASE__NAME"] == item.database_name
         assert service["environment"]["CANDIDATE_FEED_URL"] == (
@@ -148,8 +145,8 @@ def test_approved_candidate_registry_is_activated_isolated_and_safe() -> None:
         )
         assert service["read_only"] is True
         assert service["cap_drop"] == ["ALL"]
-    assert "spx_candidate_best_rr:8000" not in runtime.prometheus_targets
-    assert runtime.prometheus_targets.count('"job": "spx_candidate_evaluator"') == 5
+    assert "spx_candidate_best_rr:8000" in runtime.prometheus_targets
+    assert runtime.prometheus_targets.count('"job": "spx_candidate_evaluator"') == 6
 
 
 def test_candidate_configs_each_change_only_the_approved_decision() -> None:
