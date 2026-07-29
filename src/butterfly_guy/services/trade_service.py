@@ -7,6 +7,10 @@ from typing import Any, Literal
 
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.core.config import AppConfig
+from butterfly_guy.core.entry_pricing import (
+    capped_entry_limit,
+    entry_fill_within_limit,
+)
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import (
     butterfly_candidates_found,
@@ -467,7 +471,10 @@ class TradeService:
             # Never submit above the configured maximum debit for this width.
             max_entry_price = self.config.strategy.max_cost_per_width[best.wing_width]
             unconstrained_limit = round(best.ask + step * price_step, 2)
-            limit_price = round(min(unconstrained_limit, max_entry_price), 2)
+            limit_price = capped_entry_limit(
+                unconstrained_limit,
+                max_entry_price,
+            )
             attempt_record = {
                 "step": step,
                 "limit": limit_price,
@@ -533,7 +540,10 @@ class TradeService:
                 fill = await self.order_manager.execute_single_attempt(best, limit_price)
                 if fill:
                     fill_price = float(fill["fill_price"])
-                    if fill_price > max_entry_price:
+                    if not entry_fill_within_limit(
+                        fill_price,
+                        max_entry_price,
+                    ):
                         log.error(
                             "entry_fill_above_strategy_limit",
                             fill_price=fill_price,

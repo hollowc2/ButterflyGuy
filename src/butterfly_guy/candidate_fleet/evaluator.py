@@ -20,6 +20,7 @@ from butterfly_guy.candidate_fleet.models import (
 )
 from butterfly_guy.candidate_fleet.provider import MarketDataProvider
 from butterfly_guy.core.config import AppConfig
+from butterfly_guy.core.entry_pricing import entry_fill_within_limit
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.time_utils import (
     is_market_open,
@@ -309,11 +310,20 @@ class CandidatePaperExecutor:
         self,
         candidate: ButterflyCandidate,
         snapshot: MarketSnapshot,
+        max_entry_price: float,
     ) -> dict[str, Any]:
         # Pin before returning a fill. A failed pin therefore cannot produce a trade.
         await self.provider.pin(snapshot.identity)
         mark = _candidate_mark(candidate, snapshot)
-        return self._fill(mark, snapshot, side="entry")
+        fill = self._fill(mark, snapshot, side="entry")
+        fill_price = float(fill["fill_price"])
+        if not entry_fill_within_limit(fill_price, max_entry_price):
+            raise RuntimeError(
+                f"Candidate entry fill {fill_price:.4f} exceeds configured "
+                f"{candidate.wing_width}-wide maximum {max_entry_price:.4f}"
+            )
+        fill["execution_diagnostics"]["max_entry_price"] = max_entry_price
+        return fill
 
     def exit(
         self,
@@ -469,7 +479,11 @@ class CandidateEvaluator:
                     snapshot,
                 )
                 return None
-            fill = await self.executor.entry(best, snapshot)
+            fill = await self.executor.entry(
+                best,
+                snapshot,
+                self.config.strategy.max_cost_per_width[best.wing_width],
+            )
             metadata = {
                 **self.audit.metadata(snapshot),
                 "selection_method": selection.selection_method,

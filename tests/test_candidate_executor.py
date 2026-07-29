@@ -79,11 +79,12 @@ async def test_candidate_entry_pins_before_mark_fill() -> None:
     )
     snapshot = market()
 
-    fill = await executor.entry(candidate(), snapshot)
+    fill = await executor.entry(candidate(), snapshot, max_entry_price=2.0)
 
     assert provider.pinned == [snapshot.identity]
     assert fill["fill_price"] == 1.0
     assert fill["paper_fill_model"] == "mark_v1"
+    assert fill["execution_diagnostics"]["max_entry_price"] == 2.0
     assert not hasattr(executor, "place_order")
     assert not hasattr(executor, "cancel_order")
     assert not hasattr(executor, "get_order_status")
@@ -96,7 +97,22 @@ async def test_candidate_entry_is_blocked_when_pin_fails() -> None:
         CandidateAuditContext("best-rr", "config-hash", "git-sha"),
     )
     with pytest.raises(RuntimeError, match="archive unavailable"):
-        await executor.entry(candidate(), market())
+        await executor.entry(candidate(), market(), max_entry_price=2.0)
+
+
+@pytest.mark.asyncio
+async def test_candidate_entry_blocks_fill_above_configured_width_maximum() -> None:
+    provider = FakeProvider()
+    executor = CandidatePaperExecutor(
+        provider,  # type: ignore[arg-type]
+        CandidateAuditContext("best-rr", "config-hash", "git-sha"),
+    )
+    snapshot = market()
+
+    with pytest.raises(RuntimeError, match="exceeds configured 20-wide maximum"):
+        await executor.entry(candidate(), snapshot, max_entry_price=0.50)
+
+    assert provider.pinned == [snapshot.identity]
 
 
 def test_candidate_safety_rejects_live_or_credentialed_runtime() -> None:

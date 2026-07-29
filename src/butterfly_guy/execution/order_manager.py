@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from typing import NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
+from butterfly_guy.core.entry_pricing import entry_fill_within_limit
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import (
     order_fill_duration,
@@ -207,7 +208,7 @@ def _fill_result(fill: BrokerFill, intent_id: int | None = None) -> dict[str, ob
 
 
 def _assert_entry_fill_within_limit(fill_price: float, limit_price: float) -> None:
-    if fill_price > limit_price:
+    if not entry_fill_within_limit(fill_price, limit_price):
         raise BrokerFillError(
             f"Entry fill {fill_price:.4f} exceeds submitted limit {limit_price:.4f}"
         )
@@ -419,7 +420,10 @@ class OrderManager:
                 log.warning("paper_entry_no_spread", center=candidate.center_strike)
                 return None
             result = self._mark_paper_fill("entry", spread.mark, quantity, spread)
-            if float(result["fill_price"]) > limit_price:
+            if not entry_fill_within_limit(
+                float(result["fill_price"]),
+                limit_price,
+            ):
                 log.warning(
                     "paper_entry_above_limit_blocked",
                     fill_price=result["fill_price"],
