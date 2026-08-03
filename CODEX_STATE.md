@@ -10,7 +10,8 @@ live ButterflyGuy behavior or production defaults.
 Phase 0 is complete. The safest Phase 1 collector boundary and fake-backed Phase 2 gateway
 foundation, including an isolated localhost smoke proof, are complete on branch
 `codex/schwab-gateway-foundation` at `/tmp/butterfly-schwab-gateway`. The foundation
-has been approved for commit and push only. No production cutover has begun.
+has been committed and pushed to `origin/codex/schwab-gateway-foundation` as functional
+commit `bdbdd31` plus generated-graph commit `5f9d239`. No production cutover has begun.
 
 ## Repository Findings
 
