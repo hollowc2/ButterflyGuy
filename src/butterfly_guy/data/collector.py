@@ -22,11 +22,8 @@ from butterfly_guy.core.time_utils import (
     is_market_open,
     now_eastern,
 )
-from butterfly_guy.data.schwab_client import (
-    SCHWAB_CHAIN_SYMBOLS,
-    SCHWAB_SPOT_SYMBOLS,
-    SchwabClientWrapper,
-)
+from butterfly_guy.data.providers import CollectorMarketDataProvider
+from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS
 from butterfly_guy.db.queries import ChainQueries, DailyBarQueries, SpotQueries
 
 log = get_logger(__name__)
@@ -38,7 +35,7 @@ class OptionChainCollector:
     def __init__(
         self,
         config: AppConfig,
-        schwab: SchwabClientWrapper,
+        schwab: CollectorMarketDataProvider,
         chain_queries: ChainQueries,
         spot_queries: SpotQueries,
         daily_bar_queries: DailyBarQueries | None = None,

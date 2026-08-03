@@ -8,6 +8,7 @@ from butterfly_guy.core.config import load_config
 from butterfly_guy.core.logging import setup_logging
 from butterfly_guy.core.metrics import start_metrics_server
 from butterfly_guy.data.collector import OptionChainCollector
+from butterfly_guy.data.providers import DirectSchwabMarketDataProvider
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.db.connection import DatabasePool
 from butterfly_guy.db.migrations.run_migrations import run_migrations
@@ -38,11 +39,12 @@ async def main() -> None:
     # Init Schwab
     schwab = SchwabClientWrapper(config.schwab)
     await schwab.initialize()
+    market_data = DirectSchwabMarketDataProvider(schwab)
 
     # Build collector
     collector = OptionChainCollector(
         config=config,
-        schwab=schwab,
+        schwab=market_data,
         chain_queries=ChainQueries(db),
         spot_queries=SpotQueries(db),
     )
