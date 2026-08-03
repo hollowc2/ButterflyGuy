@@ -1,0 +1,27 @@
+name: butterfly_gateway_foundation
+
+services:
+  schwab_gateway_foundation:
+    profiles: [gateway-foundation]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: butterfly_schwab_gateway_foundation
+    restart: "no"
+    command: ["python", "-m", "butterfly_guy.scripts.run_schwab_gateway", "--demo"]
+    environment:
+      SCHWAB_GATEWAY_BIND_HOST: 0.0.0.0
+      SCHWAB_GATEWAY_PORT: 8010
+      SCHWAB_GATEWAY_INTERNAL_KEYS_PATH: /run/secrets/schwab-gateway-keys.json
+      SCHWAB_GATEWAY_ORDER_WRITES_ENABLED: "false"
+    volumes:
+      - ../secrets/schwab-gateway-keys.json:/run/secrets/schwab-gateway-keys.json:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ports:
+      - "127.0.0.1:8010:8010"

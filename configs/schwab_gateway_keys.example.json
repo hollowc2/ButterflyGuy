@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "clients": [
+    {
+      "id": "butterfly-guy",
+      "key_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "capabilities": ["market_data:read"]
+    }
+  ]
+}

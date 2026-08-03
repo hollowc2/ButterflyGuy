@@ -31,6 +31,7 @@ from butterfly_guy.core.time_utils import (
     session_date,
 )
 from butterfly_guy.data.collector import OptionChainCollector
+from butterfly_guy.data.providers import DirectSchwabMarketDataProvider
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.db.connection import DatabasePool
@@ -739,6 +740,7 @@ async def main() -> None:
     # Init Schwab
     schwab = SchwabClientWrapper(config.schwab)
     await schwab.initialize()
+    market_data = DirectSchwabMarketDataProvider(schwab)
 
     # Build query objects
     chain_q = ChainQueries(db)
@@ -840,7 +842,7 @@ async def main() -> None:
 
     collector = OptionChainCollector(
         config=config,
-        schwab=schwab,
+        schwab=market_data,
         chain_queries=chain_q,
         spot_queries=spot_q,
         daily_bar_queries=daily_bar_q,
