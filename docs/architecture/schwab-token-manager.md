@@ -99,6 +99,8 @@ The demo runner injects only a deterministic static `ready` provider; it does no
 real manager, client factory, or Schwab client. Focused fake tests parameterize every state
 and prove the ready -> refreshing -> refresh_failed -> ready recovery sequence.
 
-Only after the separate operator checklist review may a narrowly scoped credential proof be
-considered; it must not deploy, cut over consumers, or change the demo-only gateway runner by
-implication.
+The standalone credential-proof command is now prepared and fake-tested. It performs one
+fixed public quote through the manager and adapter, emits no quote payload, and is not wired
+to the demo runner. It has not read real credentials or contacted Schwab. Execution still
+requires the separate operator authorization and single-writer proof in
+`schwab-gateway-credential-proof.md`; it must not deploy or cut over consumers.

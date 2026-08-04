@@ -252,12 +252,12 @@ only during a separately approved integration exercise.
 
 ### Readiness gates
 
-- [ ] Verify `/health` is only process liveness and preserves the v1 health fields.
-- [ ] Verify `/ready` is HTTP 200 only for the injected manager's `ready` state.
-- [ ] Verify every other bounded state is HTTP 503 with only the documented state/reason code.
-- [ ] Exercise refresh, failure, and recovery using fake manager/store fixtures before any
+- [x] Verify `/health` is only process liveness and preserves the v1 health fields.
+- [x] Verify `/ready` is HTTP 200 only for the injected manager's `ready` state.
+- [x] Verify every other bounded state is HTTP 503 with only the documented state/reason code.
+- [x] Exercise refresh, failure, and recovery using fake manager/store fixtures before any
       credential proof; reject unknown or unbounded state labels.
-- [ ] Keep the demo runner deterministic and fake-only; do not wire a real manager or
+- [x] Keep the demo runner deterministic and fake-only; do not wire a real manager or
       schwab-py factory as part of this slice.
 
 ### Rollback triggers and evidence
@@ -280,6 +280,19 @@ only during a separately approved integration exercise.
 - [ ] Do not perform a consumer cutover, alter token lifetime/persistence semantics, or create
       an ADR from this checklist.
 
+### Credential-proof gate
+
+- [x] Add a standalone, opt-in proof command that is not imported by the demo runner and is
+      fake-tested without reading credentials or contacting Schwab.
+- [x] Limit the command to one fixed public quote, bounded output, no account lookup, no order
+      or stream method, and no server/service startup.
+- [ ] Record the approved host, window, operator, rollback owner, and repository SHA.
+- [ ] Confirm all direct writers for the selected token are quiesced and the proof command is
+      the single token writer for the complete window.
+- [ ] Obtain explicit authorization for the real credential/token read and one Schwab quote.
+- [ ] Execute and review the bounded evidence described in
+      `schwab-gateway-credential-proof.md`.
+
 ## Current migration status
 
 Phase 0, Phase 1, and the fake-backed gateway foundation are complete. The standalone
@@ -291,4 +304,6 @@ not lose a refresh token. Nothing imports the real factory or is wired to the ga
 runner, a real token path, credentials, or deployment. `/ready` now fails closed for every
 non-ready bounded manager state through an injected provider, while `/health` remains
 liveness; focused fake tests prove state coverage and recovery. The operator checklist above
-is the next review gate. The gateway must remain disabled and outside the production stack.
+now records the completed fake gates and the remaining human approvals. A standalone
+credential-proof command is prepared and fake-tested but has not been executed. The gateway
+must remain disabled and outside the production stack.
