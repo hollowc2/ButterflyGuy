@@ -12,9 +12,11 @@ credential-proof command are merged. Two supervised launches stopped before cred
 token access, or Schwab access was reachable. The first stopped during a native dependency import
 and was restored. The second proved the isolated Compose delta but stopped on an unreliable
 runtime fingerprint before source staging or quiescence. Its recorded images and executable-mount
-absence were restored, but exact SPX configuration equality could not be proven; SPX/NDX/XSP are
-paused fail-closed pending an operator decision. No production cutover has begun. The current
-isolated slice adds a fake-tested three-consumer trust/admission boundary.
+absence were restored, but exact SPX configuration equality could not be proven. The operator then
+accepted the current verified paper/direct configuration as a new baseline; SPX/NDX/XSP were
+resumed healthy with recorded images, unique processes, no staging mount, and zero new filtered
+errors during a fresh observation window. No production cutover has begun. The current isolated
+slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 
@@ -127,8 +129,17 @@ staging, smoke, quiescence, Approval 2, credential/token access, or Schwab acces
 without the staging override from its recorded image ID; its image, startup-error count, one-process
 state, and staging-mount absence passed, while NDX/XSP remained on their original container/image
 IDs. Because the destroyed baseline's authoritative Compose hash was unavailable, exact SPX
-configuration equality is unproven. SPX/NDX/XSP are paused fail-closed, temporary overrides are
-removed, and bounded mode-`0600` evidence records the inconclusive result. No retry occurred.
+configuration equality is unproven. SPX/NDX/XSP were paused fail-closed, temporary overrides were
+removed, and bounded mode-`0600` evidence recorded the inconclusive result. No retry occurred.
+
+The operator then approved the current paper-mode/direct-access configuration as a new baseline.
+The safety gate passed recorded-image, Compose/config hash, live-gate, risk-limit, account-guard,
+token-lifetime, staging-absence, candidate-ownership, and process/writer checks. SPX/NDX/XSP were
+unpaused at `2026-08-04T23:36:21Z`; all health and uniqueness checks passed. Six filtered error
+markers per service occurred immediately after the long pause, followed by zero new filtered
+errors for every service in a fresh 30-second window. A separate mode-`0600` evidence supplement
+records the accepted canonical fingerprints and resume result. This is an operator-defined new
+baseline, not proof of byte-for-byte equality with the destroyed SPX configuration.
 
 ## Open Questions
 
@@ -153,8 +164,7 @@ removed, and bounded mode-`0600` evidence records the inconclusive result. No re
 
 ## Next Exact Action
 
-Obtain an operator decision for the paused SPX/NDX/XSP services. Before resuming them, establish an
-authoritative exact SPX configuration comparison or explicitly approve a reviewed restoration
-procedure; do not claim the second rollback as exact from the order-sensitive fingerprint. Any new
-staging attempt requires fresh Approval 1, and any real credential/token read plus one AAPL quote
-requires fresh Approval 2. No gateway deployment or cutover is authorized.
+Leave the resumed direct-access paper services on the operator-accepted baseline. Any new staging
+attempt requires fresh Approval 1, and any real credential/token read plus one AAPL quote requires
+fresh Approval 2. Do not reinterpret the accepted baseline as proof of equality with the destroyed
+SPX container. No gateway deployment or cutover is authorized.

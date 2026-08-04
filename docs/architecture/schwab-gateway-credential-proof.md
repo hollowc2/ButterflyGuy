@@ -125,6 +125,20 @@ NDX/XSP container IDs and images were unchanged. Exact SPX configuration equalit
 proven because the preflight fingerprint had included nondeterministically ordered Docker mount
 lists and Docker no longer retained the destroyed baseline container's Compose hash. The result is
 therefore inconclusive, not a successful restoration claim. In accordance with the fail-closed
-rule, SPX, NDX, and XSP are paused on their recorded image IDs pending an operator decision. The
+rule, SPX, NDX, and XSP were paused on their recorded image IDs pending an operator decision. The
 temporary overrides were removed, candidate ownership and keepalive absence were preserved, and
-the final redacted evidence is mode `0600`. The real credential proof remains incomplete.
+the final redacted evidence is mode `0600`.
+
+The operator subsequently approved treating the current direct-access, paper-mode configuration
+as a new accepted baseline. A read-only safety gate verified the recorded images; unchanged default
+Compose and trading-config hashes; paper mode; disabled live gates; direct Schwab access; recorded
+risk limits, token lifetime, and XSP account guard; read-only candidate ownership; staging-mount
+absence; and absence of keepalive, credential-proof, direct-host, and active CI-worker processes.
+SPX/NDX/XSP were unpaused at `2026-08-04T23:36:21Z`. All three health endpoints, image checks,
+container/process uniqueness checks, and staging-absence checks passed. Six filtered error markers
+per service appeared immediately after the long pause; all services were healthy, and a fresh
+30-second observation window from `2026-08-04T23:37:46Z` recorded zero new filtered errors for each
+service. The accepted canonical configuration fingerprints are retained only in mode-`0600`
+bounded evidence. This restores service under the operator-defined new baseline; it does not prove
+byte-for-byte equality with the destroyed SPX container. The real credential proof remains
+incomplete and requires fresh Approval 1 and Approval 2 before any later attempt.
