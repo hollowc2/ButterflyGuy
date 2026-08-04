@@ -7,11 +7,10 @@ live ButterflyGuy behavior or production defaults.
 
 ## Current Phase
 
-The gateway foundation and atomic token manager merged through PR #8. The current isolated
-slice on `codex/fake-schwab-token-adapter` adds an injected client-factory adapter and proves
-the exact schwab-py 1.5.1 access-function lifecycle using only synthetic token documents,
-fake clients, and fake callbacks. It is not wired to schwab-py, the gateway runner, a real
-token path, or any deployed service. No production cutover has begun.
+The gateway foundation and atomic token manager merged through PR #8. This isolated
+readiness slice adds a fail-closed injected `/ready` boundary over the manager's bounded
+states. It uses only fake managers/stores and remains unwired to a real token path, Schwab,
+or any deployed service. No production cutover has begun.
 
 ## Repository Findings
 
@@ -33,6 +32,10 @@ token path, or any deployed service. No production cutover has begun.
   an injected protocol; do not import or wire the real factory in this slice.
 - Keep fake client construction, operation, and every callback write inside one manager
   transaction; invalidate callbacks before releasing the lock.
+- Keep `/health` as v1 process liveness. `/ready` is HTTP 200 only for injected `ready`; every
+  other bounded manager state is HTTP 503 with a fixed non-sensitive state/reason code.
+- Use a deterministic static fake readiness provider in the demo runner rather than wiring a
+  real manager or schwab-py factory.
 - Defer Redis, shared streaming, account APIs, order APIs, and token-manager cutover.
 - Do not start the inactive local Docker daemon because unrelated `unless-stopped`
   containers could restart; use the equivalent localhost demo runner for this proof.
@@ -46,7 +49,10 @@ token path, or any deployed service. No production cutover has begun.
 - `tests/test_gateway_token_adapter.py`: fake SDK metadata wrapping, directly observed lock
   coverage, no-refresh/multi-refresh behavior, invalid/escaped callbacks, later failures,
   redaction, and concurrent rotation coverage.
-- Architecture/state docs: proven callback contract and the next readiness/checklist gate.
+- `schwab_gateway/api.py`: injected readiness protocol, exhaustive state-to-code mapping, and
+  fail-closed default when no provider is injected.
+- `scripts/run_schwab_gateway.py`: deterministic fake `ready` provider for `--demo` only.
+- Architecture/state docs: readiness semantics and the explicit operator checklist.
 
 ## Token-Manager Tests Added
 
@@ -67,16 +73,17 @@ token path, or any deployed service. No production cutover has begun.
 - Persistence of a valid rotation when the later fake operation fails.
 - Invalid data rejection, callback expiry, and bounded error/log redaction.
 - Concurrent operations serialize construction and retain both refresh-token generations.
+- Every bounded manager state returns the expected fake-proven `/ready` status and bounded
+  code; refresh, failure, and recovery return 200, 503, 503, and 200 respectively.
 
 ## Tests Passing
 
-- Focused token-manager/adapter tests: 24 passed.
-- Full suite: 541 passed, 1 skipped because `CI_DATABASE_URL` is provided only by the
+- Focused gateway token-manager/adapter/API suite: 42 passed.
+- Full suite: 555 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
-- `uv run ruff check .`, `git diff --check`, wheel/sdist build and content inspection, and
-  `graphify update .` pass.
-- PR #9 is open without deployment; its Database Smoke CI passed for the implementation
-  commit, and the adversarial review reported no blocking findings.
+- `uv run ruff check .`, `git diff --check`, wheel/sdist builds, and `graphify update .` pass.
+- The adversarial review covered each bounded state, refresh/failure/recovery, absent or broken
+  providers, and response/log information exposure; no blocking finding remains.
 
 ## Known Failures
 
@@ -105,6 +112,5 @@ deployment and reads no real token or credential.
 
 ## Next Exact Action
 
-Review and merge the fake-only adapter slice without deploying. After merge, add gateway
-readiness mapping for every bounded token-manager state and complete an operator-reviewed
-migration/rollback checklist before considering any real credential proof.
+Commit and open a no-deploy PR for the readiness boundary and checklist, then wait for CI and
+review. A real credential proof remains a separate approval gate.

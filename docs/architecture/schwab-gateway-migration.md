@@ -235,6 +235,51 @@ Future cutover rollback:
    order capability.
 5. Preserve gateway logs/audit/discrepancies for diagnosis; do not delete token evidence.
 
+## Fake-only readiness and operator checklist
+
+This checklist is a review gate, not authorization to deploy or use a credential. Complete it
+only during a separately approved integration exercise.
+
+### Prerequisites and ownership
+
+- [ ] Identify one approved token-manager owner and one writable token store; all other
+      consumers are read-only or remain on the existing direct path.
+- [ ] Confirm the gateway process is isolated from direct consumers that could refresh or
+      write the same token document.
+- [ ] Record the selected direct rollback owner, service scope, change window, and operators.
+- [ ] Verify no account, order, or streaming capability is introduced and direct mode remains
+      the default.
+
+### Readiness gates
+
+- [ ] Verify `/health` is only process liveness and preserves the v1 health fields.
+- [ ] Verify `/ready` is HTTP 200 only for the injected manager's `ready` state.
+- [ ] Verify every other bounded state is HTTP 503 with only the documented state/reason code.
+- [ ] Exercise refresh, failure, and recovery using fake manager/store fixtures before any
+      credential proof; reject unknown or unbounded state labels.
+- [ ] Keep the demo runner deterministic and fake-only; do not wire a real manager or
+      schwab-py factory as part of this slice.
+
+### Rollback triggers and evidence
+
+- [ ] Roll back to direct mode before any consumer cutover for non-ready token state, stale or
+      missing data, unexplained direct/gateway divergence, readiness flapping, or any hint of
+      concurrent token writer ownership.
+- [ ] Before changing a process, capture redacted `/health` and `/ready` responses, bounded
+      state transitions, caller/service identity, timestamps, and direct-provider test output.
+- [ ] After rollback, confirm no in-flight order path was changed, direct ownership is singular,
+      `/ready` evidence is retained, and no token data, credential, path, or exception text was
+      captured in tickets or logs.
+
+### Prohibited in this slice
+
+- [ ] Do not read, create, mount, copy, or test with real credentials, token files, API keys,
+      account data, or secrets.
+- [ ] Do not contact Schwab, start Docker, deploy, restart a service, invoke a deployment
+      workflow, or change a production default.
+- [ ] Do not perform a consumer cutover, alter token lifetime/persistence semantics, or create
+      an ADR from this checklist.
+
 ## Current migration status
 
 Phase 0, Phase 1, and the fake-backed gateway foundation are complete. The standalone
@@ -243,6 +288,7 @@ schwab-py 1.5.1 access-function signature and metadata-wrapped writer lifecycle.
 the lock spans read, construction, operation, and all writes; callbacks expire with the
 transaction; valid rotations survive later operation failure; and concurrent operations do
 not lose a refresh token. Nothing imports the real factory or is wired to the gateway
-runner, a real token path, credentials, or deployment. Readiness-state mapping and an
-operator-reviewed migration/rollback checklist are the next integration gate. The gateway
-must remain disabled and outside the production stack.
+runner, a real token path, credentials, or deployment. `/ready` now fails closed for every
+non-ready bounded manager state through an injected provider, while `/health` remains
+liveness; focused fake tests prove state coverage and recovery. The operator checklist above
+is the next review gate. The gateway must remain disabled and outside the production stack.

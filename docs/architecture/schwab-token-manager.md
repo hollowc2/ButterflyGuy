@@ -72,7 +72,33 @@ No test or implementation path reads `tokens.json` or any real Schwab credential
 ## Integration gate
 
 Do not connect these components to Schwab credentials yet. The callback lifecycle and
-concurrency gate is now fake-proven. The next integration gate is gateway readiness mapping
-for every bounded manager state plus an operator-reviewed migration/rollback checklist.
-Only after that separate review may a narrowly scoped credential proof be considered; it
-must not deploy, cut over consumers, or change the demo-only gateway runner by implication.
+concurrency gate is now fake-proven. Gateway `/ready` now receives an injected
+token-readiness provider and returns HTTP 200 only for `ready`. Every other bounded manager
+state returns HTTP 503 with the fixed `token_state` and reason code below. `/health` remains
+process liveness and keeps its existing v1 fields. The gateway never returns the provider's
+own reason, token data, exception text, or paths.
+
+| Manager state | `/ready` reason | HTTP status |
+|---|---|---|
+| `uninitialized` | `token_not_checked` | 503 |
+| `ready` | `token_ready` | 200 |
+| `refreshing` | `token_refreshing` | 503 |
+| `missing` | `token_missing` | 503 |
+| `corrupt` | `token_corrupt` | 503 |
+| `expired` | `refresh_token_expired` | 503 |
+| `revoked` | `token_revoked` | 503 |
+| `reauthorization_required` | `token_reauthorization_required` | 503 |
+| `lock_timeout` | `token_lock_timeout` | 503 |
+| `refresh_failed` | `token_refresh_failed` | 503 |
+| `persistence_failed` | `token_persistence_failed` | 503 |
+
+If the injected provider itself fails or supplies an unrecognized state, `/ready` fails closed
+as `uninitialized` with `token_readiness_unavailable` and HTTP 503.
+
+The demo runner injects only a deterministic static `ready` provider; it does not construct a
+real manager, client factory, or Schwab client. Focused fake tests parameterize every state
+and prove the ready -> refreshing -> refresh_failed -> ready recovery sequence.
+
+Only after the separate operator checklist review may a narrowly scoped credential proof be
+considered; it must not deploy, cut over consumers, or change the demo-only gateway runner by
+implication.
