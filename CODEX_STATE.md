@@ -7,10 +7,11 @@ live ButterflyGuy behavior or production defaults.
 
 ## Current Phase
 
-The gateway foundation merged in PR #7 at merge commit `b8248a5`. The next isolated slice
-on `codex/atomic-token-manager` implements a locked atomic single-token manager using only
-synthetic token documents and fake refresh callbacks. It is not wired to schwab-py, the
-gateway runner, a real token path, or any deployed service. No production cutover has begun.
+The gateway foundation and atomic token manager merged through PR #8. The current isolated
+slice on `codex/fake-schwab-token-adapter` adds an injected client-factory adapter and proves
+the exact schwab-py 1.5.1 access-function lifecycle using only synthetic token documents,
+fake clients, and fake callbacks. It is not wired to schwab-py, the gateway runner, a real
+token path, or any deployed service. No production cutover has begun.
 
 ## Repository Findings
 
@@ -28,20 +29,24 @@ gateway runner, a real token path, or any deployed service. No production cutove
 - Build an aiohttp/httpx/Pydantic read-only quote proof with hashed internal API keys.
 - Build the token manager as a standalone `TokenStore` boundary before any SDK integration.
 - Hold one thread/process lock across read, fake refresh callback, and atomic persistence.
+- Match the installed schwab-py 1.5.1 factory signature and `TokenMetadata` wrapping through
+  an injected protocol; do not import or wire the real factory in this slice.
+- Keep fake client construction, operation, and every callback write inside one manager
+  transaction; invalidate callbacks before releasing the lock.
 - Defer Redis, shared streaming, account APIs, order APIs, and token-manager cutover.
 - Do not start the inactive local Docker daemon because unrelated `unless-stopped`
   containers could restart; use the equivalent localhost demo runner for this proof.
 
 ## Current Slice
 
-- `schwab_gateway/token_manager.py`: replaceable token-store protocol, thread/process lock,
-  schema/lifetime validation, atomic mode-0600 persistence, health states, redacted
-  transitions, and bounded Prometheus metrics.
-- `tests/test_gateway_token_manager.py`: synthetic/fake callback failure, concurrency,
-  process locking, state, redaction, and atomicity coverage.
-- `infra/docker-compose.gateway.yml` and its runbook/test: run the unprivileged container as
-  the mode-0600 key-file owner and add a readiness health check.
-- `docs/architecture/schwab-token-manager.md`: contract and next integration gate.
+- `schwab_gateway/token_adapter.py`: exact injected client-factory protocol, bounded adapter
+  errors, and manager-owned construction/operation scope.
+- `schwab_gateway/token_manager.py`: scoped read/write callbacks that validate and durably
+  persist every rotation before returning, then become unusable before lock release.
+- `tests/test_gateway_token_adapter.py`: fake SDK metadata wrapping, directly observed lock
+  coverage, no-refresh/multi-refresh behavior, invalid/escaped callbacks, later failures,
+  redaction, and concurrent rotation coverage.
+- Architecture/state docs: proven callback contract and the next readiness/checklist gate.
 
 ## Token-Manager Tests Added
 
@@ -53,13 +58,23 @@ gateway runner, a real token path, or any deployed service. No production cutove
 - Same-directory temporary write, mode `0600`, fsync/replace flow, and cleanup after a
   simulated atomic-replace failure.
 
+## Token-Adapter Tests Added
+
+- Direct lock observation across token-store read, fake factory construction, operation, and
+  metadata-wrapped writes.
+- Exact fake reproduction of schwab-py 1.5.1 reader/writer arguments and metadata envelope.
+- No-refresh and multiple-refresh paths, with every valid rotation persisted before return.
+- Persistence of a valid rotation when the later fake operation fails.
+- Invalid data rejection, callback expiry, and bounded error/log redaction.
+- Concurrent operations serialize construction and retain both refresh-token generations.
+
 ## Tests Passing
 
-- Focused token-manager/Compose tests: 17 passed.
-- Full suite: 533 passed, 1 skipped because `CI_DATABASE_URL` is provided only by the
+- Focused token-manager/adapter tests: 24 passed.
+- Full suite: 541 passed, 1 skipped because `CI_DATABASE_URL` is provided only by the
   real-database workflow, and 2 pre-existing warnings.
-- `uv run ruff check .`, `git diff --check`, Compose overlay rendering with an explicit
-  UID/GID, wheel/sdist build, and `graphify update .` pass.
+- `uv run ruff check .`, `git diff --check`, wheel/sdist build and content inspection, and
+  `graphify update .` pass. Pull-request CI is pending.
 
 ## Known Failures
 
@@ -75,11 +90,11 @@ deployment and reads no real token or credential.
 
 ## Risks
 
-- Existing production token refresh/write races remain because the new manager is not yet
-  wired; this is deliberate until fake SDK callback integration is proven.
+- Existing production token refresh/write races remain because the fake-proven manager and
+  adapter are deliberately not wired to any current direct path.
 - Raw exception logging has no central redaction.
-- The foundation runner intentionally serves fake data only; a production Schwab upstream
-  and the standalone token manager are not wired.
+- The foundation runner intentionally serves fake data only; a production Schwab upstream,
+  the standalone token manager, and the adapter are not wired.
 - Only the collector uses the new direct market-data adapter; trade/position/order separation
   remains later work.
 - New gateway code must remain disabled and isolated until shadow/session proof.
@@ -88,6 +103,6 @@ deployment and reads no real token or credential.
 
 ## Next Exact Action
 
-Review and merge the fake-only atomic token-manager slice without deploying. After merge,
-build a fake schwab-py client adapter that proves the exact read/write callback lifecycle
-under the manager lock before considering any real credential connection.
+Review and merge the fake-only adapter slice without deploying. After merge, add gateway
+readiness mapping for every bounded token-manager state and complete an operator-reviewed
+migration/rollback checklist before considering any real credential proof.

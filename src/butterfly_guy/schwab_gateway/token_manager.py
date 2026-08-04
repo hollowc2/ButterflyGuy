@@ -18,7 +18,7 @@ from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 from prometheus_client import Counter, Gauge
 
@@ -43,6 +43,25 @@ token_state = Gauge(
 
 TokenDocument = dict[str, Any]
 TokenRefreshCallback = Callable[[TokenDocument], Mapping[str, Any]]
+TokenReadCallback = Callable[[], TokenDocument]
+TransactionResult = TypeVar("TransactionResult")
+
+
+class TokenWriteCallback(Protocol):
+    """schwab-py-compatible token writer supplied to a client factory."""
+
+    def __call__(
+        self,
+        token: Mapping[str, Any],
+        *args: object,
+        **kwargs: object,
+    ) -> None: ...
+
+
+TokenAccessOperation = Callable[
+    [TokenReadCallback, TokenWriteCallback],
+    TransactionResult,
+]
 
 
 class TokenManagerState(str, Enum):
@@ -91,6 +110,10 @@ class TokenPersistenceError(TokenManagerError):
 
 
 class TokenRefreshError(TokenManagerError):
+    pass
+
+
+class TokenCallbackScopeError(TokenManagerError):
     pass
 
 
@@ -407,6 +430,31 @@ class AtomicTokenManager:
         self._transition(TokenManagerState.READY, "refresh_succeeded")
         return copy.deepcopy(refreshed)
 
+    def run_access_transaction(
+        self,
+        operation: TokenAccessOperation[TransactionResult],
+    ) -> TransactionResult:
+        """Run an SDK-shaped token read/client operation/write lifecycle under one lock."""
+        entered_store = False
+        try:
+            with self._store.locked(self._lock_timeout_seconds) as transaction:
+                entered_store = True
+                try:
+                    current = self._load_from_transaction(transaction)
+                except TokenManagerError as exc:
+                    self._record_load_failure(exc)
+                    raise
+                self._transition(TokenManagerState.READY, "token_loaded")
+                callbacks = _ScopedTokenCallbacks(self, transaction, current)
+                try:
+                    return operation(callbacks.read, callbacks.write)
+                finally:
+                    callbacks.close()
+        except TokenManagerError as exc:
+            if not entered_store:
+                self._record_load_failure(exc)
+            raise
+
     def _load_from_transaction(self, transaction: TokenTransaction) -> TokenDocument:
         token = validate_token_document(transaction.read())
         creation_timestamp = float(token["creation_timestamp"])
@@ -465,3 +513,67 @@ class AtomicTokenManager:
 
     def _timestamp(self) -> dt.datetime:
         return dt.datetime.fromtimestamp(self._clock(), tz=UTC)
+
+
+class _ScopedTokenCallbacks:
+    """Keep SDK token callbacks live only for one manager-owned transaction."""
+
+    def __init__(
+        self,
+        manager: AtomicTokenManager,
+        transaction: TokenTransaction,
+        current: TokenDocument,
+    ) -> None:
+        self._manager = manager
+        self._transaction = transaction
+        self._current: TokenDocument | None = current
+        self._active = True
+        self._guard = threading.RLock()
+
+    def read(self) -> TokenDocument:
+        with self._guard:
+            self._require_active()
+            assert self._current is not None
+            return copy.deepcopy(self._current)
+
+    def write(
+        self,
+        token: Mapping[str, Any],
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        del args, kwargs
+        with self._guard:
+            self._require_active()
+            self._manager._transition(TokenManagerState.REFRESHING, "refresh_started")
+            try:
+                refreshed = validate_token_document(token)
+            except TokenCorruptError:
+                token_refresh_total.labels(result="invalid_result").inc()
+                self._manager._transition(
+                    TokenManagerState.REFRESH_FAILED,
+                    "invalid_refresh_result",
+                )
+                raise TokenRefreshError(
+                    "token write callback received invalid data"
+                ) from None
+
+            try:
+                self._transaction.write(refreshed)
+            except TokenManagerError as exc:
+                self._manager._record_refresh_failure(exc)
+                raise
+            self._current = refreshed
+            token_refresh_total.labels(result="success").inc()
+            self._manager._transition(TokenManagerState.READY, "refresh_succeeded")
+
+    def close(self) -> None:
+        with self._guard:
+            self._active = False
+            self._current = None
+
+    def _require_active(self) -> None:
+        if not self._active:
+            raise TokenCallbackScopeError(
+                "token callback is outside its transaction scope"
+            )
