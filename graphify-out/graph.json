@@ -14152,8 +14152,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "src_butterfly_guy_schwab_gateway_token_manager_py_datetime",
-      "community": 1,
-      "community_name": "AtomicTokenManager",
+      "community": 8,
+      "community_name": "token_manager.py",
       "norm_label": "datetime"
     },
     {
@@ -30707,8 +30707,8 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "tests_test_weekend_review_test_review_windows_from_saturday",
-      "community": 91,
-      "community_name": "test_weekend_review.py",
+      "community": 57,
+      "community_name": "weekend_review.py",
       "norm_label": "test_review_windows_from_saturday()"
     },
     {
@@ -31457,7 +31457,7 @@
       "label": "Known Failures",
       "file_type": "document",
       "source_file": "CODEX_STATE.md",
-      "source_location": "L79",
+      "source_location": "L81",
       "_origin": "ast",
       "id": "codex_state_known_failures",
       "community": 95,
@@ -31468,7 +31468,7 @@
       "label": "Open Questions",
       "file_type": "document",
       "source_file": "CODEX_STATE.md",
-      "source_location": "L85",
+      "source_location": "L87",
       "_origin": "ast",
       "id": "codex_state_open_questions",
       "community": 95,
@@ -31479,7 +31479,7 @@
       "label": "Risks",
       "file_type": "document",
       "source_file": "CODEX_STATE.md",
-      "source_location": "L91",
+      "source_location": "L93",
       "_origin": "ast",
       "id": "codex_state_risks",
       "community": 95,
@@ -31490,7 +31490,7 @@
       "label": "Next Exact Action",
       "file_type": "document",
       "source_file": "CODEX_STATE.md",
-      "source_location": "L104",
+      "source_location": "L106",
       "_origin": "ast",
       "id": "codex_state_next_exact_action",
       "community": 95,
@@ -36958,9 +36958,9 @@
       "file_type": "document",
       "source_file": "README.md",
       "source_location": "L226",
-      "community": 119,
+      "community": 88,
       "norm_label": "\ud83d\udc33 running with docker",
-      "community_name": "Butterfly Guy",
+      "community_name": "Shared SPX candidate fleet",
       "_origin": "ast",
       "id": "butterflyguy_readme_running_with_docker"
     },
@@ -134067,7 +134067,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "CODEX_STATE.md",
-      "source_location": "L79",
+      "source_location": "L81",
       "weight": 1.0,
       "_origin": "ast",
       "source": "codex_state_codex_project_state",
@@ -134078,7 +134078,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "CODEX_STATE.md",
-      "source_location": "L104",
+      "source_location": "L106",
       "weight": 1.0,
       "_origin": "ast",
       "source": "codex_state_codex_project_state",
@@ -134100,7 +134100,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "CODEX_STATE.md",
-      "source_location": "L85",
+      "source_location": "L87",
       "weight": 1.0,
       "_origin": "ast",
       "source": "codex_state_codex_project_state",
@@ -134122,7 +134122,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "CODEX_STATE.md",
-      "source_location": "L91",
+      "source_location": "L93",
       "weight": 1.0,
       "_origin": "ast",
       "source": "codex_state_codex_project_state",
@@ -140201,5 +140201,5 @@
       "confidence_score": 0.62
     }
   ],
-  "built_at_commit": "af1eb1f5131f85ecc2d430aa865b05fb41e5a6ba"
+  "built_at_commit": "adc1b16cc4f406385ab2e402114954af9d4da5cf"
 }

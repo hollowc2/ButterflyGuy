@@ -74,7 +74,9 @@ token path, or any deployed service. No production cutover has begun.
 - Full suite: 541 passed, 1 skipped because `CI_DATABASE_URL` is provided only by the
   real-database workflow, and 2 pre-existing warnings.
 - `uv run ruff check .`, `git diff --check`, wheel/sdist build and content inspection, and
-  `graphify update .` pass. Pull-request CI is pending.
+  `graphify update .` pass.
+- PR #9 is open without deployment; its Database Smoke CI passed for the implementation
+  commit, and the adversarial review reported no blocking findings.
 
 ## Known Failures
 

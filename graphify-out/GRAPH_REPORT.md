@@ -1,7 +1,7 @@
 # Graph Report - butterfly-token-adapter  (2026-08-03)
 
 ## Corpus Check
-- 261 files · ~250,206 words
+- 261 files · ~250,226 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `af1eb1f5`
+- Built from commit: `adc1b16c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -220,7 +220,7 @@ Nodes (35): _butterfly_value(), detect_complete_days(), _elapsed(), EntryDecisio
 
 ### Community 1 - "AtomicTokenManager"
 Cohesion: 0.14
-Nodes (15): AtomicTokenManager, datetime, Serialize refreshes and atomically persist one validated token document., Run one fake/replaceable refresh callback under the exclusive token lock., Run an SDK-shaped token read/client operation/write lifecycle under one lock., Keep SDK token callbacks live only for one manager-owned transaction., _ScopedTokenCallbacks, TokenCallbackScopeError (+7 more)
+Nodes (14): AtomicTokenManager, Serialize refreshes and atomically persist one validated token document., Run one fake/replaceable refresh callback under the exclusive token lock., Run an SDK-shaped token read/client operation/write lifecycle under one lock., Keep SDK token callbacks live only for one manager-owned transaction., _ScopedTokenCallbacks, TokenCallbackScopeError, TokenExpiredError (+6 more)
 
 ### Community 2 - "ButterflySelector"
 Cohesion: 0.11
@@ -247,8 +247,8 @@ Cohesion: 0.22
 Nodes (20): LockedSchwabClientAdapter, Construct and use one injected client inside a token-manager transaction., adapter(), FakeAccessFunctionFactory, FakeClient, manager(), Any, MonkeyPatch (+12 more)
 
 ### Community 8 - "token_manager.py"
-Cohesion: 0.15
-Nodes (17): AtomicFileTokenStore, _AtomicFileTokenTransaction, _fsync_directory(), Enum, Path, str, Locked, atomic token persistence without a Schwab runtime dependency., One JSON token file protected by thread and process locks. (+9 more)
+Cohesion: 0.14
+Nodes (18): AtomicFileTokenStore, _AtomicFileTokenTransaction, _fsync_directory(), datetime, Enum, Path, str, Locked, atomic token persistence without a Schwab runtime dependency. (+10 more)
 
 ### Community 9 - "discover_options_strategy.py"
 Cohesion: 0.15
@@ -443,8 +443,8 @@ Cohesion: 0.13
 Nodes (14): `001_initial.sql`: `option_chain_snapshots`, `001_initial.sql`: `spot_prices`, `002_fix_greeks_precision.sql`, `004_add_chain_fields.sql`, `005_add_daily_bars.sql`, Anonymized Synchronized Data Slice, Daily Bar Shape Example, `daily_bars` (+6 more)
 
 ### Community 57 - "weekend_review.py"
-Cohesion: 0.19
-Nodes (26): TradePoint, build_eod_chart_for_row(), calendar_month_to_date(), closed_trades_to_points(), fetch_closed_trades(), format_combined_performance_caption(), format_performance_caption(), format_review_header() (+18 more)
+Cohesion: 0.18
+Nodes (27): TradePoint, build_eod_chart_for_row(), calendar_month_to_date(), closed_trades_to_points(), fetch_closed_trades(), format_combined_performance_caption(), format_performance_caption(), format_review_header() (+19 more)
 
 ### Community 58 - "StrategySettings"
 Cohesion: 0.26
@@ -563,8 +563,8 @@ Cohesion: 0.30
 Nodes (12): _build_payload(), main(), _order_symbols(), Any, Write a redacted read-only report of Schwab order statuses for one day., _status_category(), _summarize(), test_payload_counts_parent_and_descendant_statuses() (+4 more)
 
 ### Community 88 - "Shared SPX candidate fleet"
-Cohesion: 0.16
-Nodes (21): 4) Run the live orchestrator directly, 5) Smoke-test the backtest from Docker, 6) Inspect a historical entry decision, 7) Run the morning equity scan, 8) Generate or compare reports, Backtesting, code:bash (uv run python src/butterfly_guy/scripts/run_live.py --config), code:bash (docker exec butterfly_spx_app python -m butterfly_guy.script) (+13 more)
+Cohesion: 0.15
+Nodes (22): 4) Run the live orchestrator directly, 5) Smoke-test the backtest from Docker, 6) Inspect a historical entry decision, 7) Run the morning equity scan, 8) Generate or compare reports, Backtesting, code:bash (uv run python src/butterfly_guy/scripts/run_live.py --config), code:bash (docker exec butterfly_spx_app python -m butterfly_guy.script) (+14 more)
 
 ### Community 89 - "daily_report_card_format.py"
 Cohesion: 0.25
@@ -575,8 +575,8 @@ Cohesion: 0.33
 Nodes (12): _dashboard(), _expressions(), _panels(), test_candidate_review_metrics_are_folded_into_performance(), test_candidate_runtime_health_is_folded_into_trading(), test_performance_trade_links_pin_the_main_strategy_datasource(), test_trade_detail_defaults_to_primary_spx_and_selects_strategy_datasource(), test_trade_detail_preserves_candidate_cohort_and_accounting_checks() (+4 more)
 
 ### Community 91 - "test_weekend_review.py"
-Cohesion: 0.27
-Nodes (14): asyncio, date, Tests for weekend review date windows and orchestration., test_calendar_month_to_date(), test_format_performance_caption_includes_stats(), test_latest_fill_model_cohort_does_not_mix_legacy_and_mark_v1(), test_previous_mon_fri_from_friday(), test_previous_mon_fri_from_saturday() (+6 more)
+Cohesion: 0.29
+Nodes (13): asyncio, date, Tests for weekend review date windows and orchestration., test_calendar_month_to_date(), test_format_performance_caption_includes_stats(), test_latest_fill_model_cohort_does_not_mix_legacy_and_mark_v1(), test_previous_mon_fri_from_friday(), test_previous_mon_fri_from_saturday() (+5 more)
 
 ### Community 92 - "OptionQuote"
 Cohesion: 0.08
@@ -671,8 +671,8 @@ Cohesion: 0.25
 Nodes (8): 5.1 Application YAML configuration, 5.2 Environment variables and `.env`, 5.3 `tokens.json`, 5.4 Universe and metadata files, 5.5 Historical minute CSVs, 5.6 Local daily bar cache, 5.7 Local option-chain cache, 5. Local files and backtest inputs
 
 ### Community 119 - "Butterfly Guy"
-Cohesion: 0.12
-Nodes (16): Gap Regime Filter, Charles Schwab API, Architecture at a glance, Butterfly Guy, code:text (Schwab API), Configuration files, Core repo layout, 🚀 Features (+8 more)
+Cohesion: 0.13
+Nodes (15): Gap Regime Filter, Charles Schwab API, Architecture at a glance, Butterfly Guy, code:text (Schwab API), Configuration files, Core repo layout, 🚀 Features (+7 more)
 
 ### Community 120 - "DatabasePool"
 Cohesion: 0.05
