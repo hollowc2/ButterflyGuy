@@ -203,7 +203,7 @@ parsers. That consolidation is not part of the foundation.
 
 | Risk | Severity | Foundation treatment |
 |---|---|---|
-| concurrent token refresh/file overwrite | critical | Standalone locked atomic manager is fake-tested; do not wire it or add another production writer until the SDK callback gate passes. |
+| concurrent token refresh/file overwrite | critical | The exact SDK-shaped reader/writer lifecycle is fake-proven under the locked atomic manager, including concurrent rotations; do not wire a production token until readiness and operator checklist gates pass. |
 | duplicate order submission | critical | No gateway order routes; direct default; no shadow writes. |
 | missing quote interpreted as zero | high | Nullable v1 model and explicit quality flags. Preserve legacy parser behavior until golden tests. |
 | credentials spread to consumers | high | Fake proof; scoped key contract; later only gateway gets Schwab mounts. |
@@ -211,7 +211,7 @@ parsers. That consolidation is not part of the foundation.
 | live deployment interference | high | Separate worktree, branch, Compose overlay/project; no existing Compose edits/actions. |
 | raw exception/response leakage | high | Normalized errors and redaction helper; never return upstream payloads. |
 | gateway latency/outage during monitoring | high | Timeouts, fail-closed client, shadow measurement, direct operator rollback. |
-| SDK token semantics uncertain | high | Capability/auth probes before token-manager cutover. |
+| SDK token semantics uncertain | high | schwab-py 1.5.1 metadata wrapping and callback signatures are fake-proven; real upstream auth behavior still requires a separately approved probe before cutover. |
 | stream limits/reconnect uncertain | medium | Capability recorder; defer broker. |
 | new Redis operational burden | medium | Defer until durable fan-out is required. |
 | Docker context includes secrets | high | Add `.dockerignore`; keep secret mounts out of image layers. |
@@ -237,7 +237,12 @@ Future cutover rollback:
 
 ## Current migration status
 
-Phase 0, Phase 1, and the fake-backed gateway foundation are complete. A standalone locked,
-atomic single-token manager is implemented with synthetic documents and fake refresh
-callbacks, but it is not wired to schwab-py, the gateway runner, any real token path, or a
-deployment. The gateway must remain disabled and outside the production stack.
+Phase 0, Phase 1, and the fake-backed gateway foundation are complete. The standalone
+single-token manager now has an injected, fake-only client adapter proving the exact
+schwab-py 1.5.1 access-function signature and metadata-wrapped writer lifecycle. Tests prove
+the lock spans read, construction, operation, and all writes; callbacks expire with the
+transaction; valid rotations survive later operation failure; and concurrent operations do
+not lose a refresh token. Nothing imports the real factory or is wired to the gateway
+runner, a real token path, credentials, or deployment. Readiness-state mapping and an
+operator-reviewed migration/rollback checklist are the next integration gate. The gateway
+must remain disabled and outside the production stack.
