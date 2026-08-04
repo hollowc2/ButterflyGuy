@@ -19,6 +19,10 @@ from butterfly_guy.schwab_gateway.auth import (
     InternalPrincipal,
     hash_api_key,
 )
+from butterfly_guy.schwab_gateway.token_manager import (
+    TokenManagerHealth,
+    TokenManagerState,
+)
 
 
 class FakeQuoteUpstream:
@@ -54,6 +58,19 @@ def authenticator(*, capability: str = "market_data:read") -> InternalKeyAuthent
             ),
         )
     )
+
+
+class FakeTokenReadinessProvider:
+    def __init__(self, state: TokenManagerState, reason: str = "fake reason") -> None:
+        self.state = state
+        self.reason = reason
+
+    def health(self) -> TokenManagerHealth:
+        return TokenManagerHealth(
+            state=self.state,
+            reason=self.reason,
+            updated_at=dt.datetime.now(dt.timezone.utc),
+        )
 
 
 @pytest.mark.asyncio
@@ -102,6 +119,117 @@ async def test_gateway_authentication_authorization_and_health_contracts() -> No
     assert "key" not in health.text.lower()
     assert missing.status_code == 401
     assert invalid.status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", list(TokenManagerState))
+async def test_ready_maps_every_token_manager_state_to_bounded_response(
+    state: TokenManagerState,
+) -> None:
+    provider = FakeTokenReadinessProvider(
+        state,
+        reason="access-secret and /private/token/path must never be exposed",
+    )
+    server = TestServer(
+        create_app(
+            FakeQuoteUpstream(),
+            authenticator(),
+            token_readiness_provider=provider,
+        )
+    )
+    await server.start_server()
+    try:
+        async with httpx.AsyncClient(base_url=str(server.make_url("/"))) as http:
+            response = await http.get("/ready")
+    finally:
+        await server.close()
+
+    payload = response.json()
+    assert response.status_code == (200 if state is TokenManagerState.READY else 503)
+    assert payload["status"] == ("ready" if state is TokenManagerState.READY else "not_ready")
+    assert payload["token_state"] == state.value
+    assert payload["reason"]
+    assert "secret" not in response.text
+    assert "/private" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_ready_tracks_fake_refresh_failure_and_recovery() -> None:
+    provider = FakeTokenReadinessProvider(TokenManagerState.READY)
+    server = TestServer(
+        create_app(
+            FakeQuoteUpstream(),
+            authenticator(),
+            token_readiness_provider=provider,
+        )
+    )
+    await server.start_server()
+    try:
+        async with httpx.AsyncClient(base_url=str(server.make_url("/"))) as http:
+            ready = await http.get("/ready")
+            provider.state = TokenManagerState.REFRESHING
+            refreshing = await http.get("/ready")
+            provider.state = TokenManagerState.REFRESH_FAILED
+            failed = await http.get("/ready")
+            provider.state = TokenManagerState.READY
+            recovered = await http.get("/ready")
+    finally:
+        await server.close()
+
+    assert [response.status_code for response in (ready, refreshing, failed, recovered)] == [
+        200,
+        503,
+        503,
+        200,
+    ]
+    assert [response.json()["reason"] for response in (ready, refreshing, failed, recovered)] == [
+        "token_ready",
+        "token_refreshing",
+        "token_refresh_failed",
+        "token_ready",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ready_fails_closed_without_an_injected_provider() -> None:
+    server = TestServer(create_app(FakeQuoteUpstream(), authenticator()))
+    await server.start_server()
+    try:
+        async with httpx.AsyncClient(base_url=str(server.make_url("/"))) as http:
+            response = await http.get("/ready")
+    finally:
+        await server.close()
+
+    assert response.status_code == 503
+    assert response.json()["token_state"] == TokenManagerState.UNINITIALIZED.value
+    assert response.json()["reason"] == "token_not_checked"
+
+
+@pytest.mark.asyncio
+async def test_ready_fails_closed_when_provider_fails_without_exposing_its_error() -> None:
+    class FailingProvider:
+        def health(self) -> TokenManagerHealth:
+            raise RuntimeError("access-secret at /private/token/path")
+
+    server = TestServer(
+        create_app(
+            FakeQuoteUpstream(),
+            authenticator(),
+            token_readiness_provider=FailingProvider(),
+        )
+    )
+    await server.start_server()
+    try:
+        async with httpx.AsyncClient(base_url=str(server.make_url("/"))) as http:
+            response = await http.get("/ready")
+    finally:
+        await server.close()
+
+    assert response.status_code == 503
+    assert response.json()["token_state"] == TokenManagerState.UNINITIALIZED.value
+    assert response.json()["reason"] == "token_readiness_unavailable"
+    assert "secret" not in response.text
+    assert "/private" not in response.text
 
 
 @pytest.mark.asyncio

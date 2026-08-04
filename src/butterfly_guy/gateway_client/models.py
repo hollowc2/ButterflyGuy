@@ -59,6 +59,22 @@ class GatewayHealthV1(GatewayModel):
     timestamp: dt.datetime
 
 
+class GatewayReadinessV1(GatewayHealthV1):
+    """Bounded token-readiness detail for gateway operators."""
+
+    token_state: Literal[
+        "uninitialized", "ready", "refreshing", "missing", "corrupt", "expired",
+        "revoked", "reauthorization_required", "lock_timeout", "refresh_failed",
+        "persistence_failed",
+    ]
+    reason: Literal[
+        "token_not_checked", "token_ready", "token_refreshing", "token_missing",
+        "token_corrupt", "refresh_token_expired", "token_revoked",
+        "token_reauthorization_required", "token_lock_timeout", "token_refresh_failed",
+        "token_persistence_failed", "token_readiness_unavailable",
+    ]
+
+
 class GatewayErrorDetailV1(GatewayModel):
     code: str
     message: str

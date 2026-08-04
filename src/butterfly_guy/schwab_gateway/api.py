@@ -6,18 +6,27 @@ import asyncio
 import datetime as dt
 import re
 import time
+from typing import Protocol
 
 from aiohttp import web
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 from butterfly_guy.core.logging import get_logger
-from butterfly_guy.gateway_client.models import GatewayHealthV1, QuoteResponseV1
+from butterfly_guy.gateway_client.models import (
+    GatewayHealthV1,
+    GatewayReadinessV1,
+    QuoteResponseV1,
+)
 from butterfly_guy.schwab_gateway.auth import (
     AUTHENTICATOR_KEY,
     PRINCIPAL_KEY,
     InternalKeyAuthenticator,
     authentication_middleware,
     require_capability,
+)
+from butterfly_guy.schwab_gateway.token_manager import (
+    TokenManagerHealth,
+    TokenManagerState,
 )
 from butterfly_guy.schwab_gateway.upstream import (
     QuoteUpstream,
@@ -43,6 +52,56 @@ gateway_latency = Histogram(
 
 UPSTREAM_KEY = web.AppKey("gateway_quote_upstream", QuoteUpstream)
 UPSTREAM_TIMEOUT_KEY = web.AppKey("gateway_upstream_timeout", float)
+TOKEN_READINESS_PROVIDER_KEY = web.AppKey(
+    "gateway_token_readiness_provider", "TokenReadinessProvider"
+)
+
+
+class TokenReadinessProvider(Protocol):
+    """Injected boundary for the token manager's bounded readiness state."""
+
+    def health(self) -> TokenManagerHealth: ...
+
+
+class StaticTokenReadinessProvider:
+    """Deterministic fake-only readiness provider for the demo runner."""
+
+    def __init__(self, state: TokenManagerState) -> None:
+        self._state = state
+
+    def health(self) -> TokenManagerHealth:
+        return TokenManagerHealth(
+            state=self._state,
+            reason="static_provider",
+            updated_at=dt.datetime.now(UTC),
+        )
+
+
+class _UnavailableTokenReadinessProvider:
+    """Fail closed when an app has no injected readiness dependency."""
+
+    def health(self) -> TokenManagerHealth:
+        return TokenManagerHealth(
+            state=TokenManagerState.UNINITIALIZED,
+            reason="provider_not_configured",
+            updated_at=dt.datetime.now(UTC),
+        )
+
+
+READINESS_REASON_BY_STATE = {
+    TokenManagerState.UNINITIALIZED: "token_not_checked",
+    TokenManagerState.READY: "token_ready",
+    TokenManagerState.REFRESHING: "token_refreshing",
+    TokenManagerState.MISSING: "token_missing",
+    TokenManagerState.CORRUPT: "token_corrupt",
+    TokenManagerState.EXPIRED: "refresh_token_expired",
+    TokenManagerState.REVOKED: "token_revoked",
+    TokenManagerState.REAUTHORIZATION_REQUIRED: "token_reauthorization_required",
+    TokenManagerState.LOCK_TIMEOUT: "token_lock_timeout",
+    TokenManagerState.REFRESH_FAILED: "token_refresh_failed",
+    TokenManagerState.PERSISTENCE_FAILED: "token_persistence_failed",
+}
+READINESS_UNAVAILABLE_REASON = "token_readiness_unavailable"
 
 
 def _json(model, *, status: int = 200) -> web.Response:
@@ -112,11 +171,26 @@ async def health(_request: web.Request) -> web.Response:
 
 
 async def ready(_request: web.Request) -> web.Response:
+    try:
+        manager_health = _request.app[TOKEN_READINESS_PROVIDER_KEY].health()
+        state = manager_health.state
+        reason = READINESS_REASON_BY_STATE.get(state)
+    except Exception:
+        state = TokenManagerState.UNINITIALIZED
+        reason = None
+        log.warning("gateway_readiness_provider_failed", reason="provider_unavailable")
+    if reason is None:
+        state = TokenManagerState.UNINITIALIZED
+        reason = READINESS_UNAVAILABLE_REASON
+    is_ready = state is TokenManagerState.READY
     return _json(
-        GatewayHealthV1(
-            status="ready",
+        GatewayReadinessV1(
+            status="ready" if is_ready else "not_ready",
             timestamp=dt.datetime.now(UTC),
-        )
+            token_state=state.value,
+            reason=reason,
+        ),
+        status=200 if is_ready else 503,
     )
 
 
@@ -154,6 +228,7 @@ def create_app(
     authenticator: InternalKeyAuthenticator,
     *,
     upstream_timeout_seconds: float = 3.0,
+    token_readiness_provider: TokenReadinessProvider | None = None,
 ) -> web.Application:
     if upstream_timeout_seconds <= 0:
         raise ValueError("upstream timeout must be positive")
@@ -161,6 +236,9 @@ def create_app(
     app[UPSTREAM_KEY] = upstream
     app[AUTHENTICATOR_KEY] = authenticator
     app[UPSTREAM_TIMEOUT_KEY] = upstream_timeout_seconds
+    app[TOKEN_READINESS_PROVIDER_KEY] = (
+        token_readiness_provider or _UnavailableTokenReadinessProvider()
+    )
     app.router.add_get("/health", health, name="health")
     app.router.add_get("/ready", ready, name="ready")
     app.router.add_get("/metrics", metrics, name="metrics")
