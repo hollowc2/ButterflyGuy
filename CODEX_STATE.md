@@ -7,11 +7,10 @@ live ButterflyGuy behavior or production defaults.
 
 ## Current Phase
 
-Phase 0 is complete. The safest Phase 1 collector boundary and fake-backed Phase 2 gateway
-foundation, including an isolated localhost smoke proof, are complete on branch
-`codex/schwab-gateway-foundation` at `/tmp/butterfly-schwab-gateway`. The foundation
-has been committed and pushed to `origin/codex/schwab-gateway-foundation` as functional
-commit `bdbdd31` plus generated-graph commit `5f9d239`. No production cutover has begun.
+The gateway foundation merged in PR #7 at merge commit `b8248a5`. The next isolated slice
+on `codex/atomic-token-manager` implements a locked atomic single-token manager using only
+synthetic token documents and fake refresh callbacks. It is not wired to schwab-py, the
+gateway runner, a real token path, or any deployed service. No production cutover has begun.
 
 ## Repository Findings
 
@@ -27,47 +26,46 @@ commit `bdbdd31` plus generated-graph commit `5f9d239`. No production cutover ha
 - Keep direct access as the production default and do not migrate order submission.
 - Add narrow market-data protocols/direct delegation first.
 - Build an aiohttp/httpx/Pydantic read-only quote proof with hashed internal API keys.
+- Build the token manager as a standalone `TokenStore` boundary before any SDK integration.
+- Hold one thread/process lock across read, fake refresh callback, and atomic persistence.
 - Defer Redis, shared streaming, account APIs, order APIs, and token-manager cutover.
 - Do not start the inactive local Docker daemon because unrelated `unless-stopped`
   containers could restart; use the equivalent localhost demo runner for this proof.
 
-## Files Changed
+## Current Slice
 
-- Architecture/state: `CODEX_STATE.md` and six `docs/architecture/` documents covering the
-  current state, target, migration, capability matrix, local run, and redacted smoke proof.
-- Boundary/client/server: `data/providers.py`, collector and two constructor call sites,
-  `gateway_client/`, `schwab_gateway/`, and `scripts/run_schwab_gateway.py`.
-- Safe local ops: `.dockerignore`, `.env.example`, hashed-key example, and the separate
-  `infra/docker-compose.gateway.yml` project.
-- Generated graph: `graphify-out/GRAPH_REPORT.md`, `graph.html`, `graph.json`, and manifest.
-- Tests: six new gateway/provider test modules.
+- `schwab_gateway/token_manager.py`: replaceable token-store protocol, thread/process lock,
+  schema/lifetime validation, atomic mode-0600 persistence, health states, redacted
+  transitions, and bounded Prometheus metrics.
+- `tests/test_gateway_token_manager.py`: synthetic/fake callback failure, concurrency,
+  process locking, state, redaction, and atomicity coverage.
+- `infra/docker-compose.gateway.yml` and its runbook/test: run the unprivileged container as
+  the mode-0600 key-file owner and add a readiness health check.
+- `docs/architecture/schwab-token-manager.md`: contract and next integration gate.
 
-## Tests Added
+## Token-Manager Tests Added
 
-- Direct adapter exact delegation.
-- Quote parsing, null/missing-field preservation, timestamps, and staleness.
-- Hashed API-key authentication, key-file validation, capabilities, and redaction.
-- Server/client configuration safety and direct-mode default.
-- Real localhost client -> aiohttp gateway -> fake upstream contract, authn/authz, request
-  validation, no order routes, and timeout behavior.
-- Correct 404 audit/metric classification for the intentionally absent order route.
+- Successful fake refresh and defensive-copy behavior.
+- Missing, malformed, insecure, expired, symlinked, and non-finite token rejection.
+- Revoked, manual-reauthorization, callback-failure, persistence-failure, and lock-timeout
+  states without logging fake token contents.
+- Thread and separate-process serialization with no lost refresh update.
+- Same-directory temporary write, mode `0600`, fsync/replace flow, and cleanup after a
+  simulated atomic-replace failure.
 
 ## Tests Passing
 
-- Baseline before edits: 35 focused tests.
-- Focused final: 53 provider/gateway/current-boundary tests.
-- Full final: 516 passed, 1 skipped because `CI_DATABASE_URL` is only provided by the
-  real-DB workflow, and 2 pre-existing warnings.
-- `uv run ruff check .`, `git diff --check`, Compose overlay rendering, graphify update, and
-  wheel/sdist build all pass.
-- Local smoke: health 200, ready 200, anonymous quote 401, authenticated demo quote 200,
-  absent order route 404, and `operation=unknown,status=404` metric verified.
+- Focused token-manager/Compose tests: 17 passed.
+- Full suite: 533 passed, 1 skipped because `CI_DATABASE_URL` is provided only by the
+  real-database workflow, and 2 pre-existing warnings.
+- `uv run ruff check .`, `git diff --check`, Compose overlay rendering with an explicit
+  UID/GID, wheel/sdist build, and `graphify update .` pass.
 
 ## Known Failures
 
-None. Docker runtime execution was deliberately deferred because the local Docker daemon is
-inactive and starting it could restart unrelated containers. Compose rendering and the
-equivalent local-process smoke proof passed.
+None in focused tests. Docker runtime execution remains deliberately deferred because
+starting the local daemon could restart unrelated containers. This slice performs no
+deployment and reads no real token or credential.
 
 ## Open Questions
 
@@ -77,10 +75,11 @@ equivalent local-process smoke proof passed.
 
 ## Risks
 
-- Concurrent token refresh/write races remain until cutover to a single token manager.
+- Existing production token refresh/write races remain because the new manager is not yet
+  wired; this is deliberate until fake SDK callback integration is proven.
 - Raw exception logging has no central redaction.
 - The foundation runner intentionally serves fake data only; a production Schwab upstream
-  and token manager are not wired.
+  and the standalone token manager are not wired.
 - Only the collector uses the new direct market-data adapter; trade/position/order separation
   remains later work.
 - New gateway code must remain disabled and isolated until shadow/session proof.
@@ -89,5 +88,6 @@ equivalent local-process smoke proof passed.
 
 ## Next Exact Action
 
-Open a pull request for architecture/code review of `codex/schwab-gateway-foundation`; do not
-deploy or change production defaults.
+Review and merge the fake-only atomic token-manager slice without deploying. After merge,
+build a fake schwab-py client adapter that proves the exact read/write callback lifecycle
+under the manager lock before considering any real credential connection.

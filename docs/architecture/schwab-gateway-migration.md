@@ -203,7 +203,7 @@ parsers. That consolidation is not part of the foundation.
 
 | Risk | Severity | Foundation treatment |
 |---|---|---|
-| concurrent token refresh/file overwrite | critical | Document; do not add another production writer; design single manager for later cutover. |
+| concurrent token refresh/file overwrite | critical | Standalone locked atomic manager is fake-tested; do not wire it or add another production writer until the SDK callback gate passes. |
 | duplicate order submission | critical | No gateway order routes; direct default; no shadow writes. |
 | missing quote interpreted as zero | high | Nullable v1 model and explicit quality flags. Preserve legacy parser behavior until golden tests. |
 | credentials spread to consumers | high | Fake proof; scoped key contract; later only gateway gets Schwab mounts. |
@@ -237,5 +237,7 @@ Future cutover rollback:
 
 ## Current migration status
 
-Phase 0 is complete. Phase 1 and the fake-backed portion of Phase 2 are the only authorized
-implementation scope. The gateway must remain disabled and outside the production stack.
+Phase 0, Phase 1, and the fake-backed gateway foundation are complete. A standalone locked,
+atomic single-token manager is implemented with synthetic documents and fake refresh
+callbacks, but it is not wired to schwab-py, the gateway runner, any real token path, or a
+deployment. The gateway must remain disabled and outside the production stack.

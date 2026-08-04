@@ -95,9 +95,10 @@ Target design uses one logical `TokenManager` with:
 5. one manual-reauthorization state exposed through limited auth health;
 6. a `TokenStore` interface so a host secret store can replace the file later.
 
-This manager is designed now but intentionally not placed in the existing production path
-in the foundation. Changing SDK token callbacks before fake/recorded and shadow validation
-would create more operational risk than it removes.
+The locked atomic manager is implemented as a standalone component and tested only with
+synthetic token documents and fake refresh callbacks. It is intentionally not placed in the
+gateway or any existing production path. Changing SDK token callbacks before a fake client
+adapter and reviewed cutover would create more operational risk than it removes.
 
 ## REST policy
 

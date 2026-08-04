@@ -8,8 +8,8 @@ quote for trading.
 
 Copy `configs/schwab_gateway_keys.example.json` to the ignored path
 `secrets/schwab-gateway-keys.json`. Replace the all-zero placeholder digest with the
-lowercase SHA-256 digest of a newly generated internal API key and make the file non-writable
-by group/other. Keep the raw key outside Git and pass it only to the client.
+lowercase SHA-256 digest of a newly generated internal API key and set the file mode to
+`0600`. Keep the raw key outside Git and pass it only to the client.
 
 ## Run locally
 
@@ -31,14 +31,22 @@ curl --fail http://127.0.0.1:8010/ready
 ## Run the separate Compose proof
 
 ```bash
-docker compose -f infra/docker-compose.gateway.yml \
+SCHWAB_GATEWAY_UID="$(id -u)" SCHWAB_GATEWAY_GID="$(id -g)" \
+  docker compose -f infra/docker-compose.gateway.yml \
   --profile gateway-foundation up --build schwab_gateway_foundation
 ```
+
+The UID/GID override makes the unprivileged container process match the owner of the
+mode-`0600` key file. Omitting it retains the image default `1001:1001`, which is appropriate
+only when the mounted file is owned by that numeric identity. Do not loosen the key file to
+group/world-readable as a workaround.
 
 This overlay creates only `butterfly_schwab_gateway_foundation`; it does not reference,
 recreate, stop, or share a network with the existing SPX/NDX/XSP services. It binds the
 demo endpoint to host loopback and mounts only the hashed internal-key file. It mounts no
-project `.env`, `tokens.json`, account ID, or Schwab credential.
+project `.env`, `tokens.json`, account ID, or Schwab credential. A container health check
+reports healthy only after the process loads authentication configuration and serves
+`/ready`.
 
 Stop it with the same file/profile and service name. Do not use the production Compose file
 for this proof.
