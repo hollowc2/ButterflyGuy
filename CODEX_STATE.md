@@ -7,10 +7,11 @@ live ButterflyGuy behavior or production defaults.
 
 ## Current Phase
 
-The fake gateway foundation, atomic token manager/adapter, and readiness boundary are merged.
-This isolated slice prepares a standalone credential-proof command for one fixed public quote
-through the locked manager/adapter. The command is fake-tested and has not been executed,
-read a real token, contacted Schwab, or changed a service. No production cutover has begun.
+The fake gateway foundation, atomic token manager/adapter, readiness boundary, and standalone
+credential-proof command are merged. A supervised launch proved the single-writer quiescence
+procedure but stopped during a native dependency import before credential settings, token
+access, or Schwab access was reachable. The direct services were restored and no production
+cutover has begun. This isolated slice bounds that previously unhandled import failure.
 
 ## Repository Findings
 
@@ -56,9 +57,12 @@ read a real token, contacted Schwab, or changed a service. No production cutover
 - `schwab_gateway/credential_probe.py`: bounded one-quote proof with no response payload,
   account lookup, order/stream surface, retry, or server startup.
 - `scripts/probe_schwab_gateway_credentials.py`: explicit three-confirmation entry point;
-  lazy real-factory import only after the confirmations and environment validation.
+  lazy real-factory import only after the confirmations and environment validation; all
+  project/third-party imports and result serialization occur inside the generic CLI failure
+  boundary so runtime failures cannot emit raw exception text.
 - `tests/test_gateway_credential_probe.py`: synthetic token, fake factory/client/response,
-  exact quote-only call, close, redaction, malformed response, and CLI refusal coverage.
+  exact quote-only call, close, redaction, malformed response, CLI refusal, and bounded
+  runtime-import failure coverage.
 
 ## Token-Manager Tests Added
 
@@ -84,20 +88,22 @@ read a real token, contacted Schwab, or changed a service. No production cutover
 
 ## Tests Passing
 
-- Focused gateway credential/token-manager/adapter/API suite: 48 passed.
-- Full suite: 561 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
+- Focused gateway credential/token-manager/adapter/API suite: 50 passed.
+- Full suite: 563 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
 - `uv run ruff check .`, `git diff --check`, wheel/sdist builds, and `graphify update .` pass.
-- The adversarial review covered command authorization, quote-only capability, token locking,
-  malformed/error behavior, session close, and credential/path/response exposure; no blocking
-  finding remains.
+- The adversarial review found that top-level project imports could emit raw exception text.
+  The focused remediation and regression test pass, but the real credential proof remains
+  blocked until that remediation is reviewed and merged and a fresh execution is authorized.
 
 ## Known Failures
 
-None in focused tests. Docker runtime execution remains deliberately deferred because
-starting the local daemon could restart unrelated containers. The credential proof is
-prepared but deliberately not executed pending explicit real-credential and single-writer
-authorization.
+The supervised command launch on 2026-08-04 exited before credential access because a native
+dependency could not load from the temporary execution filesystem. The pre-remediation CLI
+emitted raw exception text because project imports occurred outside its failure boundary.
+Retained evidence is bounded and mode `0600`; no credential/token read or Schwab request was
+reachable, no retry occurred, and all direct services were restored healthy. The real proof
+remains incomplete pending remediation merge and fresh authorization.
 
 ## Open Questions
 
@@ -109,7 +115,8 @@ authorization.
 
 - Existing production token refresh/write races remain because the fake-proven manager and
   adapter are deliberately not wired to any current direct path.
-- Raw exception logging has no central redaction.
+- Raw exception logging has no central redaction. This slice bounds the standalone proof
+  command's project/third-party imports but does not change unrelated commands.
 - The foundation runner intentionally serves fake data only. The real manager/adapter are
   reachable only through the standalone, explicitly confirmed credential-proof command; no
   gateway server or consumer uses them.
@@ -121,6 +128,6 @@ authorization.
 
 ## Next Exact Action
 
-Review and merge the offline credential-proof harness without deploying. Then identify the
-approved host/window/operator and prove single-writer ownership before explicitly authorizing
-one real credential/token read and one Schwab quote.
+Review and merge the bounded-import remediation without deploying. Then use an executable
+staging filesystem, re-establish a fresh approved single-writer window, and obtain fresh
+authorization before one real credential/token read and one Schwab quote.

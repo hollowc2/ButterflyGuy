@@ -286,10 +286,10 @@ only during a separately approved integration exercise.
       fake-tested without reading credentials or contacting Schwab.
 - [x] Limit the command to one fixed public quote, bounded output, no account lookup, no order
       or stream method, and no server/service startup.
-- [ ] Record the approved host, window, operator, rollback owner, and repository SHA.
-- [ ] Confirm all direct writers for the selected token are quiesced and the proof command is
+- [x] Record the approved host, window, operator, rollback owner, and repository SHA.
+- [x] Confirm all direct writers for the selected token are quiesced and the proof command is
       the single token writer for the complete window.
-- [ ] Obtain explicit authorization for the real credential/token read and one Schwab quote.
+- [x] Obtain explicit authorization for the real credential/token read and one Schwab quote.
 - [ ] Execute and review the bounded evidence described in
       `schwab-gateway-credential-proof.md`.
 
@@ -304,6 +304,9 @@ not lose a refresh token. Nothing imports the real factory or is wired to the ga
 runner, a real token path, credentials, or deployment. `/ready` now fails closed for every
 non-ready bounded manager state through an injected provider, while `/health` remains
 liveness; focused fake tests prove state coverage and recovery. The operator checklist above
-now records the completed fake gates and the remaining human approvals. A standalone
-credential-proof command is prepared and fake-tested but has not been executed. The gateway
+now records the completed fake gates, supervised single-writer window, and authorization.
+The first command launch stopped during a native dependency import before credential settings,
+token access, or Schwab access was reachable; no real quote occurred and all direct services
+were restored. A focused remediation now bounds project/third-party import failures, but the
+real credential proof remains incomplete pending merge and fresh authorization. The gateway
 must remain disabled and outside the production stack.
