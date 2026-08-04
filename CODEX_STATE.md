@@ -7,10 +7,10 @@ live ButterflyGuy behavior or production defaults.
 
 ## Current Phase
 
-The gateway foundation and atomic token manager merged through PR #8. This isolated
-readiness slice adds a fail-closed injected `/ready` boundary over the manager's bounded
-states. It uses only fake managers/stores and remains unwired to a real token path, Schwab,
-or any deployed service. No production cutover has begun.
+The fake gateway foundation, atomic token manager/adapter, and readiness boundary are merged.
+This isolated slice prepares a standalone credential-proof command for one fixed public quote
+through the locked manager/adapter. The command is fake-tested and has not been executed,
+read a real token, contacted Schwab, or changed a service. No production cutover has begun.
 
 ## Repository Findings
 
@@ -53,6 +53,12 @@ or any deployed service. No production cutover has begun.
   fail-closed default when no provider is injected.
 - `scripts/run_schwab_gateway.py`: deterministic fake `ready` provider for `--demo` only.
 - Architecture/state docs: readiness semantics and the explicit operator checklist.
+- `schwab_gateway/credential_probe.py`: bounded one-quote proof with no response payload,
+  account lookup, order/stream surface, retry, or server startup.
+- `scripts/probe_schwab_gateway_credentials.py`: explicit three-confirmation entry point;
+  lazy real-factory import only after the confirmations and environment validation.
+- `tests/test_gateway_credential_probe.py`: synthetic token, fake factory/client/response,
+  exact quote-only call, close, redaction, malformed response, and CLI refusal coverage.
 
 ## Token-Manager Tests Added
 
@@ -78,18 +84,20 @@ or any deployed service. No production cutover has begun.
 
 ## Tests Passing
 
-- Focused gateway token-manager/adapter/API suite: 42 passed.
-- Full suite: 555 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
+- Focused gateway credential/token-manager/adapter/API suite: 48 passed.
+- Full suite: 561 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
 - `uv run ruff check .`, `git diff --check`, wheel/sdist builds, and `graphify update .` pass.
-- The adversarial review covered each bounded state, refresh/failure/recovery, absent or broken
-  providers, and response/log information exposure; no blocking finding remains.
+- The adversarial review covered command authorization, quote-only capability, token locking,
+  malformed/error behavior, session close, and credential/path/response exposure; no blocking
+  finding remains.
 
 ## Known Failures
 
 None in focused tests. Docker runtime execution remains deliberately deferred because
-starting the local daemon could restart unrelated containers. This slice performs no
-deployment and reads no real token or credential.
+starting the local daemon could restart unrelated containers. The credential proof is
+prepared but deliberately not executed pending explicit real-credential and single-writer
+authorization.
 
 ## Open Questions
 
@@ -102,8 +110,9 @@ deployment and reads no real token or credential.
 - Existing production token refresh/write races remain because the fake-proven manager and
   adapter are deliberately not wired to any current direct path.
 - Raw exception logging has no central redaction.
-- The foundation runner intentionally serves fake data only; a production Schwab upstream,
-  the standalone token manager, and the adapter are not wired.
+- The foundation runner intentionally serves fake data only. The real manager/adapter are
+  reachable only through the standalone, explicitly confirmed credential-proof command; no
+  gateway server or consumer uses them.
 - Only the collector uses the new direct market-data adapter; trade/position/order separation
   remains later work.
 - New gateway code must remain disabled and isolated until shadow/session proof.
@@ -112,5 +121,6 @@ deployment and reads no real token or credential.
 
 ## Next Exact Action
 
-Commit and open a no-deploy PR for the readiness boundary and checklist, then wait for CI and
-review. A real credential proof remains a separate approval gate.
+Review and merge the offline credential-proof harness without deploying. Then identify the
+approved host/window/operator and prove single-writer ownership before explicitly authorizing
+one real credential/token read and one Schwab quote.

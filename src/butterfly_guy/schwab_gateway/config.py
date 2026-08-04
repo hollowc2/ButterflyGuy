@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -54,4 +54,21 @@ class GatewaySettings(BaseSettings):
     def foundation_disables_order_writes(cls, value: bool) -> bool:
         if value:
             raise ValueError("order writes are not available in the gateway foundation")
+        return value
+
+
+class GatewayCredentialProbeSettings(BaseSettings):
+    """Explicit real-credential inputs for the standalone quote proof only."""
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    api_key: SecretStr = Field(validation_alias="SCHWAB_API_KEY")
+    app_secret: SecretStr = Field(validation_alias="SCHWAB_SECRET_KEY")
+    token_path: Path = Field(validation_alias="SCHWAB_TOKEN_PATH", repr=False)
+
+    @field_validator("token_path")
+    @classmethod
+    def token_path_must_be_absolute(cls, value: Path) -> Path:
+        if not value.is_absolute():
+            raise ValueError("credential probe token path must be absolute")
         return value

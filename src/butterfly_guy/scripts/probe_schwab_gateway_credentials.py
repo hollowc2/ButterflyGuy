@@ -1,0 +1,48 @@
+"""Run one explicitly authorized Schwab gateway credential proof without starting a server."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import asdict
+
+from butterfly_guy.core.logging import setup_logging
+from butterfly_guy.schwab_gateway.config import GatewayCredentialProbeSettings
+from butterfly_guy.schwab_gateway.credential_probe import run_gateway_credential_probe
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--authorize-real-credential-read", action="store_true")
+    parser.add_argument("--confirm-single-token-writer", action="store_true")
+    parser.add_argument("--confirm-no-deployment", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parser().parse_args(argv)
+    if not all(
+        (
+            args.authorize_real_credential_read,
+            args.confirm_single_token_writer,
+            args.confirm_no_deployment,
+        )
+    ):
+        _parser().error(
+            "credential proof requires explicit credential, single-writer, "
+            "and no-deploy confirmations"
+        )
+
+    setup_logging("CRITICAL", json_output=True)
+    try:
+        settings = GatewayCredentialProbeSettings()
+        from schwab.auth import client_from_access_functions
+
+        result = run_gateway_credential_probe(settings, client_from_access_functions)
+    except Exception:
+        _parser().exit(status=1, message="Schwab gateway credential proof failed\n")
+    print(json.dumps(asdict(result), separators=(",", ":"), sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
