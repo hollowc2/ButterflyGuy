@@ -9,6 +9,7 @@ from aiohttp import web
 
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.gateway_client.models import QuoteV1
+from butterfly_guy.schwab_gateway.admission import AdmissionPolicy
 from butterfly_guy.schwab_gateway.api import StaticTokenReadinessProvider, create_app
 from butterfly_guy.schwab_gateway.auth import InternalKeyAuthenticator
 from butterfly_guy.schwab_gateway.config import GatewaySettings
@@ -54,6 +55,10 @@ def main() -> None:
         authenticator,
         upstream_timeout_seconds=settings.upstream_timeout_seconds,
         token_readiness_provider=StaticTokenReadinessProvider(TokenManagerState.READY),
+        admission_policy=AdmissionPolicy(
+            protected_capacity=settings.protected_capacity,
+            background_capacity=settings.background_capacity,
+        ),
     )
     log.info(
         "schwab_gateway_foundation_starting",

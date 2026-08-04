@@ -11,7 +11,9 @@ The fake gateway foundation, atomic token manager/adapter, readiness boundary, a
 credential-proof command are merged. A supervised launch proved the single-writer quiescence
 procedure but stopped during a native dependency import before credential settings, token
 access, or Schwab access was reachable. The direct services were restored and no production
-cutover has begun. This isolated slice bounds that previously unhandled import failure.
+cutover has begun. The bounded import remediation is merged. The current isolated slice adds a
+fake-tested three-consumer trust/admission boundary and prepares an unexecuted after-hours staging
+and evidence package.
 
 ## Repository Findings
 
@@ -42,6 +44,15 @@ cutover has begun. This isolated slice bounds that previously unhandled import f
   containers could restart; use the equivalent localhost demo runner for this proof.
 
 ## Current Slice
+
+- `schwab_gateway/auth.py`: exact `butterfly-guy`, `equity-scanner`, and `afterhours-lab`
+  identities with distinct digests, read-only capabilities, and fixed protected/background policy.
+- `schwab_gateway/admission.py` and `api.py`: separate finite pools, readiness-gated quote
+  admission, fixed overload response, bounded metrics, and unconditional permit release.
+- Gateway client/config/examples/tests: explicit capacity failure, three synthetic callers,
+  constant-time full digest scan, route/import boundaries, and concurrent failure-path coverage.
+- Architecture/runbook/template/isolated Compose override: prepared after-hours executable staging,
+  two approvals, watchdog restoration, exact-image rollback, and redacted evidence fields; not run.
 
 - `schwab_gateway/token_adapter.py`: exact injected client-factory protocol, bounded adapter
   errors, and manager-owned construction/operation scope.
@@ -88,13 +99,15 @@ cutover has begun. This isolated slice bounds that previously unhandled import f
 
 ## Tests Passing
 
-- Focused gateway credential/token-manager/adapter/API suite: 50 passed.
-- Full suite: 563 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
+- Required gateway auth/config/API/model/redaction/token/credential suite: 76 passed.
+- New admission/client/import/Compose/provider suite: 13 passed.
+- Full suite: 587 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
-- `uv run ruff check .`, `git diff --check`, wheel/sdist builds, and `graphify update .` pass.
-- The adversarial review found that top-level project imports could emit raw exception text.
-  The focused remediation and regression test pass, but the real credential proof remains
-  blocked until that remediation is reviewed and merged and a fresh execution is authorized.
+- `uv run ruff check .`, `git diff --check`, wheel/sdist builds and content checks, and
+  `graphify update .` pass.
+- The current adversarial review removed unimplemented future capabilities and verified bounded
+  errors/labels, identity derivation, permit cleanup, route/import boundaries, unchanged defaults,
+  and package exclusions. The real credential proof remains unproven and requires fresh approval.
 
 ## Known Failures
 
@@ -128,6 +141,7 @@ remains incomplete pending remediation merge and fresh authorization.
 
 ## Next Exact Action
 
-Review and merge the bounded-import remediation without deploying. Then use an executable
-staging filesystem, re-establish a fresh approved single-writer window, and obtain fresh
-authorization before one real credential/token read and one Schwab quote.
+Review and merge the multi-consumer foundation without deploying. After market hours, obtain
+Approval 1 before the isolated staging recreation/smoke/quiescence procedure, then obtain fresh
+Approval 2 before one real credential/token read and one AAPL quote. No live action is authorized
+by the prepared package.

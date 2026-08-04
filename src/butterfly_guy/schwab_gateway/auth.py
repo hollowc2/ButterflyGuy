@@ -7,23 +7,32 @@ import hmac
 import json
 import re
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from aiohttp import web
 
-KNOWN_CAPABILITIES = frozenset(
+KNOWN_CAPABILITIES = frozenset({"market_data:read"})
+KNOWN_CLIENT_IDS = frozenset(
     {
-        "market_data:read",
-        "history:read",
-        "options:read",
-        "accounts:read",
-        "orders:read",
-        "orders:write",
-        "admin:auth",
-        "admin:subscriptions",
+        "butterfly-guy",
+        "equity-scanner",
+        "afterhours-lab",
     }
 )
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+class PriorityClass(StrEnum):
+    PROTECTED = "protected"
+    BACKGROUND = "background"
+
+
+EXPECTED_PRIORITY_BY_CLIENT = {
+    "butterfly-guy": PriorityClass.PROTECTED,
+    "equity-scanner": PriorityClass.BACKGROUND,
+    "afterhours-lab": PriorityClass.BACKGROUND,
+}
 
 
 def hash_api_key(api_key: str) -> str:
@@ -37,15 +46,19 @@ class InternalPrincipal:
     client_id: str
     key_sha256: str
     capabilities: frozenset[str]
+    priority_class: PriorityClass
 
     def __post_init__(self) -> None:
-        if not self.client_id:
-            raise ValueError("client_id is required")
+        if self.client_id not in KNOWN_CLIENT_IDS:
+            raise ValueError("unknown gateway client ID")
         if not _SHA256_PATTERN.fullmatch(self.key_sha256):
             raise ValueError("key_sha256 must be a lowercase SHA-256 digest")
         unknown = self.capabilities - KNOWN_CAPABILITIES
         if unknown:
             raise ValueError(f"unknown gateway capabilities: {sorted(unknown)}")
+        expected_priority = EXPECTED_PRIORITY_BY_CLIENT[self.client_id]
+        if self.priority_class is not expected_priority:
+            raise ValueError("gateway client priority does not match its configured identity")
 
 
 class InternalKeyAuthenticator:
@@ -80,16 +93,19 @@ class InternalKeyAuthenticator:
                     client_id=item["id"],
                     key_sha256=item["key_sha256"],
                     capabilities=frozenset(item["capabilities"]),
+                    priority_class=PriorityClass(item["priority_class"]),
                 )
                 for item in payload["clients"]
                 if isinstance(item, dict)
-                and set(item) == {"id", "key_sha256", "capabilities"}
+                and set(item)
+                == {"id", "key_sha256", "capabilities", "priority_class"}
                 and isinstance(item["id"], str)
                 and isinstance(item["key_sha256"], str)
                 and isinstance(item["capabilities"], list)
+                and isinstance(item["priority_class"], str)
                 and all(isinstance(value, str) for value in item["capabilities"])
             )
-        except (KeyError, TypeError) as exc:
+        except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("invalid gateway client entry") from exc
         if len(principals) != len(payload["clients"]):
             raise ValueError("invalid gateway client entry")
@@ -99,10 +115,11 @@ class InternalKeyAuthenticator:
         if not api_key:
             return None
         candidate = hash_api_key(api_key)
+        authenticated: InternalPrincipal | None = None
         for principal in self._principals:
             if hmac.compare_digest(candidate, principal.key_sha256):
-                return principal
-        return None
+                authenticated = principal
+        return authenticated
 
 
 @web.middleware

@@ -8,8 +8,13 @@ quote for trading.
 
 Copy `configs/schwab_gateway_keys.example.json` to the ignored path
 `secrets/schwab-gateway-keys.json`. Replace the all-zero placeholder digest with the
-lowercase SHA-256 digest of a newly generated internal API key and set the file mode to
-`0600`. Keep the raw key outside Git and pass it only to the client.
+lowercase SHA-256 digest of a newly generated internal API key, and replace the other placeholder
+digests with two different generated-key digests. Set the file mode to `0600`. Keep all three raw
+keys outside Git and give each only to its named client. Do not share one key between applications.
+
+The three configured identities are `butterfly-guy` (protected), `equity-scanner` (background),
+and `afterhours-lab` (background). The default protected/background capacities are bounded local
+concurrency controls and do not represent a measured Schwab quota.
 
 ## Run locally
 

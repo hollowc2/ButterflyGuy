@@ -73,15 +73,19 @@ Capabilities:
 
 | Consumer | Capabilities |
 |---|---|
-| ButterflyGuy foundation client | `market_data:read` |
-| ButterflyGuy later | market/history/options plus only the account/order permissions proven necessary |
-| AfterHours collector/scanner | `market_data:read`, `history:read`; no account/order |
-| Research notebook | `history:read` only |
-| Discord bot | none; derived scanner events only |
+| `butterfly-guy` | `market_data:read`, protected priority |
+| `equity-scanner` | `market_data:read`, background priority |
+| `afterhours-lab` | `market_data:read`, background priority |
 
 Future order writes require a distinct service identity, `orders:write`, an independent
 kill switch, correlation ID, reconciliation policy, and `SCHWAB_GATEWAY_ORDER_WRITES_ENABLED=true`.
 There will be no order route in the foundation.
+
+The foundation accepts only those three bounded caller IDs and their fixed priority classes.
+History/options capabilities remain future additions tied to implemented endpoints. The quote
+handler uses separate finite protected/background admission pools, so background consumers cannot
+consume ButterflyGuy's reserved capacity. These are internal concurrency controls, not an encoded
+or inferred Schwab quota.
 
 ## OAuth and token storage
 
@@ -175,6 +179,8 @@ SCHWAB_GATEWAY_PORT=8010
 SCHWAB_GATEWAY_INTERNAL_KEYS_PATH=/run/secrets/schwab-gateway-keys.json
 SCHWAB_GATEWAY_LOG_LEVEL=INFO
 SCHWAB_GATEWAY_ORDER_WRITES_ENABLED=false
+SCHWAB_GATEWAY_PROTECTED_CAPACITY=4
+SCHWAB_GATEWAY_BACKGROUND_CAPACITY=8
 SCHWAB_GATEWAY_URL=http://127.0.0.1:8010
 SCHWAB_GATEWAY_API_KEY=<client secret>
 SCHWAB_ACCESS_MODE=direct
@@ -194,6 +200,8 @@ order writes in this foundation.
 - `/health`: process liveness only; never includes secrets, callers, symbols, or accounts.
 - `/ready`: initially upstream object initialized and internal auth configuration loaded.
 - `/metrics`: reuse Prometheus; add bounded labels for operation/status/caller class.
+- quote admission: requires authentication, capability, validation, and readiness before a
+  class-specific permit; a full pool returns a bounded 429 without retry.
 
 Target metrics include request/error/latency/rate-limit, token refresh/failure/expiry,
 stream reconnect/age, cache hit/miss, client requests, and order requests. Auth, stream,

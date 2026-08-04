@@ -310,3 +310,12 @@ token access, or Schwab access was reachable; no real quote occurred and all dir
 were restored. A focused remediation now bounds project/third-party import failures, but the
 real credential proof remains incomplete pending merge and fresh authorization. The gateway
 must remain disabled and outside the production stack.
+
+The multi-consumer local foundation now fixes three identities and separates ButterflyGuy's
+protected quote capacity from the scanner/lab background pool. Authentication, capability,
+validation, and readiness precede admission; permits release on every exit path. This is wired to
+the fake foundation application and tested locally, but it is not deployed or enforced by any
+current runtime. The after-hours executable-staging override, approval runbook, rollback procedure,
+and redacted evidence template are prepared but have not been executed. See
+`schwab-gateway-multi-consumer.md` and
+`../runbooks/schwab-gateway-after-hours-credential-proof.md`.

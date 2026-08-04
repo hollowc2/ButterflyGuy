@@ -30,6 +30,10 @@ class GatewayUnavailableError(GatewayClientError):
     pass
 
 
+class GatewayCapacityError(GatewayClientError):
+    pass
+
+
 class GatewayResponseError(GatewayClientError):
     pass
 
@@ -73,7 +77,11 @@ class GatewayMarketDataClient:
             raise GatewayAuthenticationError("gateway authentication failed")
         if response.status_code == 403:
             raise GatewayAuthorizationError("gateway capability denied")
-        if response.status_code in {502, 503, 504}:
+        if response.status_code == 429:
+            raise GatewayCapacityError("gateway request capacity is unavailable")
+        if response.status_code == 504:
+            raise GatewayTimeoutError("gateway quote upstream timed out")
+        if response.status_code in {502, 503}:
             raise GatewayUnavailableError("gateway upstream is unavailable")
         if response.status_code != 200:
             raise GatewayResponseError(

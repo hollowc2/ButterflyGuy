@@ -31,6 +31,20 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/butterfly_guy"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.env",
+    "/.env.*",
+    "/.git",
+    "/.venv",
+    "/dist",
+    "/evidence",
+    "/graphify-out",
+    "/secrets",
+    "**/tokens.json",
+    "**/credentials.json",
+]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

@@ -21,6 +21,8 @@ class GatewaySettings(BaseSettings):
     log_level: str = "INFO"
     order_writes_enabled: bool = False
     upstream_timeout_seconds: float = 3.0
+    protected_capacity: int = 4
+    background_capacity: int = 8
 
     @field_validator("bind_host")
     @classmethod
@@ -47,6 +49,13 @@ class GatewaySettings(BaseSettings):
     def timeout_must_be_positive(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("gateway upstream timeout must be positive")
+        return value
+
+    @field_validator("protected_capacity", "background_capacity")
+    @classmethod
+    def capacity_must_be_bounded(cls, value: int) -> int:
+        if not 1 <= value <= 256:
+            raise ValueError("gateway capacity must be between 1 and 256")
         return value
 
     @field_validator("order_writes_enabled")

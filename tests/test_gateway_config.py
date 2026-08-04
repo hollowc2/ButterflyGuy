@@ -22,6 +22,8 @@ def test_gateway_defaults_to_loopback_and_no_order_writes() -> None:
     assert value.bind_host == "127.0.0.1"
     assert value.port == 8010
     assert value.order_writes_enabled is False
+    assert value.protected_capacity == 4
+    assert value.background_capacity == 8
 
 
 def test_gateway_rejects_public_bind_and_order_writes() -> None:
@@ -29,6 +31,20 @@ def test_gateway_rejects_public_bind_and_order_writes() -> None:
         settings(bind_host="8.8.8.8")
     with pytest.raises(ValidationError, match="order writes are not available"):
         settings(order_writes_enabled=True)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("protected_capacity", 0),
+        ("protected_capacity", 257),
+        ("background_capacity", 0),
+        ("background_capacity", 257),
+    ],
+)
+def test_gateway_rejects_nonpositive_or_unbounded_capacity(field: str, value: int) -> None:
+    with pytest.raises(ValidationError, match="capacity must be between 1 and 256"):
+        settings(**{field: value})
 
 
 def test_gateway_client_mode_is_opt_in_and_secret_is_hidden() -> None:

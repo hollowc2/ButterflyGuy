@@ -96,3 +96,8 @@ The remediation moves all project/third-party imports inside the bounded CLI fai
 adds a regression test that injects a sensitive import error and requires only the generic
 failure line. The real credential proof remains incomplete and requires a merged remediation,
 an executable staging filesystem, a fresh single-writer window, and fresh explicit approval.
+
+The local multi-consumer foundation prepares, but does not execute, an isolated executable tmpfs
+override and a two-approval restoration plan for that staging blocker. Operational review must use
+`../runbooks/schwab-gateway-after-hours-credential-proof.md` and its redacted evidence template.
+Nothing in that package changes this document's status: the real proof is still unproven.

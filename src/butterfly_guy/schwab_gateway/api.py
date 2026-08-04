@@ -17,6 +17,11 @@ from butterfly_guy.gateway_client.models import (
     GatewayReadinessV1,
     QuoteResponseV1,
 )
+from butterfly_guy.schwab_gateway.admission import (
+    AdmissionCapacityError,
+    AdmissionController,
+    AdmissionPolicy,
+)
 from butterfly_guy.schwab_gateway.auth import (
     AUTHENTICATOR_KEY,
     PRINCIPAL_KEY,
@@ -49,11 +54,19 @@ gateway_latency = Histogram(
     "Internal gateway request latency",
     ["operation"],
 )
+gateway_admission = Counter(
+    "gateway_admission_total",
+    "Bounded gateway admission decisions",
+    ["priority_class", "outcome"],
+)
 
 UPSTREAM_KEY = web.AppKey("gateway_quote_upstream", QuoteUpstream)
 UPSTREAM_TIMEOUT_KEY = web.AppKey("gateway_upstream_timeout", float)
 TOKEN_READINESS_PROVIDER_KEY = web.AppKey(
     "gateway_token_readiness_provider", "TokenReadinessProvider"
+)
+ADMISSION_CONTROLLER_KEY = web.AppKey(
+    "gateway_admission_controller", AdmissionController
 )
 
 
@@ -170,9 +183,9 @@ async def health(_request: web.Request) -> web.Response:
     )
 
 
-async def ready(_request: web.Request) -> web.Response:
+def _token_readiness(app: web.Application) -> tuple[TokenManagerState, str]:
     try:
-        manager_health = _request.app[TOKEN_READINESS_PROVIDER_KEY].health()
+        manager_health = app[TOKEN_READINESS_PROVIDER_KEY].health()
         state = manager_health.state
         reason = READINESS_REASON_BY_STATE.get(state)
     except Exception:
@@ -182,6 +195,11 @@ async def ready(_request: web.Request) -> web.Response:
     if reason is None:
         state = TokenManagerState.UNINITIALIZED
         reason = READINESS_UNAVAILABLE_REASON
+    return state, reason
+
+
+async def ready(_request: web.Request) -> web.Response:
+    state, reason = _token_readiness(_request.app)
     is_ready = state is TokenManagerState.READY
     return _json(
         GatewayReadinessV1(
@@ -207,20 +225,42 @@ async def quotes(request: web.Request) -> web.Response:
     except ValueError as exc:
         return _error("invalid_request", str(exc), 400)
 
+    state, _reason = _token_readiness(request.app)
+    if state is not TokenManagerState.READY:
+        return _error("gateway_not_ready", "gateway is not ready", 503)
+
+    principal = request[PRINCIPAL_KEY]
+    priority = principal.priority_class
     try:
-        async with asyncio.timeout(request.app[UPSTREAM_TIMEOUT_KEY]):
-            result = await request.app[UPSTREAM_KEY].get_quotes(symbols)
-        by_symbol = {quote.symbol: quote for quote in result}
-        if set(by_symbol) != set(symbols):
-            raise UpstreamMalformedError("upstream returned a partial symbol set")
-        ordered = tuple(by_symbol[symbol] for symbol in symbols)
-        return _json(QuoteResponseV1(quotes=ordered))
-    except TimeoutError:
-        return _error("upstream_timeout", "quote upstream timed out", 504)
-    except UpstreamUnavailableError:
-        return _error("upstream_unavailable", "quote upstream is unavailable", 503)
-    except (UpstreamMalformedError, ValueError):
-        return _error("upstream_malformed", "quote upstream returned invalid data", 502)
+        async with request.app[ADMISSION_CONTROLLER_KEY].admit(priority):
+            gateway_admission.labels(
+                priority_class=priority.value,
+                outcome="admitted",
+            ).inc()
+            try:
+                async with asyncio.timeout(request.app[UPSTREAM_TIMEOUT_KEY]):
+                    result = await request.app[UPSTREAM_KEY].get_quotes(symbols)
+                by_symbol = {quote.symbol: quote for quote in result}
+                if set(by_symbol) != set(symbols):
+                    raise UpstreamMalformedError("upstream returned a partial symbol set")
+                ordered = tuple(by_symbol[symbol] for symbol in symbols)
+                return _json(QuoteResponseV1(quotes=ordered))
+            except TimeoutError:
+                return _error("upstream_timeout", "quote upstream timed out", 504)
+            except UpstreamUnavailableError:
+                return _error("upstream_unavailable", "quote upstream is unavailable", 503)
+            except (UpstreamMalformedError, ValueError):
+                return _error("upstream_malformed", "quote upstream returned invalid data", 502)
+    except AdmissionCapacityError:
+        gateway_admission.labels(
+            priority_class=priority.value,
+            outcome="rejected",
+        ).inc()
+        return _error(
+            "gateway_capacity_exceeded",
+            "gateway request capacity is unavailable",
+            429,
+        )
 
 
 def create_app(
@@ -229,6 +269,7 @@ def create_app(
     *,
     upstream_timeout_seconds: float = 3.0,
     token_readiness_provider: TokenReadinessProvider | None = None,
+    admission_policy: AdmissionPolicy | None = None,
 ) -> web.Application:
     if upstream_timeout_seconds <= 0:
         raise ValueError("upstream timeout must be positive")
@@ -238,6 +279,9 @@ def create_app(
     app[UPSTREAM_TIMEOUT_KEY] = upstream_timeout_seconds
     app[TOKEN_READINESS_PROVIDER_KEY] = (
         token_readiness_provider or _UnavailableTokenReadinessProvider()
+    )
+    app[ADMISSION_CONTROLLER_KEY] = AdmissionController(
+        admission_policy or AdmissionPolicy(protected_capacity=4, background_capacity=8)
     )
     app.router.add_get("/health", health, name="health")
     app.router.add_get("/ready", ready, name="ready")
