@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-**Prepared; one supervised launch stopped before credential access.** This is a standalone,
+**Incomplete; two supervised launches stopped before credential access.** This is a standalone,
 no-deploy proof for one public `AAPL` quote. It exists to verify the real schwab-py
 access-function lifecycle through
 `AtomicTokenManager` and `LockedSchwabClientAdapter` before any gateway server, consumer,
@@ -101,3 +101,30 @@ The local multi-consumer foundation prepares, but does not execute, an isolated 
 override and a two-approval restoration plan for that staging blocker. Operational review must use
 `../runbooks/schwab-gateway-after-hours-credential-proof.md` and its redacted evidence template.
 Nothing in that package changes this document's status: the real proof is still unproven.
+
+## Supervised staging stop — 2026-08-04
+
+A second supervised window used reviewed feature SHA
+`3a321bd765ef01356af9d53ef1bd1a17e8c31c08`. Local focused and full validation passed,
+and the Helios preflight recorded the existing SPX/NDX/XSP and candidate images, one
+application process per trading container, zero active keepalive/direct-host/credential-proof/CI
+worker processes, two idle CI listeners, and read-only candidate token ownership. The default
+Compose and all three trading configuration hashes matched the recorded local baseline.
+
+The opt-in Compose dry run proved that one executable tmpfs on `app_spx` was the only proposed
+configuration delta and that no other service, image, build, or pull was proposed. The supervised
+recreation retained the recorded SPX image, started one application process, and added the exact
+tmpfs. Post-recreation validation then rejected an order-sensitive runtime configuration
+fingerprint. Per the runbook, execution stopped before source staging, synthetic smoke,
+single-writer quiescence, Approval 2, credential settings, token access, or a Schwab request.
+Retry count remained zero.
+
+SPX was immediately recreated from the recorded image ID without the staging override. Its image,
+bounded startup-error count, one-process state, and absence of the executable mount were verified;
+NDX/XSP container IDs and images were unchanged. Exact SPX configuration equality could not be
+proven because the preflight fingerprint had included nondeterministically ordered Docker mount
+lists and Docker no longer retained the destroyed baseline container's Compose hash. The result is
+therefore inconclusive, not a successful restoration claim. In accordance with the fail-closed
+rule, SPX, NDX, and XSP are paused on their recorded image IDs pending an operator decision. The
+temporary overrides were removed, candidate ownership and keepalive absence were preserved, and
+the final redacted evidence is mode `0600`. The real credential proof remains incomplete.

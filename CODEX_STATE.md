@@ -8,12 +8,13 @@ live ButterflyGuy behavior or production defaults.
 ## Current Phase
 
 The fake gateway foundation, atomic token manager/adapter, readiness boundary, and standalone
-credential-proof command are merged. A supervised launch proved the single-writer quiescence
-procedure but stopped during a native dependency import before credential settings, token
-access, or Schwab access was reachable. The direct services were restored and no production
-cutover has begun. The bounded import remediation is merged. The current isolated slice adds a
-fake-tested three-consumer trust/admission boundary and prepares an unexecuted after-hours staging
-and evidence package.
+credential-proof command are merged. Two supervised launches stopped before credential settings,
+token access, or Schwab access was reachable. The first stopped during a native dependency import
+and was restored. The second proved the isolated Compose delta but stopped on an unreliable
+runtime fingerprint before source staging or quiescence. Its recorded images and executable-mount
+absence were restored, but exact SPX configuration equality could not be proven; SPX/NDX/XSP are
+paused fail-closed pending an operator decision. No production cutover has begun. The current
+isolated slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 
@@ -111,12 +112,23 @@ and evidence package.
 
 ## Known Failures
 
-The supervised command launch on 2026-08-04 exited before credential access because a native
+The first supervised command launch on 2026-08-04 exited before credential access because a native
 dependency could not load from the temporary execution filesystem. The pre-remediation CLI
 emitted raw exception text because project imports occurred outside its failure boundary.
 Retained evidence is bounded and mode `0600`; no credential/token read or Schwab request was
 reachable, no retry occurred, and all direct services were restored healthy. The real proof
 remains incomplete pending remediation merge and fresh authorization.
+
+A second supervised window on 2026-08-04 used feature SHA
+`3a321bd765ef01356af9d53ef1bd1a17e8c31c08`. The opt-in Compose dry run proved a target-only
+executable-tmpfs delta, and staged SPX recreation retained the recorded image with one process.
+Validation then rejected an order-sensitive runtime fingerprint, so the run stopped before source
+staging, smoke, quiescence, Approval 2, credential/token access, or Schwab access. SPX was recreated
+without the staging override from its recorded image ID; its image, startup-error count, one-process
+state, and staging-mount absence passed, while NDX/XSP remained on their original container/image
+IDs. Because the destroyed baseline's authoritative Compose hash was unavailable, exact SPX
+configuration equality is unproven. SPX/NDX/XSP are paused fail-closed, temporary overrides are
+removed, and bounded mode-`0600` evidence records the inconclusive result. No retry occurred.
 
 ## Open Questions
 
@@ -141,7 +153,8 @@ remains incomplete pending remediation merge and fresh authorization.
 
 ## Next Exact Action
 
-Review and merge the multi-consumer foundation without deploying. After market hours, obtain
-Approval 1 before the isolated staging recreation/smoke/quiescence procedure, then obtain fresh
-Approval 2 before one real credential/token read and one AAPL quote. No live action is authorized
-by the prepared package.
+Obtain an operator decision for the paused SPX/NDX/XSP services. Before resuming them, establish an
+authoritative exact SPX configuration comparison or explicitly approve a reviewed restoration
+procedure; do not claim the second rollback as exact from the order-sensitive fingerprint. Any new
+staging attempt requires fresh Approval 1, and any real credential/token read plus one AAPL quote
+requires fresh Approval 2. No gateway deployment or cutover is authorized.
