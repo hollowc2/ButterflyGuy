@@ -8,15 +8,17 @@ live ButterflyGuy behavior or production defaults.
 ## Current Phase
 
 The fake gateway foundation, atomic token manager/adapter, readiness boundary, and standalone
-credential-proof command are merged. Two supervised launches stopped before credential settings,
+credential-proof command are merged. Three supervised launches stopped before credential settings,
 token access, or Schwab access was reachable. The first stopped during a native dependency import
 and was restored. The second proved the isolated Compose delta but stopped on an unreliable
 runtime fingerprint before source staging or quiescence. Its recorded images and executable-mount
 absence were restored, but exact SPX configuration equality could not be proven. The operator then
 accepted the current verified paper/direct configuration as a new baseline; SPX/NDX/XSP were
 resumed healthy with recorded images, unique processes, no staging mount, and zero new filtered
-errors during a fresh observation window. No production cutover has begun. The current isolated
-slice adds a fake-tested three-consumer trust/admission boundary.
+errors during a fresh observation window. The third stopped during baseline preflight when ad-hoc
+operator wrappers violated the bounded-output rule; no service mutation occurred. No production
+cutover has begun. The current isolated slice adds a fake-tested three-consumer trust/admission
+boundary.
 
 ## Repository Findings
 
@@ -102,9 +104,8 @@ slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Tests Passing
 
-- Required gateway auth/config/API/model/redaction/token/credential suite: 76 passed.
-- New admission/client/import/Compose/provider suite: 13 passed.
-- Full suite: 587 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
+- Required focused gateway/remediation suite: 100 passed.
+- Full suite: 598 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
 - `uv run ruff check .`, `git diff --check`, wheel/sdist builds and content checks, and
   `graphify update .` pass.
@@ -141,6 +142,24 @@ errors for every service in a fresh 30-second window. A separate mode-`0600` evi
 records the accepted canonical fingerprints and resume result. This is an operator-defined new
 baseline, not proof of byte-for-byte equality with the destroyed SPX configuration.
 
+A third supervised window on 2026-08-05 used remediation SHA
+`7435ce0d5934155ff3db9c9f0566d56b7685f601`. Relevant remote source, runtime-config, base-Compose,
+documentation, and state paths were clean, and the default Compose and three trading-config hashes
+matched the accepted sources. SPX/NDX/XSP and candidate feed were running and unpaused. The exact
+minimal archive passed SHA-256 and embedded-commit verification and contained no forbidden
+environment, token, credential, data, or evidence entries. The committed helper captured four
+mode-`0600` baseline snapshots containing canonical, field-level, and Compose hashes.
+
+An ad-hoc accepted-fingerprint comparison wrapper then emitted a raw programming traceback, so the
+information-exposure stop condition fired before any recreation. A later optional post-stop
+wrapper also failed, and its partial process-count lines are marked invalid and must not be used.
+No Compose dry run, rollback override, executable mount, source staging inside a container, smoke,
+watchdog, quiescence, Approval 2 request, credential/token access, or Schwab request occurred; retry
+count remained zero. The committed helper verified that all four containers still exactly matched
+their just-captured baselines and were running and unpaused. Temporary host-side source artifacts
+were removed. This proves no configuration change during the window, not accepted-fingerprint or
+process-uniqueness completion.
+
 ## Open Questions
 
 - Real Schwab extended-hours/streaming/EXTO capability results.
@@ -165,6 +184,8 @@ baseline, not proof of byte-for-byte equality with the destroyed SPX configurati
 ## Next Exact Action
 
 Leave the resumed direct-access paper services on the operator-accepted baseline. Any new staging
-attempt requires fresh Approval 1, and any real credential/token read plus one AAPL quote requires
-fresh Approval 2. Do not reinterpret the accepted baseline as proof of equality with the destroyed
-SPX container. No gateway deployment or cutover is authorized.
+attempt requires a committed, fake-tested bounded operator path for accepted-fingerprint
+comparison, uniqueness/ownership checks, filtered-error counts, and fail-closed evidence handling,
+followed by fresh Approval 1. Any real credential/token read plus one AAPL quote still requires
+fresh Approval 2. Do not reinterpret any just-captured snapshot as proof against an accepted
+baseline. No gateway deployment or cutover is authorized.

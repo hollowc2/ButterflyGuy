@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-**Incomplete; two supervised launches stopped before credential access.** This is a standalone,
+**Incomplete; three supervised launches stopped before credential access.** This is a standalone,
 no-deploy proof for one public `AAPL` quote. It exists to verify the real schwab-py
 access-function lifecycle through
 `AtomicTokenManager` and `LockedSchwabClientAdapter` before any gateway server, consumer,
@@ -142,3 +142,36 @@ service. The accepted canonical configuration fingerprints are retained only in 
 bounded evidence. This restores service under the operator-defined new baseline; it does not prove
 byte-for-byte equality with the destroyed SPX container. The real credential proof remains
 incomplete and requires fresh Approval 1 and Approval 2 before any later attempt.
+
+## Supervised pre-recreation stop — 2026-08-05
+
+A third supervised window used remediation SHA
+`7435ce0d5934155ff3db9c9f0566d56b7685f601`. Before the window, the focused gateway suite
+passed 100 tests, the full suite passed 598 tests with one expected database-dependent skip,
+lint and diff checks passed, and the isolated worktree was clean. On Helios, the relevant source,
+runtime-config, base-Compose, documentation, and state paths were unchanged even though an
+unrelated tracked path made the checkout globally dirty. The default Compose and three trading
+configuration hashes matched the accepted sources, and SPX, NDX, XSP, and candidate-feed
+containers were running and unpaused.
+
+The exact minimal source archive embedded the approved Git SHA, matched its reviewed SHA-256,
+contained no environment, token, credential, data, or evidence files, and yielded the reviewed
+fingerprint-helper hash. The committed helper then wrote four mode-`0600` baseline snapshots with
+canonical configuration fingerprints, 17 field-level hashes, the Compose configuration hash, and
+staging-mount absence.
+
+The attempt stopped before recreation because an ad-hoc operator comparison wrapper violated the
+bounded-output rule and emitted a raw programming traceback. No sensitive value was observed, but
+the information-exposure check failed by policy. A later optional post-stop wrapper also failed;
+its partial process-count lines are explicitly marked invalid and are not evidence. No Compose dry
+run, rollback override, SPX recreation, executable mount, container source staging, smoke check,
+watchdog, quiescence, Approval 2 request, credential/token access, or Schwab request occurred, and
+retry count remained zero.
+
+Before exit, the committed helper proved that all four containers still exactly matched their
+just-captured hash-only baselines; each was running and unpaused. This proves no configuration
+change during the window, but it does not substitute for the accepted-fingerprint comparison or
+the invalid process-count extension. Temporary host-side source artifacts were removed, and the
+bounded evidence plus four snapshots remain mode `0600`. The real credential proof remains
+incomplete. Any further attempt needs a committed, fake-tested replacement for the failed operator
+wrappers and fresh Approval 1.
