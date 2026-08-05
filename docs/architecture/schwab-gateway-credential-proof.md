@@ -379,3 +379,26 @@ trading service as `config_exact_services`, `config_content_match_services`, or
 classification into the candidate digest; and remains fail-closed with fixed service names for
 missing, duplicate, writable, non-bind, unreadable, oversized, or content-different sources. Fresh
 authorization remains required before another Helios capture.
+
+## Content-verified mount result — 2026-08-05
+
+Under fresh authorization, exact release `8c7070debb11733092980f7854e66b7678c8dd86`
+and archive SHA-256 `f546b9335d8a72260a69772f822f39db78b87b1db1fc535e67ef8a69ee7fa24a`
+ran the content-verified read-only runtime-baseline capture on Helios. It failed closed with
+`baseline_mismatch` and `invalid_config_services=[spx,ndx,xsp]`. The capture itself emitted the
+complete fixed service list, so the companion reader was not needed. No candidate set was produced.
+
+The failure artifact remains at
+`/opt/butterflyguy/.runtime-baseline-evidence-20260805-8c7070d.json` and was verified as a
+Billy-owned regular file with mode `0600` and size 918 bytes. The exact temporary archive and source
+directory were removed and verified absent. No Compose or service mutation, restart, process/cron
+action, credential/token read, Schwab request, staging, quiescence, trading action, or baseline
+acceptance occurred.
+
+All three reviewed Compose short-form config mounts omit an explicit read-only suffix. The result is
+therefore consistent with writable bind permissions for every trading config, not an unknown service
+or lost evidence. Moving forward requires an explicit operator policy decision. The runtime path can
+require bounded content equality and treat writable permissions as a visible, digest-bound exception,
+or a separately approved live deployment can add read-only mounts and recreate the trading services.
+The former preserves current runtime behavior; the latter changes live service state and requires
+rollback and post-restart trading safeguards.

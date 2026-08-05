@@ -56,8 +56,13 @@ the temporary paths were removed, and no live mutation occurred. The exact-host-
 overstrict for a runtime baseline because a different bind source may contain the identical reviewed
 file. Local remediation now requires the expected read-only destination and either exact source
 identity or bounded regular-file content equality, emits exhaustive fixed per-service classifications,
-and binds them into the candidate digest. The current isolated slice adds a fake-tested
-three-consumer trust/admission boundary.
+and binds them into the candidate digest. Under fresh authorization, exact release
+`8c7070debb11733092980f7854e66b7678c8dd86` failed closed and named SPX, NDX, and XSP as invalid
+config-mount services. The reviewed Compose short-form mounts omit read-only flags, so accepting the
+current runtime now requires an explicit policy decision: record writable-but-content-identical
+config mounts as a baseline exception, or harden the mounts through an approved live recreation.
+The protected evidence was retained, exact temporary paths were removed, and no live mutation
+occurred. The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 
