@@ -62,9 +62,14 @@ config-mount services. The reviewed Compose short-form mounts omit read-only fla
 current runtime required an explicit policy decision. The operator accepted writable config mounts
 as a recorded runtime-baseline exception. Local capture now requires exact bounded config contents,
 classifies every service independently by content relation and read-only/writable permission, and
-binds both classifications into the candidate digest. The protected failure evidence was retained,
-exact temporary paths were removed, and no live mutation occurred. The current isolated slice adds a
-fake-tested three-consumer trust/admission boundary.
+binds both classifications into the candidate digest. Under fresh authorization, exact release
+`dd1d9ef76b448cd0582f9408204e9e7f1eb8d380` produced candidate digest
+`6872c3582cf728f67acba78bf5f7e226b735c40a4be09ea27c135c7641e5320d`. SPX/NDX/XSP use the
+exact reviewed config sources with writable permissions; Compose remains SPX mismatched and NDX/XSP
+invalid. Every runtime-safety gate passed, the strict reader re-derived the same digest, protected
+evidence was retained, exact temporary paths were removed, and no live mutation occurred. The
+candidate is awaiting separate explicit operator acceptance and is not yet the baseline. The current
+isolated slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 

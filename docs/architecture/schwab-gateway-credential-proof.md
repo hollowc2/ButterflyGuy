@@ -407,3 +407,33 @@ file. It independently classifies the content relation as exact, content-matched
 permission as read-only or writable. Both exhaustive classifications are included in the candidate
 digest and bounded output; only invalid content or structure blocks candidate creation. This policy
 preserves current runtime behavior while making the writable-mount exception explicit and auditable.
+
+## Writable-exception runtime candidate — 2026-08-05
+
+Under fresh authorization, exact release `dd1d9ef76b448cd0582f9408204e9e7f1eb8d380`
+and archive SHA-256 `82fedcb944783526fa1731bcae5da02d667bc68fda4d0eac0ac0dfe93ada6a49`
+ran the committed read-only runtime-baseline capture on Helios. Every runtime-safety gate passed and
+the command produced candidate digest
+`6872c3582cf728f67acba78bf5f7e226b735c40a4be09ea27c135c7641e5320d` for three services.
+
+The bounded candidate classifications are:
+
+- config exact: SPX, NDX, XSP;
+- config content-match-only: none;
+- config invalid: none;
+- config read-only: none;
+- config writable: SPX, NDX, XSP;
+- Compose matched: none;
+- Compose mismatched: SPX;
+- Compose invalid: NDX, XSP.
+
+The strict companion reader validated the complete private artifact and independently re-derived the
+same digest and classifications. The evidence remains at
+`/opt/butterflyguy/.runtime-baseline-evidence-20260805-dd1d9ef.json` and was verified as a
+Billy-owned regular file with mode `0600` and size 6,672 bytes. The exact temporary archive and source
+directory were removed and verified absent. No Compose or service mutation, restart, process/cron
+action, credential/token read, Schwab request, staging, quiescence, trading action, or baseline
+acceptance occurred.
+
+This candidate is not the baseline until the operator separately accepts the exact digest together
+with the recorded writable-config and Compose-provenance exceptions.
