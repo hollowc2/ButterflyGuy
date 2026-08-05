@@ -437,3 +437,19 @@ acceptance occurred.
 
 This candidate is not the baseline until the operator separately accepts the exact digest together
 with the recorded writable-config and Compose-provenance exceptions.
+
+## Runtime baseline accepted — 2026-08-05
+
+The operator explicitly accepted candidate digest
+`6872c3582cf728f67acba78bf5f7e226b735c40a4be09ea27c135c7641e5320d` as the new runtime
+baseline with writable SPX/NDX/XSP config mounts and the Compose exceptions `SPX=mismatched` and
+`NDX/XSP=invalid`. This acceptance covers exactly the three runtime records, actual image IDs,
+config-mount classifications, and Compose classifications bound into that digest; it does not waive
+any paper/direct, health, process-uniqueness, ownership, no-writer, no-staging, image, or fingerprint
+gate.
+
+The authoritative accepted evidence is
+`/opt/butterflyguy/.runtime-baseline-evidence-20260805-dd1d9ef.json`. Acceptance did not contact
+Helios, mutate services or configuration, read credentials or tokens, call Schwab, place a trade, or
+authorize the credential-proof execution. Any subsequent use of this baseline must strictly validate
+the private artifact and re-derive the accepted digest before acting.

@@ -68,8 +68,12 @@ binds both classifications into the candidate digest. Under fresh authorization,
 exact reviewed config sources with writable permissions; Compose remains SPX mismatched and NDX/XSP
 invalid. Every runtime-safety gate passed, the strict reader re-derived the same digest, protected
 evidence was retained, exact temporary paths were removed, and no live mutation occurred. The
-candidate is awaiting separate explicit operator acceptance and is not yet the baseline. The current
-isolated slice adds a fake-tested three-consumer trust/admission boundary.
+operator then explicitly accepted that exact digest as the new runtime baseline together with
+writable SPX/NDX/XSP config mounts and the Compose exceptions `SPX=mismatched` and
+`NDX/XSP=invalid`. The protected artifact at
+`/opt/butterflyguy/.runtime-baseline-evidence-20260805-dd1d9ef.json` is the authoritative accepted
+baseline evidence. No live mutation occurred. The current isolated slice adds a fake-tested
+three-consumer trust/admission boundary.
 
 ## Repository Findings
 
