@@ -26,8 +26,11 @@ same bounded `no_acceptance` disposition and durably retained a mode-`0600` evid
 before temporary source cleanup. No service mutation occurred. No production cutover has begun.
 An authorized read-only new-baseline candidate capture then failed closed with the bounded
 `compose_semantics_invalid` result before producing any candidate set; its mode-`0600` failure
-evidence was retained and temporary source removed. The current isolated slice adds a fake-tested
-three-consumer trust/admission boundary.
+evidence was retained and temporary source removed. The authorized bounded reader identified the
+failed check as `compose_hashes`. Local review found that the capture had incorrectly required
+Compose/image equality for the candidate-feed container even though the authorized baseline set is
+SPX/NDX/XSP and candidate feed requires ownership/uniqueness checks only. The current isolated slice
+adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 
@@ -126,8 +129,8 @@ three-consumer trust/admission boundary.
 
 ## Tests Passing
 
-- Required focused gateway/remediation suite: 165 passed.
-- Full suite: 664 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
+- Required focused gateway/remediation suite: 167 passed.
+- Full suite: 666 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
 - `uv run ruff check .`, `git diff --check`, wheel/sdist builds and content checks, and
   `graphify update .` pass.
@@ -205,9 +208,10 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Commit and archive the bounded `baseline-candidate-status` reader, then obtain fresh authorization
-tied to that exact release to identify which fixed Compose-related check failed in the retained
-artifact. Do not inspect raw Docker or evidence content and do not adopt a candidate automatically.
-Until an exact candidate passes and is explicitly accepted, leave the direct-access paper services
-unchanged. No gateway deployment, staging, credential/token read, Schwab request, or cutover is
-currently authorized.
+Commit and archive the corrected candidate capture, which limits Compose-hash and image equality to
+the authorized SPX/NDX/XSP baseline set while preserving candidate-feed running, staging-absence,
+ownership, uniqueness, and no-writer checks. Obtain fresh authorization tied to that exact release
+before rerunning the read-only capture. Do not adopt a candidate automatically. Until an exact
+candidate passes and is explicitly accepted, leave the direct-access paper services unchanged. No
+gateway deployment, staging, credential/token read, Schwab request, or cutover is currently
+authorized.

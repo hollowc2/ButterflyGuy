@@ -2328,6 +2328,7 @@ def _baseline_candidate_capture(
     started = int(time.time())
     current_check = "reviewed_sources"
     candidate: dict[str, object] | None = None
+    failure_fields: dict[str, object] = {}
     succeeded = False
     try:
         _require_reviewed_file(args.base_compose, args.archive, "infra/docker-compose.yml")
@@ -2388,15 +2389,19 @@ def _baseline_candidate_capture(
 
         images: dict[str, str] = {}
         current_check = "compose_hashes"
-        for name in _ALL_SERVICES:
-            if _compose_service_hash(args.base_compose, name) != records[name][
-                "compose_config_hash"
-            ]:
-                raise OperatorFailure("compose_semantics_invalid")
+        compose_mismatches = [
+            name
+            for name in _TRADING_SERVICES
+            if _compose_service_hash(args.base_compose, name)
+            != records[name]["compose_config_hash"]
+        ]
+        if compose_mismatches:
+            failure_fields["mismatched_services"] = compose_mismatches
+            raise OperatorFailure("compose_semantics_invalid")
         checks[current_check] = "pass"
 
         current_check = "images"
-        for name in _ALL_SERVICES:
+        for name in _TRADING_SERVICES:
             _, image_id = _container_identity(inspections[name])
             _require_base_image(args.base_compose, image_id, name)
             images[name] = image_id
@@ -2421,7 +2426,7 @@ def _baseline_candidate_capture(
         succeeded = True
     except OperatorFailure as exc:
         checks[current_check] = "fail"
-        result = {"code": exc.code, "status": "error"}
+        result = {"code": exc.code, **failure_fields, "status": "error"}
     except (OSError, ValueError):
         checks[current_check] = "fail"
         result = {"code": "evidence_invalid", "status": "error"}
@@ -2510,14 +2515,31 @@ def _baseline_candidate_status(path: Path) -> tuple[str, str, dict[str, object]]
     candidate = value["candidate"]
     if candidate is None:
         failed = [name for name, result_value in checks.items() if result_value == "fail"]
+        result_fields = set(result)
+        allowed_result_fields = {"code", "status"}
+        if failed == ["compose_hashes"]:
+            allowed_result_fields.add("mismatched_services")
+        mismatches = result.get("mismatched_services")
         if (
             len(failed) != 1
-            or set(result) != {"code", "status"}
+            or result_fields not in ({"code", "status"}, allowed_result_fields)
             or result.get("status") != "error"
             or result.get("code") not in _RESULT_CODES
+            or (
+                "mismatched_services" in result
+                and (
+                    not isinstance(mismatches, list)
+                    or not mismatches
+                    or len(mismatches) != len(set(mismatches))
+                    or any(name not in _TRADING_SERVICES for name in mismatches)
+                )
+            )
         ):
             raise OperatorFailure("evidence_invalid")
-        return "error", str(result["code"]), {"failed_check": failed[0]}
+        fields: dict[str, object] = {"failed_check": failed[0]}
+        if "mismatched_services" in result:
+            fields["mismatched_services"] = mismatches
+        return "error", str(result["code"]), fields
 
     if not isinstance(candidate, dict) or set(candidate) != {
         "candidate_set_sha256",

@@ -250,3 +250,21 @@ artifact it re-derives and emits only the exact candidate-set digest and service
 extra fields, partial records, inconsistent check states, invalid images, and altered candidate
 hashes without printing stored content. A new exact SHA/archive and fresh authorization are required
 before this reader may access the retained Helios artifact.
+
+## Candidate failure diagnosis and scope correction
+
+Under fresh authorization, exact release `ad450dab2f8f15237b7dd78436a312371e16273f`
+strictly read the retained artifact and emitted only `failed_check=compose_hashes`. The evidence
+validated successfully, remained mode `0600`, and the temporary reader archive/source was removed.
+No Docker inspection, service/config mutation, credential/token read, Schwab request, or baseline
+acceptance occurred.
+
+Code review then identified that the first candidate capture compared Compose hashes and images for
+all four inspected services, including candidate feed. That exceeded the authorized baseline set:
+SPX, NDX, and XSP require exact Compose/image equality, while candidate feed was authorized only for
+running/unpaused state, staging absence, process uniqueness, read-only ownership, and writer
+exclusion. The local correction limits Compose/image equality to the three trading services and
+retains every candidate-feed safety check. A trading-service Compose mismatch is persisted and
+emitted only as a fixed service name; no hashes or partial candidate are exposed. The correction is
+fake-tested only and requires a new exact SHA/archive plus fresh authorization before another
+read-only Helios capture.
