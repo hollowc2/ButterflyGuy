@@ -57,6 +57,43 @@ def populated_state(phase: str = "approval_2_pending") -> dict:
     return value
 
 
+def runtime_baseline_state(phase: str) -> dict:
+    value = populated_state(phase)
+    compose_observation = {
+        "invalid_services": ["ndx", "xsp"],
+        "matched_services": [],
+        "mismatched_services": ["spx"],
+    }
+    config_mount_observation = {
+        "config_content_match_services": [],
+        "config_exact_services": ["spx", "ndx", "xsp"],
+        "config_invalid_services": [],
+        "config_readonly_services": [],
+        "config_writable_services": ["spx", "ndx", "xsp"],
+    }
+    material = {
+        "compose_observation": compose_observation,
+        "config_mount_observation": config_mount_observation,
+        "images": {
+            name: value["baseline"][name]["image_id"]
+            for name in operator._TRADING_SERVICES
+        },
+        "records": {
+            name: value["baseline"][name]["record"]
+            for name in operator._TRADING_SERVICES
+        },
+    }
+    value["runtime_baseline"] = {
+        "candidate_set_sha256": operator._digest(material),
+        "compose_observation": compose_observation,
+        "config_content_sha256": {
+            name: "a" * 64 for name in operator._TRADING_SERVICES
+        },
+        "config_mount_observation": config_mount_observation,
+    }
+    return value
+
+
 def write_state(path: Path, value: dict) -> None:
     operator._write_state_new(path, value)
 
@@ -352,6 +389,65 @@ def test_container_archive_staging_rejects_success_with_unexpected_output(
         operator._stage_archive(tmp_path / "reviewed.tar", ARCHIVE_SHA)
 
 
+def test_runtime_staging_requires_absent_fixed_target_and_cleanup_is_exact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(list(command))
+        return result()
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    operator._prepare_runtime_staging()
+    operator._cleanup_runtime_staging()
+
+    assert commands == [
+        [
+            "docker",
+            "exec",
+            "butterfly_spx_app",
+            "test",
+            "!",
+            "-e",
+            operator.RUNTIME_STAGING_TMPFS_TARGET,
+        ],
+        [
+            "docker",
+            "exec",
+            "butterfly_spx_app",
+            "mkdir",
+            "-m",
+            "700",
+            operator.RUNTIME_STAGING_TMPFS_TARGET,
+        ],
+        [
+            "docker",
+            "exec",
+            "butterfly_spx_app",
+            "rm",
+            "-rf",
+            operator.RUNTIME_STAGING_TMPFS_TARGET,
+        ],
+    ]
+
+
+def test_runtime_staging_refuses_preexisting_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def fake_run(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return result(returncode=1)
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    with pytest.raises(operator.OperatorFailure, match="staging_invalid"):
+        operator._prepare_runtime_staging()
+    assert calls == 1
+
+
 def test_missing_compose_label_and_wrong_image_fail_closed() -> None:
     missing_label = runtime_inspect()
     missing_label["Config"]["Labels"] = {}
@@ -568,6 +664,42 @@ def test_approval_2_runs_credential_command_exactly_once_without_retry(
     assert invocations == 1
 
 
+def test_runtime_baseline_approval_2_uses_only_fixed_tmpfs_source(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    args = approval_args(tmp_path)
+    state = runtime_baseline_state("approval_2_pending")
+    state["watchdog"].update(
+        {
+            "hard": "armed",
+            "approval": "armed",
+            "hard_deadline": int(time.time()) + 300,
+            "approval_deadline": int(time.time()) + 120,
+        }
+    )
+    write_state(args.state, state)
+    patch_approval_checks(monkeypatch)
+    proof_commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        proof_commands.append(list(command))
+        return result(stdout='{"quote_count":1,"status":"ok","token_state":"ready"}\n')
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    monkeypatch.setattr(operator, "_restore_operation", lambda *_args, **_kwargs: True)
+
+    operator._approval_2_execute(args)
+
+    assert len(proof_commands) == 1
+    command = proof_commands[0]
+    assert f"PYTHONPATH={operator.RUNTIME_STAGING_TMPFS_TARGET}/source/src" in command
+    assert (
+        f"{operator.RUNTIME_STAGING_TMPFS_TARGET}/source/src/"
+        "butterfly_guy/scripts/probe_schwab_gateway_credentials.py"
+    ) in command
+
+
 def test_malformed_secret_credential_output_is_not_persisted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -644,6 +776,11 @@ def patch_restoration_success(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda: {name: runtime_inspect() for name in operator._ALL_SERVICES},
     )
     monkeypatch.setattr(operator, "_require_runtime_baseline", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        operator,
+        "_runtime_config_content_hashes",
+        lambda *_args: {name: "a" * 64 for name in operator._TRADING_SERVICES},
+    )
     monkeypatch.setattr(operator, "_run_uniqueness_checks", lambda **_kwargs: {})
     monkeypatch.setattr(operator, "_require_candidate_ownership", lambda *_args: None)
     monkeypatch.setattr(operator, "_require_no_host_writers", lambda: None)
@@ -728,6 +865,69 @@ def test_successful_restoration_proves_every_postcondition(
             "restoration_errors",
         )
     )
+
+
+def test_runtime_baseline_restoration_resumes_and_cleans_without_recreation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    args = approval_args(tmp_path)
+    state = runtime_baseline_state("approval_2_running")
+    state["watchdog"]["hard"] = "armed"
+    state["watchdog"]["approval"] = "cancelled"
+    write_state(args.state, state)
+    patch_restoration_success(monkeypatch)
+    resumed: list[bool] = []
+    cleaned: list[bool] = []
+    recreated: list[bool] = []
+    monkeypatch.setattr(operator, "_resume_spx", lambda: resumed.append(True))
+    monkeypatch.setattr(
+        operator, "_cleanup_runtime_staging", lambda: cleaned.append(True)
+    )
+    monkeypatch.setattr(
+        operator, "_recreate_baseline", lambda *_args: recreated.append(True)
+    )
+
+    assert operator._restore_operation(args)
+
+    assert resumed == [True]
+    assert cleaned == [True]
+    assert recreated == []
+    assert operator._read_state(args.state)["phase"] == "restored"
+
+
+def test_runtime_baseline_restoration_fails_closed_on_config_content_change(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    args = approval_args(tmp_path)
+    write_state(args.state, runtime_baseline_state("approval_2_running"))
+    patch_restoration_success(monkeypatch)
+    monkeypatch.setattr(operator, "_resume_spx", lambda: None)
+    monkeypatch.setattr(operator, "_cleanup_runtime_staging", lambda: None)
+    monkeypatch.setattr(
+        operator,
+        "_runtime_config_content_hashes",
+        lambda *_args: {name: "b" * 64 for name in operator._TRADING_SERVICES},
+    )
+    monkeypatch.setattr(operator, "_best_effort_runtime_restore", lambda: None)
+    paused: list[bool] = []
+    monkeypatch.setattr(operator, "_pause_fail_closed", lambda: paused.append(True))
+
+    with pytest.raises(operator.OperatorFailure, match="restoration_failed_paused"):
+        operator._restore_operation(args)
+
+    assert paused == [True]
+    state = operator._read_state(args.state)
+    assert state["failure_code"] == "restoration_failed_paused"
+
+
+def test_runtime_baseline_state_digest_binds_records_images_and_exceptions() -> None:
+    state = runtime_baseline_state("approval_1_ready")
+    assert operator._valid_state(state)
+    state["runtime_baseline"]["compose_observation"]["matched_services"] = ["spx"]
+    state["runtime_baseline"]["compose_observation"]["mismatched_services"] = []
+    assert not operator._valid_state(state)
 
 
 def test_fresh_error_parser_counts_without_echoing_secret(
@@ -1271,6 +1471,11 @@ def patch_runtime_baseline_success(monkeypatch: pytest.MonkeyPatch) -> None:
             "config_writable_services": list(operator._TRADING_SERVICES),
         },
     )
+    monkeypatch.setattr(
+        operator,
+        "_runtime_config_content_hashes",
+        lambda *_args: {name: "a" * 64 for name in operator._TRADING_SERVICES},
+    )
 
 
 def test_baseline_candidate_capture_persists_exact_hash_only_candidate(
@@ -1622,6 +1827,85 @@ def test_runtime_baseline_capture_binds_runtime_and_compose_exceptions(
     assert json.loads(capsys.readouterr().out) == output
 
 
+def test_prepare_consumes_exact_runtime_baseline_without_strict_compose_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_runtime_baseline_success(monkeypatch)
+
+    def compose_hash(_path: Path, service: str = "spx") -> str:
+        if service in {"ndx", "xsp"}:
+            raise operator.OperatorFailure("compose_semantics_invalid")
+        return "f" * 64
+
+    monkeypatch.setattr(operator, "_compose_service_hash", compose_hash)
+    operator.main(runtime_baseline_args(tmp_path))
+    candidate = json.loads(capsys.readouterr().out)
+
+    args = prepare_args(tmp_path)
+    patch_prepare_success(monkeypatch, args)
+    monkeypatch.setattr(operator, "_compose_service_hash", compose_hash)
+    args.accepted_spx = None
+    args.accepted_ndx = None
+    args.accepted_xsp = None
+    args.accepted_runtime_baseline = tmp_path / "runtime-baseline.json"
+    args.accepted_runtime_digest = candidate["candidate_set_sha256"]
+    args.spx_config = tmp_path / "config.yaml"
+    args.ndx_config = tmp_path / "config_ndx.yaml"
+    args.xsp_config = tmp_path / "config_xsp.yaml"
+
+    operator._prepare(args)
+
+    assert json.loads(capsys.readouterr().out)["code"] == "approval_1_ready"
+    state = operator._read_state(args.state)
+    assert state["runtime_baseline"] == {
+        "candidate_set_sha256": candidate["candidate_set_sha256"],
+        "compose_observation": {
+            "invalid_services": ["ndx", "xsp"],
+            "matched_services": [],
+            "mismatched_services": ["spx"],
+        },
+        "config_content_sha256": {
+            name: "a" * 64 for name in operator._TRADING_SERVICES
+        },
+        "config_mount_observation": {
+            "config_content_match_services": [],
+            "config_exact_services": ["spx", "ndx", "xsp"],
+            "config_invalid_services": [],
+            "config_readonly_services": [],
+            "config_writable_services": ["spx", "ndx", "xsp"],
+        },
+    }
+
+
+def test_prepare_rejects_runtime_baseline_digest_other_than_explicit_acceptance(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_runtime_baseline_success(monkeypatch)
+    operator.main(runtime_baseline_args(tmp_path))
+    capsys.readouterr()
+    args = prepare_args(tmp_path)
+    patch_prepare_success(monkeypatch, args)
+    args.accepted_spx = None
+    args.accepted_ndx = None
+    args.accepted_xsp = None
+    args.accepted_runtime_baseline = tmp_path / "runtime-baseline.json"
+    args.accepted_runtime_digest = "0" * 64
+    args.spx_config = tmp_path / "config.yaml"
+    args.ndx_config = tmp_path / "config_ndx.yaml"
+    args.xsp_config = tmp_path / "config_xsp.yaml"
+
+    with pytest.raises(operator.OperatorFailure, match="baseline_mismatch"):
+        operator._prepare(args)
+
+    state = operator._read_state(args.state)
+    assert state["phase"] == "failed"
+    assert state["failure_code"] == "baseline_mismatch"
+
+
 def test_runtime_baseline_capture_fails_closed_on_config_mount_mismatch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1879,6 +2163,41 @@ def test_approval_1_success_arms_both_watchdogs_and_starts_two_minute_gate(
     assert stored["checks"]["native_smoke"] == "pass"
     assert stored["checks"]["refusal_gate"] == "pass"
     assert stored["checks"]["single_writer"] == "pass"
+
+
+def test_runtime_baseline_approval_1_stages_in_place_without_recreating_spx(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    args = prepare_args(tmp_path)
+    args.spx_config = tmp_path / "config.yaml"
+    args.ndx_config = tmp_path / "config_ndx.yaml"
+    args.xsp_config = tmp_path / "config_xsp.yaml"
+    write_state(args.state, runtime_baseline_state("approval_1_ready"))
+    patch_approval_1_success(monkeypatch)
+    recreated: list[bool] = []
+    staged_targets: list[str] = []
+    acceptance_checks: list[bool] = []
+    monkeypatch.setattr(
+        operator, "_recreate_staged", lambda *_args: recreated.append(True)
+    )
+    monkeypatch.setattr(
+        operator,
+        "_stage_archive",
+        lambda *_args, **kwargs: staged_targets.append(kwargs["root_target"]),
+    )
+    monkeypatch.setattr(
+        operator,
+        "_require_runtime_acceptance_state",
+        lambda *_args: acceptance_checks.append(True),
+    )
+
+    operator._approval_1_execute(args)
+
+    assert recreated == []
+    assert staged_targets == [operator.RUNTIME_STAGING_TMPFS_TARGET]
+    assert acceptance_checks == [True, True]
+    assert operator._read_state(args.state)["phase"] == "approval_2_pending"
 
 
 def test_post_recreation_watchdog_failure_invokes_immediate_restoration(

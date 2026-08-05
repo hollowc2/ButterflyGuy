@@ -73,7 +73,8 @@ writable SPX/NDX/XSP config mounts and the Compose exceptions `SPX=mismatched` a
 `NDX/XSP=invalid`. The protected artifact at
 `/opt/butterflyguy/.runtime-baseline-evidence-20260805-dd1d9ef.json` is the authoritative accepted
 baseline evidence. No live mutation occurred. The current isolated slice adds a fake-tested
-three-consumer trust/admission boundary.
+runtime-baseline credential-proof adapter that consumes only that exact digest and stages reviewed
+Python source in the existing SPX `/tmp` tmpfs without recreating the accepted container.
 
 ## Repository Findings
 
@@ -251,10 +252,11 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Commit and archive the corrected candidate capture, which limits Compose-hash and image equality to
-the authorized SPX/NDX/XSP baseline set while preserving candidate-feed running, staging-absence,
-ownership, uniqueness, and no-writer checks. Obtain fresh authorization tied to that exact release
-before rerunning the read-only capture. Do not adopt a candidate automatically. Until an exact
-candidate passes and is explicitly accepted, leave the direct-access paper services unchanged. No
-gateway deployment, staging, credential/token read, Schwab request, or cutover is currently
-authorized.
+Finish local verification, commit and archive the runtime-baseline proof adapter, then obtain fresh
+Approval 1 tied to the exact release/archive, accepted digest/evidence path, bounded UTC window, and
+fixed actions. Approval 1 may revalidate the baseline, stage reviewed Python source only under
+`/tmp/.schwab-credential-proof-runtime`, run synthetic smoke/refusal checks, arm watchdogs, and
+quiesce the three direct writers; it may not read credentials/tokens or call Schwab. Request fresh
+Approval 2 only after those gates pass; Approval 2 permits exactly one credential/token read and one
+AAPL quote with no retry, followed by exact runtime restoration. No gateway deployment, trading
+action, configuration change, order/account operation, or cutover is authorized.

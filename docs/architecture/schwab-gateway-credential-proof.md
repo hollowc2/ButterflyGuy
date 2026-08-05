@@ -453,3 +453,26 @@ The authoritative accepted evidence is
 Helios, mutate services or configuration, read credentials or tokens, call Schwab, place a trade, or
 authorize the credential-proof execution. Any subsequent use of this baseline must strictly validate
 the private artifact and re-derive the accepted digest before acting.
+
+## Accepted runtime-baseline proof adapter
+
+The local operator now has a distinct, fail-closed path for the accepted runtime baseline. `prepare`
+accepts the private artifact only together with its explicit accepted digest and rejects any mixture
+with legacy per-service evidence. It strictly validates the artifact, binds the digest into operator
+state, and rechecks the current trading records, actual image IDs, reviewed paper-mode config
+contents, config-mount classifications, Compose exception classifications, direct-access state,
+health, ownership, process uniqueness, and no-writer gates. The state validator re-derives the digest
+from the stored records, images, and exceptions on every read and separately preserves the three
+reviewed config-content hashes because writable bind contents are not part of Docker's fingerprint.
+
+Because SPX's accepted Compose hash is mismatched, this path never recreates SPX from the reviewed
+Compose file. After fresh Approval 1 it requires a fixed mode-`0700` directory to be absent, stages
+only the reviewed Python source under `/tmp/.schwab-credential-proof-runtime` in the existing SPX
+tmpfs, and verifies the accepted runtime fingerprint is unchanged. Restoration sends `SIGCONT` to
+the original SPX process, restarts NDX/XSP if needed, removes only that exact staging directory, and
+requires the original container/image/configuration baseline and config-content hashes. The legacy
+strict-Compose recreation path remains unchanged for a future baseline that passes its original
+Compose gates.
+
+This adapter is local and fake-tested only. It has not contacted Helios, staged source, quiesced a
+process, read credentials or tokens, called Schwab, or received Approval 1 or Approval 2.

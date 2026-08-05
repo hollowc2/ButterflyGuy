@@ -29,6 +29,7 @@ COMPOSE_CONFIG_HASH_LABEL = "com.docker.compose.config-hash"
 STAGING_TMPFS_TARGET = "/app/.schwab-credential-proof-runtime"
 STAGING_ARCHIVE_TARGET = f"{STAGING_TMPFS_TARGET}/reviewed.tar"
 STAGING_SOURCE_TARGET = f"{STAGING_TMPFS_TARGET}/source"
+RUNTIME_STAGING_TMPFS_TARGET = "/tmp/.schwab-credential-proof-runtime"
 MAX_CAPTURE_BYTES = 64 * 1024
 MAX_SOURCE_BYTES = 256 * 1024
 MAX_RESULT_BYTES = 512
@@ -700,6 +701,7 @@ _STATE_FIELDS = frozenset(
         "quiescence",
         "proof",
         "restoration",
+        "runtime_baseline",
     }
 )
 _STATE_PHASES = frozenset(
@@ -771,6 +773,12 @@ def _new_state(approved_sha: str) -> dict[str, Any]:
             "result": "pending",
             "completed": None,
             "error_counts": {name: None for name in _TRADING_SERVICES},
+        },
+        "runtime_baseline": {
+            "candidate_set_sha256": None,
+            "compose_observation": None,
+            "config_content_sha256": None,
+            "config_mount_observation": None,
         },
     }
 
@@ -955,13 +963,55 @@ def _valid_state(value: object) -> bool:
     ):
         return False
     error_counts = restoration["error_counts"]
-    return bool(
+    if not (
         isinstance(error_counts, dict)
         and set(error_counts) == set(_TRADING_SERVICES)
         and all(
             item is None or (isinstance(item, int) and item >= 0)
             for item in error_counts.values()
         )
+    ):
+        return False
+    runtime_baseline = value.get("runtime_baseline")
+    if not isinstance(runtime_baseline, dict) or set(runtime_baseline) != {
+        "candidate_set_sha256",
+        "compose_observation",
+        "config_content_sha256",
+        "config_mount_observation",
+    }:
+        return False
+    candidate_set_sha256 = runtime_baseline["candidate_set_sha256"]
+    compose_observation = runtime_baseline["compose_observation"]
+    config_content_sha256 = runtime_baseline["config_content_sha256"]
+    config_mount_observation = runtime_baseline["config_mount_observation"]
+    if candidate_set_sha256 is None:
+        return (
+            compose_observation is None
+            and config_content_sha256 is None
+            and config_mount_observation is None
+        )
+    candidate_material = {
+        "compose_observation": compose_observation,
+        "config_mount_observation": config_mount_observation,
+        "images": {
+            name: baseline[name]["image_id"] for name in _TRADING_SERVICES
+        },
+        "records": {
+            name: baseline[name]["record"] for name in _TRADING_SERVICES
+        },
+    }
+    return bool(
+        isinstance(candidate_set_sha256, str)
+        and _HASH_PATTERN.fullmatch(candidate_set_sha256)
+        and _valid_compose_observation(compose_observation)
+        and isinstance(config_content_sha256, dict)
+        and set(config_content_sha256) == set(_TRADING_SERVICES)
+        and all(
+            isinstance(item, str) and _HASH_PATTERN.fullmatch(item)
+            for item in config_content_sha256.values()
+        )
+        and _valid_config_mount_observation(config_mount_observation)
+        and candidate_set_sha256 == _digest(candidate_material)
     )
 
 
@@ -2199,6 +2249,43 @@ def _accepted_snapshots(args: argparse.Namespace) -> dict[str, dict[str, object]
         raise OperatorFailure("evidence_invalid") from None
 
 
+def _runtime_config_paths(args: argparse.Namespace) -> dict[str, Path]:
+    paths = {
+        "spx": getattr(args, "spx_config", None),
+        "ndx": getattr(args, "ndx_config", None),
+        "xsp": getattr(args, "xsp_config", None),
+    }
+    if any(not isinstance(path, Path) for path in paths.values()):
+        raise OperatorFailure("invalid_arguments")
+    return paths  # type: ignore[return-value]
+
+
+def _runtime_prepare_candidate(args: argparse.Namespace) -> dict[str, object] | None:
+    evidence = getattr(args, "accepted_runtime_baseline", None)
+    digest = getattr(args, "accepted_runtime_digest", None)
+    legacy_inputs = (
+        getattr(args, "accepted_directory", None),
+        getattr(args, "accepted_spx", None),
+        getattr(args, "accepted_ndx", None),
+        getattr(args, "accepted_xsp", None),
+        getattr(args, "reviewed_evidence_root", None),
+    )
+    if evidence is None and digest is None:
+        return None
+    if (
+        not isinstance(evidence, Path)
+        or not isinstance(digest, str)
+        or any(item for item in legacy_inputs)
+    ):
+        raise OperatorFailure("invalid_arguments")
+    _runtime_config_paths(args)
+    return _accepted_runtime_baseline(evidence, digest)
+
+
+def _runtime_mode(state: dict[str, Any]) -> bool:
+    return state["runtime_baseline"]["candidate_set_sha256"] is not None
+
+
 def _approved_window(reference: str, start_utc: str, end_utc: str) -> tuple[int, int, str]:
     if not reference or len(reference) > 256:
         raise OperatorFailure("invalid_arguments")
@@ -2411,6 +2498,38 @@ def _config_mount_observation(
         if permission in permission_fields:
             observation[permission_fields[permission]].append(name)
     return observation
+
+
+def _runtime_config_content_hashes(
+    inspections: dict[str, dict[str, Any]],
+) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for name in _TRADING_SERVICES:
+        mounts = inspections[name].get("Mounts")
+        if not isinstance(mounts, list):
+            raise OperatorFailure("baseline_mismatch")
+        matching = [
+            mount
+            for mount in mounts
+            if isinstance(mount, dict)
+            and mount.get("Destination") == _RUNTIME_CONFIG_DESTINATIONS[name]
+        ]
+        if len(matching) != 1:
+            raise OperatorFailure("baseline_mismatch")
+        source = matching[0].get("Source")
+        if not (
+            matching[0].get("Type") == "bind"
+            and isinstance(source, str)
+            and source.startswith("/")
+            and len(source) <= 4096
+            and "\x00" not in source
+        ):
+            raise OperatorFailure("baseline_mismatch")
+        try:
+            hashes[name] = _sha256_file(Path(source), max_bytes=MAX_SOURCE_BYTES)
+        except (OSError, OperatorFailure, ValueError):
+            raise OperatorFailure("baseline_mismatch") from None
+    return hashes
 
 
 def _valid_config_mount_observation(value: object) -> bool:
@@ -2927,11 +3046,19 @@ def _runtime_baseline_capture(
     return succeeded, result
 
 
-def _runtime_baseline_status(path: Path) -> tuple[str, str, dict[str, object]]:
+def _read_runtime_baseline_value(path: Path) -> dict[str, object]:
     try:
         value = json.loads(_read_private_bytes(path).decode("utf-8", errors="strict"))
     except (OperatorFailure, UnicodeError, ValueError):
         raise OperatorFailure("evidence_invalid") from None
+    if not isinstance(value, dict):
+        raise OperatorFailure("evidence_invalid")
+    return value
+
+
+def _runtime_baseline_status_value(
+    value: dict[str, object],
+) -> tuple[str, str, dict[str, object]]:
     expected_fields = {
         "approval_reference_sha256",
         "approved_sha",
@@ -3080,6 +3207,90 @@ def _runtime_baseline_status(path: Path) -> tuple[str, str, dict[str, object]]:
     }
 
 
+def _runtime_baseline_status(path: Path) -> tuple[str, str, dict[str, object]]:
+    return _runtime_baseline_status_value(_read_runtime_baseline_value(path))
+
+
+def _accepted_runtime_baseline(
+    path: Path, accepted_digest: str
+) -> dict[str, object]:
+    if _HASH_PATTERN.fullmatch(accepted_digest) is None:
+        raise OperatorFailure("invalid_arguments")
+    value = _read_runtime_baseline_value(path)
+    status_value, _, fields = _runtime_baseline_status_value(value)
+    if (
+        status_value != "ok"
+        or fields.get("candidate_set_sha256") != accepted_digest
+        or not isinstance(value.get("candidate"), dict)
+    ):
+        raise OperatorFailure("baseline_mismatch")
+    return value["candidate"]
+
+
+def _require_runtime_acceptance(
+    args: argparse.Namespace,
+    candidate: dict[str, object],
+    inspections: dict[str, dict[str, Any]],
+    records: dict[str, dict[str, object]],
+) -> None:
+    config_paths = _runtime_config_paths(args)
+    config_members = {
+        "spx": "configs/config.yaml",
+        "ndx": "configs/config_ndx.yaml",
+        "xsp": "configs/config_xsp.yaml",
+    }
+    for name, member in config_members.items():
+        _require_reviewed_file(config_paths[name], args.archive, member)
+    if not _reviewed_paper_configs(list(config_paths.values())):
+        raise OperatorFailure("baseline_mismatch")
+    accepted_records = candidate.get("records")
+    accepted_images = candidate.get("images")
+    compose_observation = candidate.get("compose_observation")
+    config_mount_observation = candidate.get("config_mount_observation")
+    if not (
+        isinstance(accepted_records, dict)
+        and isinstance(accepted_images, dict)
+        and all(
+            records[name] == accepted_records.get(name)
+            and _container_identity(inspections[name])[1] == accepted_images.get(name)
+            for name in _TRADING_SERVICES
+        )
+        and _config_mount_observation(inspections, config_paths)
+        == config_mount_observation
+        and _compose_observation(args.base_compose, records) == compose_observation
+        and all(_runtime_direct_access(inspections[name]) for name in _TRADING_SERVICES)
+        and not _matching_host_processes("run_schwab_gateway.py")
+    ):
+        raise OperatorFailure("baseline_mismatch")
+
+
+def _require_runtime_acceptance_state(
+    args: argparse.Namespace,
+    state: dict[str, Any],
+    inspections: dict[str, dict[str, Any]],
+) -> None:
+    records = {name: build_record(inspections[name]) for name in _ALL_SERVICES}
+    candidate = {
+        "candidate_set_sha256": state["runtime_baseline"]["candidate_set_sha256"],
+        "compose_observation": state["runtime_baseline"]["compose_observation"],
+        "config_mount_observation": state["runtime_baseline"][
+            "config_mount_observation"
+        ],
+        "images": {
+            name: state["baseline"][name]["image_id"] for name in _TRADING_SERVICES
+        },
+        "records": {
+            name: state["baseline"][name]["record"] for name in _TRADING_SERVICES
+        },
+    }
+    _require_runtime_acceptance(args, candidate, inspections, records)
+    if (
+        _runtime_config_content_hashes(inspections)
+        != state["runtime_baseline"]["config_content_sha256"]
+    ):
+        raise OperatorFailure("baseline_mismatch")
+
+
 def _prepare(args: argparse.Namespace) -> None:
     state = _new_state(args.approved_sha)
     window_start, window_end, approval_hash = _approved_window(
@@ -3116,13 +3327,22 @@ def _prepare(args: argparse.Namespace) -> None:
         state["checks"]["reviewed_compose_files"] = "pass"
 
         inspections = _inspect_all()
-        accepted = _accepted_snapshots(args)
+        runtime_candidate = _runtime_prepare_candidate(args)
+        accepted = (
+            runtime_candidate["records"]
+            if runtime_candidate is not None
+            else _accepted_snapshots(args)
+        )
+        if not isinstance(accepted, dict):
+            raise OperatorFailure("evidence_invalid")
+        records: dict[str, dict[str, object]] = {}
         for name in _ALL_SERVICES:
             inspected = inspections[name]
             if not _container_running(inspected):
                 raise OperatorFailure("baseline_mismatch")
             container_id, image_id = _container_identity(inspected)
             record = build_record(inspected)
+            records[name] = record
             if record["staging_tmpfs_present"] is not False:
                 raise OperatorFailure("baseline_mismatch")
             if name in accepted and not records_match_exactly(accepted[name], record):
@@ -3131,6 +3351,16 @@ def _prepare(args: argparse.Namespace) -> None:
                 "container_id": container_id,
                 "image_id": image_id,
                 "record": record,
+            }
+        if runtime_candidate is not None:
+            _require_runtime_acceptance(args, runtime_candidate, inspections, records)
+            state["runtime_baseline"] = {
+                "candidate_set_sha256": runtime_candidate["candidate_set_sha256"],
+                "compose_observation": runtime_candidate["compose_observation"],
+                "config_content_sha256": _runtime_config_content_hashes(inspections),
+                "config_mount_observation": runtime_candidate[
+                    "config_mount_observation"
+                ],
             }
         for check in ("accepted_fingerprints", "field_hashes", "images", "compose_hashes"):
             state["checks"][check] = "pass"
@@ -3148,12 +3378,13 @@ def _prepare(args: argparse.Namespace) -> None:
         state["checks"]["ci_workers"] = "pass"
 
         _validate_compose_semantics(args.base_compose, args.staging_override)
-        if (
-            _compose_service_hash(args.base_compose)
-            != state["baseline"]["spx"]["record"]["compose_config_hash"]
-        ):
-            raise OperatorFailure("compose_semantics_invalid")
-        _require_base_image(args.base_compose, state["baseline"]["spx"]["image_id"])
+        if runtime_candidate is None:
+            if (
+                _compose_service_hash(args.base_compose)
+                != state["baseline"]["spx"]["record"]["compose_config_hash"]
+            ):
+                raise OperatorFailure("compose_semantics_invalid")
+            _require_base_image(args.base_compose, state["baseline"]["spx"]["image_id"])
         state["checks"]["compose_semantics"] = "pass"
         _validate_compose_dry_run(args.base_compose, args.staging_override)
         state["checks"]["compose_dry_run"] = "pass"
@@ -3202,32 +3433,45 @@ def _run_exact_json(
         raise OperatorFailure("subprocess_output_invalid")
 
 
-def _staged_operator_command(*arguments: str) -> list[str]:
+def _staging_targets(state: dict[str, Any]) -> tuple[str, str, str]:
+    root = RUNTIME_STAGING_TMPFS_TARGET if _runtime_mode(state) else STAGING_TMPFS_TARGET
+    return root, f"{root}/reviewed.tar", f"{root}/source"
+
+
+def _staged_operator_command(state: dict[str, Any], *arguments: str) -> list[str]:
+    _, _, source_target = _staging_targets(state)
     return [
         "docker",
         "exec",
         "-e",
-        f"PYTHONPATH={STAGING_SOURCE_TARGET}/src",
+        f"PYTHONPATH={source_target}/src",
         "butterfly_spx_app",
         "python",
-        f"{STAGING_SOURCE_TARGET}/src/butterfly_guy/scripts/credential_proof_fingerprint.py",
+        f"{source_target}/src/butterfly_guy/scripts/credential_proof_fingerprint.py",
         *arguments,
     ]
 
 
-def _stage_archive(archive_path: Path, expected_sha256: str) -> None:
+def _stage_archive(
+    archive_path: Path,
+    expected_sha256: str,
+    *,
+    root_target: str = STAGING_TMPFS_TARGET,
+) -> None:
+    archive_target = f"{root_target}/reviewed.tar"
+    source_target = f"{root_target}/source"
     commands = (
-        ["docker", "exec", "butterfly_spx_app", "mkdir", "-p", STAGING_SOURCE_TARGET],
-        ["docker", "cp", str(archive_path), f"butterfly_spx_app:{STAGING_ARCHIVE_TARGET}"],
+        ["docker", "exec", "butterfly_spx_app", "mkdir", "-p", source_target],
+        ["docker", "cp", str(archive_path), f"butterfly_spx_app:{archive_target}"],
         [
             "docker",
             "exec",
             "butterfly_spx_app",
             "tar",
             "-xf",
-            STAGING_ARCHIVE_TARGET,
+            archive_target,
             "-C",
-            STAGING_SOURCE_TARGET,
+            source_target,
         ],
     )
     for command in commands:
@@ -3244,8 +3488,40 @@ def _stage_archive(archive_path: Path, expected_sha256: str) -> None:
         or digest_result.stderr
         or len(parts) != 2
         or parts[0] != expected_sha256
-        or parts[1] != STAGING_ARCHIVE_TARGET
+        or parts[1] != archive_target
     ):
+        raise OperatorFailure("staging_invalid")
+
+
+def _prepare_runtime_staging() -> None:
+    absent = _run(
+        ["docker", "exec", "butterfly_spx_app", "test", "!", "-e", RUNTIME_STAGING_TMPFS_TARGET],
+        timeout=10,
+    )
+    if absent.returncode != 0 or absent.stdout or absent.stderr:
+        raise OperatorFailure("staging_invalid")
+    created = _run(
+        [
+            "docker",
+            "exec",
+            "butterfly_spx_app",
+            "mkdir",
+            "-m",
+            "700",
+            RUNTIME_STAGING_TMPFS_TARGET,
+        ],
+        timeout=10,
+    )
+    if created.returncode != 0 or created.stdout or created.stderr:
+        raise OperatorFailure("staging_invalid")
+
+
+def _cleanup_runtime_staging() -> None:
+    result = _run(
+        ["docker", "exec", "butterfly_spx_app", "rm", "-rf", RUNTIME_STAGING_TMPFS_TARGET],
+        timeout=15,
+    )
+    if result.returncode != 0 or result.stdout or result.stderr:
         raise OperatorFailure("staging_invalid")
 
 
@@ -3302,6 +3578,8 @@ def _approval_1_execute(args: argparse.Namespace) -> None:
         _validate_compose_dry_run(args.base_compose, args.staging_override)
         inspections = _inspect_all()
         _require_runtime_baseline(state, inspections)
+        if _runtime_mode(state):
+            _require_runtime_acceptance_state(args, state, inspections)
         _run_health_checks()
         service_pids = _run_uniqueness_checks()
         _require_candidate_ownership(inspections["candidate"])
@@ -3309,28 +3587,44 @@ def _approval_1_execute(args: argparse.Namespace) -> None:
         _require_no_unowned_runtime_processes(list(service_pids.values()))
 
         mutated = True
-        _recreate_staged(args.base_compose, args.staging_override)
-        staged = inspect_container("butterfly_spx_app")
-        if (
-            not _container_running(staged)
-            or _container_identity(staged)[1] != state["baseline"]["spx"]["image_id"]
-            or not staging_matches_baseline(staged, state["baseline"]["spx"]["record"])
-        ):
-            raise OperatorFailure("staging_invalid")
-        _stage_archive(args.archive, args.expected_archive_sha256)
+        if _runtime_mode(state):
+            _prepare_runtime_staging()
+            _stage_archive(
+                args.archive,
+                args.expected_archive_sha256,
+                root_target=RUNTIME_STAGING_TMPFS_TARGET,
+            )
+            _require_runtime_baseline(state, _inspect_all())
+        else:
+            _recreate_staged(args.base_compose, args.staging_override)
+            staged = inspect_container("butterfly_spx_app")
+            if (
+                not _container_running(staged)
+                or _container_identity(staged)[1]
+                != state["baseline"]["spx"]["image_id"]
+                or not staging_matches_baseline(
+                    staged, state["baseline"]["spx"]["record"]
+                )
+            ):
+                raise OperatorFailure("staging_invalid")
+            _stage_archive(args.archive, args.expected_archive_sha256)
 
         _run_exact_json(
-            _staged_operator_command("internal-native-smoke"),
+            _staged_operator_command(state, "internal-native-smoke"),
             {"code": "native_smoke_passed", "status": "ok"},
             timeout=30,
         )
         state["checks"]["native_smoke"] = "pass"
         _run_exact_json(
-            _staged_operator_command("internal-refusal-gate"),
+            _staged_operator_command(state, "internal-refusal-gate"),
             {"code": "refusal_gate_passed", "status": "ok"},
             timeout=20,
         )
         state["checks"]["refusal_gate"] = "pass"
+        if _runtime_mode(state):
+            post_smoke_inspections = _inspect_all()
+            _require_runtime_baseline(state, post_smoke_inspections)
+            _require_runtime_acceptance_state(args, state, post_smoke_inspections)
         _replace_state(args.state, state)
 
         now = int(time.time())
@@ -3366,13 +3660,15 @@ def _approval_1_execute(args: argparse.Namespace) -> None:
             if result.returncode != 0 or result.stdout != expected_stop or result.stderr:
                 raise OperatorFailure("single_writer_invalid")
         _run_exact_json(
-            _staged_operator_command("internal-signal", "--action", "stop"),
+            _staged_operator_command(state, "internal-signal", "--action", "stop"),
             {"code": "signal_passed", "status": "ok"},
         )
         if not all(_container_is_stopped(service) for service in ("ndx", "xsp")):
             raise OperatorFailure("single_writer_invalid")
         _run_exact_json(
-            _staged_operator_command("internal-signal-status", "--expect", "stopped"),
+            _staged_operator_command(
+                state, "internal-signal-status", "--expect", "stopped"
+            ),
             {"code": "signal_passed", "status": "ok"},
         )
         spx_pid = _unique_service_pid("spx")
@@ -3490,6 +3786,29 @@ def _start_container(service: str) -> None:
         raise OperatorFailure("subprocess_failed")
 
 
+def _resume_spx() -> None:
+    result = _run(
+        ["docker", "kill", "--signal", "CONT", str(_SERVICE_SPECS["spx"]["container"])],
+        timeout=15,
+    )
+    expected = f"{_SERVICE_SPECS['spx']['container']}\n"
+    if result.returncode != 0 or result.stdout != expected or result.stderr:
+        raise OperatorFailure("signal_invalid")
+
+
+def _best_effort_runtime_restore() -> None:
+    with contextlib.suppress(Exception):
+        _resume_spx()
+    for service in ("ndx", "xsp"):
+        with contextlib.suppress(Exception):
+            inspected = inspect_container(str(_SERVICE_SPECS[service]["container"]))
+            state_value = inspected.get("State")
+            if isinstance(state_value, dict) and state_value.get("Running") is not True:
+                _start_container(service)
+    with contextlib.suppress(Exception):
+        _cleanup_runtime_staging()
+
+
 def _wait_for_health() -> None:
     deadline = time.monotonic() + 30
     while True:
@@ -3592,16 +3911,20 @@ def _restore_operation(
             expected_image = state["baseline"]["spx"]["image_id"]
             if not isinstance(expected_image, str):
                 raise OperatorFailure("operator_state_invalid")
-            _validate_rollback_override(args.base_compose, args.rollback_override, expected_image)
-            _require_base_image(args.base_compose, expected_image)
-            if (
-                _compose_service_hash(args.base_compose)
-                != state["baseline"]["spx"]["record"]["compose_config_hash"]
-            ):
-                raise OperatorFailure("compose_semantics_invalid")
-
             restoration_started = int(time.time())
-            _recreate_baseline(args.base_compose, args.rollback_override)
+            if _runtime_mode(state):
+                _resume_spx()
+            else:
+                _validate_rollback_override(
+                    args.base_compose, args.rollback_override, expected_image
+                )
+                _require_base_image(args.base_compose, expected_image)
+                if (
+                    _compose_service_hash(args.base_compose)
+                    != state["baseline"]["spx"]["record"]["compose_config_hash"]
+                ):
+                    raise OperatorFailure("compose_semantics_invalid")
+                _recreate_baseline(args.base_compose, args.rollback_override)
             for service in ("ndx", "xsp"):
                 inspected = inspect_container(str(_SERVICE_SPECS[service]["container"]))
                 state_value = inspected.get("State")
@@ -3609,6 +3932,8 @@ def _restore_operation(
                     raise OperatorFailure("docker_inspect_invalid")
                 if state_value.get("Running") is not True:
                     _start_container(service)
+            if _runtime_mode(state):
+                _cleanup_runtime_staging()
 
             cron_sha = state["cron"]["sha256"]
             if not isinstance(cron_sha, str):
@@ -3627,6 +3952,11 @@ def _restore_operation(
             _wait_for_health()
             inspections = _inspect_all()
             _require_runtime_baseline(state, inspections)
+            if _runtime_mode(state) and (
+                _runtime_config_content_hashes(inspections)
+                != state["runtime_baseline"]["config_content_sha256"]
+            ):
+                raise OperatorFailure("baseline_mismatch")
             state["checks"]["restoration_fingerprints"] = "pass"
             state["checks"]["restoration_health"] = "pass"
             service_pids = _run_uniqueness_checks()
@@ -3661,7 +3991,9 @@ def _restore_operation(
                 _emit("ok", "restoration_passed")
             return True
         except Exception:
-            if isinstance(expected_image, str):
+            if _runtime_mode(state):
+                _best_effort_runtime_restore()
+            elif isinstance(expected_image, str):
                 _emergency_restore_spx(
                     args.base_compose,
                     args.rollback_override,
@@ -3790,7 +4122,9 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
         if not all(_container_is_stopped(service) for service in ("ndx", "xsp")):
             raise OperatorFailure("single_writer_invalid")
         _run_exact_json(
-            _staged_operator_command("internal-signal-status", "--expect", "stopped"),
+            _staged_operator_command(
+                state, "internal-signal-status", "--expect", "stopped"
+            ),
             {"code": "signal_passed", "status": "ok"},
         )
         spx_pid = _unique_service_pid("spx")
@@ -3802,14 +4136,15 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
         if _matching_host_processes(_PROOF_MARKER):
             raise OperatorFailure("single_writer_invalid")
 
+        _, _, source_target = _staging_targets(state)
         proof_command = [
             "docker",
             "exec",
             "-e",
-            f"PYTHONPATH={STAGING_SOURCE_TARGET}/src",
+            f"PYTHONPATH={source_target}/src",
             "butterfly_spx_app",
             "python",
-            f"{STAGING_SOURCE_TARGET}/src/butterfly_guy/scripts/probe_schwab_gateway_credentials.py",
+            f"{source_target}/src/butterfly_guy/scripts/probe_schwab_gateway_credentials.py",
             "--authorize-real-credential-read",
             "--confirm-single-token-writer",
             "--confirm-no-deployment",
@@ -3963,6 +4298,11 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--accepted-ndx", type=Path)
     prepare.add_argument("--accepted-xsp", type=Path)
     prepare.add_argument("--reviewed-evidence-root", action="append", type=Path)
+    prepare.add_argument("--accepted-runtime-baseline", type=Path)
+    prepare.add_argument("--accepted-runtime-digest")
+    prepare.add_argument("--spx-config", type=Path)
+    prepare.add_argument("--ndx-config", type=Path)
+    prepare.add_argument("--xsp-config", type=Path)
     prepare.add_argument("--base-compose", required=True, type=Path)
     prepare.add_argument("--staging-override", required=True, type=Path)
     prepare.add_argument("--archive", required=True, type=Path)
@@ -3979,6 +4319,9 @@ def _parser() -> argparse.ArgumentParser:
     approval_1.add_argument("--expected-archive-sha256", required=True)
     approval_1.add_argument("--rollback-override", required=True, type=Path)
     approval_1.add_argument("--cron-snapshot", required=True, type=Path)
+    approval_1.add_argument("--spx-config", type=Path)
+    approval_1.add_argument("--ndx-config", type=Path)
+    approval_1.add_argument("--xsp-config", type=Path)
 
     watchdog = subparsers.add_parser("watchdog-status", add_help=False)
     watchdog.add_argument("--state", required=True, type=Path)
