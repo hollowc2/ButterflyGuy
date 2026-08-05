@@ -1231,6 +1231,13 @@ def baseline_candidate_args(tmp_path: Path) -> list[str]:
     ]
 
 
+def runtime_baseline_args(tmp_path: Path) -> list[str]:
+    args = baseline_candidate_args(tmp_path)
+    args[0] = "runtime-baseline-capture"
+    args[2] = str((tmp_path / "runtime-baseline.json").resolve())
+    return args
+
+
 def patch_baseline_candidate_success(monkeypatch: pytest.MonkeyPatch) -> None:
     patch_legacy_capture_provenance(monkeypatch)
     inspections = {name: runtime_inspect() for name in operator._ALL_SERVICES}
@@ -1249,6 +1256,11 @@ def patch_baseline_candidate_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(operator, "_require_no_unowned_runtime_processes", lambda *_args: None)
     monkeypatch.setattr(operator, "_compose_service_hash", lambda *_args: COMPOSE_HASH)
     monkeypatch.setattr(operator, "_require_base_image", lambda *_args: None)
+
+
+def patch_runtime_baseline_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_baseline_candidate_success(monkeypatch)
+    monkeypatch.setattr(operator, "_runtime_uses_reviewed_config", lambda *_args: True)
 
 
 def test_baseline_candidate_capture_persists_exact_hash_only_candidate(
@@ -1484,6 +1496,146 @@ def test_baseline_candidate_status_rejects_extra_fields_without_disclosure(
     output = capsys.readouterr().out
     assert output == '{"code":"evidence_invalid","status":"error"}\n'
     assert SENSITIVE not in output
+
+
+def test_runtime_reviewed_config_requires_exact_read_only_bind(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("paper_trading: true\n", encoding="utf-8")
+    inspected = runtime_inspect()
+    inspected["Mounts"][1].update(
+        {
+            "Source": str(config_path.resolve()),
+            "Destination": operator._RUNTIME_CONFIG_DESTINATIONS["spx"],
+            "Mode": "ro",
+            "RW": False,
+        }
+    )
+
+    assert operator._runtime_uses_reviewed_config(inspected, config_path, "spx")
+
+    inspected["Mounts"][1]["RW"] = True
+    assert not operator._runtime_uses_reviewed_config(inspected, config_path, "spx")
+    assert not operator._runtime_uses_reviewed_config(inspected, config_path, "candidate")
+
+
+def test_runtime_baseline_capture_binds_runtime_and_compose_exceptions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_runtime_baseline_success(monkeypatch)
+
+    def compose_hash(_path: Path, service: str) -> str:
+        if service in {"ndx", "xsp"}:
+            raise operator.OperatorFailure("compose_semantics_invalid")
+        return "f" * 64
+
+    monkeypatch.setattr(operator, "_compose_service_hash", compose_hash)
+
+    operator.main(runtime_baseline_args(tmp_path))
+
+    output = json.loads(capsys.readouterr().out)
+    assert output == {
+        "candidate_set_sha256": output["candidate_set_sha256"],
+        "code": "runtime_baseline_candidate_ready",
+        "invalid_services": ["ndx", "xsp"],
+        "matched_services": [],
+        "mismatched_services": ["spx"],
+        "service_count": 3,
+        "status": "ok",
+    }
+    assert operator._HASH_PATTERN.fullmatch(output["candidate_set_sha256"])
+    evidence_path = tmp_path / "runtime-baseline.json"
+    stored_text = evidence_path.read_text(encoding="utf-8")
+    stored = json.loads(stored_text)
+    assert stat.S_IMODE(evidence_path.stat().st_mode) == 0o600
+    assert stored["result"] == output
+    assert stored["candidate"]["compose_observation"] == {
+        "invalid_services": ["ndx", "xsp"],
+        "matched_services": [],
+        "mismatched_services": ["spx"],
+    }
+    assert set(stored["candidate"]["images"]) == set(operator._TRADING_SERVICES)
+    assert set(stored["candidate"]["records"]) == set(operator._TRADING_SERVICES)
+    assert all(value == "pass" for value in stored["checks"].values())
+    assert stored["service_mutation"] is False
+    assert stored["credential_read"] is False
+    assert stored["token_read"] is False
+    assert stored["schwab_request"] is False
+    assert SENSITIVE not in stored_text
+    assert "/sensitive/host/token/path" not in stored_text
+
+    operator.main(
+        ["runtime-baseline-status", "--evidence", str(evidence_path.resolve())]
+    )
+    assert json.loads(capsys.readouterr().out) == output
+
+
+def test_runtime_baseline_capture_fails_closed_on_config_mount_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_runtime_baseline_success(monkeypatch)
+    monkeypatch.setattr(
+        operator,
+        "_runtime_uses_reviewed_config",
+        lambda _inspection, _path, service: service != "ndx",
+    )
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(runtime_baseline_args(tmp_path))
+
+    assert capsys.readouterr().out == '{"code":"baseline_mismatch","status":"error"}\n'
+    evidence_path = tmp_path / "runtime-baseline.json"
+    stored = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert stored["candidate"] is None
+    assert stored["checks"]["runtime_config_mounts"] == "fail"
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(
+            ["runtime-baseline-status", "--evidence", str(evidence_path.resolve())]
+        )
+    assert json.loads(capsys.readouterr().out) == {
+        "code": "baseline_mismatch",
+        "failed_check": "runtime_config_mounts",
+        "status": "error",
+    }
+
+
+def test_runtime_baseline_status_rejects_rehashed_overlapping_observation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_runtime_baseline_success(monkeypatch)
+    operator.main(runtime_baseline_args(tmp_path))
+    capsys.readouterr()
+
+    evidence_path = tmp_path / "runtime-baseline.json"
+    stored = json.loads(evidence_path.read_text(encoding="utf-8"))
+    observation = stored["candidate"]["compose_observation"]
+    observation["invalid_services"] = ["spx"]
+    observation["matched_services"] = list(operator._TRADING_SERVICES)
+    stored["candidate"]["candidate_set_sha256"] = operator._digest(
+        {
+            "compose_observation": observation,
+            "images": stored["candidate"]["images"],
+            "records": stored["candidate"]["records"],
+        }
+    )
+    stored["result"].update(observation)
+    stored["result"]["candidate_set_sha256"] = stored["candidate"][
+        "candidate_set_sha256"
+    ]
+    evidence_path.write_text(json.dumps(stored), encoding="utf-8")
+    evidence_path.chmod(0o600)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(
+            ["runtime-baseline-status", "--evidence", str(evidence_path.resolve())]
+        )
+    assert capsys.readouterr().out == '{"code":"evidence_invalid","status":"error"}\n'
 
 
 def test_runtime_direct_access_rejects_gateway_or_duplicate_environment() -> None:

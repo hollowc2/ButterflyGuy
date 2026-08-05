@@ -106,6 +106,11 @@ _SERVICE_SPECS = {
 }
 _TRADING_SERVICES = ("spx", "ndx", "xsp")
 _ALL_SERVICES = (*_TRADING_SERVICES, "candidate")
+_RUNTIME_CONFIG_DESTINATIONS = {
+    "spx": "/app/configs/config.yaml",
+    "ndx": "/app/configs/config_ndx.yaml",
+    "xsp": "/app/configs/config_xsp.yaml",
+}
 _HOST_CLIENT_MARKERS = (
     "auth_init.py",
     "backfill_equity_candles.py",
@@ -211,6 +216,24 @@ _BASELINE_CANDIDATE_CHECKS = (
     "reviewed_sources",
     "running_unpaused",
 )
+_RUNTIME_BASELINE_CHECKS = (
+    "candidate_ownership",
+    "direct_access",
+    "health",
+    "images",
+    "no_staging",
+    "no_writers",
+    "paper_mode",
+    "process_uniqueness",
+    "reviewed_sources",
+    "running_unpaused",
+    "runtime_config_mounts",
+)
+_COMPOSE_OBSERVATION_FIELDS = (
+    "invalid_services",
+    "matched_services",
+    "mismatched_services",
+)
 _EVIDENCE_REASON_CODES = frozenset(
     {
         "directory_invalid",
@@ -280,6 +303,7 @@ _RESULT_CODES = frozenset(
         "restoration_passed",
         "snapshot_captured",
         "snapshot_verified",
+        "runtime_baseline_candidate_ready",
         "single_writer_invalid",
         "signal_invalid",
         "signal_passed",
@@ -2305,6 +2329,76 @@ def _runtime_direct_access(inspected: dict[str, Any]) -> bool:
     )
 
 
+def _runtime_uses_reviewed_config(
+    inspected: dict[str, Any], config_path: Path, service: str
+) -> bool:
+    if service not in _TRADING_SERVICES:
+        return False
+    mounts = inspected.get("Mounts")
+    if not isinstance(mounts, list):
+        return False
+    try:
+        reviewed_source = str(config_path.resolve(strict=True))
+    except OSError:
+        return False
+    matching_mounts = [
+        mount
+        for mount in mounts
+        if isinstance(mount, dict)
+        and mount.get("Destination") == _RUNTIME_CONFIG_DESTINATIONS[service]
+    ]
+    if len(matching_mounts) != 1:
+        return False
+    mount = matching_mounts[0]
+    mode = mount.get("Mode")
+    return bool(
+        mount.get("Type") == "bind"
+        and mount.get("Source") == reviewed_source
+        and mount.get("RW") is False
+        and isinstance(mode, str)
+        and "ro" in mode.split(",")
+    )
+
+
+def _compose_observation(
+    base_compose: Path, records: dict[str, dict[str, object]]
+) -> dict[str, list[str]]:
+    invalid_services: list[str] = []
+    matched_services: list[str] = []
+    mismatched_services: list[str] = []
+    for name in _TRADING_SERVICES:
+        try:
+            expected_hash = _compose_service_hash(base_compose, name)
+        except OperatorFailure:
+            invalid_services.append(name)
+            continue
+        if expected_hash == records[name]["compose_config_hash"]:
+            matched_services.append(name)
+        else:
+            mismatched_services.append(name)
+    return {
+        "invalid_services": invalid_services,
+        "matched_services": matched_services,
+        "mismatched_services": mismatched_services,
+    }
+
+
+def _valid_compose_observation(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != set(_COMPOSE_OBSERVATION_FIELDS):
+        return False
+    observed: list[str] = []
+    for field in _COMPOSE_OBSERVATION_FIELDS:
+        services = value[field]
+        if (
+            not isinstance(services, list)
+            or any(name not in _TRADING_SERVICES for name in services)
+            or services != [name for name in _TRADING_SERVICES if name in services]
+        ):
+            return False
+        observed.extend(services)
+    return len(observed) == len(set(observed)) and set(observed) == set(_TRADING_SERVICES)
+
+
 def _baseline_candidate_capture(
     args: argparse.Namespace,
 ) -> tuple[bool, dict[str, object]]:
@@ -2389,16 +2483,9 @@ def _baseline_candidate_capture(
 
         images: dict[str, str] = {}
         current_check = "compose_hashes"
-        compose_invalid: list[str] = []
-        compose_mismatches: list[str] = []
-        for name in _TRADING_SERVICES:
-            try:
-                expected_hash = _compose_service_hash(args.base_compose, name)
-            except OperatorFailure:
-                compose_invalid.append(name)
-                continue
-            if expected_hash != records[name]["compose_config_hash"]:
-                compose_mismatches.append(name)
+        compose = _compose_observation(args.base_compose, records)
+        compose_invalid = compose["invalid_services"]
+        compose_mismatches = compose["mismatched_services"]
         if compose_invalid:
             failure_fields["invalid_services"] = compose_invalid
         if compose_mismatches:
@@ -2600,6 +2687,273 @@ def _baseline_candidate_status(path: Path) -> tuple[str, str, dict[str, object]]
         raise OperatorFailure("evidence_invalid")
     return "ok", "baseline_candidate_ready", {
         "candidate_set_sha256": candidate_hash,
+        "service_count": len(_TRADING_SERVICES),
+    }
+
+
+def _runtime_baseline_capture(
+    args: argparse.Namespace,
+) -> tuple[bool, dict[str, object]]:
+    window_start, window_end, approval_hash = _approved_window(
+        args.approval_reference,
+        args.window_start_utc,
+        args.window_end_utc,
+    )
+    archive_sha256 = _validate_archive(
+        args.archive,
+        args.approved_sha,
+        args.expected_archive_sha256,
+    )
+    operator_sha = _archive_member_sha256(
+        args.archive, "src/butterfly_guy/scripts/credential_proof_fingerprint.py"
+    )
+    if _sha256_file(Path(__file__).resolve(), max_bytes=MAX_SOURCE_BYTES) != operator_sha:
+        raise OperatorFailure("provenance_invalid")
+
+    checks = {name: "pending" for name in _RUNTIME_BASELINE_CHECKS}
+    started = int(time.time())
+    current_check = "reviewed_sources"
+    candidate: dict[str, object] | None = None
+    succeeded = False
+    try:
+        _require_reviewed_file(args.base_compose, args.archive, "infra/docker-compose.yml")
+        config_members = {
+            "spx": "configs/config.yaml",
+            "ndx": "configs/config_ndx.yaml",
+            "xsp": "configs/config_xsp.yaml",
+        }
+        config_paths = {
+            "spx": args.spx_config,
+            "ndx": args.ndx_config,
+            "xsp": args.xsp_config,
+        }
+        for service, member in config_members.items():
+            _require_reviewed_file(config_paths[service], args.archive, member)
+        checks[current_check] = "pass"
+
+        current_check = "paper_mode"
+        if not _reviewed_paper_configs(list(config_paths.values())):
+            raise OperatorFailure("baseline_mismatch")
+        checks[current_check] = "pass"
+
+        inspections = _inspect_all()
+        current_check = "running_unpaused"
+        if any(not _container_running(inspections[name]) for name in _ALL_SERVICES):
+            raise OperatorFailure("baseline_mismatch")
+        checks[current_check] = "pass"
+
+        current_check = "no_staging"
+        records = {name: build_record(inspections[name]) for name in _ALL_SERVICES}
+        if any(record["staging_tmpfs_present"] is not False for record in records.values()):
+            raise OperatorFailure("baseline_mismatch")
+        checks[current_check] = "pass"
+
+        current_check = "runtime_config_mounts"
+        if any(
+            not _runtime_uses_reviewed_config(
+                inspections[name], config_paths[name], name
+            )
+            for name in _TRADING_SERVICES
+        ):
+            raise OperatorFailure("baseline_mismatch")
+        checks[current_check] = "pass"
+
+        current_check = "direct_access"
+        if any(not _runtime_direct_access(inspections[name]) for name in _TRADING_SERVICES):
+            raise OperatorFailure("baseline_mismatch")
+        if _matching_host_processes("run_schwab_gateway.py"):
+            raise OperatorFailure("host_client_active")
+        checks[current_check] = "pass"
+
+        current_check = "health"
+        _run_health_checks()
+        checks[current_check] = "pass"
+
+        current_check = "process_uniqueness"
+        service_pids = _run_uniqueness_checks()
+        checks[current_check] = "pass"
+
+        current_check = "candidate_ownership"
+        _require_candidate_ownership(inspections["candidate"])
+        checks[current_check] = "pass"
+
+        current_check = "no_writers"
+        _require_no_host_writers()
+        _require_no_unowned_runtime_processes(list(service_pids.values()))
+        checks[current_check] = "pass"
+
+        current_check = "images"
+        images = {
+            name: _container_identity(inspections[name])[1]
+            for name in _TRADING_SERVICES
+        }
+        checks[current_check] = "pass"
+
+        compose = _compose_observation(args.base_compose, records)
+        accepted_records = {name: records[name] for name in _TRADING_SERVICES}
+        candidate_material = {
+            "compose_observation": compose,
+            "images": images,
+            "records": accepted_records,
+        }
+        candidate_set_sha256 = _digest(candidate_material)
+        candidate = {
+            "candidate_set_sha256": candidate_set_sha256,
+            **candidate_material,
+        }
+        result: dict[str, object] = {
+            "candidate_set_sha256": candidate_set_sha256,
+            **compose,
+            "code": "runtime_baseline_candidate_ready",
+            "service_count": len(accepted_records),
+            "status": "ok",
+        }
+        succeeded = True
+    except OperatorFailure as exc:
+        checks[current_check] = "fail"
+        result = {"code": exc.code, "status": "error"}
+    except (OSError, ValueError):
+        checks[current_check] = "fail"
+        result = {"code": "evidence_invalid", "status": "error"}
+
+    evidence: dict[str, object] = {
+        "approval_reference_sha256": approval_hash,
+        "approved_sha": args.approved_sha,
+        "archive_sha256": archive_sha256,
+        "candidate": candidate,
+        "checks": checks,
+        "credential_read": False,
+        "ended_utc": int(time.time()),
+        "evidence_type": "runtime_baseline_candidate",
+        "result": result,
+        "retry_count": 0,
+        "schema_version": LEGACY_EVIDENCE_RECORD_VERSION,
+        "service_mutation": False,
+        "schwab_request": False,
+        "started_utc": started,
+        "token_read": False,
+        "window_end_utc": window_end,
+        "window_start_utc": window_start,
+    }
+    _write_bounded_evidence_record(args.evidence_output, evidence)
+    return succeeded, result
+
+
+def _runtime_baseline_status(path: Path) -> tuple[str, str, dict[str, object]]:
+    try:
+        value = json.loads(_read_private_bytes(path).decode("utf-8", errors="strict"))
+    except (OperatorFailure, UnicodeError, ValueError):
+        raise OperatorFailure("evidence_invalid") from None
+    expected_fields = {
+        "approval_reference_sha256",
+        "approved_sha",
+        "archive_sha256",
+        "candidate",
+        "checks",
+        "credential_read",
+        "ended_utc",
+        "evidence_type",
+        "result",
+        "retry_count",
+        "schema_version",
+        "service_mutation",
+        "schwab_request",
+        "started_utc",
+        "token_read",
+        "window_end_utc",
+        "window_start_utc",
+    }
+    if not isinstance(value, dict) or set(value) != expected_fields:
+        raise OperatorFailure("evidence_invalid")
+    if not (
+        value["schema_version"] == LEGACY_EVIDENCE_RECORD_VERSION
+        and value["evidence_type"] == "runtime_baseline_candidate"
+        and isinstance(value["approved_sha"], str)
+        and _GIT_SHA_PATTERN.fullmatch(value["approved_sha"])
+        and isinstance(value["archive_sha256"], str)
+        and _HASH_PATTERN.fullmatch(value["archive_sha256"])
+        and isinstance(value["approval_reference_sha256"], str)
+        and _HASH_PATTERN.fullmatch(value["approval_reference_sha256"])
+        and value["retry_count"] == 0
+        and value["service_mutation"] is False
+        and value["credential_read"] is False
+        and value["token_read"] is False
+        and value["schwab_request"] is False
+        and all(
+            isinstance(value[name], int) and value[name] > 0
+            for name in ("started_utc", "ended_utc", "window_start_utc", "window_end_utc")
+        )
+        and value["started_utc"] <= value["ended_utc"]
+        and value["window_start_utc"] <= value["started_utc"] <= value["window_end_utc"]
+    ):
+        raise OperatorFailure("evidence_invalid")
+    checks = value["checks"]
+    result = value["result"]
+    if (
+        not isinstance(checks, dict)
+        or set(checks) != set(_RUNTIME_BASELINE_CHECKS)
+        or any(item not in {"pending", "pass", "fail"} for item in checks.values())
+        or not isinstance(result, dict)
+    ):
+        raise OperatorFailure("evidence_invalid")
+
+    candidate = value["candidate"]
+    if candidate is None:
+        failed = [name for name, result_value in checks.items() if result_value == "fail"]
+        if (
+            len(failed) != 1
+            or set(result) != {"code", "status"}
+            or result.get("status") != "error"
+            or result.get("code") not in _RESULT_CODES
+        ):
+            raise OperatorFailure("evidence_invalid")
+        return "error", str(result["code"]), {"failed_check": failed[0]}
+
+    if not isinstance(candidate, dict) or set(candidate) != {
+        "candidate_set_sha256",
+        "compose_observation",
+        "images",
+        "records",
+    }:
+        raise OperatorFailure("evidence_invalid")
+    compose = candidate["compose_observation"]
+    images = candidate["images"]
+    records = candidate["records"]
+    candidate_hash = candidate["candidate_set_sha256"]
+    candidate_material = {
+        "compose_observation": compose,
+        "images": images,
+        "records": records,
+    }
+    if not _valid_compose_observation(compose):
+        raise OperatorFailure("evidence_invalid")
+    expected_result = {
+        "candidate_set_sha256": candidate_hash,
+        **compose,
+        "code": "runtime_baseline_candidate_ready",
+        "service_count": len(_TRADING_SERVICES),
+        "status": "ok",
+    }
+    if not (
+        isinstance(images, dict)
+        and set(images) == set(_TRADING_SERVICES)
+        and all(
+            isinstance(item, str) and _IMAGE_ID_PATTERN.fullmatch(item)
+            for item in images.values()
+        )
+        and isinstance(records, dict)
+        and set(records) == set(_TRADING_SERVICES)
+        and all(_valid_record(item) for item in records.values())
+        and isinstance(candidate_hash, str)
+        and _HASH_PATTERN.fullmatch(candidate_hash)
+        and candidate_hash == _digest(candidate_material)
+        and all(item == "pass" for item in checks.values())
+        and result == expected_result
+    ):
+        raise OperatorFailure("evidence_invalid")
+    return "ok", "runtime_baseline_candidate_ready", {
+        "candidate_set_sha256": candidate_hash,
+        **compose,
         "service_count": len(_TRADING_SERVICES),
     }
 
@@ -3454,6 +3808,28 @@ def _parser() -> argparse.ArgumentParser:
     )
     baseline_candidate_status.add_argument("--evidence", required=True, type=Path)
 
+    runtime_baseline_capture = subparsers.add_parser(
+        "runtime-baseline-capture", add_help=False
+    )
+    runtime_baseline_capture.add_argument("--evidence-output", required=True, type=Path)
+    runtime_baseline_capture.add_argument("--approved-sha", required=True)
+    runtime_baseline_capture.add_argument("--approval-reference", required=True)
+    runtime_baseline_capture.add_argument("--window-start-utc", required=True)
+    runtime_baseline_capture.add_argument("--window-end-utc", required=True)
+    runtime_baseline_capture.add_argument("--archive", required=True, type=Path)
+    runtime_baseline_capture.add_argument(
+        "--expected-archive-sha256", required=True
+    )
+    runtime_baseline_capture.add_argument("--base-compose", required=True, type=Path)
+    runtime_baseline_capture.add_argument("--spx-config", required=True, type=Path)
+    runtime_baseline_capture.add_argument("--ndx-config", required=True, type=Path)
+    runtime_baseline_capture.add_argument("--xsp-config", required=True, type=Path)
+
+    runtime_baseline_status = subparsers.add_parser(
+        "runtime-baseline-status", add_help=False
+    )
+    runtime_baseline_status.add_argument("--evidence", required=True, type=Path)
+
     prepare = subparsers.add_parser("prepare", add_help=False)
     prepare.add_argument("--state", required=True, type=Path)
     prepare.add_argument("--approved-sha", required=True)
@@ -3575,6 +3951,20 @@ def main(argv: list[str] | None = None) -> None:
             if status_value == "error":
                 raise SystemExit(1)
             return
+        if args.command == "runtime-baseline-capture":
+            succeeded, result = _runtime_baseline_capture(args)
+            status_value = str(result.pop("status"))
+            code = str(result.pop("code"))
+            _emit(status_value, code, **result)
+            if not succeeded:
+                raise SystemExit(1)
+            return
+        if args.command == "runtime-baseline-status":
+            status_value, code, fields = _runtime_baseline_status(args.evidence)
+            _emit(status_value, code, **fields)
+            if status_value == "error":
+                raise SystemExit(1)
+            return
         if args.command == "prepare":
             _prepare(args)
             return
@@ -3639,6 +4029,8 @@ def main(argv: list[str] | None = None) -> None:
             "legacy-evidence-capture",
             "baseline-candidate-capture",
             "baseline-candidate-status",
+            "runtime-baseline-capture",
+            "runtime-baseline-status",
         }:
             _emit(
                 "error",

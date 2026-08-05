@@ -325,3 +325,32 @@ The current SPX/NDX/XSP runtime cannot satisfy the reviewed Compose-equality gat
 accepted as the replacement baseline. Further work requires an explicit operator decision between
 designing a separately reviewed baseline criterion for the current runtime or preparing an approved
 live reconciliation to the reviewed Compose configuration.
+
+## Runtime-baseline path
+
+The operator selected a runtime-baseline capture to unblock the credential-proof implementation
+without recreating any service. This is a separate command and does not weaken or replace the strict
+Compose-equality capture.
+
+`runtime-baseline-capture` requires the exact reviewed archive and approval window, validates all
+three reviewed paper-mode config files, and requires each trading container to bind its corresponding
+reviewed file read-only at the expected in-container destination. It then requires SPX, NDX, XSP, and
+candidate feed to be running and unpaused with no staging mount; validates SPX/NDX/XSP health and
+all process uniqueness; verifies direct access, candidate read-only ownership, and no host, CI,
+keepalive, gateway, or unowned runtime writers; and captures the actual trading-service image IDs and
+bounded runtime fingerprints.
+
+The command evaluates the reviewed Compose hash for every trading service but records the exhaustive
+result as `matched_services`, `mismatched_services`, and `invalid_services` rather than treating
+Compose provenance as a runtime-safety gate. Those classifications, the actual image IDs, and the
+three exact runtime records are all included in the candidate-set digest. A successful bounded output
+therefore presents one digest together with its known Compose exceptions for a separate explicit
+acceptance decision. A failure of any runtime-safety gate persists no candidate.
+
+The companion `runtime-baseline-status` reader validates the complete private evidence schema,
+re-derives the candidate digest, requires the three Compose classifications to be canonical,
+disjoint, and exhaustive, and emits only the bounded digest, classifications, and service count. It
+rejects altered records, images, classifications, checks, or extra fields without disclosing stored
+content. Neither command reads credentials or tokens, calls Schwab, or mutates services. A fresh
+authorization tied to an exact release, archive, evidence destination, and UTC window is required
+before the capture may contact Helios.

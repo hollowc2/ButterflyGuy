@@ -42,8 +42,14 @@ without hashes or subprocess output. Under fresh authorization, exact release
 `e32b74775e4dd4a5273de12f01a821e5056e01b4` classified SPX as mismatched and NDX/XSP as invalid
 while deriving reviewed Compose hashes. It retained protected evidence, removed exact temporary
 paths, and made no live mutation. No candidate set exists, and the current SPX/NDX/XSP set remains
-unaccepted as a replacement baseline. The current isolated slice adds a fake-tested three-consumer
-trust/admission boundary.
+unaccepted as a replacement baseline. The operator chose the runtime-baseline path. The local
+`runtime-baseline-capture` keeps every paper/direct health, process-uniqueness, ownership,
+no-writer, and no-staging gate; requires each live trading container to use its exact reviewed config
+file through a read-only bind; and binds the three runtime records, actual image IDs, and exhaustive
+Compose observation into one candidate digest. Compose invalid/mismatch classifications remain
+explicit but are not acceptance gates. The strict Compose-equality capture remains unchanged. This
+runtime path is local and fake-tested only until a new exact release receives fresh read-only Helios
+authorization. The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 
