@@ -34,8 +34,11 @@ then run under fresh authorization from exact release
 `e4838664f84fda9be032e21fe2c6f9fa273fc2ae`; it also failed closed with
 `compose_semantics_invalid` before producing any candidate set. Its mode-`0600` failure evidence is
 retained on Helios, the exact temporary source/archive were removed, and no live state was mutated.
-The current SPX/NDX/XSP set therefore remains unaccepted as a replacement baseline. The current
-isolated slice adds a fake-tested three-consumer trust/admission boundary.
+The separately authorized bounded reader then identified `failed_check=compose_hashes` but emitted
+no `mismatched_services`. The result therefore does not distinguish a trading-service hash mismatch
+from invalid bounded output while deriving a Compose hash. The current SPX/NDX/XSP set remains
+unaccepted as a replacement baseline. The current isolated slice adds a fake-tested three-consumer
+trust/admission boundary.
 
 ## Repository Findings
 

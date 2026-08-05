@@ -280,7 +280,10 @@ verified as a Billy-owned regular file with mode `0600` and size 850 bytes. The 
 archive and source directory were removed and verified absent.
 
 No Compose or service mutation, restart, process/cron action, credential/token read, Schwab request,
-staging, quiescence, trading action, or baseline acceptance occurred. The capture authorization did
-not include an additional artifact-status read, so the fixed failed check has not been disclosed.
-There is no exact SPX/NDX/XSP candidate set to present for final acceptance. Any bounded status read
-requires a separately pinned release/archive, execution window, and fresh authorization.
+staging, quiescence, trading action, or baseline acceptance occurred. Under separate authorization,
+the strict artifact reader subsequently emitted only `failed_check=compose_hashes`; it did not emit
+`mismatched_services`. This proves that the capture stopped at Compose-hash verification, but does
+not distinguish an actual trading-service hash mismatch from invalid bounded output while deriving
+a Compose hash. The evidence remained a Billy-owned regular file with mode `0600` and size 850
+bytes, and the exact temporary reader archive/source were removed and verified absent. There is no
+exact SPX/NDX/XSP candidate set to present for final acceptance.
