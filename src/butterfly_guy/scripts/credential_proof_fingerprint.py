@@ -150,6 +150,9 @@ _EVIDENCE_PRUNED_DIRECTORIES = frozenset(
     }
 )
 _ARCHIVE_PATHS = (
+    "configs/config.yaml",
+    "configs/config_ndx.yaml",
+    "configs/config_xsp.yaml",
     "pyproject.toml",
     "uv.lock",
     "infra/docker-compose.yml",
@@ -235,6 +238,7 @@ _RESULT_CODES = frozenset(
         "archive_invalid",
         "archive_mismatch",
         "baseline_mismatch",
+        "baseline_candidate_ready",
         "candidate_ownership_invalid",
         "ci_worker_active",
         "compose_dry_run_invalid",
@@ -1320,9 +1324,20 @@ def _validate_compose_action_output(result: CapturedProcess, failure_code: str) 
         raise OperatorFailure(failure_code)
 
 
-def _compose_service_hash(base_path: Path) -> str:
+def _compose_service_hash(base_path: Path, service: str = "spx") -> str:
+    if service not in _ALL_SERVICES:
+        raise OperatorFailure("compose_semantics_invalid")
+    compose_service = str(_SERVICE_SPECS[service]["compose_service"])
     result = _run(
-        ["docker", "compose", "-f", str(base_path), "config", "--hash", "app_spx"],
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(base_path),
+            "config",
+            "--hash",
+            compose_service,
+        ],
         timeout=20,
     )
     parts = result.stdout.strip().split()
@@ -1330,16 +1345,29 @@ def _compose_service_hash(base_path: Path) -> str:
         result.returncode != 0
         or result.stderr
         or len(parts) != 2
-        or parts[0] != "app_spx"
+        or parts[0] != compose_service
         or _HASH_PATTERN.fullmatch(parts[1]) is None
     ):
         raise OperatorFailure("compose_semantics_invalid")
     return parts[1]
 
 
-def _require_base_image(base_path: Path, expected_image_id: str) -> None:
+def _require_base_image(
+    base_path: Path, expected_image_id: str, service: str = "spx"
+) -> None:
+    if service not in _ALL_SERVICES:
+        raise OperatorFailure("compose_semantics_invalid")
+    compose_service = str(_SERVICE_SPECS[service]["compose_service"])
     images = _run(
-        ["docker", "compose", "-f", str(base_path), "config", "--images", "app_spx"],
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(base_path),
+            "config",
+            "--images",
+            compose_service,
+        ],
         timeout=20,
     )
     references = images.stdout.splitlines()
@@ -2150,7 +2178,7 @@ def _approved_window(reference: str, start_utc: str, end_utc: str) -> tuple[int,
     return start, end, hashlib.sha256(reference.encode()).hexdigest()
 
 
-def _write_legacy_evidence_record(path: Path, value: dict[str, object]) -> None:
+def _write_bounded_evidence_record(path: Path, value: dict[str, object]) -> None:
     if not path.is_absolute() or path.exists():
         raise OperatorFailure("evidence_invalid")
     payload = (json.dumps(value, separators=(",", ":"), sort_keys=True) + "\n").encode()
@@ -2222,7 +2250,201 @@ def _legacy_evidence_capture(
         "window_end_utc": window_end,
         "window_start_utc": window_start,
     }
-    _write_legacy_evidence_record(args.evidence_output, record)
+    _write_bounded_evidence_record(args.evidence_output, record)
+    return succeeded, result
+
+
+def _reviewed_paper_configs(paths: Sequence[Path]) -> bool:
+    if len(paths) != len(_TRADING_SERVICES):
+        return False
+    for path in paths:
+        try:
+            text = path.read_text(encoding="utf-8", errors="strict")
+        except (OSError, UnicodeError):
+            return False
+        paper_values = re.findall(
+            r"(?m)^\s*paper_trading:\s*(true|false)\s*(?:#.*)?$", text
+        )
+        live_values = re.findall(
+            r"(?m)^\s*allow_live_trading:\s*(true|false)\s*(?:#.*)?$", text
+        )
+        if paper_values != ["true"] or any(value != "false" for value in live_values):
+            return False
+    return True
+
+
+def _runtime_direct_access(inspected: dict[str, Any]) -> bool:
+    config = inspected.get("Config")
+    if not isinstance(config, dict) or not isinstance(config.get("Env"), list):
+        return False
+    values: dict[str, str] = {}
+    for item in config["Env"]:
+        if not isinstance(item, str) or "=" not in item:
+            return False
+        key, value = item.split("=", 1)
+        if not key or key in values:
+            return False
+        values[key] = value
+    return bool(
+        values.get("SCHWAB_ACCESS_MODE", "direct") == "direct"
+        and "SCHWAB_GATEWAY_URL" not in values
+        and "SCHWAB_GATEWAY_API_KEY" not in values
+    )
+
+
+def _baseline_candidate_capture(
+    args: argparse.Namespace,
+) -> tuple[bool, dict[str, object]]:
+    window_start, window_end, approval_hash = _approved_window(
+        args.approval_reference,
+        args.window_start_utc,
+        args.window_end_utc,
+    )
+    archive_sha256 = _validate_archive(
+        args.archive,
+        args.approved_sha,
+        args.expected_archive_sha256,
+    )
+    operator_sha = _archive_member_sha256(
+        args.archive, "src/butterfly_guy/scripts/credential_proof_fingerprint.py"
+    )
+    if _sha256_file(Path(__file__).resolve(), max_bytes=MAX_SOURCE_BYTES) != operator_sha:
+        raise OperatorFailure("provenance_invalid")
+
+    checks = {
+        "candidate_ownership": "pending",
+        "compose_hashes": "pending",
+        "direct_access": "pending",
+        "health": "pending",
+        "images": "pending",
+        "no_staging": "pending",
+        "no_writers": "pending",
+        "paper_mode": "pending",
+        "process_uniqueness": "pending",
+        "reviewed_sources": "pending",
+        "running_unpaused": "pending",
+    }
+    started = int(time.time())
+    current_check = "reviewed_sources"
+    candidate: dict[str, object] | None = None
+    succeeded = False
+    try:
+        _require_reviewed_file(args.base_compose, args.archive, "infra/docker-compose.yml")
+        config_members = {
+            "spx": "configs/config.yaml",
+            "ndx": "configs/config_ndx.yaml",
+            "xsp": "configs/config_xsp.yaml",
+        }
+        config_paths = {
+            "spx": args.spx_config,
+            "ndx": args.ndx_config,
+            "xsp": args.xsp_config,
+        }
+        for service, member in config_members.items():
+            _require_reviewed_file(config_paths[service], args.archive, member)
+        checks[current_check] = "pass"
+
+        current_check = "paper_mode"
+        if not _reviewed_paper_configs(list(config_paths.values())):
+            raise OperatorFailure("baseline_mismatch")
+        checks[current_check] = "pass"
+
+        inspections = _inspect_all()
+        current_check = "running_unpaused"
+        if any(not _container_running(inspections[name]) for name in _ALL_SERVICES):
+            raise OperatorFailure("baseline_mismatch")
+        checks[current_check] = "pass"
+
+        current_check = "no_staging"
+        records = {name: build_record(inspections[name]) for name in _ALL_SERVICES}
+        if any(record["staging_tmpfs_present"] is not False for record in records.values()):
+            raise OperatorFailure("baseline_mismatch")
+        checks[current_check] = "pass"
+
+        current_check = "direct_access"
+        if any(not _runtime_direct_access(inspections[name]) for name in _TRADING_SERVICES):
+            raise OperatorFailure("baseline_mismatch")
+        if _matching_host_processes("run_schwab_gateway.py"):
+            raise OperatorFailure("host_client_active")
+        checks[current_check] = "pass"
+
+        current_check = "health"
+        _run_health_checks()
+        checks[current_check] = "pass"
+
+        current_check = "process_uniqueness"
+        service_pids = _run_uniqueness_checks()
+        checks[current_check] = "pass"
+
+        current_check = "candidate_ownership"
+        _require_candidate_ownership(inspections["candidate"])
+        checks[current_check] = "pass"
+
+        current_check = "no_writers"
+        _require_no_host_writers()
+        _require_no_unowned_runtime_processes(list(service_pids.values()))
+        checks[current_check] = "pass"
+
+        images: dict[str, str] = {}
+        current_check = "compose_hashes"
+        for name in _ALL_SERVICES:
+            if _compose_service_hash(args.base_compose, name) != records[name][
+                "compose_config_hash"
+            ]:
+                raise OperatorFailure("compose_semantics_invalid")
+        checks[current_check] = "pass"
+
+        current_check = "images"
+        for name in _ALL_SERVICES:
+            _, image_id = _container_identity(inspections[name])
+            _require_base_image(args.base_compose, image_id, name)
+            images[name] = image_id
+        checks[current_check] = "pass"
+
+        accepted_records = {name: records[name] for name in _TRADING_SERVICES}
+        accepted_images = {name: images[name] for name in _TRADING_SERVICES}
+        candidate_set_sha256 = _digest(
+            {"images": accepted_images, "records": accepted_records}
+        )
+        candidate = {
+            "candidate_set_sha256": candidate_set_sha256,
+            "images": accepted_images,
+            "records": accepted_records,
+        }
+        result: dict[str, object] = {
+            "candidate_set_sha256": candidate_set_sha256,
+            "code": "baseline_candidate_ready",
+            "service_count": len(accepted_records),
+            "status": "ok",
+        }
+        succeeded = True
+    except OperatorFailure as exc:
+        checks[current_check] = "fail"
+        result = {"code": exc.code, "status": "error"}
+    except (OSError, ValueError):
+        checks[current_check] = "fail"
+        result = {"code": "evidence_invalid", "status": "error"}
+
+    evidence: dict[str, object] = {
+        "approval_reference_sha256": approval_hash,
+        "approved_sha": args.approved_sha,
+        "archive_sha256": archive_sha256,
+        "candidate": candidate,
+        "checks": checks,
+        "credential_read": False,
+        "ended_utc": int(time.time()),
+        "evidence_type": "baseline_candidate",
+        "result": result,
+        "retry_count": 0,
+        "schema_version": LEGACY_EVIDENCE_RECORD_VERSION,
+        "service_mutation": False,
+        "schwab_request": False,
+        "started_utc": started,
+        "token_read": False,
+        "window_end_utc": window_end,
+        "window_start_utc": window_start,
+    }
+    _write_bounded_evidence_record(args.evidence_output, evidence)
     return succeeded, result
 
 
@@ -3054,6 +3276,23 @@ def _parser() -> argparse.ArgumentParser:
     legacy_evidence_capture.add_argument("--archive", required=True, type=Path)
     legacy_evidence_capture.add_argument("--expected-archive-sha256", required=True)
 
+    baseline_candidate_capture = subparsers.add_parser(
+        "baseline-candidate-capture", add_help=False
+    )
+    baseline_candidate_capture.add_argument("--evidence-output", required=True, type=Path)
+    baseline_candidate_capture.add_argument("--approved-sha", required=True)
+    baseline_candidate_capture.add_argument("--approval-reference", required=True)
+    baseline_candidate_capture.add_argument("--window-start-utc", required=True)
+    baseline_candidate_capture.add_argument("--window-end-utc", required=True)
+    baseline_candidate_capture.add_argument("--archive", required=True, type=Path)
+    baseline_candidate_capture.add_argument(
+        "--expected-archive-sha256", required=True
+    )
+    baseline_candidate_capture.add_argument("--base-compose", required=True, type=Path)
+    baseline_candidate_capture.add_argument("--spx-config", required=True, type=Path)
+    baseline_candidate_capture.add_argument("--ndx-config", required=True, type=Path)
+    baseline_candidate_capture.add_argument("--xsp-config", required=True, type=Path)
+
     prepare = subparsers.add_parser("prepare", add_help=False)
     prepare.add_argument("--state", required=True, type=Path)
     prepare.add_argument("--approved-sha", required=True)
@@ -3161,6 +3400,14 @@ def main(argv: list[str] | None = None) -> None:
             if not succeeded:
                 raise SystemExit(1)
             return
+        if args.command == "baseline-candidate-capture":
+            succeeded, result = _baseline_candidate_capture(args)
+            status_value = str(result.pop("status"))
+            code = str(result.pop("code"))
+            _emit(status_value, code, **result)
+            if not succeeded:
+                raise SystemExit(1)
+            return
         if args.command == "prepare":
             _prepare(args)
             return
@@ -3223,6 +3470,7 @@ def main(argv: list[str] | None = None) -> None:
             "evidence-status",
             "legacy-evidence-status",
             "legacy-evidence-capture",
+            "baseline-candidate-capture",
         }:
             _emit(
                 "error",

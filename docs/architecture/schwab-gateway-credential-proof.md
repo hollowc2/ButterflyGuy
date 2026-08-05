@@ -212,3 +212,24 @@ file with mode `0600`. The temporary archive and source directory were removed a
 No Compose, container, process, cron, credential, token, Schwab, staging, quiescence, or Approval 2
 operation occurred. The retained evidence does not establish a baseline: an explicit operator
 new-baseline decision or newly supplied qualifying legacy evidence remains required.
+
+## Candidate new-baseline capture remediation
+
+The operator-authorized next step is a read-only capture of the current paper/direct SPX, NDX, and
+XSP configurations for a separate acceptance decision. The existing committed commands did not own
+one combined operation that could prove every required safety condition and durably bind the
+resulting records together, so no further Helios action was taken under that authorization.
+
+The local remediation adds `baseline-candidate-capture`. Before producing a candidate it validates
+the exact archive and approval window; reviewed Compose and SPX/NDX/XSP config sources; paper mode
+and direct-access runtime settings; all four containers running and unpaused; staging-mount absence;
+SPX/NDX/XSP health; application-process uniqueness; candidate read-only ownership; absence of
+keepalive, host, CI, gateway, or unowned runtime writers; and exact Compose-hash and image equality.
+
+On success it exclusively writes a mode-`0600` evidence artifact containing the three canonical
+records, three image IDs, individual check results, and one digest over the exact candidate set. It
+emits only that digest and a bounded service count. On a failed safety check it persists only the
+bounded failure and no partial candidate. The artifact contains no raw Docker inspection,
+environment values, evidence roots, credential/token data, payloads, URLs, or exceptions. A fresh
+authorization tied to the new exact SHA/archive is required before this command may contact Helios,
+and its output still requires separate explicit operator acceptance before becoming a baseline.

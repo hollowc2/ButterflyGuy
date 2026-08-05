@@ -89,6 +89,11 @@ The current isolated slice adds a fake-tested three-consumer trust/admission bou
   and approval window, performs the bounded locator, and exclusively persists one mode-`0600`
   redacted result before returning success or failure. It records no evidence roots or secret
   values and refuses to overwrite an existing artifact.
+- `scripts/credential_proof_fingerprint.py`: `baseline-candidate-capture` is the local-only,
+  fake-tested read-only path for a possible new baseline. It requires exact reviewed paper configs
+  and Compose source, direct-access runtime settings, running/unpaused services, staging absence,
+  health, uniqueness, read-only candidate ownership, writer absence, Compose-hash equality, and
+  image equality before persisting the exact three-service hash/image set.
 
 ## Token-Manager Tests Added
 
@@ -114,8 +119,8 @@ The current isolated slice adds a fake-tested three-consumer trust/admission bou
 
 ## Tests Passing
 
-- Required focused gateway/remediation suite: 160 passed.
-- Full suite: 659 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
+- Required focused gateway/remediation suite: 164 passed.
+- Full suite: 663 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
 - `uv run ruff check .`, `git diff --check`, wheel/sdist builds and content checks, and
   `graphify update .` pass.
@@ -193,8 +198,9 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-An explicit operator decision is required: provide qualifying non-rejected evidence that uniquely
-links canonical fingerprints to exactly one complete SPX/NDX/XSP record, or authorize a
-specifically defined new baseline. Do not adopt current state or a prior snapshot automatically.
-Until that decision, leave the direct-access paper services unchanged. No gateway deployment,
-staging, credential/token read, Schwab request, or cutover is currently authorized.
+Commit and archive the fake-tested `baseline-candidate-capture` remediation, then obtain fresh
+authorization tied to that exact release before Helios contact. If its read-only safety gate passes,
+present the resulting candidate-set hash for a separate explicit acceptance decision. Do not adopt
+the candidate automatically. Until acceptance, leave the direct-access paper services unchanged.
+No gateway deployment, staging, credential/token read, Schwab request, or cutover is currently
+authorized.

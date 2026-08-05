@@ -1202,6 +1202,138 @@ def test_legacy_evidence_capture_never_overwrites_existing_evidence(
     )
 
 
+def baseline_candidate_args(tmp_path: Path) -> list[str]:
+    now = datetime.now(timezone.utc)
+    return [
+        "baseline-candidate-capture",
+        "--evidence-output",
+        str((tmp_path / "baseline-candidate.json").resolve()),
+        "--approved-sha",
+        APPROVED_SHA,
+        "--approval-reference",
+        "approved-baseline-capture",
+        "--window-start-utc",
+        (now - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "--window-end-utc",
+        (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "--archive",
+        str(tmp_path / "reviewed.tar"),
+        "--expected-archive-sha256",
+        ARCHIVE_SHA,
+        "--base-compose",
+        str(tmp_path / "compose.yml"),
+        "--spx-config",
+        str(tmp_path / "config.yaml"),
+        "--ndx-config",
+        str(tmp_path / "config_ndx.yaml"),
+        "--xsp-config",
+        str(tmp_path / "config_xsp.yaml"),
+    ]
+
+
+def patch_baseline_candidate_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    patch_legacy_capture_provenance(monkeypatch)
+    inspections = {name: runtime_inspect() for name in operator._ALL_SERVICES}
+    inspections["candidate"]["Mounts"][0].update({"Mode": "ro", "RW": False})
+    monkeypatch.setattr(operator, "_require_reviewed_file", lambda *_args: None)
+    monkeypatch.setattr(operator, "_reviewed_paper_configs", lambda *_args: True)
+    monkeypatch.setattr(operator, "_inspect_all", lambda: inspections)
+    monkeypatch.setattr(operator, "_matching_host_processes", lambda *_args: [])
+    monkeypatch.setattr(operator, "_run_health_checks", lambda: None)
+    monkeypatch.setattr(
+        operator,
+        "_run_uniqueness_checks",
+        lambda: {name: index + 100 for index, name in enumerate(operator._ALL_SERVICES)},
+    )
+    monkeypatch.setattr(operator, "_require_no_host_writers", lambda: None)
+    monkeypatch.setattr(operator, "_require_no_unowned_runtime_processes", lambda *_args: None)
+    monkeypatch.setattr(operator, "_compose_service_hash", lambda *_args: COMPOSE_HASH)
+    monkeypatch.setattr(operator, "_require_base_image", lambda *_args: None)
+
+
+def test_baseline_candidate_capture_persists_exact_hash_only_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_baseline_candidate_success(monkeypatch)
+
+    operator.main(baseline_candidate_args(tmp_path))
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["code"] == "baseline_candidate_ready"
+    assert output["status"] == "ok"
+    assert output["service_count"] == 3
+    assert operator._HASH_PATTERN.fullmatch(output["candidate_set_sha256"])
+    evidence_path = tmp_path / "baseline-candidate.json"
+    stored_text = evidence_path.read_text(encoding="utf-8")
+    stored = json.loads(stored_text)
+    assert stat.S_IMODE(evidence_path.stat().st_mode) == 0o600
+    assert stored["result"] == output
+    assert stored["candidate"]["candidate_set_sha256"] == output[
+        "candidate_set_sha256"
+    ]
+    assert set(stored["candidate"]["records"]) == set(operator._TRADING_SERVICES)
+    assert set(stored["candidate"]["images"]) == set(operator._TRADING_SERVICES)
+    assert all(value == "pass" for value in stored["checks"].values())
+    assert stored["service_mutation"] is False
+    assert stored["credential_read"] is False
+    assert stored["token_read"] is False
+    assert stored["schwab_request"] is False
+    assert SENSITIVE not in stored_text
+    assert "/sensitive/host/token/path" not in stored_text
+
+
+def test_baseline_candidate_capture_persists_bounded_failed_check(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_baseline_candidate_success(monkeypatch)
+
+    def fail_health() -> None:
+        raise operator.OperatorFailure("health_invalid")
+
+    monkeypatch.setattr(operator, "_run_health_checks", fail_health)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(baseline_candidate_args(tmp_path))
+
+    output = capsys.readouterr().out
+    assert output == '{"code":"health_invalid","status":"error"}\n'
+    stored = json.loads((tmp_path / "baseline-candidate.json").read_text())
+    assert stored["candidate"] is None
+    assert stored["checks"]["health"] == "fail"
+    assert stored["result"] == {"code": "health_invalid", "status": "error"}
+    assert SENSITIVE not in output
+
+
+def test_runtime_direct_access_rejects_gateway_or_duplicate_environment() -> None:
+    inspected = runtime_inspect()
+    assert operator._runtime_direct_access(inspected)
+
+    inspected["Config"]["Env"].append("SCHWAB_ACCESS_MODE=gateway")
+    assert not operator._runtime_direct_access(inspected)
+
+    inspected = runtime_inspect()
+    inspected["Config"]["Env"].extend(["DUPLICATE=one", "DUPLICATE=two"])
+    assert not operator._runtime_direct_access(inspected)
+
+
+def test_reviewed_paper_configs_require_one_true_value_per_service(
+    tmp_path: Path,
+) -> None:
+    valid: list[Path] = []
+    for name in operator._TRADING_SERVICES:
+        path = tmp_path / f"{name}.yaml"
+        path.write_text("execution:\n  paper_trading: true\n", encoding="utf-8")
+        valid.append(path)
+    assert operator._reviewed_paper_configs(valid)
+
+    valid[1].write_text("execution:\n  paper_trading: false\n", encoding="utf-8")
+    assert not operator._reviewed_paper_configs(valid)
+
+
 def test_prepare_selects_only_explicit_reviewed_legacy_roots(tmp_path: Path) -> None:
     record = write_reviewed_legacy_evidence(tmp_path)
     args = prepare_args(tmp_path)
