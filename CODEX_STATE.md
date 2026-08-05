@@ -54,9 +54,10 @@ authorization. Under that authorization, exact release
 `runtime_config_mounts` before producing a candidate. Its protected failure evidence was retained,
 the temporary paths were removed, and no live mutation occurred. The exact-host-path requirement is
 overstrict for a runtime baseline because a different bind source may contain the identical reviewed
-file. Local remediation will require the expected read-only destination and bounded content equality,
-with fixed per-service classifications. The current isolated slice adds a fake-tested three-consumer
-trust/admission boundary.
+file. Local remediation now requires the expected read-only destination and either exact source
+identity or bounded regular-file content equality, emits exhaustive fixed per-service classifications,
+and binds them into the candidate digest. The current isolated slice adds a fake-tested
+three-consumer trust/admission boundary.
 
 ## Repository Findings
 

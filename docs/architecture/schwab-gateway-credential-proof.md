@@ -333,12 +333,12 @@ without recreating any service. This is a separate command and does not weaken o
 Compose-equality capture.
 
 `runtime-baseline-capture` requires the exact reviewed archive and approval window, validates all
-three reviewed paper-mode config files, and requires each trading container to bind its corresponding
-reviewed file read-only at the expected in-container destination. It then requires SPX, NDX, XSP, and
-candidate feed to be running and unpaused with no staging mount; validates SPX/NDX/XSP health and
-all process uniqueness; verifies direct access, candidate read-only ownership, and no host, CI,
-keepalive, gateway, or unowned runtime writers; and captures the actual trading-service image IDs and
-bounded runtime fingerprints.
+three reviewed paper-mode config files, and requires each trading container to bind either the exact
+reviewed file or a bounded regular file with identical contents read-only at the expected in-container
+destination. It then requires SPX, NDX, XSP, and candidate feed to be running and unpaused with no
+staging mount; validates SPX/NDX/XSP health and all process uniqueness; verifies direct access,
+candidate read-only ownership, and no host, CI, keepalive, gateway, or unowned runtime writers; and
+captures the actual trading-service image IDs and bounded runtime fingerprints.
 
 The command evaluates the reviewed Compose hash for every trading service but records the exhaustive
 result as `matched_services`, `mismatched_services`, and `invalid_services` rather than treating
@@ -373,8 +373,9 @@ acceptance occurred.
 The first runtime implementation required the Docker bind source pathname to equal the reviewed
 pathname. That is stronger than the selected runtime-baseline policy requires: a different regular
 host file can safely represent the reviewed config when its bounded content hash is identical and it
-is mounted read-only at the exact in-container destination. The next local remediation must classify
-every trading service explicitly, require exact read-only destination and content equality, bind that
-classification into the candidate digest, and remain fail-closed for missing, duplicate, writable,
-non-bind, unreadable, oversized, or content-different sources. Fresh authorization remains required
-before another Helios capture.
+is mounted read-only at the exact in-container destination. The local remediation classifies every
+trading service as `config_exact_services`, `config_content_match_services`, or
+`config_invalid_services`; requires those lists to be canonical, disjoint, and exhaustive; binds the
+classification into the candidate digest; and remains fail-closed with fixed service names for
+missing, duplicate, writable, non-bind, unreadable, oversized, or content-different sources. Fresh
+authorization remains required before another Helios capture.

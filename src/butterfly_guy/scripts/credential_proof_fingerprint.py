@@ -234,6 +234,11 @@ _COMPOSE_OBSERVATION_FIELDS = (
     "matched_services",
     "mismatched_services",
 )
+_CONFIG_MOUNT_OBSERVATION_FIELDS = (
+    "config_content_match_services",
+    "config_exact_services",
+    "config_invalid_services",
+)
 _EVIDENCE_REASON_CODES = frozenset(
     {
         "directory_invalid",
@@ -2329,18 +2334,18 @@ def _runtime_direct_access(inspected: dict[str, Any]) -> bool:
     )
 
 
-def _runtime_uses_reviewed_config(
+def _runtime_config_mount_status(
     inspected: dict[str, Any], config_path: Path, service: str
-) -> bool:
+) -> str:
     if service not in _TRADING_SERVICES:
-        return False
+        return "invalid"
     mounts = inspected.get("Mounts")
     if not isinstance(mounts, list):
-        return False
+        return "invalid"
     try:
-        reviewed_source = str(config_path.resolve(strict=True))
+        reviewed_source = config_path.resolve(strict=True)
     except OSError:
-        return False
+        return "invalid"
     matching_mounts = [
         mount
         for mount in mounts
@@ -2348,16 +2353,66 @@ def _runtime_uses_reviewed_config(
         and mount.get("Destination") == _RUNTIME_CONFIG_DESTINATIONS[service]
     ]
     if len(matching_mounts) != 1:
-        return False
+        return "invalid"
     mount = matching_mounts[0]
     mode = mount.get("Mode")
-    return bool(
+    source = mount.get("Source")
+    if not (
         mount.get("Type") == "bind"
-        and mount.get("Source") == reviewed_source
+        and isinstance(source, str)
+        and source.startswith("/")
+        and len(source) <= 4096
+        and "\x00" not in source
         and mount.get("RW") is False
         and isinstance(mode, str)
         and "ro" in mode.split(",")
-    )
+    ):
+        return "invalid"
+    source_path = Path(source)
+    if source_path.name != config_path.name or source_path.parent.name != "configs":
+        return "invalid"
+    try:
+        resolved_source = source_path.resolve(strict=True)
+        if resolved_source == reviewed_source:
+            return "exact"
+        if _sha256_file(source_path) == _sha256_file(reviewed_source):
+            return "content_match"
+    except (OSError, OperatorFailure, ValueError):
+        return "invalid"
+    return "invalid"
+
+
+def _config_mount_observation(
+    inspections: dict[str, dict[str, Any]], config_paths: dict[str, Path]
+) -> dict[str, list[str]]:
+    observation = {field: [] for field in _CONFIG_MOUNT_OBSERVATION_FIELDS}
+    status_fields = {
+        "content_match": "config_content_match_services",
+        "exact": "config_exact_services",
+        "invalid": "config_invalid_services",
+    }
+    for name in _TRADING_SERVICES:
+        status = _runtime_config_mount_status(
+            inspections[name], config_paths[name], name
+        )
+        observation[status_fields.get(status, "config_invalid_services")].append(name)
+    return observation
+
+
+def _valid_config_mount_observation(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != set(_CONFIG_MOUNT_OBSERVATION_FIELDS):
+        return False
+    observed: list[str] = []
+    for field in _CONFIG_MOUNT_OBSERVATION_FIELDS:
+        services = value[field]
+        if (
+            not isinstance(services, list)
+            or any(name not in _TRADING_SERVICES for name in services)
+            or services != [name for name in _TRADING_SERVICES if name in services]
+        ):
+            return False
+        observed.extend(services)
+    return len(observed) == len(set(observed)) and set(observed) == set(_TRADING_SERVICES)
 
 
 def _compose_observation(
@@ -2714,6 +2769,7 @@ def _runtime_baseline_capture(
     started = int(time.time())
     current_check = "reviewed_sources"
     candidate: dict[str, object] | None = None
+    failure_fields: dict[str, object] = {}
     succeeded = False
     try:
         _require_reviewed_file(args.base_compose, args.archive, "infra/docker-compose.yml")
@@ -2749,12 +2805,11 @@ def _runtime_baseline_capture(
         checks[current_check] = "pass"
 
         current_check = "runtime_config_mounts"
-        if any(
-            not _runtime_uses_reviewed_config(
-                inspections[name], config_paths[name], name
-            )
-            for name in _TRADING_SERVICES
-        ):
+        config_mounts = _config_mount_observation(inspections, config_paths)
+        if config_mounts["config_invalid_services"]:
+            failure_fields["invalid_config_services"] = config_mounts[
+                "config_invalid_services"
+            ]
             raise OperatorFailure("baseline_mismatch")
         checks[current_check] = "pass"
 
@@ -2793,6 +2848,7 @@ def _runtime_baseline_capture(
         accepted_records = {name: records[name] for name in _TRADING_SERVICES}
         candidate_material = {
             "compose_observation": compose,
+            "config_mount_observation": config_mounts,
             "images": images,
             "records": accepted_records,
         }
@@ -2804,6 +2860,7 @@ def _runtime_baseline_capture(
         result: dict[str, object] = {
             "candidate_set_sha256": candidate_set_sha256,
             **compose,
+            **config_mounts,
             "code": "runtime_baseline_candidate_ready",
             "service_count": len(accepted_records),
             "status": "ok",
@@ -2811,7 +2868,7 @@ def _runtime_baseline_capture(
         succeeded = True
     except OperatorFailure as exc:
         checks[current_check] = "fail"
-        result = {"code": exc.code, "status": "error"}
+        result = {"code": exc.code, **failure_fields, "status": "error"}
     except (OSError, ValueError):
         checks[current_check] = "fail"
         result = {"code": "evidence_invalid", "status": "error"}
@@ -2900,36 +2957,69 @@ def _runtime_baseline_status(path: Path) -> tuple[str, str, dict[str, object]]:
     candidate = value["candidate"]
     if candidate is None:
         failed = [name for name, result_value in checks.items() if result_value == "fail"]
+        allowed_result_fields = {"code", "status"}
+        if failed == ["runtime_config_mounts"]:
+            allowed_result_fields.add("invalid_config_services")
+        invalid_config_services = result.get("invalid_config_services")
         if (
             len(failed) != 1
-            or set(result) != {"code", "status"}
+            or not {"code", "status"}.issubset(result)
+            or not set(result).issubset(allowed_result_fields)
             or result.get("status") != "error"
             or result.get("code") not in _RESULT_CODES
+            or (
+                "invalid_config_services" in result
+                and (
+                    not isinstance(invalid_config_services, list)
+                    or not invalid_config_services
+                    or any(
+                        name not in _TRADING_SERVICES
+                        for name in invalid_config_services
+                    )
+                    or invalid_config_services
+                    != [
+                        name
+                        for name in _TRADING_SERVICES
+                        if name in invalid_config_services
+                    ]
+                )
+            )
         ):
             raise OperatorFailure("evidence_invalid")
-        return "error", str(result["code"]), {"failed_check": failed[0]}
+        fields: dict[str, object] = {"failed_check": failed[0]}
+        if "invalid_config_services" in result:
+            fields["invalid_config_services"] = invalid_config_services
+        return "error", str(result["code"]), fields
 
     if not isinstance(candidate, dict) or set(candidate) != {
         "candidate_set_sha256",
         "compose_observation",
+        "config_mount_observation",
         "images",
         "records",
     }:
         raise OperatorFailure("evidence_invalid")
     compose = candidate["compose_observation"]
+    config_mounts = candidate["config_mount_observation"]
     images = candidate["images"]
     records = candidate["records"]
     candidate_hash = candidate["candidate_set_sha256"]
     candidate_material = {
         "compose_observation": compose,
+        "config_mount_observation": config_mounts,
         "images": images,
         "records": records,
     }
-    if not _valid_compose_observation(compose):
+    if not (
+        _valid_compose_observation(compose)
+        and _valid_config_mount_observation(config_mounts)
+        and not config_mounts["config_invalid_services"]
+    ):
         raise OperatorFailure("evidence_invalid")
     expected_result = {
         "candidate_set_sha256": candidate_hash,
         **compose,
+        **config_mounts,
         "code": "runtime_baseline_candidate_ready",
         "service_count": len(_TRADING_SERVICES),
         "status": "ok",
@@ -2954,6 +3044,7 @@ def _runtime_baseline_status(path: Path) -> tuple[str, str, dict[str, object]]:
     return "ok", "runtime_baseline_candidate_ready", {
         "candidate_set_sha256": candidate_hash,
         **compose,
+        **config_mounts,
         "service_count": len(_TRADING_SERVICES),
     }
 

@@ -1260,7 +1260,15 @@ def patch_baseline_candidate_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def patch_runtime_baseline_success(monkeypatch: pytest.MonkeyPatch) -> None:
     patch_baseline_candidate_success(monkeypatch)
-    monkeypatch.setattr(operator, "_runtime_uses_reviewed_config", lambda *_args: True)
+    monkeypatch.setattr(
+        operator,
+        "_config_mount_observation",
+        lambda *_args: {
+            "config_content_match_services": [],
+            "config_exact_services": list(operator._TRADING_SERVICES),
+            "config_invalid_services": [],
+        },
+    )
 
 
 def test_baseline_candidate_capture_persists_exact_hash_only_candidate(
@@ -1498,9 +1506,15 @@ def test_baseline_candidate_status_rejects_extra_fields_without_disclosure(
     assert SENSITIVE not in output
 
 
-def test_runtime_reviewed_config_requires_exact_read_only_bind(tmp_path: Path) -> None:
-    config_path = tmp_path / "config.yaml"
+def test_runtime_reviewed_config_requires_read_only_content_equivalent_bind(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "configs" / "config.yaml"
+    config_path.parent.mkdir()
     config_path.write_text("paper_trading: true\n", encoding="utf-8")
+    equivalent_path = tmp_path / "alternate" / "configs" / "config.yaml"
+    equivalent_path.parent.mkdir(parents=True)
+    equivalent_path.write_text("paper_trading: true\n", encoding="utf-8")
     inspected = runtime_inspect()
     inspected["Mounts"][1].update(
         {
@@ -1511,11 +1525,24 @@ def test_runtime_reviewed_config_requires_exact_read_only_bind(tmp_path: Path) -
         }
     )
 
-    assert operator._runtime_uses_reviewed_config(inspected, config_path, "spx")
+    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == "exact"
 
+    inspected["Mounts"][1]["Source"] = str(equivalent_path.resolve())
+    assert (
+        operator._runtime_config_mount_status(inspected, config_path, "spx")
+        == "content_match"
+    )
+
+    equivalent_path.write_text("paper_trading: false\n", encoding="utf-8")
+    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == "invalid"
+
+    equivalent_path.write_text("paper_trading: true\n", encoding="utf-8")
     inspected["Mounts"][1]["RW"] = True
-    assert not operator._runtime_uses_reviewed_config(inspected, config_path, "spx")
-    assert not operator._runtime_uses_reviewed_config(inspected, config_path, "candidate")
+    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == "invalid"
+    assert (
+        operator._runtime_config_mount_status(inspected, config_path, "candidate")
+        == "invalid"
+    )
 
 
 def test_runtime_baseline_capture_binds_runtime_and_compose_exceptions(
@@ -1538,6 +1565,9 @@ def test_runtime_baseline_capture_binds_runtime_and_compose_exceptions(
     assert output == {
         "candidate_set_sha256": output["candidate_set_sha256"],
         "code": "runtime_baseline_candidate_ready",
+        "config_content_match_services": [],
+        "config_exact_services": ["spx", "ndx", "xsp"],
+        "config_invalid_services": [],
         "invalid_services": ["ndx", "xsp"],
         "matched_services": [],
         "mismatched_services": ["spx"],
@@ -1554,6 +1584,11 @@ def test_runtime_baseline_capture_binds_runtime_and_compose_exceptions(
         "invalid_services": ["ndx", "xsp"],
         "matched_services": [],
         "mismatched_services": ["spx"],
+    }
+    assert stored["candidate"]["config_mount_observation"] == {
+        "config_content_match_services": [],
+        "config_exact_services": ["spx", "ndx", "xsp"],
+        "config_invalid_services": [],
     }
     assert set(stored["candidate"]["images"]) == set(operator._TRADING_SERVICES)
     assert set(stored["candidate"]["records"]) == set(operator._TRADING_SERVICES)
@@ -1579,14 +1614,22 @@ def test_runtime_baseline_capture_fails_closed_on_config_mount_mismatch(
     patch_runtime_baseline_success(monkeypatch)
     monkeypatch.setattr(
         operator,
-        "_runtime_uses_reviewed_config",
-        lambda _inspection, _path, service: service != "ndx",
+        "_config_mount_observation",
+        lambda *_args: {
+            "config_content_match_services": [],
+            "config_exact_services": ["spx", "xsp"],
+            "config_invalid_services": ["ndx"],
+        },
     )
 
     with pytest.raises(SystemExit, match="1"):
         operator.main(runtime_baseline_args(tmp_path))
 
-    assert capsys.readouterr().out == '{"code":"baseline_mismatch","status":"error"}\n'
+    assert json.loads(capsys.readouterr().out) == {
+        "code": "baseline_mismatch",
+        "invalid_config_services": ["ndx"],
+        "status": "error",
+    }
     evidence_path = tmp_path / "runtime-baseline.json"
     stored = json.loads(evidence_path.read_text(encoding="utf-8"))
     assert stored["candidate"] is None
@@ -1599,6 +1642,7 @@ def test_runtime_baseline_capture_fails_closed_on_config_mount_mismatch(
     assert json.loads(capsys.readouterr().out) == {
         "code": "baseline_mismatch",
         "failed_check": "runtime_config_mounts",
+        "invalid_config_services": ["ndx"],
         "status": "error",
     }
 
@@ -1620,6 +1664,9 @@ def test_runtime_baseline_status_rejects_rehashed_overlapping_observation(
     stored["candidate"]["candidate_set_sha256"] = operator._digest(
         {
             "compose_observation": observation,
+            "config_mount_observation": stored["candidate"][
+                "config_mount_observation"
+            ],
             "images": stored["candidate"]["images"],
             "records": stored["candidate"]["records"],
         }
