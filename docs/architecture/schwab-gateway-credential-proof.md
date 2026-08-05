@@ -268,3 +268,19 @@ retains every candidate-feed safety check. A trading-service Compose mismatch is
 emitted only as a fixed service name; no hashes or partial candidate are exposed. The correction is
 fake-tested only and requires a new exact SHA/archive plus fresh authorization before another
 read-only Helios capture.
+
+## Corrected candidate capture safety stop — 2026-08-05
+
+Under fresh authorization, exact release `e4838664f84fda9be032e21fe2c6f9fa273fc2ae`
+and archive SHA-256 `6c611947c9becc55a5441e0c6f2117e18fb56070a2a6f055736308ba876c4bf7`
+ran the corrected committed read-only candidate capture on Helios. It failed closed with the bounded
+`compose_semantics_invalid` result before producing any candidate set. The failure artifact was
+durably retained at `/opt/butterflyguy/.baseline-candidate-evidence-20260805-e483866.json` and
+verified as a Billy-owned regular file with mode `0600` and size 850 bytes. The exact temporary
+archive and source directory were removed and verified absent.
+
+No Compose or service mutation, restart, process/cron action, credential/token read, Schwab request,
+staging, quiescence, trading action, or baseline acceptance occurred. The capture authorization did
+not include an additional artifact-status read, so the fixed failed check has not been disclosed.
+There is no exact SPX/NDX/XSP candidate set to present for final acceptance. Any bounded status read
+requires a separately pinned release/archive, execution window, and fresh authorization.

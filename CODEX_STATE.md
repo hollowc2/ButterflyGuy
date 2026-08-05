@@ -29,8 +29,13 @@ An authorized read-only new-baseline candidate capture then failed closed with t
 evidence was retained and temporary source removed. The authorized bounded reader identified the
 failed check as `compose_hashes`. Local review found that the capture had incorrectly required
 Compose/image equality for the candidate-feed container even though the authorized baseline set is
-SPX/NDX/XSP and candidate feed requires ownership/uniqueness checks only. The current isolated slice
-adds a fake-tested three-consumer trust/admission boundary.
+SPX/NDX/XSP and candidate feed requires ownership/uniqueness checks only. The corrected capture was
+then run under fresh authorization from exact release
+`e4838664f84fda9be032e21fe2c6f9fa273fc2ae`; it also failed closed with
+`compose_semantics_invalid` before producing any candidate set. Its mode-`0600` failure evidence is
+retained on Helios, the exact temporary source/archive were removed, and no live state was mutated.
+The current SPX/NDX/XSP set therefore remains unaccepted as a replacement baseline. The current
+isolated slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 
