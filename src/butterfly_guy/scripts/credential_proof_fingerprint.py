@@ -35,6 +35,7 @@ MAX_EVIDENCE_DIRECTORIES = 128
 MAX_EVIDENCE_FILES = 4096
 MAX_EVIDENCE_CANDIDATES = 256
 MAX_EVIDENCE_JSON_NODES = 512
+MAX_EVIDENCE_DEPTH = 3
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 15
 PROOF_TIMEOUT_SECONDS = 45
 RESTORE_BUDGET_SECONDS = 120
@@ -120,6 +121,21 @@ _CI_WORKER_MARKERS = ("Runner.Worker", "Agent.Worker")
 _PROOF_MARKER = "probe_schwab_gateway_credentials.py"
 _ERROR_MARKERS = ("error", "exception", "traceback", "critical", "failed")
 _EVIDENCE_MARKERS = ("accepted", "resume", "supplement")
+_LEGACY_EVIDENCE_MARKERS = (
+    "credential-proof",
+    "credential_proof",
+    "fingerprint",
+    "baseline",
+)
+_LEGACY_EVIDENCE_DIRECTORY_MARKERS = (
+    "evidence",
+    "credential",
+    "fingerprint",
+    "baseline",
+)
+_FORBIDDEN_EVIDENCE_NAME_PATTERN = re.compile(
+    r"(?:^|[^a-z0-9])(?:tokens?|secrets?|keys?)(?:[^a-z0-9]|$)"
+)
 _EVIDENCE_PRUNED_DIRECTORIES = frozenset(
     {
         ".git",
@@ -183,6 +199,7 @@ _EVIDENCE_REASON_CODES = frozenset(
         "directory_invalid",
         "duplicate_service",
         "missing_service",
+        "no_acceptance",
         "no_candidates",
         "schema_invalid",
         "traversal_limit",
@@ -235,6 +252,7 @@ _RESULT_CODES = frozenset(
         "internal_failure",
         "invalid_arguments",
         "keepalive_active",
+        "legacy_evidence_ready",
         "native_smoke_failed",
         "native_smoke_passed",
         "operator_state_invalid",
@@ -1741,14 +1759,15 @@ def _records_in_evidence(value: object) -> list[tuple[str, dict[str, object]]]:
     return found
 
 
-def _read_evidence_records(path: Path, relative_name: str) -> list[tuple[str, dict[str, object]]]:
+def _read_evidence_value(path: Path) -> object | None:
     file_stat = path.lstat()
     if (
         not stat.S_ISREG(file_stat.st_mode)
         or stat.S_IMODE(file_stat.st_mode) != 0o600
+        or file_stat.st_uid != os.getuid()
         or file_stat.st_size > MAX_SOURCE_BYTES
     ):
-        return []
+        return None
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -1758,10 +1777,16 @@ def _read_evidence_records(path: Path, relative_name: str) -> list[tuple[str, di
             descriptor = -1
             value = json.load(handle)
     except (UnicodeDecodeError, ValueError):
-        return []
+        return None
     finally:
         if descriptor >= 0:
             os.close(descriptor)
+    return value
+
+
+def _evidence_records(
+    value: object, relative_name: str
+) -> list[tuple[str, dict[str, object]]]:
     if _valid_record(value):
         service = _service_name(relative_name)
         return [] if service is None else [(service, value)]
@@ -1769,6 +1794,234 @@ def _read_evidence_records(path: Path, relative_name: str) -> list[tuple[str, di
         return _records_in_evidence(value)
     except ValueError:
         return []
+
+
+def _read_evidence_records(path: Path, relative_name: str) -> list[tuple[str, dict[str, object]]]:
+    try:
+        value = _read_evidence_value(path)
+    except OSError:
+        return []
+    return [] if value is None else _evidence_records(value, relative_name)
+
+
+def _has_explicit_acceptance(value: object) -> bool:
+    stack: list[tuple[str, object]] = [("", value)]
+    visited = 0
+    while stack:
+        context, current = stack.pop()
+        visited += 1
+        if visited > MAX_EVIDENCE_JSON_NODES:
+            return False
+        if isinstance(current, dict):
+            for key, item in current.items():
+                if not isinstance(key, str):
+                    return False
+                normalized_key = key.casefold().replace("-", "_")
+                if "accepted" in normalized_key and (
+                    "fingerprint" in normalized_key or "baseline" in normalized_key
+                ):
+                    if isinstance(item, (dict, list)) or item is True:
+                        return True
+                    if isinstance(item, str) and item.casefold() in {"accepted", "pass", "yes"}:
+                        return True
+                stack.append((normalized_key, item))
+        elif isinstance(current, list):
+            stack.extend((context, item) for item in current)
+        elif isinstance(current, str):
+            normalized = " ".join(current.casefold().replace("_", " ").split())
+            if context in {"reviewer_disposition", "disposition"} and normalized == "accepted":
+                return True
+            if "baseline" in normalized and (
+                "accepted" in normalized or normalized.startswith("accept ")
+            ):
+                return True
+    return False
+
+
+def _has_explicit_rejection(value: object) -> bool:
+    stack: list[tuple[str, object]] = [("", value)]
+    visited = 0
+    rejected_values = {"fail", "inconclusive", "invalid", "no", "rejected"}
+    while stack:
+        context, current = stack.pop()
+        visited += 1
+        if visited > MAX_EVIDENCE_JSON_NODES:
+            return True
+        if isinstance(current, dict):
+            for key, item in current.items():
+                if not isinstance(key, str):
+                    return True
+                stack.append((key.casefold().replace("-", "_"), item))
+        elif isinstance(current, list):
+            stack.extend((context, item) for item in current)
+        elif isinstance(current, str):
+            normalized = " ".join(current.casefold().replace("_", " ").split())
+            if context in {"reviewer_disposition", "disposition"} and normalized in {
+                "inconclusive",
+                "rejected",
+            }:
+                return True
+            if "accepted" in context and normalized in rejected_values:
+                return True
+        elif current is False and "accepted" in context:
+            return True
+    return False
+
+
+def _accepted_fingerprint_hashes(value: object) -> dict[str, set[str]]:
+    found = {name: set() for name in _TRADING_SERVICES}
+    stack: list[tuple[object, str | None, bool]] = [(value, None, False)]
+    visited = 0
+    while stack:
+        current, service_hint, fingerprint_context = stack.pop()
+        visited += 1
+        if visited > MAX_EVIDENCE_JSON_NODES:
+            return {name: set() for name in _TRADING_SERVICES}
+        if isinstance(current, dict):
+            for key, item in current.items():
+                if not isinstance(key, str):
+                    return {name: set() for name in _TRADING_SERVICES}
+                key_service = _service_name(key)
+                stack.append(
+                    (
+                        item,
+                        key_service if key_service is not None else service_hint,
+                        fingerprint_context or "fingerprint" in key.casefold(),
+                    )
+                )
+        elif isinstance(current, list):
+            stack.extend(
+                (item, service_hint, fingerprint_context) for item in current
+            )
+        elif (
+            isinstance(current, str)
+            and service_hint is not None
+            and fingerprint_context
+            and _HASH_PATTERN.fullmatch(current)
+        ):
+            found[service_hint].add(current)
+    return found
+
+
+def _legacy_candidate(relative_name: str) -> bool:
+    lowered = relative_name.casefold()
+    return bool(
+        lowered.endswith(".json")
+        and any(marker in lowered for marker in _LEGACY_EVIDENCE_MARKERS)
+        and _FORBIDDEN_EVIDENCE_NAME_PATTERN.search(lowered) is None
+    )
+
+
+def _discover_reviewed_legacy_snapshots(
+    directories: Sequence[Path],
+) -> tuple[dict[str, dict[str, object]], int, int]:
+    if not directories or len(directories) > 4:
+        raise EvidenceFailure("directory_invalid")
+    candidates: list[tuple[object, str]] = []
+    visited_directories = 0
+    visited_files = 0
+    for directory in directories:
+        try:
+            directory_stat = directory.lstat()
+        except OSError:
+            raise EvidenceFailure("directory_invalid") from None
+        if not stat.S_ISDIR(directory_stat.st_mode) or directory.is_symlink():
+            raise EvidenceFailure("directory_invalid")
+        try:
+            for root, child_directories, filenames in os.walk(
+                directory, followlinks=False
+            ):
+                visited_directories += 1
+                if visited_directories > MAX_EVIDENCE_DIRECTORIES:
+                    raise EvidenceFailure(
+                        "traversal_limit", candidate_count=len(candidates)
+                    )
+                child_directories[:] = [
+                    name
+                    for name in child_directories
+                    if name not in _EVIDENCE_PRUNED_DIRECTORIES
+                    and not (Path(root) / name).is_symlink()
+                    and any(
+                        marker in name.casefold()
+                        for marker in _LEGACY_EVIDENCE_DIRECTORY_MARKERS
+                    )
+                ]
+                if len(Path(root).relative_to(directory).parts) >= MAX_EVIDENCE_DEPTH:
+                    child_directories[:] = []
+                for filename in filenames:
+                    visited_files += 1
+                    if visited_files > MAX_EVIDENCE_FILES:
+                        raise EvidenceFailure(
+                            "traversal_limit", candidate_count=len(candidates)
+                        )
+                    path = Path(root) / filename
+                    relative = str(path.relative_to(directory))
+                    if not _legacy_candidate(relative):
+                        continue
+                    if len(candidates) >= MAX_EVIDENCE_CANDIDATES:
+                        raise EvidenceFailure(
+                            "traversal_limit", candidate_count=len(candidates)
+                        )
+                    value = _read_evidence_value(path)
+                    if value is not None:
+                        candidates.append((value, relative))
+        except EvidenceFailure:
+            raise
+        except OSError:
+            raise EvidenceFailure(
+                "directory_invalid", candidate_count=len(candidates)
+            ) from None
+    if not candidates:
+        raise EvidenceFailure("no_candidates")
+
+    accepted_values = [
+        value
+        for value, _ in candidates
+        if _has_explicit_acceptance(value) and not _has_explicit_rejection(value)
+    ]
+    if not accepted_values:
+        raise EvidenceFailure("no_acceptance", candidate_count=len(candidates))
+    accepted_hashes = {name: set() for name in _TRADING_SERVICES}
+    for value in accepted_values:
+        hashes = _accepted_fingerprint_hashes(value)
+        for name in _TRADING_SERVICES:
+            accepted_hashes[name].update(hashes[name])
+
+    direct = {name: [] for name in _TRADING_SERVICES}
+    linked = {name: [] for name in _TRADING_SERVICES}
+    accepted_ids = {id(value) for value in accepted_values}
+    valid_record_count = 0
+    for value, relative in candidates:
+        records = _evidence_records(value, relative)
+        valid_record_count += len(records)
+        for service, record in records:
+            if id(value) in accepted_ids:
+                direct[service].append(record)
+            elif record["configuration_fingerprint"] in accepted_hashes[service]:
+                linked[service].append(record)
+    if valid_record_count == 0:
+        raise EvidenceFailure("schema_invalid", candidate_count=len(candidates))
+    selected = {
+        name: direct[name] if direct[name] else linked[name] for name in _TRADING_SERVICES
+    }
+    selected_count = sum(len(records) for records in selected.values())
+    if any(len(records) > 1 for records in selected.values()):
+        raise EvidenceFailure(
+            "duplicate_service",
+            candidate_count=len(candidates),
+            valid_record_count=selected_count,
+        )
+    if any(len(records) == 0 for records in selected.values()):
+        raise EvidenceFailure(
+            "missing_service",
+            candidate_count=len(candidates),
+            valid_record_count=selected_count,
+        )
+    return (
+        {name: selected[name][0] for name in _TRADING_SERVICES},
+        len(candidates),
+        len(accepted_values),
+    )
 
 
 def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]]:
@@ -1797,6 +2050,8 @@ def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]
                 if name not in _EVIDENCE_PRUNED_DIRECTORIES
                 and not (Path(root) / name).is_symlink()
             ]
+            if len(Path(root).relative_to(directory).parts) >= MAX_EVIDENCE_DEPTH:
+                directories[:] = []
             for filename in filenames:
                 visited_files += 1
                 if visited_files > MAX_EVIDENCE_FILES:
@@ -1850,6 +2105,11 @@ def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]
 
 def _accepted_snapshots(args: argparse.Namespace) -> dict[str, dict[str, object]]:
     explicit = (args.accepted_spx, args.accepted_ndx, args.accepted_xsp)
+    reviewed_roots = getattr(args, "reviewed_evidence_root", None)
+    if reviewed_roots:
+        if args.accepted_directory is not None or any(path is not None for path in explicit):
+            raise OperatorFailure("invalid_arguments")
+        return _discover_reviewed_legacy_snapshots(reviewed_roots)[0]
     if args.accepted_directory is not None:
         if any(path is not None for path in explicit):
             raise OperatorFailure("invalid_arguments")
@@ -2696,6 +2956,13 @@ def _parser() -> argparse.ArgumentParser:
     evidence_status = subparsers.add_parser("evidence-status", add_help=False)
     evidence_status.add_argument("--accepted-directory", required=True, type=Path)
 
+    legacy_evidence_status = subparsers.add_parser(
+        "legacy-evidence-status", add_help=False
+    )
+    legacy_evidence_status.add_argument(
+        "--evidence-root", required=True, action="append", type=Path
+    )
+
     prepare = subparsers.add_parser("prepare", add_help=False)
     prepare.add_argument("--state", required=True, type=Path)
     prepare.add_argument("--approved-sha", required=True)
@@ -2706,6 +2973,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--accepted-spx", type=Path)
     prepare.add_argument("--accepted-ndx", type=Path)
     prepare.add_argument("--accepted-xsp", type=Path)
+    prepare.add_argument("--reviewed-evidence-root", action="append", type=Path)
     prepare.add_argument("--base-compose", required=True, type=Path)
     prepare.add_argument("--staging-override", required=True, type=Path)
     prepare.add_argument("--archive", required=True, type=Path)
@@ -2781,6 +3049,19 @@ def main(argv: list[str] | None = None) -> None:
                 valid_record_count=len(snapshots),
             )
             return
+        if args.command == "legacy-evidence-status":
+            snapshots, candidate_count, acceptance_count = (
+                _discover_reviewed_legacy_snapshots(args.evidence_root)
+            )
+            _emit(
+                "ok",
+                "legacy_evidence_ready",
+                acceptance_count=acceptance_count,
+                candidate_count=candidate_count,
+                service_count=len(snapshots),
+                valid_record_count=len(snapshots),
+            )
+            return
         if args.command == "prepare":
             _prepare(args)
             return
@@ -2839,7 +3120,7 @@ def main(argv: list[str] | None = None) -> None:
             raise OperatorFailure("fingerprint_failed")
         _emit("ok", "snapshot_verified", expectation=args.expect)
     except EvidenceFailure as exc:
-        if args.command == "evidence-status":
+        if args.command in {"evidence-status", "legacy-evidence-status"}:
             _emit(
                 "error",
                 exc.code,

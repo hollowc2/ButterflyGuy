@@ -955,6 +955,152 @@ def test_evidence_status_reports_ready_without_paths_or_content(
     }
 
 
+def write_reviewed_legacy_evidence(root: Path) -> dict[str, object]:
+    record = operator.build_record(runtime_inspect())
+    decision = root / "credential-proof-operator-decision.json"
+    decision.write_text(
+        json.dumps(
+            {
+                "operator_decision": "accept current verified configuration as new baseline",
+                "accepted_fingerprints": {
+                    name: record["configuration_fingerprint"]
+                    for name in operator._TRADING_SERVICES
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    decision.chmod(0o600)
+    for name in operator._TRADING_SERVICES:
+        snapshot = root / f"credential-proof-baseline-{name}.json"
+        snapshot.write_text(json.dumps(record), encoding="utf-8")
+        snapshot.chmod(0o600)
+    return record
+
+
+def test_reviewed_legacy_discovery_links_explicit_acceptance_to_exact_records(
+    tmp_path: Path,
+) -> None:
+    record = write_reviewed_legacy_evidence(tmp_path)
+
+    snapshots, candidate_count, acceptance_count = (
+        operator._discover_reviewed_legacy_snapshots([tmp_path])
+    )
+
+    assert snapshots == {name: record for name in operator._TRADING_SERVICES}
+    assert candidate_count == 4
+    assert acceptance_count == 1
+
+
+def test_reviewed_legacy_discovery_rejects_unaccepted_third_baselines(
+    tmp_path: Path,
+) -> None:
+    record = operator.build_record(runtime_inspect())
+    for name in operator._TRADING_SERVICES:
+        snapshot = tmp_path / f"credential-proof-third-baseline-{name}.json"
+        snapshot.write_text(json.dumps(record), encoding="utf-8")
+        snapshot.chmod(0o600)
+
+    with pytest.raises(operator.EvidenceFailure, match="evidence_invalid") as failure:
+        operator._discover_reviewed_legacy_snapshots([tmp_path])
+
+    assert failure.value.reason == "no_acceptance"
+
+
+def test_reviewed_legacy_discovery_rejects_rejected_or_ambiguous_evidence(
+    tmp_path: Path,
+) -> None:
+    record = write_reviewed_legacy_evidence(tmp_path)
+    decision = tmp_path / "credential-proof-operator-decision.json"
+    decision.write_text(
+        json.dumps(
+            {
+                "accepted_fingerprint_comparison": "invalid",
+                "accepted_fingerprints": {
+                    name: record["configuration_fingerprint"]
+                    for name in operator._TRADING_SERVICES
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(operator.EvidenceFailure) as rejected:
+        operator._discover_reviewed_legacy_snapshots([tmp_path])
+    assert rejected.value.reason == "no_acceptance"
+
+    decision.unlink()
+    write_reviewed_legacy_evidence(tmp_path)
+    duplicate = tmp_path / "credential-proof-baseline-copy-spx.json"
+    duplicate.write_text(json.dumps(record), encoding="utf-8")
+    duplicate.chmod(0o600)
+    with pytest.raises(operator.EvidenceFailure) as ambiguous:
+        operator._discover_reviewed_legacy_snapshots([tmp_path])
+    assert ambiguous.value.reason == "duplicate_service"
+
+
+def test_legacy_evidence_status_is_bounded_and_never_reads_token_named_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    token = tmp_path / "credential-proof-token-baseline.json"
+    token.write_text(SENSITIVE, encoding="utf-8")
+    token.chmod(0o600)
+    original = operator._read_evidence_value
+    read_paths: list[Path] = []
+
+    def tracked(path: Path):
+        read_paths.append(path)
+        return original(path)
+
+    monkeypatch.setattr(operator, "_read_evidence_value", tracked)
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(
+            ["legacy-evidence-status", "--evidence-root", str(tmp_path)]
+        )
+
+    output = capsys.readouterr().out
+    assert json.loads(output) == {
+        "candidate_count": 0,
+        "code": "evidence_invalid",
+        "reason": "no_candidates",
+        "status": "error",
+        "valid_record_count": 0,
+    }
+    assert read_paths == []
+    assert SENSITIVE not in output
+
+
+def test_legacy_evidence_status_reports_only_bounded_counts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_reviewed_legacy_evidence(tmp_path)
+
+    operator.main(["legacy-evidence-status", "--evidence-root", str(tmp_path)])
+
+    assert json.loads(capsys.readouterr().out) == {
+        "acceptance_count": 1,
+        "candidate_count": 4,
+        "code": "legacy_evidence_ready",
+        "service_count": 3,
+        "status": "ok",
+        "valid_record_count": 3,
+    }
+
+
+def test_prepare_selects_only_explicit_reviewed_legacy_roots(tmp_path: Path) -> None:
+    record = write_reviewed_legacy_evidence(tmp_path)
+    args = prepare_args(tmp_path)
+    args.accepted_spx = None
+    args.accepted_ndx = None
+    args.accepted_xsp = None
+    args.reviewed_evidence_root = [tmp_path]
+
+    assert operator._accepted_snapshots(args) == {
+        name: record for name in operator._TRADING_SERVICES
+    }
+
+
 def test_accepted_snapshot_discovery_rejects_insecure_or_partial_records(
     tmp_path: Path,
 ) -> None:
