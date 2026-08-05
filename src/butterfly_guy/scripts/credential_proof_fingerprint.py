@@ -178,6 +178,16 @@ _CHECK_NAMES = (
     "restoration_errors",
 )
 _CHECK_VALUES = frozenset({"pending", "pass", "fail", "invalid"})
+_EVIDENCE_REASON_CODES = frozenset(
+    {
+        "directory_invalid",
+        "duplicate_service",
+        "missing_service",
+        "no_candidates",
+        "schema_invalid",
+        "traversal_limit",
+    }
+)
 _FAILURE_CHECK = {
     "archive_invalid": "archive_provenance",
     "archive_mismatch": "archive_sha256",
@@ -218,6 +228,7 @@ _RESULT_CODES = frozenset(
         "docker_inspect_invalid",
         "docker_top_invalid",
         "evidence_invalid",
+        "evidence_ready",
         "fingerprint_failed",
         "health_invalid",
         "host_client_active",
@@ -257,6 +268,22 @@ class OperatorFailure(RuntimeError):  # noqa: N818 - fixed operator result, not 
             code = "internal_failure"
         super().__init__(code)
         self.code = code
+
+
+class EvidenceFailure(OperatorFailure):  # noqa: N818 - fixed bounded diagnostic
+    """Accepted-evidence failure with only fixed codes and bounded integer counts."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        candidate_count: int = 0,
+        valid_record_count: int = 0,
+    ):
+        super().__init__("evidence_invalid")
+        self.reason = reason if reason in _EVIDENCE_REASON_CODES else "schema_invalid"
+        self.candidate_count = max(0, min(candidate_count, MAX_EVIDENCE_CANDIDATES))
+        self.valid_record_count = max(0, min(valid_record_count, MAX_EVIDENCE_JSON_NODES))
 
 
 class SafeArgumentParser(argparse.ArgumentParser):
@@ -1748,9 +1775,9 @@ def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]
     try:
         directory_stat = directory.lstat()
     except OSError:
-        raise OperatorFailure("evidence_invalid") from None
+        raise EvidenceFailure("directory_invalid") from None
     if not stat.S_ISDIR(directory_stat.st_mode) or directory.is_symlink():
-        raise OperatorFailure("evidence_invalid")
+        raise EvidenceFailure("directory_invalid")
     found: dict[str, list[dict[str, object]]] = {name: [] for name in _TRADING_SERVICES}
     visited_directories = 0
     visited_files = 0
@@ -1759,7 +1786,11 @@ def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]
         for root, directories, filenames in os.walk(directory, followlinks=False):
             visited_directories += 1
             if visited_directories > MAX_EVIDENCE_DIRECTORIES:
-                raise OperatorFailure("evidence_invalid")
+                raise EvidenceFailure(
+                    "traversal_limit",
+                    candidate_count=candidate_files,
+                    valid_record_count=sum(len(records) for records in found.values()),
+                )
             directories[:] = [
                 name
                 for name in directories
@@ -1769,7 +1800,11 @@ def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]
             for filename in filenames:
                 visited_files += 1
                 if visited_files > MAX_EVIDENCE_FILES:
-                    raise OperatorFailure("evidence_invalid")
+                    raise EvidenceFailure(
+                        "traversal_limit",
+                        candidate_count=candidate_files,
+                        valid_record_count=sum(len(records) for records in found.values()),
+                    )
                 path = Path(root) / filename
                 relative = str(path.relative_to(directory)).casefold()
                 if not relative.endswith(".json") or not any(
@@ -1778,15 +1813,38 @@ def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]
                     continue
                 candidate_files += 1
                 if candidate_files > MAX_EVIDENCE_CANDIDATES:
-                    raise OperatorFailure("evidence_invalid")
+                    raise EvidenceFailure(
+                        "traversal_limit",
+                        candidate_count=candidate_files,
+                        valid_record_count=sum(len(records) for records in found.values()),
+                    )
                 for service, record in _read_evidence_records(path, relative):
                     found[service].append(record)
-    except OperatorFailure:
+    except EvidenceFailure:
         raise
     except OSError:
-        raise OperatorFailure("evidence_invalid") from None
-    if any(len(records) != 1 for records in found.values()):
-        raise OperatorFailure("evidence_invalid")
+        raise EvidenceFailure(
+            "directory_invalid",
+            candidate_count=candidate_files,
+            valid_record_count=sum(len(records) for records in found.values()),
+        ) from None
+    valid_record_count = sum(len(records) for records in found.values())
+    if candidate_files == 0:
+        raise EvidenceFailure("no_candidates")
+    if valid_record_count == 0:
+        raise EvidenceFailure("schema_invalid", candidate_count=candidate_files)
+    if any(len(records) > 1 for records in found.values()):
+        raise EvidenceFailure(
+            "duplicate_service",
+            candidate_count=candidate_files,
+            valid_record_count=valid_record_count,
+        )
+    if any(len(records) == 0 for records in found.values()):
+        raise EvidenceFailure(
+            "missing_service",
+            candidate_count=candidate_files,
+            valid_record_count=valid_record_count,
+        )
     return {name: records[0] for name, records in found.items()}
 
 
@@ -2635,6 +2693,9 @@ def _parser() -> argparse.ArgumentParser:
     archive.add_argument("--approved-sha", required=True)
     archive.add_argument("--archive", required=True, type=Path)
 
+    evidence_status = subparsers.add_parser("evidence-status", add_help=False)
+    evidence_status.add_argument("--accepted-directory", required=True, type=Path)
+
     prepare = subparsers.add_parser("prepare", add_help=False)
     prepare.add_argument("--state", required=True, type=Path)
     prepare.add_argument("--approved-sha", required=True)
@@ -2711,6 +2772,15 @@ def main(argv: list[str] | None = None) -> None:
             archive_sha256 = _create_archive(args.archive, args.approved_sha)
             _emit("ok", "archive_created", archive_sha256=archive_sha256)
             return
+        if args.command == "evidence-status":
+            snapshots = _discover_accepted_snapshots(args.accepted_directory)
+            _emit(
+                "ok",
+                "evidence_ready",
+                service_count=len(snapshots),
+                valid_record_count=len(snapshots),
+            )
+            return
         if args.command == "prepare":
             _prepare(args)
             return
@@ -2768,6 +2838,18 @@ def main(argv: list[str] | None = None) -> None:
         if not verified:
             raise OperatorFailure("fingerprint_failed")
         _emit("ok", "snapshot_verified", expectation=args.expect)
+    except EvidenceFailure as exc:
+        if args.command == "evidence-status":
+            _emit(
+                "error",
+                exc.code,
+                candidate_count=exc.candidate_count,
+                reason=exc.reason,
+                valid_record_count=exc.valid_record_count,
+            )
+        else:
+            _emit("error", exc.code)
+        raise SystemExit(1) from None
     except OperatorFailure as exc:
         _emit("error", exc.code)
         raise SystemExit(1) from None

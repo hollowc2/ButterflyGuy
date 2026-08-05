@@ -911,6 +911,50 @@ def test_accepted_snapshot_discovery_rejects_duplicate_composite_records(
         operator._discover_accepted_snapshots(evidence)
 
 
+def test_evidence_status_emits_only_bounded_fixed_failure_diagnostics(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    candidate = evidence / f"accepted-{SENSITIVE}.json"
+    candidate.write_text("{}", encoding="utf-8")
+    candidate.chmod(0o600)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(["evidence-status", "--accepted-directory", str(evidence)])
+
+    output = capsys.readouterr().out
+    assert json.loads(output) == {
+        "candidate_count": 1,
+        "code": "evidence_invalid",
+        "reason": "schema_invalid",
+        "status": "error",
+        "valid_record_count": 0,
+    }
+    assert SENSITIVE not in output
+
+
+def test_evidence_status_reports_ready_without_paths_or_content(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    record = operator.build_record(runtime_inspect())
+    for name in operator._TRADING_SERVICES:
+        path = evidence / f"accepted-{name}.json"
+        path.write_text(json.dumps(record), encoding="utf-8")
+        path.chmod(0o600)
+
+    operator.main(["evidence-status", "--accepted-directory", str(evidence)])
+
+    assert json.loads(capsys.readouterr().out) == {
+        "code": "evidence_ready",
+        "service_count": 3,
+        "status": "ok",
+        "valid_record_count": 3,
+    }
+
+
 def test_accepted_snapshot_discovery_rejects_insecure_or_partial_records(
     tmp_path: Path,
 ) -> None:
