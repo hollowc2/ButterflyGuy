@@ -175,3 +175,16 @@ the invalid process-count extension. Temporary host-side source artifacts were r
 bounded evidence plus four snapshots remain mode `0600`. The real credential proof remains
 incomplete. Any further attempt needs a committed, fake-tested replacement for the failed operator
 wrappers and fresh Approval 1.
+
+## Supervised legacy-evidence stop — 2026-08-05
+
+After fresh Approval 1, the exact reviewed archive and committed locator were used only for the
+approved read-only search of the reviewed legacy evidence roots. The locator returned the bounded
+`no_acceptance` disposition rather than `legacy_evidence_ready`; it did not uniquely link an
+explicit non-rejected operator decision to one complete SPX/NDX/XSP fingerprint set.
+
+The run therefore stopped before Compose, container, process, cron, credential, token, or Schwab
+mutation. No Approval 2 was requested, retry count remained zero, and the temporary archive and
+staging directory were removed. A later attempt requires an explicit operator new-baseline decision
+or newly supplied qualifying legacy evidence; neither the current state nor a prior snapshot may be
+adopted automatically.

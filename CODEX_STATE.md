@@ -8,7 +8,7 @@ live ButterflyGuy behavior or production defaults.
 ## Current Phase
 
 The fake gateway foundation, atomic token manager/adapter, readiness boundary, and standalone
-credential-proof command are merged. Three supervised launches stopped before credential settings,
+credential-proof command are merged. Four supervised launches stopped before credential settings,
 token access, or Schwab access was reachable. The first stopped during a native dependency import
 and was restored. The second proved the isolated Compose delta but stopped on an unreliable
 runtime fingerprint before source staging or quiescence. Its recorded images and executable-mount
@@ -16,9 +16,11 @@ absence were restored, but exact SPX configuration equality could not be proven.
 accepted the current verified paper/direct configuration as a new baseline; SPX/NDX/XSP were
 resumed healthy with recorded images, unique processes, no staging mount, and zero new filtered
 errors during a fresh observation window. The third stopped during baseline preflight when ad-hoc
-operator wrappers violated the bounded-output rule; no service mutation occurred. No production
-cutover has begun. The current isolated slice adds a fake-tested three-consumer trust/admission
-boundary.
+operator wrappers violated the bounded-output rule; no service mutation occurred. The fourth used
+the committed, read-only legacy-evidence locator after fresh Approval 1; it returned the bounded
+`no_acceptance` disposition, so no service mutation occurred. The operator-accepted SPX/NDX/XSP
+baseline is not uniquely proven by the reviewed legacy evidence. No production cutover has begun.
+The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 
@@ -183,9 +185,8 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Leave the resumed direct-access paper services on the operator-accepted baseline. Any new staging
-attempt requires a committed, fake-tested bounded operator path for accepted-fingerprint
-comparison, uniqueness/ownership checks, filtered-error counts, and fail-closed evidence handling,
-followed by fresh Approval 1. Any real credential/token read plus one AAPL quote still requires
-fresh Approval 2. Do not reinterpret any just-captured snapshot as proof against an accepted
-baseline. No gateway deployment or cutover is authorized.
+An explicit operator decision is required: either provide qualifying, non-rejected legacy evidence
+that uniquely links canonical fingerprints to exactly one complete SPX/NDX/XSP record, or authorize
+a specifically defined new baseline. Do not adopt the current state or a prior snapshot
+automatically. Until that decision, leave the direct-access paper services unchanged; no gateway
+deployment, staging, credential/token read, Schwab request, or cutover is authorized.
