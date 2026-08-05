@@ -179,7 +179,7 @@ def test_cli_writes_mode_0600_bounded_redacted_snapshot(
 
     captured = capsys.readouterr()
     stored = snapshot.read_text(encoding="utf-8")
-    assert captured.out == '{"status":"captured"}\n'
+    assert captured.out == '{"code":"snapshot_captured","status":"ok"}\n'
     assert captured.err == ""
     assert len(captured.out) <= 64
     assert stat.S_IMODE(snapshot.stat().st_mode) == 0o600
@@ -220,9 +220,9 @@ def test_cli_bounds_docker_failure_without_raw_exception(
 
     captured = capsys.readouterr()
     assert exc.value.code == 1
-    assert captured.out == ""
-    assert captured.err == "Credential proof fingerprint failed\n"
-    assert "sensitive-runtime-exception" not in captured.err
+    assert captured.out == '{"code":"internal_failure","status":"error"}\n'
+    assert captured.err == ""
+    assert "sensitive-runtime-exception" not in captured.out
 
 
 def test_cli_exact_and_staging_verification_are_bounded(
@@ -247,7 +247,9 @@ def test_cli_exact_and_staging_verification_are_bounded(
     )
 
     captured = capsys.readouterr()
-    assert captured.out == '{"expectation":"exact","status":"verified"}\n'
+    assert captured.out == (
+        '{"code":"snapshot_verified","expectation":"exact","status":"ok"}\n'
+    )
     assert captured.err == ""
     assert len(captured.out) <= 80
 
