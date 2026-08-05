@@ -38,8 +38,12 @@ The separately authorized bounded reader then identified `failed_check=compose_h
 no `mismatched_services`. The result therefore does not distinguish a trading-service hash mismatch
 from invalid bounded output while deriving a Compose hash. Local remediation now collects all three
 trading-service results and emits separate fixed `invalid_services` and `mismatched_services` lists
-without hashes or subprocess output. The current SPX/NDX/XSP set remains unaccepted as a replacement
-baseline. The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
+without hashes or subprocess output. Under fresh authorization, exact release
+`e32b74775e4dd4a5273de12f01a821e5056e01b4` classified SPX as mismatched and NDX/XSP as invalid
+while deriving reviewed Compose hashes. It retained protected evidence, removed exact temporary
+paths, and made no live mutation. No candidate set exists, and the current SPX/NDX/XSP set remains
+unaccepted as a replacement baseline. The current isolated slice adds a fake-tested three-consumer
+trust/admission boundary.
 
 ## Repository Findings
 

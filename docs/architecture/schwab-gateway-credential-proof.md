@@ -303,3 +303,25 @@ or overlapping service names, and remains compatible with the earlier evidence t
 field. No raw hashes, Compose output, stderr, configuration, environment, or exceptions are emitted
 or persisted. This correction is fake-tested only; another exact release/archive and fresh read-only
 authorization are required before it may contact Helios.
+
+## Corrected Compose-hash result — 2026-08-05
+
+Under fresh authorization, exact release `e32b74775e4dd4a5273de12f01a821e5056e01b4`
+and archive SHA-256 `3c31a800d26fbbced84f33d320d9abc7a116a735b336a86f14aece09527dc228`
+ran the corrected committed read-only candidate capture on Helios. It failed closed with the bounded
+result `compose_semantics_invalid`, `mismatched_services=[spx]`, and
+`invalid_services=[ndx,xsp]`. SPX therefore differs from its successfully derived reviewed Compose
+hash. NDX and XSP did not yield valid bounded Compose-hash results and cannot be classified as
+matching or mismatching. No candidate set was produced.
+
+The failure artifact remains at
+`/opt/butterflyguy/.baseline-candidate-evidence-20260805-e32b747.json` and was verified as a
+Billy-owned regular file with mode `0600` and size 913 bytes. The exact temporary archive and source
+directory were removed and verified absent. No Compose or service mutation, restart, process/cron
+action, credential/token read, Schwab request, staging, quiescence, trading action, or baseline
+acceptance occurred.
+
+The current SPX/NDX/XSP runtime cannot satisfy the reviewed Compose-equality gate and must not be
+accepted as the replacement baseline. Further work requires an explicit operator decision between
+designing a separately reviewed baseline criterion for the current runtime or preparing an approved
+live reconciliation to the reviewed Compose configuration.
