@@ -1088,6 +1088,120 @@ def test_legacy_evidence_status_reports_only_bounded_counts(
     }
 
 
+def legacy_capture_args(tmp_path: Path, evidence_root: Path) -> list[str]:
+    now = datetime.now(timezone.utc)
+    return [
+        "legacy-evidence-capture",
+        "--evidence-root",
+        str(evidence_root),
+        "--evidence-output",
+        str((tmp_path / "bounded-evidence.json").resolve()),
+        "--approved-sha",
+        APPROVED_SHA,
+        "--approval-reference",
+        "approved-in-chat",
+        "--window-start-utc",
+        (now - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "--window-end-utc",
+        (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "--archive",
+        str(tmp_path / "reviewed.tar"),
+        "--expected-archive-sha256",
+        ARCHIVE_SHA,
+    ]
+
+
+def patch_legacy_capture_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(operator, "_validate_archive", lambda *_args: ARCHIVE_SHA)
+    current_hash = operator._sha256_file(Path(operator.__file__).resolve())
+    monkeypatch.setattr(operator, "_archive_member_sha256", lambda *_args: current_hash)
+
+
+def test_legacy_evidence_capture_persists_bounded_failure_before_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_legacy_capture_provenance(monkeypatch)
+    record = operator.build_record(runtime_inspect())
+    for name in operator._TRADING_SERVICES:
+        path = tmp_path / f"credential-proof-third-baseline-{name}.json"
+        path.write_text(json.dumps(record), encoding="utf-8")
+        path.chmod(0o600)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(legacy_capture_args(tmp_path, tmp_path))
+
+    output = json.loads(capsys.readouterr().out)
+    assert output == {
+        "candidate_count": 3,
+        "code": "evidence_invalid",
+        "reason": "no_acceptance",
+        "status": "error",
+        "valid_record_count": 0,
+    }
+    evidence_path = tmp_path / "bounded-evidence.json"
+    stored = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert stat.S_IMODE(evidence_path.stat().st_mode) == 0o600
+    assert stored["locator_result"] == output
+    assert stored["approved_sha"] == APPROVED_SHA
+    assert stored["archive_sha256"] == ARCHIVE_SHA
+    assert stored["approval_reference_sha256"] == hashlib.sha256(
+        b"approved-in-chat"
+    ).hexdigest()
+    assert stored["evidence_type"] == "legacy_baseline_locator"
+    assert stored["retry_count"] == 0
+    assert stored["service_mutation"] is False
+    assert stored["credential_read"] is False
+    assert stored["token_read"] is False
+    assert stored["schwab_request"] is False
+    assert str(tmp_path) not in evidence_path.read_text(encoding="utf-8")
+    assert SENSITIVE not in evidence_path.read_text(encoding="utf-8")
+
+
+def test_legacy_evidence_capture_persists_ready_result(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_legacy_capture_provenance(monkeypatch)
+    write_reviewed_legacy_evidence(tmp_path)
+
+    operator.main(legacy_capture_args(tmp_path, tmp_path))
+
+    output = json.loads(capsys.readouterr().out)
+    assert output == {
+        "acceptance_count": 1,
+        "candidate_count": 4,
+        "code": "legacy_evidence_ready",
+        "service_count": 3,
+        "status": "ok",
+        "valid_record_count": 3,
+    }
+    stored = json.loads((tmp_path / "bounded-evidence.json").read_text(encoding="utf-8"))
+    assert stored["locator_result"] == output
+
+
+def test_legacy_evidence_capture_never_overwrites_existing_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_legacy_capture_provenance(monkeypatch)
+    write_reviewed_legacy_evidence(tmp_path)
+    evidence_path = tmp_path / "bounded-evidence.json"
+    evidence_path.write_text(SENSITIVE, encoding="utf-8")
+    evidence_path.chmod(0o600)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(legacy_capture_args(tmp_path, tmp_path))
+
+    assert evidence_path.read_text(encoding="utf-8") == SENSITIVE
+    assert capsys.readouterr().out == (
+        '{"code":"evidence_invalid","status":"error"}\n'
+    )
+
+
 def test_prepare_selects_only_explicit_reviewed_legacy_roots(tmp_path: Path) -> None:
     record = write_reviewed_legacy_evidence(tmp_path)
     args = prepare_args(tmp_path)

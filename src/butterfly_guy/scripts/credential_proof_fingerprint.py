@@ -24,6 +24,7 @@ from typing import Any, Iterator, Sequence
 
 SCHEMA_VERSION = 1
 OPERATOR_STATE_VERSION = 1
+LEGACY_EVIDENCE_RECORD_VERSION = 1
 COMPOSE_CONFIG_HASH_LABEL = "com.docker.compose.config-hash"
 STAGING_TMPFS_TARGET = "/app/.schwab-credential-proof-runtime"
 STAGING_ARCHIVE_TARGET = f"{STAGING_TMPFS_TARGET}/reviewed.tar"
@@ -2149,6 +2150,82 @@ def _approved_window(reference: str, start_utc: str, end_utc: str) -> tuple[int,
     return start, end, hashlib.sha256(reference.encode()).hexdigest()
 
 
+def _write_legacy_evidence_record(path: Path, value: dict[str, object]) -> None:
+    if not path.is_absolute() or path.exists():
+        raise OperatorFailure("evidence_invalid")
+    payload = (json.dumps(value, separators=(",", ":"), sort_keys=True) + "\n").encode()
+    if len(payload) > MAX_SOURCE_BYTES:
+        raise OperatorFailure("evidence_invalid")
+    try:
+        _write_private_bytes(path, payload)
+    except OSError:
+        raise OperatorFailure("evidence_invalid") from None
+
+
+def _legacy_evidence_capture(
+    args: argparse.Namespace,
+) -> tuple[bool, dict[str, object]]:
+    window_start, window_end, approval_hash = _approved_window(
+        args.approval_reference,
+        args.window_start_utc,
+        args.window_end_utc,
+    )
+    archive_sha256 = _validate_archive(
+        args.archive,
+        args.approved_sha,
+        args.expected_archive_sha256,
+    )
+    operator_sha = _archive_member_sha256(
+        args.archive, "src/butterfly_guy/scripts/credential_proof_fingerprint.py"
+    )
+    if _sha256_file(Path(__file__).resolve(), max_bytes=MAX_SOURCE_BYTES) != operator_sha:
+        raise OperatorFailure("provenance_invalid")
+
+    started = int(time.time())
+    succeeded = False
+    try:
+        snapshots, candidate_count, acceptance_count = (
+            _discover_reviewed_legacy_snapshots(args.evidence_root)
+        )
+        result: dict[str, object] = {
+            "acceptance_count": acceptance_count,
+            "candidate_count": candidate_count,
+            "code": "legacy_evidence_ready",
+            "service_count": len(snapshots),
+            "status": "ok",
+            "valid_record_count": len(snapshots),
+        }
+        succeeded = True
+    except EvidenceFailure as exc:
+        result = {
+            "candidate_count": exc.candidate_count,
+            "code": exc.code,
+            "reason": exc.reason,
+            "status": "error",
+            "valid_record_count": exc.valid_record_count,
+        }
+
+    record: dict[str, object] = {
+        "approval_reference_sha256": approval_hash,
+        "approved_sha": args.approved_sha,
+        "archive_sha256": archive_sha256,
+        "credential_read": False,
+        "ended_utc": int(time.time()),
+        "evidence_type": "legacy_baseline_locator",
+        "locator_result": result,
+        "retry_count": 0,
+        "schema_version": LEGACY_EVIDENCE_RECORD_VERSION,
+        "service_mutation": False,
+        "schwab_request": False,
+        "started_utc": started,
+        "token_read": False,
+        "window_end_utc": window_end,
+        "window_start_utc": window_start,
+    }
+    _write_legacy_evidence_record(args.evidence_output, record)
+    return succeeded, result
+
+
 def _prepare(args: argparse.Namespace) -> None:
     state = _new_state(args.approved_sha)
     window_start, window_end, approval_hash = _approved_window(
@@ -2963,6 +3040,20 @@ def _parser() -> argparse.ArgumentParser:
         "--evidence-root", required=True, action="append", type=Path
     )
 
+    legacy_evidence_capture = subparsers.add_parser(
+        "legacy-evidence-capture", add_help=False
+    )
+    legacy_evidence_capture.add_argument(
+        "--evidence-root", required=True, action="append", type=Path
+    )
+    legacy_evidence_capture.add_argument("--evidence-output", required=True, type=Path)
+    legacy_evidence_capture.add_argument("--approved-sha", required=True)
+    legacy_evidence_capture.add_argument("--approval-reference", required=True)
+    legacy_evidence_capture.add_argument("--window-start-utc", required=True)
+    legacy_evidence_capture.add_argument("--window-end-utc", required=True)
+    legacy_evidence_capture.add_argument("--archive", required=True, type=Path)
+    legacy_evidence_capture.add_argument("--expected-archive-sha256", required=True)
+
     prepare = subparsers.add_parser("prepare", add_help=False)
     prepare.add_argument("--state", required=True, type=Path)
     prepare.add_argument("--approved-sha", required=True)
@@ -3062,6 +3153,14 @@ def main(argv: list[str] | None = None) -> None:
                 valid_record_count=len(snapshots),
             )
             return
+        if args.command == "legacy-evidence-capture":
+            succeeded, result = _legacy_evidence_capture(args)
+            status_value = str(result.pop("status"))
+            code = str(result.pop("code"))
+            _emit(status_value, code, **result)
+            if not succeeded:
+                raise SystemExit(1)
+            return
         if args.command == "prepare":
             _prepare(args)
             return
@@ -3120,7 +3219,11 @@ def main(argv: list[str] | None = None) -> None:
             raise OperatorFailure("fingerprint_failed")
         _emit("ok", "snapshot_verified", expectation=args.expect)
     except EvidenceFailure as exc:
-        if args.command in {"evidence-status", "legacy-evidence-status"}:
+        if args.command in {
+            "evidence-status",
+            "legacy-evidence-status",
+            "legacy-evidence-capture",
+        }:
             _emit(
                 "error",
                 exc.code,

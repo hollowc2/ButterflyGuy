@@ -188,3 +188,21 @@ mutation. No Approval 2 was requested, retry count remained zero, and the tempor
 staging directory were removed. A later attempt requires an explicit operator new-baseline decision
 or newly supplied qualifying legacy evidence; neither the current state nor a prior snapshot may be
 adopted automatically.
+
+## Legacy-evidence retention remediation
+
+The bounded locator result above was not persisted to the approved evidence destination before the
+temporary source artifacts were removed. The documentation summary and execution transcript do not
+replace that required mode-`0600` artifact.
+
+The local remediation adds `legacy-evidence-capture`, which validates the exact archive provenance
+and approval window, performs the same reviewed legacy-evidence discovery, and exclusively writes
+one redacted record before emitting either the ready or failure result. The record contains only
+the approved SHA and archive hash, a hash of the approval reference, bounded timestamps and counts,
+fixed result codes, retry count zero, and explicit false values for service mutation, credential
+read, token read, and Schwab request. It contains no evidence roots, paths, credential values, token
+metadata, payloads, URLs, or raw exceptions and will not overwrite an existing destination.
+
+This remediation is local and fake-tested only. A new exact SHA/archive and fresh Approval 1 are
+required before it may be run on Helios. It does not authorize staging, quiescence, Approval 2, or
+the real AAPL quote.

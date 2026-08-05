@@ -19,8 +19,11 @@ errors during a fresh observation window. The third stopped during baseline pref
 operator wrappers violated the bounded-output rule; no service mutation occurred. The fourth used
 the committed, read-only legacy-evidence locator after fresh Approval 1; it returned the bounded
 `no_acceptance` disposition, so no service mutation occurred. The operator-accepted SPX/NDX/XSP
-baseline is not uniquely proven by the reviewed legacy evidence. No production cutover has begun.
-The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
+baseline is not uniquely proven by the reviewed legacy evidence. Its bounded result was not
+persisted to the approved evidence destination before temporary staging cleanup. The current local
+remediation adds a committed evidence-capturing locator; it has not been run on Helios. No
+production cutover has begun. The current isolated slice adds a fake-tested three-consumer
+trust/admission boundary.
 
 ## Repository Findings
 
@@ -81,6 +84,10 @@ The current isolated slice adds a fake-tested three-consumer trust/admission bou
 - `tests/test_gateway_credential_probe.py`: synthetic token, fake factory/client/response,
   exact quote-only call, close, redaction, malformed response, CLI refusal, and bounded
   runtime-import failure coverage.
+- `scripts/credential_proof_fingerprint.py`: `legacy-evidence-capture` validates the exact archive
+  and approval window, performs the bounded locator, and exclusively persists one mode-`0600`
+  redacted result before returning success or failure. It records no evidence roots or secret
+  values and refuses to overwrite an existing artifact.
 
 ## Token-Manager Tests Added
 
@@ -106,8 +113,8 @@ The current isolated slice adds a fake-tested three-consumer trust/admission bou
 
 ## Tests Passing
 
-- Required focused gateway/remediation suite: 100 passed.
-- Full suite: 598 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
+- Required focused gateway/remediation suite: 160 passed.
+- Full suite: 659 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
 - `uv run ruff check .`, `git diff --check`, wheel/sdist builds and content checks, and
   `graphify update .` pass.
@@ -185,8 +192,10 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-An explicit operator decision is required: either provide qualifying, non-rejected legacy evidence
-that uniquely links canonical fingerprints to exactly one complete SPX/NDX/XSP record, or authorize
-a specifically defined new baseline. Do not adopt the current state or a prior snapshot
-automatically. Until that decision, leave the direct-access paper services unchanged; no gateway
-deployment, staging, credential/token read, Schwab request, or cutover is authorized.
+Use a new exact archive from the committed remediation and obtain fresh Approval 1 before Helios
+contact. Re-run the reviewed legacy locator through `legacy-evidence-capture` so its bounded outcome
+is durably retained at the approved mode-`0600` destination. If it again cannot uniquely prove one
+complete SPX/NDX/XSP set, stop before service mutation and request an explicit operator decision:
+provide qualifying non-rejected evidence or authorize a specifically defined new baseline. Do not
+adopt current state or a prior snapshot automatically. No gateway deployment, staging,
+credential/token read, Schwab request, or cutover is currently authorized.
