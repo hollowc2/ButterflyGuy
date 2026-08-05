@@ -364,10 +364,12 @@ def test_container_archive_staging_verifies_every_command_and_digest(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     calls = 0
+    commands: list[list[str]] = []
 
     def fake_run(command, **_kwargs):
         nonlocal calls
         calls += 1
+        commands.append(list(command))
         if command[:3] == ["docker", "exec", "butterfly_spx_app"] and "sha256sum" in command:
             return result(stdout=f"{ARCHIVE_SHA}  {operator.STAGING_ARCHIVE_TARGET}\n")
         return result()
@@ -375,6 +377,7 @@ def test_container_archive_staging_verifies_every_command_and_digest(
     monkeypatch.setattr(operator, "_run", fake_run)
     operator._stage_archive(tmp_path / "reviewed.tar", ARCHIVE_SHA)
     assert calls == 4
+    assert commands[1][0:3] == ["docker", "cp", "--quiet"]
 
 
 def test_container_archive_staging_rejects_success_with_unexpected_output(
@@ -385,7 +388,38 @@ def test_container_archive_staging_rejects_success_with_unexpected_output(
         "_run",
         lambda *_args, **_kwargs: result(stdout=SENSITIVE),
     )
-    with pytest.raises(operator.OperatorFailure, match="staging_invalid"):
+    with pytest.raises(operator.OperatorFailure, match="staging_target_invalid"):
+        operator._stage_archive(tmp_path / "reviewed.tar", ARCHIVE_SHA)
+
+
+@pytest.mark.parametrize(
+    ("failed_call", "expected_code"),
+    [
+        (1, "staging_target_invalid"),
+        (2, "staging_copy_invalid"),
+        (3, "staging_extract_invalid"),
+        (4, "staging_digest_invalid"),
+    ],
+)
+def test_container_archive_staging_reports_exact_failed_gate(
+    failed_call: int,
+    expected_code: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls = 0
+
+    def fake_run(command, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == failed_call:
+            return result(returncode=1)
+        if "sha256sum" in command:
+            return result(stdout=f"{ARCHIVE_SHA}  {operator.STAGING_ARCHIVE_TARGET}\n")
+        return result()
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    with pytest.raises(operator.OperatorFailure, match=expected_code):
         operator._stage_archive(tmp_path / "reviewed.tar", ARCHIVE_SHA)
 
 
@@ -443,7 +477,7 @@ def test_runtime_staging_refuses_preexisting_target(
         return result(returncode=1)
 
     monkeypatch.setattr(operator, "_run", fake_run)
-    with pytest.raises(operator.OperatorFailure, match="staging_invalid"):
+    with pytest.raises(operator.OperatorFailure, match="staging_target_invalid"):
         operator._prepare_runtime_staging()
     assert calls == 1
 

@@ -476,3 +476,27 @@ Compose gates.
 
 This adapter is local and fake-tested only. It has not contacted Helios, staged source, quiesced a
 process, read credentials or tokens, called Schwab, or received Approval 1 or Approval 2.
+
+## Runtime-baseline Approval 1 staging stop — 2026-08-05
+
+The operator authorized Approval 1 for release
+`5a472b3da1feefbc1e592785839704b104e94c28`, archive SHA-256
+`59e4944d1781cd9954caee42d3a681c3ceba3b8238c317ad2f58113088bf6a8a`, and accepted
+runtime-baseline digest `6872c3582cf728f67acba78bf5f7e226b735c40a4be09ea27c135c7641e5320d`.
+The archive and Git provenance matched on Helios. The first preflight stopped before Docker
+inspection because the checkout lacked the reviewed staging-override file; its bounded failure
+state was retained. Repointing only that input to the archive-extracted reviewed copy allowed the
+full preflight to pass.
+
+Approval 1 execution then failed closed with `staging_invalid` before native smoke, watchdog arming,
+writer quiescence, credential/token access, or a Schwab request. Automatic restoration passed: the
+original SPX/NDX/XSP container, image, configuration, and config-content baselines matched; health,
+process uniqueness, candidate ownership, keepalive state, and fresh error checks passed; cron was
+restored; and watchdog state was cancelled. The exact container and host staging directories plus
+temporary archive, rollback override, and cron snapshot were removed. Both private failure state
+records remain on Helios as evidence.
+
+The corrected local operator uses Docker's supported `cp --quiet` mode and emits distinct bounded
+codes for target creation, archive copy, extraction, and digest verification. No further live
+staging attempt is authorized until that correction is committed, archived, fully tested, and tied
+to fresh Approval 1.

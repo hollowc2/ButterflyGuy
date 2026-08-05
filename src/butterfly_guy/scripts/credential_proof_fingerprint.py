@@ -270,7 +270,11 @@ _FAILURE_CHECK = {
     "process_uniqueness_invalid": "process_uniqueness",
     "provenance_invalid": "archive_provenance",
     "single_writer_invalid": "single_writer",
+    "staging_copy_invalid": "field_hashes",
+    "staging_digest_invalid": "field_hashes",
+    "staging_extract_invalid": "field_hashes",
     "staging_invalid": "field_hashes",
+    "staging_target_invalid": "field_hashes",
     "watchdog_invalid": "watchdog",
 }
 _RESULT_CODES = frozenset(
@@ -315,7 +319,11 @@ _RESULT_CODES = frozenset(
         "single_writer_invalid",
         "signal_invalid",
         "signal_passed",
+        "staging_copy_invalid",
+        "staging_digest_invalid",
+        "staging_extract_invalid",
         "staging_invalid",
+        "staging_target_invalid",
         "subprocess_failed",
         "subprocess_output_invalid",
         "subprocess_timeout",
@@ -3461,23 +3469,38 @@ def _stage_archive(
     archive_target = f"{root_target}/reviewed.tar"
     source_target = f"{root_target}/source"
     commands = (
-        ["docker", "exec", "butterfly_spx_app", "mkdir", "-p", source_target],
-        ["docker", "cp", str(archive_path), f"butterfly_spx_app:{archive_target}"],
-        [
-            "docker",
-            "exec",
-            "butterfly_spx_app",
-            "tar",
-            "-xf",
-            archive_target,
-            "-C",
-            source_target,
-        ],
+        (
+            ["docker", "exec", "butterfly_spx_app", "mkdir", "-p", source_target],
+            "staging_target_invalid",
+        ),
+        (
+            [
+                "docker",
+                "cp",
+                "--quiet",
+                str(archive_path),
+                f"butterfly_spx_app:{archive_target}",
+            ],
+            "staging_copy_invalid",
+        ),
+        (
+            [
+                "docker",
+                "exec",
+                "butterfly_spx_app",
+                "tar",
+                "-xf",
+                archive_target,
+                "-C",
+                source_target,
+            ],
+            "staging_extract_invalid",
+        ),
     )
-    for command in commands:
+    for command, failure_code in commands:
         result = _run(command, timeout=30)
         if result.returncode != 0 or result.stdout or result.stderr:
-            raise OperatorFailure("staging_invalid")
+            raise OperatorFailure(failure_code)
     digest_result = _run(
         ["docker", "exec", "butterfly_spx_app", "sha256sum", STAGING_ARCHIVE_TARGET],
         timeout=10,
@@ -3490,7 +3513,7 @@ def _stage_archive(
         or parts[0] != expected_sha256
         or parts[1] != archive_target
     ):
-        raise OperatorFailure("staging_invalid")
+        raise OperatorFailure("staging_digest_invalid")
 
 
 def _prepare_runtime_staging() -> None:
@@ -3499,7 +3522,7 @@ def _prepare_runtime_staging() -> None:
         timeout=10,
     )
     if absent.returncode != 0 or absent.stdout or absent.stderr:
-        raise OperatorFailure("staging_invalid")
+        raise OperatorFailure("staging_target_invalid")
     created = _run(
         [
             "docker",
@@ -3513,7 +3536,7 @@ def _prepare_runtime_staging() -> None:
         timeout=10,
     )
     if created.returncode != 0 or created.stdout or created.stderr:
-        raise OperatorFailure("staging_invalid")
+        raise OperatorFailure("staging_target_invalid")
 
 
 def _cleanup_runtime_staging() -> None:

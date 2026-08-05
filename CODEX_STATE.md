@@ -74,7 +74,12 @@ writable SPX/NDX/XSP config mounts and the Compose exceptions `SPX=mismatched` a
 `/opt/butterflyguy/.runtime-baseline-evidence-20260805-dd1d9ef.json` is the authoritative accepted
 baseline evidence. No live mutation occurred. The current isolated slice adds a fake-tested
 runtime-baseline credential-proof adapter that consumes only that exact digest and stages reviewed
-Python source in the existing SPX `/tmp` tmpfs without recreating the accepted container.
+Python source in the existing SPX `/tmp` tmpfs without recreating the accepted container. Approval 1
+for release `5a472b3da1feefbc1e592785839704b104e94c28` passed corrected preflight but failed closed
+inside the generic staging-copy gate before native smoke or quiescence. Automatic exact restoration
+passed, all temporary staging material was removed, two private failure states were retained, and no
+credential/token read or Schwab request occurred. The local correction now uses `docker cp --quiet`
+and distinct bounded target/copy/extract/digest failure codes.
 
 ## Repository Findings
 
@@ -252,9 +257,9 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Finish local verification, commit and archive the runtime-baseline proof adapter, then obtain fresh
-Approval 1 tied to the exact release/archive, accepted digest/evidence path, bounded UTC window, and
-fixed actions. Approval 1 may revalidate the baseline, stage reviewed Python source only under
+Finish local verification, commit and archive the granular staging correction, then obtain fresh
+Approval 1 tied to that new exact release/archive, accepted digest/evidence path, bounded UTC window,
+and fixed actions. Approval 1 may revalidate the baseline, stage reviewed Python source only under
 `/tmp/.schwab-credential-proof-runtime`, run synthetic smoke/refusal checks, arm watchdogs, and
 quiesce the three direct writers; it may not read credentials/tokens or call Schwab. Request fresh
 Approval 2 only after those gates pass; Approval 2 permits exactly one credential/token read and one
