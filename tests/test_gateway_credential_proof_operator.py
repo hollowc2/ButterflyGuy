@@ -861,6 +861,56 @@ def test_accepted_snapshot_discovery_uses_only_unique_mode_0600_accepted_records
         operator._discover_accepted_snapshots(evidence)
 
 
+def test_accepted_snapshot_discovery_extracts_bounded_composite_supplement(
+    tmp_path: Path,
+) -> None:
+    evidence_root = tmp_path / "deployment"
+    evidence_root.mkdir()
+    nested = evidence_root / "retained"
+    nested.mkdir()
+    record = operator.build_record(runtime_inspect())
+    supplement = nested / "accepted-resume-supplement.json"
+    supplement.write_text(
+        json.dumps(
+            {
+                "reviewer_disposition": "accepted",
+                "accepted_fingerprints": {
+                    name: record for name in operator._TRADING_SERVICES
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    supplement.chmod(0o600)
+    for index in range(300):
+        (evidence_root / f"unrelated-{index}.txt").write_text("ignored", encoding="utf-8")
+    third = evidence_root / "third-window-baseline-spx.json"
+    third.write_text(json.dumps(record), encoding="utf-8")
+    third.chmod(0o600)
+
+    assert operator._discover_accepted_snapshots(evidence_root) == {
+        name: record for name in operator._TRADING_SERVICES
+    }
+
+
+def test_accepted_snapshot_discovery_rejects_duplicate_composite_records(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    record = operator.build_record(runtime_inspect())
+    for index in range(2):
+        supplement = evidence / f"accepted-supplement-{index}.json"
+        supplement.write_text(
+            json.dumps({name: record for name in operator._TRADING_SERVICES}),
+            encoding="utf-8",
+        )
+        supplement.chmod(0o600)
+
+    with pytest.raises(operator.OperatorFailure, match="evidence_invalid"):
+        operator._discover_accepted_snapshots(evidence)
+
+
 def test_accepted_snapshot_discovery_rejects_insecure_or_partial_records(
     tmp_path: Path,
 ) -> None:

@@ -1495,8 +1495,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/credential_proof_fingerprint.py": {
-    "mtime": 1785902357.0946488,
-    "ast_hash": "662af73d4878eb5bef1c4ee41a5ee66b",
+    "mtime": 1785902847.9361987,
+    "ast_hash": "e600c455f92ddc697e594492abf5764a",
     "semantic_hash": ""
   },
   "tests/test_credential_proof_fingerprint.py": {
@@ -1505,8 +1505,8 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_credential_proof_operator.py": {
-    "mtime": 1785902372.7726436,
-    "ast_hash": "62aa7a7f4a436f4635fd6825428654f8",
+    "mtime": 1785902866.0931735,
+    "ast_hash": "003daccbf1f14843da2da1fb9153c64a",
     "semantic_hash": ""
   }
 }

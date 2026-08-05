@@ -31,6 +31,10 @@ STAGING_SOURCE_TARGET = f"{STAGING_TMPFS_TARGET}/source"
 MAX_CAPTURE_BYTES = 64 * 1024
 MAX_SOURCE_BYTES = 256 * 1024
 MAX_RESULT_BYTES = 512
+MAX_EVIDENCE_DIRECTORIES = 128
+MAX_EVIDENCE_FILES = 4096
+MAX_EVIDENCE_CANDIDATES = 256
+MAX_EVIDENCE_JSON_NODES = 512
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 15
 PROOF_TIMEOUT_SECONDS = 45
 RESTORE_BUDGET_SECONDS = 120
@@ -115,6 +119,19 @@ _KEEPALIVE_MARKER = "schwab_token_keepalive.py"
 _CI_WORKER_MARKERS = ("Runner.Worker", "Agent.Worker")
 _PROOF_MARKER = "probe_schwab_gateway_credentials.py"
 _ERROR_MARKERS = ("error", "exception", "traceback", "critical", "failed")
+_EVIDENCE_MARKERS = ("accepted", "resume", "supplement")
+_EVIDENCE_PRUNED_DIRECTORIES = frozenset(
+    {
+        ".git",
+        ".venv",
+        "__pycache__",
+        "data",
+        "graphify-out",
+        "logs",
+        "node_modules",
+        "user_data",
+    }
+)
 _ARCHIVE_PATHS = (
     "pyproject.toml",
     "uv.lock",
@@ -551,14 +568,18 @@ def write_snapshot(path: Path, record: dict[str, object]) -> None:
 
 def read_snapshot(path: Path) -> dict[str, object]:
     file_stat = path.lstat()
-    if not stat.S_ISREG(file_stat.st_mode) or stat.S_IMODE(file_stat.st_mode) != 0o600:
+    if (
+        not stat.S_ISREG(file_stat.st_mode)
+        or stat.S_IMODE(file_stat.st_mode) != 0o600
+        or file_stat.st_size > MAX_SOURCE_BYTES
+    ):
         raise ValueError("invalid snapshot")
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(path, flags)
     try:
-        with os.fdopen(descriptor, encoding="utf-8") as handle:
+        with os.fdopen(descriptor, encoding="utf-8", errors="strict") as handle:
             descriptor = -1
             value = json.load(handle)
     finally:
@@ -1659,6 +1680,70 @@ def _require_reviewed_file(path: Path, archive: Path, member_name: str) -> None:
         raise OperatorFailure("provenance_invalid")
 
 
+def _service_name(value: str) -> str | None:
+    matched = [
+        name
+        for name in _TRADING_SERVICES
+        if re.search(rf"(?:^|[^a-z0-9]){name}(?:[^a-z0-9]|$)", value.casefold())
+    ]
+    return matched[0] if len(matched) == 1 else None
+
+
+def _records_in_evidence(value: object) -> list[tuple[str, dict[str, object]]]:
+    found: list[tuple[str, dict[str, object]]] = []
+    stack: list[tuple[object, str | None]] = [(value, None)]
+    visited = 0
+    while stack:
+        current, service_hint = stack.pop()
+        visited += 1
+        if visited > MAX_EVIDENCE_JSON_NODES:
+            raise ValueError("invalid evidence")
+        if _valid_record(current):
+            if service_hint is not None:
+                found.append((service_hint, current))
+            continue
+        if isinstance(current, dict):
+            for key, item in current.items():
+                if not isinstance(key, str):
+                    raise ValueError("invalid evidence")
+                key_service = _service_name(key)
+                next_hint = key_service if key_service is not None else service_hint
+                stack.append((item, next_hint))
+        elif isinstance(current, list):
+            stack.extend((item, service_hint) for item in current)
+    return found
+
+
+def _read_evidence_records(path: Path, relative_name: str) -> list[tuple[str, dict[str, object]]]:
+    file_stat = path.lstat()
+    if (
+        not stat.S_ISREG(file_stat.st_mode)
+        or stat.S_IMODE(file_stat.st_mode) != 0o600
+        or file_stat.st_size > MAX_SOURCE_BYTES
+    ):
+        return []
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        with os.fdopen(descriptor, encoding="utf-8", errors="strict") as handle:
+            descriptor = -1
+            value = json.load(handle)
+    except (UnicodeDecodeError, ValueError):
+        return []
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if _valid_record(value):
+        service = _service_name(relative_name)
+        return [] if service is None else [(service, value)]
+    try:
+        return _records_in_evidence(value)
+    except ValueError:
+        return []
+
+
 def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]]:
     try:
         directory_stat = directory.lstat()
@@ -1667,32 +1752,35 @@ def _discover_accepted_snapshots(directory: Path) -> dict[str, dict[str, object]
     if not stat.S_ISDIR(directory_stat.st_mode) or directory.is_symlink():
         raise OperatorFailure("evidence_invalid")
     found: dict[str, list[dict[str, object]]] = {name: [] for name in _TRADING_SERVICES}
-    visited = 0
+    visited_directories = 0
+    visited_files = 0
+    candidate_files = 0
     try:
         for root, directories, filenames in os.walk(directory, followlinks=False):
+            visited_directories += 1
+            if visited_directories > MAX_EVIDENCE_DIRECTORIES:
+                raise OperatorFailure("evidence_invalid")
             directories[:] = [
-                name for name in directories if not (Path(root) / name).is_symlink()
+                name
+                for name in directories
+                if name not in _EVIDENCE_PRUNED_DIRECTORIES
+                and not (Path(root) / name).is_symlink()
             ]
             for filename in filenames:
-                visited += 1
-                if visited > 256:
+                visited_files += 1
+                if visited_files > MAX_EVIDENCE_FILES:
                     raise OperatorFailure("evidence_invalid")
                 path = Path(root) / filename
                 relative = str(path.relative_to(directory)).casefold()
-                if not any(marker in relative for marker in ("accepted", "resume", "supplement")):
+                if not relative.endswith(".json") or not any(
+                    marker in relative for marker in _EVIDENCE_MARKERS
+                ):
                     continue
-                matched = [
-                    name
-                    for name in _TRADING_SERVICES
-                    if re.search(rf"(?:^|[^a-z0-9]){name}(?:[^a-z0-9]|$)", relative)
-                ]
-                if len(matched) != 1:
-                    continue
-                try:
-                    record = read_snapshot(path)
-                except (OSError, ValueError):
-                    continue
-                found[matched[0]].append(record)
+                candidate_files += 1
+                if candidate_files > MAX_EVIDENCE_CANDIDATES:
+                    raise OperatorFailure("evidence_invalid")
+                for service, record in _read_evidence_records(path, relative):
+                    found[service].append(record)
     except OperatorFailure:
         raise
     except OSError:
