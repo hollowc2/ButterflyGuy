@@ -238,6 +238,8 @@ _CONFIG_MOUNT_OBSERVATION_FIELDS = (
     "config_content_match_services",
     "config_exact_services",
     "config_invalid_services",
+    "config_readonly_services",
+    "config_writable_services",
 )
 _EVIDENCE_REASON_CODES = frozenset(
     {
@@ -2336,16 +2338,16 @@ def _runtime_direct_access(inspected: dict[str, Any]) -> bool:
 
 def _runtime_config_mount_status(
     inspected: dict[str, Any], config_path: Path, service: str
-) -> str:
+) -> tuple[str, str | None]:
     if service not in _TRADING_SERVICES:
-        return "invalid"
+        return "invalid", None
     mounts = inspected.get("Mounts")
     if not isinstance(mounts, list):
-        return "invalid"
+        return "invalid", None
     try:
         reviewed_source = config_path.resolve(strict=True)
     except OSError:
-        return "invalid"
+        return "invalid", None
     matching_mounts = [
         mount
         for mount in mounts
@@ -2353,7 +2355,7 @@ def _runtime_config_mount_status(
         and mount.get("Destination") == _RUNTIME_CONFIG_DESTINATIONS[service]
     ]
     if len(matching_mounts) != 1:
-        return "invalid"
+        return "invalid", None
     mount = matching_mounts[0]
     mode = mount.get("Mode")
     source = mount.get("Source")
@@ -2363,23 +2365,29 @@ def _runtime_config_mount_status(
         and source.startswith("/")
         and len(source) <= 4096
         and "\x00" not in source
-        and mount.get("RW") is False
         and isinstance(mode, str)
-        and "ro" in mode.split(",")
+        and isinstance(mount.get("RW"), bool)
     ):
-        return "invalid"
+        return "invalid", None
+    mode_options = mode.split(",") if mode else []
+    if mount["RW"] is False and "ro" in mode_options:
+        permission = "readonly"
+    elif mount["RW"] is True and (not mode_options or "rw" in mode_options):
+        permission = "writable"
+    else:
+        return "invalid", None
     source_path = Path(source)
     if source_path.name != config_path.name or source_path.parent.name != "configs":
-        return "invalid"
+        return "invalid", permission
     try:
         resolved_source = source_path.resolve(strict=True)
         if resolved_source == reviewed_source:
-            return "exact"
+            return "exact", permission
         if _sha256_file(source_path) == _sha256_file(reviewed_source):
-            return "content_match"
+            return "content_match", permission
     except (OSError, OperatorFailure, ValueError):
-        return "invalid"
-    return "invalid"
+        return "invalid", permission
+    return "invalid", permission
 
 
 def _config_mount_observation(
@@ -2391,18 +2399,23 @@ def _config_mount_observation(
         "exact": "config_exact_services",
         "invalid": "config_invalid_services",
     }
+    permission_fields = {
+        "readonly": "config_readonly_services",
+        "writable": "config_writable_services",
+    }
     for name in _TRADING_SERVICES:
-        status = _runtime_config_mount_status(
+        status, permission = _runtime_config_mount_status(
             inspections[name], config_paths[name], name
         )
         observation[status_fields.get(status, "config_invalid_services")].append(name)
+        if permission in permission_fields:
+            observation[permission_fields[permission]].append(name)
     return observation
 
 
 def _valid_config_mount_observation(value: object) -> bool:
     if not isinstance(value, dict) or set(value) != set(_CONFIG_MOUNT_OBSERVATION_FIELDS):
         return False
-    observed: list[str] = []
     for field in _CONFIG_MOUNT_OBSERVATION_FIELDS:
         services = value[field]
         if (
@@ -2411,8 +2424,26 @@ def _valid_config_mount_observation(value: object) -> bool:
             or services != [name for name in _TRADING_SERVICES if name in services]
         ):
             return False
-        observed.extend(services)
-    return len(observed) == len(set(observed)) and set(observed) == set(_TRADING_SERVICES)
+    content_observed = [
+        name
+        for field in (
+            "config_content_match_services",
+            "config_exact_services",
+            "config_invalid_services",
+        )
+        for name in value[field]
+    ]
+    permission_observed = [
+        name
+        for field in ("config_readonly_services", "config_writable_services")
+        for name in value[field]
+    ]
+    return bool(
+        len(content_observed) == len(set(content_observed))
+        and set(content_observed) == set(_TRADING_SERVICES)
+        and len(permission_observed) == len(set(permission_observed))
+        and set(permission_observed) == set(_TRADING_SERVICES)
+    )
 
 
 def _compose_observation(

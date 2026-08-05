@@ -1267,6 +1267,8 @@ def patch_runtime_baseline_success(monkeypatch: pytest.MonkeyPatch) -> None:
             "config_content_match_services": [],
             "config_exact_services": list(operator._TRADING_SERVICES),
             "config_invalid_services": [],
+            "config_readonly_services": [],
+            "config_writable_services": list(operator._TRADING_SERVICES),
         },
     )
 
@@ -1525,23 +1527,33 @@ def test_runtime_reviewed_config_requires_read_only_content_equivalent_bind(
         }
     )
 
-    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == "exact"
+    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == (
+        "exact",
+        "readonly",
+    )
 
     inspected["Mounts"][1]["Source"] = str(equivalent_path.resolve())
     assert (
         operator._runtime_config_mount_status(inspected, config_path, "spx")
-        == "content_match"
+        == ("content_match", "readonly")
     )
 
     equivalent_path.write_text("paper_trading: false\n", encoding="utf-8")
-    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == "invalid"
+    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == (
+        "invalid",
+        "readonly",
+    )
 
     equivalent_path.write_text("paper_trading: true\n", encoding="utf-8")
     inspected["Mounts"][1]["RW"] = True
-    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == "invalid"
+    inspected["Mounts"][1]["Mode"] = "rw"
+    assert operator._runtime_config_mount_status(inspected, config_path, "spx") == (
+        "content_match",
+        "writable",
+    )
     assert (
         operator._runtime_config_mount_status(inspected, config_path, "candidate")
-        == "invalid"
+        == ("invalid", None)
     )
 
 
@@ -1568,6 +1580,8 @@ def test_runtime_baseline_capture_binds_runtime_and_compose_exceptions(
         "config_content_match_services": [],
         "config_exact_services": ["spx", "ndx", "xsp"],
         "config_invalid_services": [],
+        "config_readonly_services": [],
+        "config_writable_services": ["spx", "ndx", "xsp"],
         "invalid_services": ["ndx", "xsp"],
         "matched_services": [],
         "mismatched_services": ["spx"],
@@ -1589,6 +1603,8 @@ def test_runtime_baseline_capture_binds_runtime_and_compose_exceptions(
         "config_content_match_services": [],
         "config_exact_services": ["spx", "ndx", "xsp"],
         "config_invalid_services": [],
+        "config_readonly_services": [],
+        "config_writable_services": ["spx", "ndx", "xsp"],
     }
     assert set(stored["candidate"]["images"]) == set(operator._TRADING_SERVICES)
     assert set(stored["candidate"]["records"]) == set(operator._TRADING_SERVICES)
@@ -1619,6 +1635,8 @@ def test_runtime_baseline_capture_fails_closed_on_config_mount_mismatch(
             "config_content_match_services": [],
             "config_exact_services": ["spx", "xsp"],
             "config_invalid_services": ["ndx"],
+            "config_readonly_services": [],
+            "config_writable_services": ["spx", "ndx", "xsp"],
         },
     )
 
@@ -1672,6 +1690,41 @@ def test_runtime_baseline_status_rejects_rehashed_overlapping_observation(
         }
     )
     stored["result"].update(observation)
+    stored["result"]["candidate_set_sha256"] = stored["candidate"][
+        "candidate_set_sha256"
+    ]
+    evidence_path.write_text(json.dumps(stored), encoding="utf-8")
+    evidence_path.chmod(0o600)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(
+            ["runtime-baseline-status", "--evidence", str(evidence_path.resolve())]
+        )
+    assert capsys.readouterr().out == '{"code":"evidence_invalid","status":"error"}\n'
+
+
+def test_runtime_baseline_status_rejects_overlapping_mount_permissions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_runtime_baseline_success(monkeypatch)
+    operator.main(runtime_baseline_args(tmp_path))
+    capsys.readouterr()
+
+    evidence_path = tmp_path / "runtime-baseline.json"
+    stored = json.loads(evidence_path.read_text(encoding="utf-8"))
+    mount_observation = stored["candidate"]["config_mount_observation"]
+    mount_observation["config_readonly_services"] = ["spx"]
+    stored["candidate"]["candidate_set_sha256"] = operator._digest(
+        {
+            "compose_observation": stored["candidate"]["compose_observation"],
+            "config_mount_observation": mount_observation,
+            "images": stored["candidate"]["images"],
+            "records": stored["candidate"]["records"],
+        }
+    )
+    stored["result"].update(mount_observation)
     stored["result"]["candidate_set_sha256"] = stored["candidate"][
         "candidate_set_sha256"
     ]

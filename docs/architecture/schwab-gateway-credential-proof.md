@@ -397,8 +397,13 @@ acceptance occurred.
 
 All three reviewed Compose short-form config mounts omit an explicit read-only suffix. The result is
 therefore consistent with writable bind permissions for every trading config, not an unknown service
-or lost evidence. Moving forward requires an explicit operator policy decision. The runtime path can
-require bounded content equality and treat writable permissions as a visible, digest-bound exception,
-or a separately approved live deployment can add read-only mounts and recreate the trading services.
-The former preserves current runtime behavior; the latter changes live service state and requires
-rollback and post-restart trading safeguards.
+or lost evidence. The operator selected the runtime path and explicitly accepted writable config
+mounts as a visible, digest-bound exception for this paper-mode baseline. Read-only mount hardening
+remains a separate deployment concern before live trading or gateway cutover.
+
+The local capture still requires a single bind at the exact in-container destination, the expected
+config filename under a `configs` directory, and exact bounded content equality with the reviewed
+file. It independently classifies the content relation as exact, content-matched, or invalid and the
+permission as read-only or writable. Both exhaustive classifications are included in the candidate
+digest and bounded output; only invalid content or structure blocks candidate creation. This policy
+preserves current runtime behavior while making the writable-mount exception explicit and auditable.

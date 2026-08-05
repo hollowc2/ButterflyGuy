@@ -1,16 +1,16 @@
 # Graph Report - butterfly-gateway-multi-consumer-foundation  (2026-08-05)
 
 ## Corpus Check
-- 274 files · ~277,830 words
+- 274 files · ~278,368 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3809 nodes · 10273 edges · 175 communities (160 shown, 15 thin omitted)
+- 3811 nodes · 10280 edges · 178 communities (164 shown, 14 thin omitted)
 - Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 776 edges (avg confidence: 0.51)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ae462941`
+- Built from commit: `6c8e3d6d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -25,17 +25,17 @@
 - FakeAccessFunctionFactory
 - SchwabClientWrapper
 - discover_options_strategy.py
-- OptionQuote
+- exit_mark_parity.py
 - credential_proof_fingerprint.py
 - 4. Detailed findings
-- OptionChainCollector
+- DirectSchwabMarketDataProvider
 - CandidateRegistry
 - forex_calendar.py
-- run_classifier_sweep.py
+- TradeRecord
 - MinuteBar
 - CsvDataLoader
 - run_backtest_db.py
-- test_broker_order_intents.py
+- run_live.py
 - test_equity_scan.py
 - InternalKeyAuthenticator
 - simulation_engine.py
@@ -51,11 +51,11 @@
 - test_risk_engine.py
 - SyntheticChainGenerator
 - news.py
-- symbol_directory
+- record_equity_market_data.py
 - test_gateway_credential_probe.py
 - test_comparison_stats.py
 - Current Schwab Integration
-- record_equity_market_data.py
+- CandidateEvaluator
 - test_candidate_settlement.py
 - api.py
 - AtomicSnapshotStore
@@ -63,38 +63,39 @@
 - send_alertmanager
 - SchwabDataLoader
 - equity_trade_chart.py
-- trade_service.py
-- report_exit_mark_parity.py
+- core/config.py
+- universes.py
+- OptionQuote
 - performance_chart.py
 - Target Trading Platform
 - ButterflyGuy AI Review State
 - test_gateway_credential_proof_operator.py
 - load_config
 - Database Compatibility
-- TradeRecord
-- TestEma
+- time_utils.py
+- refresh_builtin_universes
 - Schwab Gateway Migration Plan
-- select_cross_width_candidate
+- .collect_once
 - create_app
-- volume.py
+- gateway_client/models.py
 - report_trade_ladders.py
 - ButterflyGuy Code Review State
 - MarketSnapshot
-- universes.py
+- refresh_equity_universes.py
 - NamedTuple
 - DbDataLoader
 - feed.py
 - GapRegimeFilter
 - scanner.py
 - Behavioral Specification
-- backfill_equity_candles.py
+- SessionCloseUnavailableError
 - DiscordNotifier
 - ChainDay
 - live_performance.py
 - run_morning_scan.py
-- core/config.py
+- ButterflySelector
 - 1. Charles Schwab API
-- daily_report_card_config.py
+- ButterflyOrderBuilder
 - test_daily_report_card.py
 - weekend_review.py
 - Architecture
@@ -106,19 +107,21 @@
 - daily_report_card_format.py
 - test_candidate_dashboards.py
 - ReadOnlySchwabMarketDataClient
-- entry_selection.py
+- ButterflyCandidate
 - ButterflyGuy Fable 5 Refactor Plan
 - 2026-07-14 — data audit and research design
 - Codex Project State
 - 9) Capture equity candles and Level II for trade review
 - Capability recorder design
+- test_candidate_evaluator_accounting.py
 - Schwab Single-Token Manager
 - XSP Opportunistic Partial-Fill Evidence Plan
+- test_order_preview.py
 - test_run_backtest_db.py
 - redact
-- report_selection_parity.py
+- test_run_backtest_db_defaults.py
 - _MetricsHandler
-- run_live.py
+- BrokerStateGate
 - ButterflyGuy data sources — representative samples
 - Schwab Gateway Foundation: Local Run
 - client.py
@@ -132,18 +135,18 @@
 - Protocol
 - RuntimeError
 - Butterfly Guy
-- SnapshotIdentity
+- FakeProvider
 - OrderIntentQueries
-- SessionClose
+- test_candidate_snapshot.py
 - GatewaySettings
 - test_run_migrations.py
 - Schwab Gateway Foundation Smoke Test
 - StaticTokenReadinessProvider
-- load_spot_series
+- send_test_chart.py
 - Schwab Gateway Credential Proof
 - test_gateway_admission.py
 - Strategy Settings
-- ButterflyCandidate
+- OrderManager
 - Width Selection
 - After-Hours Schwab Gateway Credential-Proof Runbook
 - Schwab Gateway Credential-Proof Evidence Template
@@ -189,8 +192,6 @@
 10. `StrategySettings` - 50 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `TestEma` --uses--> `MinuteBar`  [INFERRED]
-  tests/test_bias_filter.py → src/butterfly_guy/backtest/data_loader.py
 - `TestEngineIntegration` --uses--> `MinuteBar`  [INFERRED]
   tests/test_bias_filter.py → src/butterfly_guy/backtest/data_loader.py
 - `TestBiasScore` --uses--> `DayData`  [INFERRED]
@@ -198,6 +199,8 @@
 - `TestComputeOr` --uses--> `DayData`  [INFERRED]
   tests/test_bias_filter.py → src/butterfly_guy/backtest/data_loader.py
 - `TestComputeVwap` --uses--> `DayData`  [INFERRED]
+  tests/test_bias_filter.py → src/butterfly_guy/backtest/data_loader.py
+- `TestEma` --uses--> `DayData`  [INFERRED]
   tests/test_bias_filter.py → src/butterfly_guy/backtest/data_loader.py
 
 ## Import Cycles
@@ -210,19 +213,19 @@
 - **hyperedge:logo_composition** — visual:geometric_butterfly_icon, brand:ButterflyGuy, visual:neon_green_accent, visual:dark_navy_background [EXTRACTED 1.00]
 - **hyperedge:brand_visual_identity_inference** — brand:ButterflyGuy, visual:geometric_butterfly_icon, visual:polygon_linework, visual:futuristic_uppercase_wordmark, concept:technology_or_trading_brand_signal [INFERRED 0.62]
 
-## Communities (175 total, 15 thin omitted)
+## Communities (178 total, 14 thin omitted)
 
 ### Community 0 - "run_paper_replay.py"
-Cohesion: 0.12
-Nodes (35): _butterfly_value(), _compute_spread(), detect_complete_days(), _elapsed(), _et(), get_prev_close(), get_vix(), LiveSpread (+27 more)
+Cohesion: 0.11
+Nodes (38): _butterfly_value(), _compute_spread(), detect_complete_days(), _elapsed(), EntryDecision, _et(), find_entry_candidate(), get_prev_close() (+30 more)
 
 ### Community 1 - "token_manager.py"
-Cohesion: 0.08
-Nodes (31): RLock, _AtomicFileTokenTransaction, _fsync_directory(), Enum, Path, str, Locked, atomic token persistence without a Schwab runtime dependency., A refresh callback uses this to classify an upstream revocation. (+23 more)
+Cohesion: 0.10
+Nodes (26): _AtomicFileTokenTransaction, _fsync_directory(), Enum, Path, str, Locked, atomic token persistence without a Schwab runtime dependency., Validate only the stable schwab-py token envelope and required OAuth fields., Run one fake/replaceable refresh callback under the exclusive token lock. (+18 more)
 
 ### Community 2 - "TokenTransaction"
-Cohesion: 0.15
-Nodes (8): AbstractContextManager, Any, datetime, Protocol, Operations available only while a token-store lock is held., Replaceable persistence boundary for one logical token document., TokenStore, TokenTransaction
+Cohesion: 0.10
+Nodes (13): AbstractContextManager, RLock, Any, datetime, Protocol, A refresh callback uses this to classify an upstream revocation., A refresh callback uses this when manual OAuth authorization is required., Operations available only while a token-store lock is held. (+5 more)
 
 ### Community 3 - "test_order_manager.py"
 Cohesion: 0.16
@@ -230,31 +233,31 @@ Nodes (58): LiveSpread, NamedTuple, broker_fill(), filled_order(), make_candidat
 
 ### Community 4 - "AppConfig"
 Cohesion: 0.08
-Nodes (40): assert_candidate_safety(), AppConfig, ExecutionSettings, BaseSettings, model_validator, RiskSettings, ConsecutiveLossNotifier, Protocol (+32 more)
+Nodes (48): assert_candidate_safety(), AppConfig, CollectorSettings, ConfigModel, EntrySettings, ExecutionSettings, MonitoringSettings, BaseModel (+40 more)
 
 ### Community 5 - "DatabasePool"
-Cohesion: 0.05
-Nodes (69): Pool, CandidateAuditContext, CandidateDecisionQueries, CandidatePaperExecutor, CandidatePerformanceStats, config_sha256(), Path, Paper-only candidate evaluator built without broker execution dependencies. (+61 more)
+Cohesion: 0.06
+Nodes (54): Pool, candidate_performance_stats(), CandidateAuditContext, CandidateDecisionQueries, CandidatePaperExecutor, CandidatePerformanceStats, config_sha256(), Path (+46 more)
 
 ### Community 6 - "ButterflyChartSpec"
-Cohesion: 0.10
-Nodes (43): _load_trade(), main(), Generate entry + EOD charts from a historic trade and post to Discord., build_entry_chart_png(), build_exit_chart_png(), ButterflyChartSpec, candles_to_series(), _draw_strike_overlays() (+35 more)
+Cohesion: 0.11
+Nodes (40): build_entry_chart_png(), build_exit_chart_png(), ButterflyChartSpec, candles_to_series(), _draw_strike_overlays(), entry_chart_window(), _exit_chart_series(), _exit_marker_point() (+32 more)
 
 ### Community 7 - "FakeAccessFunctionFactory"
 Cohesion: 0.24
 Nodes (18): adapter(), FakeAccessFunctionFactory, FakeClient, manager(), Any, MonkeyPatch, Path, Mimic schwab-py 1.5.1 TokenMetadata wrapping without importing schwab. (+10 more)
 
 ### Community 8 - "SchwabClientWrapper"
-Cohesion: 0.07
-Nodes (29): SchwabSettings, Any, date, Fetch option chain for a specific symbol and expiration., Get current spot price for SPX., Place an order once and return the order ID. Order placement is not retried…, Get the status of an order., Cancel an existing order. (+21 more)
+Cohesion: 0.06
+Nodes (33): SchwabSettings, Any, date, Fetch option chain for a specific symbol and expiration., Get current spot price for SPX., Place an order once and return the order ID. Order placement is not retried…, Get the status of an order., Cancel an existing order. (+25 more)
 
 ### Community 9 - "discover_options_strategy.py"
 Cohesion: 0.15
 Nodes (39): atm_pair(), bootstrap_report(), butterfly(), candidate_charts(), closest_delta(), credit_spread(), drawdown(), entry_cost() (+31 more)
 
-### Community 10 - "OptionQuote"
-Cohesion: 0.12
-Nodes (25): _as_float(), _as_int(), Any, date, Convert option_chain_snapshots rows into OptionQuote objects., Build OptionQuote list from option_chain_snapshots query rows., rows_to_option_quotes(), fly_mark_value() (+17 more)
+### Community 10 - "exit_mark_parity.py"
+Cohesion: 0.16
+Nodes (17): _as_float(), _as_int(), Any, date, Convert option_chain_snapshots rows into OptionQuote objects., Build OptionQuote list from option_chain_snapshots query rows., rows_to_option_quotes(), build_exit_mark_parity() (+9 more)
 
 ### Community 11 - "credential_proof_fingerprint.py"
 Cohesion: 0.07
@@ -264,9 +267,9 @@ Nodes (132): _accepted_fingerprint_hashes(), _accepted_snapshots(), _approval_1_
 Cohesion: 0.04
 Nodes (45): 10. Refactoring roadmap, 11. Verification log, 1. Executive summary, 2. Architecture map, 3. Original audit findings summary, 4. Detailed findings, 5. Single-source-of-truth matrix, 6. Duplication map (+37 more)
 
-### Community 13 - "OptionChainCollector"
-Cohesion: 0.05
-Nodes (35): OptionChainCollector, Any, date, datetime, Fetch and store daily OHLCV bars for SPX and VIX. Runs once per calendar day., Collects option chain snapshots at regular intervals., Parse Schwab callExpDateMap/putExpDateMap into flat rows., CollectorMarketDataProvider (+27 more)
+### Community 13 - "DirectSchwabMarketDataProvider"
+Cohesion: 0.10
+Nodes (14): CollectorMarketDataProvider, DirectSchwabMarketDataProvider, MarketMoversProvider, OptionChainProvider, PriceHistoryProvider, Any, date, Protocol (+6 more)
 
 ### Community 14 - "CandidateRegistry"
 Cohesion: 0.12
@@ -276,13 +279,13 @@ Nodes (38): CandidateRegistration, CandidateRegistry, load_registry(), BaseModel
 Cohesion: 0.14
 Nodes (23): _cell_text(), _fetch_calendar_html(), fetch_usd_events(), ForexEvent, _format_event_line(), format_usd_calendar_text(), _impact_from_row(), _parse_day_label() (+15 more)
 
-### Community 16 - "run_classifier_sweep.py"
-Cohesion: 0.29
-Nodes (12): profit_factor(), Shared metrics for backtest sweep scripts., sharpe(), win_pct(), main(), parse_args(), print_table(), Namespace (+4 more)
+### Community 16 - "TradeRecord"
+Cohesion: 0.10
+Nodes (29): A trade record for tracking entry/exit., TradeRecord, PartialFillError, RuntimeError, Broker reported a partial fill; operator reconciliation is required., Broker rejected or expired an order; the ladder must stop., TerminalOrderError, broker_cash_settlement_from_transactions() (+21 more)
 
 ### Community 17 - "MinuteBar"
 Cohesion: 0.07
-Nodes (28): CSV-based data loader for historical SPX + VIX 1-minute data. Reads two CSV…, MinuteBar, Shared backtest market-data models., DB-backed data loader for historical SPX + VIX data. Reads from the live…, Backtest data loader using Schwab (1-min SPY bars) + yfinance (daily data).…, Fetch today's 1-min bars from Schwab and run BiasScoreFilter., BiasScoreFilter, Multi-signal directional bias filter for 0-DTE butterfly entries. (+20 more)
+Nodes (28): CSV-based data loader for historical SPX + VIX 1-minute data. Reads two CSV…, MinuteBar, Shared backtest market-data models., Fetch today's 1-min bars from Schwab and run BiasScoreFilter., BiasScoreFilter, Multi-signal directional bias filter for 0-DTE butterfly entries., High and low of the opening range (bars with ET time < 09:45). Edge case: no OR…, Exponential moving average seeded with SMA of first `period` bars. Returns None… (+20 more)
 
 ### Community 18 - "CsvDataLoader"
 Cohesion: 0.25
@@ -290,47 +293,47 @@ Nodes (8): DataFrame, CsvDataLoader, date, Path, Map each date → list of up to
 
 ### Community 19 - "run_backtest_db.py"
 Cohesion: 0.05
-Nodes (94): max_consecutive_losses(), max_drawdown(), _asset_drawdowns(), backtest_entry_price(), candidate_from_trade_row(), _dd_schedule_label(), discover_dates(), _duration_min() (+86 more)
+Nodes (92): max_consecutive_losses(), max_drawdown(), profit_factor(), Shared metrics for backtest sweep scripts., sharpe(), _asset_drawdowns(), backtest_entry_price(), candidate_from_trade_row() (+84 more)
 
-### Community 20 - "test_broker_order_intents.py"
-Cohesion: 0.24
-Nodes (16): broker_fill_payload(), asyncio, parametrize, test_broker_state_gate_records_unsafe_reason(), test_filled_entry_intent_rejects_wrong_broker_ratio(), test_filled_entry_intent_rejects_zero_quantity(), test_filled_entry_intent_repairs_open_trade_only_with_matching_legs_and_fill(), test_filled_exit_intent_repairs_open_trade_only_when_broker_flat() (+8 more)
+### Community 20 - "run_live.py"
+Cohesion: 0.12
+Nodes (39): BrokerFill, order_ids(), parse_broker_fill(), Return a validated net butterfly fill derived only from broker executions., walk_orders(), _assert_broker_state_matches_db(), _broker_option_positions(), eod_chart_loop() (+31 more)
 
 ### Community 21 - "test_equity_scan.py"
 Cohesion: 0.17
-Nodes (36): EquityScanSettings, build_snapshots(), parse_equity_quote(), passes_filters(), datetime, _quote_age_seconds(), rank_catalyst_watch(), rank_scan_results() (+28 more)
+Nodes (35): EquityScanSettings, build_snapshots(), parse_equity_quote(), passes_filters(), datetime, _quote_age_seconds(), rank_catalyst_watch(), rank_scan_results() (+27 more)
 
 ### Community 22 - "InternalKeyAuthenticator"
 Cohesion: 0.11
 Nodes (28): Enum, authentication_middleware(), hash_api_key(), InternalKeyAuthenticator, InternalPrincipal, middleware, Path, StreamResponse (+20 more)
 
 ### Community 23 - "simulation_engine.py"
-Cohesion: 0.09
-Nodes (42): ProfitManagementStrategy, DayData, DayResult, DrawdownWindow, datetime, Single-day simulation engine using synthetic option chains., Runs full strategy on a single day using synthetic options., Simulate one trading day. (+34 more)
+Cohesion: 0.07
+Nodes (51): nearest_snapshot(), Return quotes from the most recent snapshot at or before bar_ts., DayData, win_pct(), DayResult, DrawdownWindow, datetime, Single-day simulation engine using synthetic option chains. (+43 more)
 
 ### Community 24 - "reports/daily_report_card.py"
 Cohesion: 0.13
-Nodes (36): AccountBalances, ActivitySummary, build_daily_report_card(), CashMovement, DailyReportCardSettings, count_rejected_orders(), detect_problems(), _extract_order_id() (+28 more)
+Nodes (37): AccountBalances, ActivitySummary, build_daily_report_card(), CashMovement, DailyReportCardSettings, count_rejected_orders(), detect_problems(), _extract_order_id() (+29 more)
 
 ### Community 25 - "report.py"
-Cohesion: 0.16
-Nodes (32): build_report(), _direction_emoji(), _fmt_news(), _fmt_pct(), _fmt_price(), _fmt_quality(), _fmt_rvol(), _fmt_universes() (+24 more)
+Cohesion: 0.18
+Nodes (29): build_report(), _direction_emoji(), _fmt_news(), _fmt_pct(), _fmt_price(), _fmt_quality(), _fmt_rvol(), _fmt_universes() (+21 more)
 
 ### Community 26 - "HttpMarketDataProvider"
 Cohesion: 0.12
-Nodes (20): A long poll completed normally before a newer snapshot was published., SnapshotWaitTimeoutError, HttpMarketDataProvider, AsyncClient, Response, Market-data provider contract and shared-feed HTTP implementation., Fail-closed client for the internal candidate feed., _response_error() (+12 more)
+Nodes (17): HttpMarketDataProvider, AsyncClient, LeaseKind, Response, Fail-closed client for the internal candidate feed., _response_error(), Build a synchronous schwab-py handler that never blocks the stream., make_session_close() (+9 more)
 
 ### Community 27 - "StrategySettings"
-Cohesion: 0.11
-Nodes (34): StrategySettings, main(), parse_args(), print_help(), Inspect what the strategy saw at entry for a given date. Replicates the…, EntryDecision, find_entry_candidate(), MonitorResult (+26 more)
+Cohesion: 0.13
+Nodes (28): StrategySettings, main(), parse_args(), print_help(), Inspect what the strategy saw at entry for a given date. Replicates the…, _bucket_sigmas(), ButterflyBuilder, O(N*W) butterfly construction and scoring engine. (+20 more)
 
 ### Community 28 - "upstream.py"
-Cohesion: 0.13
-Nodes (21): EquityQuoteProvider, datetime, field_validator, QuoteV1, DirectSchwabQuoteUpstream, _event_time(), _integer(), normalize_schwab_quote() (+13 more)
+Cohesion: 0.20
+Nodes (16): EquityQuoteProvider, DirectSchwabQuoteUpstream, _event_time(), _integer(), normalize_schwab_quote(), _number(), Any, datetime (+8 more)
 
 ### Community 29 - "run_entry_analysis.py"
-Cohesion: 0.14
-Nodes (28): fmt_candidate(), get_prev_close(), get_vix(), load_bars_from_db(), load_chains_from_db(), main(), nearest_snapshot(), parse_args() (+20 more)
+Cohesion: 0.15
+Nodes (26): fmt_candidate(), get_prev_close(), get_vix(), load_bars_from_db(), load_chains_from_db(), main(), nearest_snapshot(), parse_args() (+18 more)
 
 ### Community 30 - "test_gateway_config.py"
 Cohesion: 0.20
@@ -342,7 +345,7 @@ Nodes (28): Actual Schwab Symbol Formats, Backtest Database Chain Rows to Strate
 
 ### Community 32 - "ProfitStateMachine"
 Cohesion: 0.05
-Nodes (75): ProfitManagementSettings, QuoteQualitySettings, compute_tent_boundaries(), fly_bid_value(), fly_settlement_value(), _max_leg_spread_to_mark_ratio(), PositionState, _quote_quality_ok() (+67 more)
+Nodes (73): ProfitManagementStrategy, PeakTrackingSettings, ProfitManagementSettings, QuoteQualitySettings, fly_settlement_value(), PositionState, Butterfly cash-settlement value from the underlying index close., Current state of an open position. (+65 more)
 
 ### Community 33 - "test_risk_engine.py"
 Cohesion: 0.25
@@ -350,15 +353,15 @@ Nodes (18): make_risk_engine(), asyncio, Tests for the risk engine., Should bloc
 
 ### Community 34 - "SyntheticChainGenerator"
 Cohesion: 0.05
-Nodes (58): bs_call_price(), bs_delta(), bs_gamma(), bs_put_price(), bs_theta(), bs_vega(), _d1(), _d2() (+50 more)
+Nodes (60): bs_call_price(), bs_delta(), bs_gamma(), bs_put_price(), bs_theta(), bs_vega(), _d1(), _d2() (+52 more)
 
 ### Community 35 - "news.py"
-Cohesion: 0.17
-Nodes (30): EquityNewsSettings, EquityScanFilters, EquityScanLimits, BaseModel, Configuration for the equity morning scan., _alpha_key(), _fetch_alpha_earnings(), _fetch_alpha_impacts() (+22 more)
-
-### Community 36 - "symbol_directory"
 Cohesion: 0.16
-Nodes (16): date, datetime, Path, Persistence helpers for recorded equity candles and Schwab stream events., Write a run summary without exposing credentials or account identifiers., Return the stable output directory for one symbol and session., Write a deterministic JSON candle snapshot., symbol_directory() (+8 more)
+Nodes (31): EquityNewsSettings, EquityScanFilters, EquityScanLimits, BaseModel, Configuration for the equity morning scan., _alpha_key(), _fetch_alpha_earnings(), _fetch_alpha_impacts() (+23 more)
+
+### Community 36 - "record_equity_market_data.py"
+Cohesion: 0.09
+Nodes (39): JsonlStreamRecorder, Any, date, datetime, Event, Path, Persistence helpers for recorded equity candles and Schwab stream events., Write a run summary without exposing credentials or account identifiers. (+31 more)
 
 ### Community 37 - "test_gateway_credential_probe.py"
 Cohesion: 0.16
@@ -372,21 +375,21 @@ Nodes (6): _capture(), _make_result(), Tests for _print_comparison_table aggrega
 Cohesion: 0.10
 Nodes (19): Assumptions requiring verification, Authentication and token lifecycle, Configuration, secrets, and deployment assumptions, Current architecture, Current Schwab Integration, Database and messaging dependencies, Direct SDK construction and imports, Discord and operational dependencies (+11 more)
 
-### Community 40 - "record_equity_market_data.py"
-Cohesion: 0.20
-Nodes (15): JsonlStreamRecorder, Event, Non-blocking stream handlers backed by one JSONL file per Schwab service., Drain queued events until the stop flag is set and the queue is empty., async_main(), _install_signal_handlers(), main(), parse_args() (+7 more)
+### Community 40 - "CandidateEvaluator"
+Cohesion: 0.22
+Nodes (7): candidate_fill_parity_failures(), _candidate_mark(), CandidateEvaluator, Any, Count mark_v1 rows whose fills disagree with their recorded evidence., _restore_trade(), test_candidate_fill_parity_counts_entry_exit_mismatch_or_missing_evidence()
 
 ### Community 41 - "test_candidate_settlement.py"
 Cohesion: 0.62
 Nodes (6): _candidate(), _evaluator(), asyncio, test_candidate_cash_settlement_fails_closed_without_feed_evidence(), test_candidate_cash_settlement_uses_only_shared_feed_evidence(), _trade()
 
 ### Community 42 - "api.py"
-Cohesion: 0.13
-Nodes (28): Transport-neutral client contracts for the internal Schwab gateway., GatewayErrorDetailV1, GatewayErrorV1, GatewayHealthV1, GatewayModel, GatewayReadinessV1, BaseModel, QuoteResponseV1 (+20 more)
+Cohesion: 0.22
+Nodes (18): audit_middleware(), _error(), health(), _json(), metrics(), _parse_symbols(), Application, middleware (+10 more)
 
 ### Community 43 - "AtomicSnapshotStore"
-Cohesion: 0.13
-Nodes (22): AtomicSnapshotStore, CandidateFeed, LeaseRegistry, Condition-guarded pointer swap; readers never observe partial snapshots., Persist once and return the canonical evidence for this session., SnapshotArchive, No verified final regular-session close is available from the shared feed., SessionCloseUnavailableError (+14 more)
+Cohesion: 0.12
+Nodes (21): AtomicSnapshotStore, CandidateFeed, LeaseRegistry, Condition-guarded pointer swap; readers never observe partial snapshots., SnapshotArchive, DatabaseSettings, main(), Run the demand-aware shared SPX candidate market-data feed. (+13 more)
 
 ### Community 44 - "test_weekend_review.py"
 Cohesion: 0.27
@@ -398,23 +401,27 @@ Nodes (16): asyncio, parametrize, Tests for Discord trade notifications., test_a
 
 ### Community 46 - "SchwabDataLoader"
 Cohesion: 0.09
-Nodes (21): day_cache_path(), load_day(), date, Path, JSON cache helpers for DayData — shared across Schwab and future loaders., save_day(), date, Path (+13 more)
+Nodes (22): day_cache_path(), load_day(), date, Path, JSON cache helpers for DayData — shared across Schwab and future loaders., save_day(), date, Path (+14 more)
 
 ### Community 47 - "equity_trade_chart.py"
 Cohesion: 0.16
 Nodes (31): TradeResult, build_equity_trade_chart_png(), _compact_volume(), _draw_candles(), _draw_depth_overlay(), _draw_viewfinder(), _draw_volume(), _draw_volume_overlay() (+23 more)
 
-### Community 48 - "trade_service.py"
+### Community 48 - "core/config.py"
 Cohesion: 0.04
-Nodes (96): BoundLogger, Schwab market-data client deliberately lacking every account/order operation., get_logger(), Structured logging setup with structlog., Get a structlog logger with optional name., _easter_sunday(), get_0dte_expiration(), get_us_market_early_closes() (+88 more)
+Nodes (59): BoundLogger, Schwab market-data client deliberately lacking every account/order operation., Configuration management using Pydantic settings., capped_entry_limit(), Shared entry-price limit policy for production and candidate runtimes., Return a cent-valid debit limit that never exceeds the configured maximum., get_logger(), Structured logging setup with structlog. (+51 more)
 
-### Community 50 - "report_exit_mark_parity.py"
-Cohesion: 0.26
-Nodes (18): analyze_manual(), analyze_trade(), _compare_snapshots(), _fly_from_rows(), _leg_rows_at_snapshot(), main(), _nearest_snapshot_time(), parse_args() (+10 more)
+### Community 49 - "universes.py"
+Cohesion: 0.17
+Nodes (18): fetch_exchange_seed_map(), fetch_nasdaq_listed_symbols(), fetch_nyse_listed_symbols(), _fetch_url_text(), _is_common_equity_symbol(), _is_symbol_directory_footer(), parse_nasdaq_listed_text(), parse_nyse_listed_text() (+10 more)
+
+### Community 50 - "OptionQuote"
+Cohesion: 0.11
+Nodes (31): fly_mark_value(), OptionQuote, A single option quote from a chain snapshot., Butterfly value at mark: lower.mark - 2*center.mark + upper.mark., compute_tent_boundaries(), fly_bid_value(), _max_leg_spread_to_mark_ratio(), _quote_quality_ok() (+23 more)
 
 ### Community 51 - "performance_chart.py"
-Cohesion: 0.20
-Nodes (17): compute_stats(), ReportStats, build_performance_chart_png(), _fig_to_png(), _format_pnl(), _period_subtitle(), _plot_period_panels(), Axes (+9 more)
+Cohesion: 0.18
+Nodes (18): compute_stats(), ReportStats, build_performance_chart_png(), _fig_to_png(), _format_pnl(), _period_subtitle(), _plot_period_panels(), Axes (+10 more)
 
 ### Community 52 - "Target Trading Platform"
 Cohesion: 0.11
@@ -426,35 +433,39 @@ Nodes (11): Active Work Item, Architecture Map, ButterflyGuy AI Review State, Cu
 
 ### Community 54 - "test_gateway_credential_proof_operator.py"
 Cohesion: 0.07
-Nodes (106): docker_inspect(), CaptureFixture, MonkeyPatch, parametrize, Path, test_canonical_fingerprint_is_independent_of_semantically_unordered_fields(), test_cli_bounds_docker_failure_without_raw_exception(), test_cli_exact_and_staging_verification_are_bounded() (+98 more)
+Nodes (107): docker_inspect(), CaptureFixture, MonkeyPatch, parametrize, Path, test_canonical_fingerprint_is_independent_of_semantically_unordered_fields(), test_cli_bounds_docker_failure_without_raw_exception(), test_cli_exact_and_staging_verification_are_bounded() (+99 more)
 
 ### Community 55 - "load_config"
-Cohesion: 0.13
-Nodes (21): load_config(), Path, Load configuration from YAML file and environment variables., parametrize, Tests for configuration loading., Loading config with no files should return sensible defaults., Config values from YAML should override defaults., test_allow_live_trading_requires_explicit_env() (+13 more)
+Cohesion: 0.10
+Nodes (27): load_config(), Path, Load configuration from YAML file and environment variables., main(), parse_args(), date, Namespace, Summarize Schwab vs DB entry selection parity from decision_log. Usage: uv run… (+19 more)
 
 ### Community 56 - "Database Compatibility"
 Cohesion: 0.13
 Nodes (14): `001_initial.sql`: `option_chain_snapshots`, `001_initial.sql`: `spot_prices`, `002_fix_greeks_precision.sql`, `004_add_chain_fields.sql`, `005_add_daily_bars.sql`, Anonymized Synchronized Data Slice, Daily Bar Shape Example, `daily_bars` (+6 more)
 
-### Community 57 - "TradeRecord"
-Cohesion: 0.10
-Nodes (31): candidate_performance_stats(), CandidateEvaluator, Summarize one chronological, closed mark_v1 PnL cohort., _restore_trade(), A trade record for tracking entry/exit., TradeRecord, trade_pnl_dollars(), broker_cash_settlement_from_transactions() (+23 more)
+### Community 57 - "time_utils.py"
+Cohesion: 0.07
+Nodes (62): _easter_sunday(), get_us_market_early_closes(), get_us_market_holidays(), is_market_open(), is_premarket_window(), is_trading_day(), _last_weekday(), market_close_time() (+54 more)
+
+### Community 58 - "refresh_builtin_universes"
+Cohesion: 0.13
+Nodes (19): fetch_nq100_tickers(), fetch_sp500_rows(), fetch_sp500_sectors(), fetch_sp500_tickers(), load_liquid_meta(), load_universe(), load_universes(), Path (+11 more)
 
 ### Community 59 - "Schwab Gateway Migration Plan"
 Cohesion: 0.09
 Nodes (22): Credential-proof gate, Current migration status, Dependency map, Fake-only readiness and operator checklist, Phase 0 — audit and documentation, Phase 1 — provider boundary, Phase 2 — minimal read-only gateway, Phase 3 — shadow comparison (+14 more)
 
-### Community 60 - "select_cross_width_candidate"
-Cohesion: 0.36
-Nodes (7): Helpers for choosing a candidate across multiple active widths., Choose the final candidate from one best candidate per width. When…, select_cross_width_candidate(), _candidate(), test_cross_width_selection_can_prefer_first_bucket_width(), test_cross_width_selection_prefers_wider_wing_on_rr_tie(), test_cross_width_selection_returns_none_for_empty_pool()
+### Community 60 - ".collect_once"
+Cohesion: 0.20
+Nodes (9): _final_regular_session_close(), _previous_close(), Any, date, datetime, LeaseKind, time, Select only a final (15:59/16:00 normally) regular-session 1-minute bar. (+1 more)
 
 ### Community 61 - "create_app"
 Cohesion: 0.22
 Nodes (17): GatewayMarketDataClient, AsyncClient, Typed client for gateway market-data endpoints only., create_app(), authenticator(), FakeQuoteUpstream, FakeTokenReadinessProvider, asyncio (+9 more)
 
-### Community 62 - "volume.py"
-Cohesion: 0.21
-Nodes (12): _as_int(), avg_daily_volume(), compute_rvol(), prior_session_pct_change(), Relative volume helpers using Schwab daily bar history., Average daily volume from completed sessions (excludes today)., Close-to-close percent change for the last completed daily session., Symbols with premarket volume — only these need avg-volume for RVOL filter. (+4 more)
+### Community 62 - "gateway_client/models.py"
+Cohesion: 0.19
+Nodes (13): Transport-neutral client contracts for the internal Schwab gateway., GatewayErrorDetailV1, GatewayErrorV1, GatewayHealthV1, GatewayModel, GatewayReadinessV1, BaseModel, datetime (+5 more)
 
 ### Community 63 - "report_trade_ladders.py"
 Cohesion: 0.20
@@ -466,67 +477,67 @@ Nodes (15): Architecture map, ButterflyGuy Code Review State, Changes implemente
 
 ### Community 65 - "MarketSnapshot"
 Cohesion: 0.08
-Nodes (19): candidate_fill_parity_failures(), _candidate_mark(), Any, Count mark_v1 rows whose fills disagree with their recorded evidence., Paper-only SPX candidate fleet fed by a shared market-data service., _aware_utc(), MarketSnapshot, datetime (+11 more)
+Nodes (20): Paper-only SPX candidate fleet fed by a shared market-data service., _aware_utc(), MarketSnapshot, Any, datetime, RuntimeError, Immutable normalized market snapshots shared by candidate evaluators., No complete snapshot is currently available. (+12 more)
 
-### Community 66 - "universes.py"
-Cohesion: 0.06
-Nodes (60): _as_float(), build_liquid_meta(), extract_quote_price(), fetch_exchange_seed_map(), fetch_nasdaq_listed_symbols(), fetch_nq100_tickers(), fetch_nyse_listed_symbols(), fetch_sp500_rows() (+52 more)
+### Community 66 - "refresh_equity_universes.py"
+Cohesion: 0.11
+Nodes (25): _as_float(), build_liquid_meta(), extract_quote_price(), filter_symbols_by_avg_volume(), filter_symbols_by_price(), load_sector_map(), Any, Load symbol -> sector mapping (GICS for index names, exchange fallback for… (+17 more)
 
 ### Community 68 - "DbDataLoader"
-Cohesion: 0.16
-Nodes (13): DbDataLoader, Connection, date, datetime, VIX close for *date*: daily_bars first, then last spot_prices tick., Last close from daily_bars strictly before *date*., Up to *n* daily closes before *date*, chronological order., Query option_chain_snapshots for the nearest snapshot_time <= *at*. (+5 more)
+Cohesion: 0.15
+Nodes (14): DbDataLoader, Connection, date, datetime, DB-backed data loader for historical SPX + VIX data. Reads from the live…, VIX close for *date*: daily_bars first, then last spot_prices tick., Last close from daily_bars strictly before *date*., Up to *n* daily closes before *date*, chronological order. (+6 more)
 
 ### Community 69 - "feed.py"
-Cohesion: 0.11
-Nodes (31): _after_identity(), create_app(), _delete_lease(), _final_regular_session_close(), _float_query(), _health(), Lease, _legs() (+23 more)
+Cohesion: 0.26
+Nodes (16): _after_identity(), create_app(), _delete_lease(), _float_query(), _health(), _legs(), _metrics(), _pin_snapshot() (+8 more)
 
 ### Community 70 - "GapRegimeFilter"
-Cohesion: 0.14
-Nodes (12): GapRegimeFilter, Enum, str, Market regime classifier for 0-DTE butterfly parameter dispatch. Classifies…, Return Regime for today given prior daily closes and today's VIX. Args:…, Regime, Unit tests for GapRegimeFilter.apply()., min_gap_pct check runs before bull_call_bias, so tiny gap-down is skipped. (+4 more)
+Cohesion: 0.18
+Nodes (7): GapRegimeFilter, Unit tests for GapRegimeFilter.apply()., min_gap_pct check runs before bull_call_bias, so tiny gap-down is skipped., TestBullCallBias, TestDefaultsAreNoop, TestMinGapPct, TestSkipBeforeOverride
 
 ### Community 71 - "scanner.py"
-Cohesion: 0.24
-Nodes (16): _as_float(), _as_int(), filter_movers(), MarketContext, _mid_bid_ask(), _mover_change_pct(), _mover_symbol(), parse_market_context() (+8 more)
+Cohesion: 0.19
+Nodes (19): _as_float(), _as_int(), filter_movers(), _focus_reasons(), MarketContext, _mid_bid_ask(), _mover_change_pct(), _mover_symbol() (+11 more)
 
 ### Community 72 - "Behavioral Specification"
 Cohesion: 0.09
 Nodes (22): Algorithmic Refinements For 0-DTE Robustness, Behavioral Specification, Bid-Ask Spread Penalization, Candidate Construction Invariants, Current Config Defaults, Current Width And Center Selection Data, Double-Factor Live Gating, Dynamic Wing Width Formula (+14 more)
 
-### Community 73 - "backfill_equity_candles.py"
-Cohesion: 0.46
-Nodes (7): async_main(), main(), parse_args(), Namespace, Path, Backfill one session of one-minute equity candles from Schwab., run()
+### Community 73 - "SessionCloseUnavailableError"
+Cohesion: 0.21
+Nodes (9): Lease, Persist once and return the canonical evidence for this session., Return one cached, verified final regular-session SPX close per date., SessionContext, Auditable final regular-session SPX close supplied by the shared feed., No verified final regular-session close is available from the shared feed., SessionClose, SessionCloseUnavailableError (+1 more)
 
 ### Community 74 - "DiscordNotifier"
-Cohesion: 0.23
-Nodes (4): DiscordNotifier, date, Post one or more plain-text messages (e.g. morning equity scan)., Sends trading notifications to Discord via webhook.
+Cohesion: 0.16
+Nodes (8): DiscordNotifier, date, Post one or more plain-text messages (e.g. morning equity scan)., Sends trading notifications to Discord via webhook., main(), parse_reference_date(), date, Send SPX weekend review to Discord #weekend-review. Cron: Saturday 9:00 AM PT 0…
 
 ### Community 75 - "ChainDay"
-Cohesion: 0.14
-Nodes (24): dict, chain_cache_path(), ChainDay, load_chain_day(), nearest_snapshot(), date, datetime, Path (+16 more)
+Cohesion: 0.15
+Nodes (22): dict, chain_cache_path(), ChainDay, load_chain_day(), date, datetime, Path, Real option chain cache — per-day JSON snapshots from the live collector.… (+14 more)
 
 ### Community 76 - "live_performance.py"
 Cohesion: 0.10
-Nodes (46): chart_payload(), cumulative_equity(), drawdown_series(), DrawdownPoint, duration_minutes(), format_et_time(), is_drawdown_exit(), _money() (+38 more)
+Nodes (44): chart_payload(), cumulative_equity(), drawdown_series(), DrawdownPoint, duration_minutes(), format_et_time(), is_drawdown_exit(), _money() (+36 more)
 
 ### Community 77 - "run_morning_scan.py"
-Cohesion: 0.14
-Nodes (21): load_equity_scan_config(), Path, Load equity scan settings from YAML., archive_report(), archive_report_json(), Path, Write the scan report to a dated markdown file under report_dir., Write machine-readable scan internals next to the markdown report. (+13 more)
+Cohesion: 0.09
+Nodes (31): load_equity_scan_config(), Path, Load equity scan settings from YAML., archive_report(), archive_report_json(), Path, Write the scan report to a dated markdown file under report_dir., Write machine-readable scan internals next to the markdown report. (+23 more)
 
-### Community 78 - "core/config.py"
-Cohesion: 0.16
-Nodes (17): CollectorSettings, ConfigModel, DatabaseSettings, EntrySettings, MonitoringSettings, PeakTrackingSettings, BaseModel, Configuration management using Pydantic settings. (+9 more)
+### Community 78 - "ButterflySelector"
+Cohesion: 0.19
+Nodes (11): ButterflySelector, Butterfly selector — picks the best candidate from a list., Selects the best butterfly candidate., Select the best butterfly candidate. When `target_center` is provided (derived…, Select the candidate whose cost is closest to its max_cost_per_width., make_candidate(), Tests for butterfly candidate selection., test_regular_best_rr_selection_still_uses_rr_target() (+3 more)
 
 ### Community 79 - "1. Charles Schwab API"
 Cohesion: 0.20
 Nodes (10): 1.1 Account-number resolution, 1.2 Option chains, 1.3 Single-symbol spot/index quotes, 1.4 Batched equity quotes, 1.5 Price-history candles, 1.6 Market movers, 1.7 Account snapshot, balances, and positions, 1.8 Orders and order status (+2 more)
 
-### Community 80 - "daily_report_card_config.py"
-Cohesion: 0.33
-Nodes (5): load_daily_report_card_config(), BaseModel, Path, Configuration for the daily report card., ReportCardThresholds
+### Community 80 - "ButterflyOrderBuilder"
+Cohesion: 0.26
+Nodes (9): ButterflyOrderBuilder, Builds butterfly spread orders for Schwab API., Constructs Schwab-compatible butterfly order JSON., make_candidate(), Tests for butterfly order builder., test_build_close_order_structure(), test_build_open_order_legs(), test_build_open_order_structure() (+1 more)
 
 ### Community 81 - "test_daily_report_card.py"
-Cohesion: 0.17
-Nodes (16): parse_trade_transactions(), Parse TRADE transactions into round-trip realized P&L., candles_to_series(), date, Tests for daily report card parsing and formatting., Without positionEffect, falls back to per-transaction P&L (e.g. options)., test_build_equity_trade_chart_png_returns_png_bytes(), test_chartable_equity_trades_skips_options() (+8 more)
+Cohesion: 0.18
+Nodes (15): parse_trade_transactions(), Parse TRADE transactions into round-trip realized P&L., candles_to_series(), date, Tests for daily report card parsing and formatting., Without positionEffect, falls back to per-transaction P&L (e.g. options)., test_build_equity_trade_chart_png_returns_png_bytes(), test_chartable_equity_trades_skips_options() (+7 more)
 
 ### Community 82 - "weekend_review.py"
 Cohesion: 0.17
@@ -553,8 +564,8 @@ Cohesion: 0.30
 Nodes (12): _build_payload(), main(), _order_symbols(), Any, Write a redacted read-only report of Schwab order statuses for one day., _status_category(), _summarize(), test_payload_counts_parent_and_descendant_statuses() (+4 more)
 
 ### Community 88 - "Shared SPX candidate fleet"
-Cohesion: 0.15
-Nodes (22): 4) Run the live orchestrator directly, 5) Smoke-test the backtest from Docker, 6) Inspect a historical entry decision, 7) Run the morning equity scan, 8) Generate or compare reports, Backtesting, code:bash (uv run python src/butterfly_guy/scripts/run_live.py --config), code:bash (docker exec butterfly_spx_app python -m butterfly_guy.script) (+14 more)
+Cohesion: 0.16
+Nodes (21): 4) Run the live orchestrator directly, 5) Smoke-test the backtest from Docker, 6) Inspect a historical entry decision, 7) Run the morning equity scan, 8) Generate or compare reports, Backtesting, code:bash (uv run python src/butterfly_guy/scripts/run_live.py --config), code:bash (docker exec butterfly_spx_app python -m butterfly_guy.script) (+13 more)
 
 ### Community 89 - "daily_report_card_format.py"
 Cohesion: 0.25
@@ -568,9 +579,9 @@ Nodes (12): _dashboard(), _expressions(), _panels(), test_candidate_review_metri
 Cohesion: 0.26
 Nodes (4): Any, date, Authenticate a Schwab client without resolving or retaining an account., ReadOnlySchwabMarketDataClient
 
-### Community 92 - "entry_selection.py"
-Cohesion: 0.13
-Nodes (24): Compare Schwab selection with the nearest DB collector snapshot., _bucket_sigmas(), Return sigma anchors spanning narrow to wide for the bucket size., Return (widths, sigma_fractions) for the active VIX bucket. Buckets are…, resolve_wing_widths_for_vix(), _active_widths_and_sigmas(), EntrySelectionResult, build_entry_selection_parity() (+16 more)
+### Community 92 - "ButterflyCandidate"
+Cohesion: 0.11
+Nodes (28): ButterflyCandidate, Pydantic models for option data and trade records., A butterfly spread candidate identified by the scanner., Any, Build a butterfly BUY_TO_OPEN order., Build a butterfly SELL_TO_CLOSE order., Compare Schwab selection with the nearest DB collector snapshot., EntrySelectionResult (+20 more)
 
 ### Community 93 - "ButterflyGuy Fable 5 Refactor Plan"
 Cohesion: 0.13
@@ -592,6 +603,10 @@ Nodes (3): 9) Capture equity candles and Level II for trade review, code:bash (u
 Cohesion: 0.25
 Nodes (7): Capability recorder design, Evidence per observation, Output, Probes, Schedule, Schwab Capability Matrix, Stop conditions
 
+### Community 98 - "test_candidate_evaluator_accounting.py"
+Cohesion: 0.24
+Nodes (8): _gauge_value(), MetricsPool, asyncio, MonkeyPatch, test_candidate_performance_stats_reports_outlier_dependence(), test_min_gap_filter_logs_no_trade_before_candidate_selection(), test_min_gap_filter_preserves_direction_above_threshold(), test_review_progress_counts_only_closed_mark_v1_trades()
+
 ### Community 99 - "Schwab Single-Token Manager"
 Cohesion: 0.25
 Nodes (7): Fake-only verification, Integration gate, Proven schwab-py callback contract, Schwab Single-Token Manager, Scope, Transaction, Validation and states
@@ -599,6 +614,10 @@ Nodes (7): Fake-only verification, Integration gate, Proven schwab-py callback c
 ### Community 100 - "XSP Opportunistic Partial-Fill Evidence Plan"
 Cohesion: 0.29
 Nodes (6): Completion, Current evidence, Decision, If one occurs naturally, Required artifacts, XSP Opportunistic Partial-Fill Evidence Plan
+
+### Community 101 - "test_order_preview.py"
+Cohesion: 0.27
+Nodes (10): make_spx_candidate(), Integration test: validate butterfly order JSON structure. These tests check…, Realistic SPX butterfly candidate., Order spec must have all fields Schwab requires., Schwab expects price as a string., test_close_order_credit(), test_order_has_required_schwab_fields(), test_order_leg_has_required_fields() (+2 more)
 
 ### Community 102 - "test_run_backtest_db.py"
 Cohesion: 0.20
@@ -608,17 +627,17 @@ Nodes (11): _fitted_density_counts(), _print_pnl_histogram(), Return bucket-heig
 Cohesion: 0.33
 Nodes (5): Any, Small defensive redaction layer for gateway audit metadata., Return a recursively redacted copy suitable for bounded audit metadata., redact(), test_redaction_removes_nested_credentials_and_account_identifiers()
 
-### Community 104 - "report_selection_parity.py"
-Cohesion: 0.38
-Nodes (6): main(), parse_args(), date, Namespace, Summarize Schwab vs DB entry selection parity from decision_log. Usage: uv run…, run()
+### Community 104 - "test_run_backtest_db_defaults.py"
+Cohesion: 0.27
+Nodes (9): Use the first regular-session snapshot for gap direction., select_direction_bar(), _parse_for_asset(), test_backtest_auto_direction_uses_first_regular_session_snapshot(), test_candidate_from_trade_row_pins_live_trade_fields(), test_default_entry_bar_lookup_rejects_late_fallback(), test_ndx_backtest_drawdown_defaults_match_live_config(), test_spx_backtest_drawdown_defaults_match_live_config() (+1 more)
 
 ### Community 105 - "_MetricsHandler"
 Cohesion: 0.32
 Nodes (4): BaseHTTPRequestHandler, _MetricsHandler, HTTP request handler serving both Prometheus metrics and health checks., Suppress default request logging to stderr.
 
-### Community 106 - "run_live.py"
-Cohesion: 0.08
-Nodes (54): clear_readiness(), Prometheus metrics for monitoring., Add a not-ready reason; ``None`` explicitly resets all reasons., Clear only the recovered subsystem's not-ready reason., readiness_snapshot(), set_readiness(), order_ids(), order_statuses() (+46 more)
+### Community 106 - "BrokerStateGate"
+Cohesion: 0.06
+Nodes (51): clear_readiness(), Add a not-ready reason; ``None`` explicitly resets all reasons., Clear only the recovered subsystem's not-ready reason., readiness_snapshot(), set_readiness(), OptionChainCollector, Any, date (+43 more)
 
 ### Community 107 - "ButterflyGuy data sources — representative samples"
 Cohesion: 0.33
@@ -653,24 +672,24 @@ Cohesion: 0.25
 Nodes (8): 5.1 Application YAML configuration, 5.2 Environment variables and `.env`, 5.3 `tokens.json`, 5.4 Universe and metadata files, 5.5 Historical minute CSVs, 5.6 Local daily bar cache, 5.7 Local option-chain cache, 5. Local files and backtest inputs
 
 ### Community 116 - "services/daily_report_card.py"
-Cohesion: 0.27
-Nodes (11): archive_report(), date, Path, chartable_equity_trades(), date, datetime, Path, Daily report card orchestration — fetch Schwab data, build, post to Discord. (+3 more)
+Cohesion: 0.13
+Nodes (20): load_daily_report_card_config(), BaseModel, Path, Configuration for the daily report card., ReportCardThresholds, archive_report(), date, Path (+12 more)
 
 ### Community 119 - "Butterfly Guy"
-Cohesion: 0.13
-Nodes (15): Gap Regime Filter, Charles Schwab API, Architecture at a glance, Butterfly Guy, code:text (Schwab API), Configuration files, Core repo layout, 🚀 Features (+7 more)
+Cohesion: 0.12
+Nodes (16): Gap Regime Filter, Charles Schwab API, Architecture at a glance, Butterfly Guy, code:text (Schwab API), Configuration files, Core repo layout, 🚀 Features (+8 more)
 
-### Community 120 - "SnapshotIdentity"
-Cohesion: 0.10
-Nodes (14): SnapshotIdentity, MarketDataProvider, LeaseKind, Protocol, Direct-provider adapter for primary/parity paths that normalize Schwab data., The complete market-data surface available to a strategy evaluator., SchwabMarketDataProvider, candidate() (+6 more)
+### Community 120 - "FakeProvider"
+Cohesion: 0.44
+Nodes (7): candidate(), FakeProvider, market(), asyncio, test_candidate_entry_blocks_fill_above_configured_width_maximum(), test_candidate_entry_is_blocked_when_pin_fails(), test_candidate_entry_pins_before_mark_fill()
 
 ### Community 121 - "OrderIntentQueries"
-Cohesion: 0.08
-Nodes (8): OrderIntentQueries, Any, date, datetime, Bulk insert option chain snapshot rows using COPY., Queries for durable broker order intents., Dollar PnL for the rolling 7-day window (closed trades only)., Return the nearest full chain snapshot at or before *at* within…
+Cohesion: 0.07
+Nodes (9): OrderIntentQueries, Any, date, datetime, Bulk insert option chain snapshot rows using COPY., Queries for durable broker order intents., Dollar PnL for the rolling 7-day window (closed trades only)., Upsert daily OHLCV rows. Updates close/open/high/low/volume on conflict. (+1 more)
 
-### Community 122 - "SessionClose"
-Cohesion: 0.14
-Nodes (16): Any, Auditable final regular-session SPX close supplied by the shared feed., SessionClose, date, asyncio, datetime, quote(), snapshot() (+8 more)
+### Community 122 - "test_candidate_snapshot.py"
+Cohesion: 0.33
+Nodes (12): asyncio, datetime, quote(), snapshot(), test_atomic_store_sequence_and_boot_instance_change(), test_lease_cadence_and_ttl_expiry(), test_long_poll_never_replays_same_sequence(), test_new_lease_wakes_idle_feed() (+4 more)
 
 ### Community 123 - "GatewaySettings"
 Cohesion: 0.13
@@ -685,16 +704,16 @@ Cohesion: 0.25
 Nodes (7): Defect Found During Proof, Observed Contract, Result, Safety Boundary, Schwab Gateway Foundation Smoke Test, Shutdown and Residual State, Temporary Authentication
 
 ### Community 127 - "StaticTokenReadinessProvider"
-Cohesion: 0.10
-Nodes (22): AdmissionCapacityError, AdmissionController, AdmissionPolicy, RuntimeError, Bounded in-process admission policy for gateway market-data reads., The caller's bounded priority pool has no available permit., Keep background work out of ButterflyGuy's protected capacity., Expose bounded state for deterministic fake-only tests. (+14 more)
+Cohesion: 0.09
+Nodes (24): AdmissionCapacityError, AdmissionController, AdmissionPolicy, RuntimeError, Bounded in-process admission policy for gateway market-data reads., The caller's bounded priority pool has no available permit., Keep background work out of ButterflyGuy's protected capacity., Expose bounded state for deterministic fake-only tests. (+16 more)
 
-### Community 128 - "load_spot_series"
-Cohesion: 0.50
-Nodes (4): load_spot_series(), date, Load spot price series from TimescaleDB for chart generation., spot_rows_to_candles()
+### Community 128 - "send_test_chart.py"
+Cohesion: 0.27
+Nodes (9): trade_pnl_dollars(), _load_trade(), main(), Generate entry + EOD charts from a historic trade and post to Discord., load_spot_series(), date, Load spot price series from TimescaleDB for chart generation., spot_rows_to_candles() (+1 more)
 
 ### Community 130 - "Schwab Gateway Credential Proof"
-Cohesion: 0.11
-Nodes (18): Candidate capture safety stop — 2026-08-05, Candidate failure diagnosis and scope correction, Candidate new-baseline capture remediation, Command, Compose-hash ambiguity remediation, Corrected candidate capture safety stop — 2026-08-05, Corrected Compose-hash result — 2026-08-05, Evidence and stop conditions (+10 more)
+Cohesion: 0.10
+Nodes (19): Candidate capture safety stop — 2026-08-05, Candidate failure diagnosis and scope correction, Candidate new-baseline capture remediation, Command, Compose-hash ambiguity remediation, Content-verified mount result — 2026-08-05, Corrected candidate capture safety stop — 2026-08-05, Corrected Compose-hash result — 2026-08-05 (+11 more)
 
 ### Community 133 - "test_gateway_admission.py"
 Cohesion: 0.30
@@ -704,9 +723,9 @@ Nodes (10): Read-only Schwab gateway foundation., authenticator(), BlockingUpstr
 Cohesion: 0.25
 Nodes (8): 1) Install dependencies, 2) Run the test and lint pass, code:bash (uv sync), code:bash (uv run pytest), 🛠 Configuration, Key Entry Settings, SPX vs NDX vs XSP, Strategy Settings
 
-### Community 141 - "ButterflyCandidate"
-Cohesion: 0.06
-Nodes (59): capped_entry_limit(), entry_fill_within_limit(), Shared entry-price limit policy for production and candidate runtimes., Return a cent-valid debit limit that never exceeds the configured maximum., Return whether an entry fill respects its hard debit ceiling., now_utc(), ButterflyCandidate, A butterfly spread candidate identified by the scanner. (+51 more)
+### Community 141 - "OrderManager"
+Cohesion: 0.15
+Nodes (18): entry_fill_within_limit(), Return whether an entry fill respects its hard debit ceiling., now_utc(), AmbiguousOrderError, _assert_entry_fill_within_limit(), _fill_result(), order_statuses(), OrderManager (+10 more)
 
 ### Community 145 - "Width Selection"
 Cohesion: 0.26
@@ -797,21 +816,21 @@ Nodes (4): Critical External-Alert Delivery Proof - 2026-07-15, Implementation r
   data/images/butterflyguy_logo2.png · relation: suggests
 
 ## Knowledge Gaps
-- **425 isolated node(s):** `butterfly-guy`, `run_live_performance_cron.sh script`, `run_morning_scan_cron.sh script`, `Objective`, `Current Phase` (+420 more)
+- **426 isolated node(s):** `butterfly-guy`, `run_live_performance_cron.sh script`, `run_morning_scan_cron.sh script`, `Objective`, `Current Phase` (+421 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **14 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `central cyan glow` and `technology visual association`?**
   _Edge tagged AMBIGUOUS (relation: suggests) - confidence is low._
-- **Why does `_restore_argv()` connect `credential_proof_fingerprint.py` to `MarketSnapshot`?**
+- **Why does `_restore_argv()` connect `credential_proof_fingerprint.py` to `AtomicSnapshotStore`?**
   _High betweenness centrality (0.075) - this node is a cross-community bridge._
-- **Why does `get_logger()` connect `trade_service.py` to `run_paper_replay.py`, `token_manager.py`, `DatabasePool`, `ButterflyChartSpec`, `OptionQuote`, `ButterflyCandidate`, `run_classifier_sweep.py`, `MinuteBar`, `run_backtest_db.py`, `StrategySettings`, `run_entry_analysis.py`, `ProfitStateMachine`, `news.py`, `api.py`, `universes.py`, `feed.py`, `run_morning_scan.py`, `weekend_review.py`, `AtomicTokenManager`, `run_live.py`, `services/daily_report_card.py`, `StaticTokenReadinessProvider`?**
-  _High betweenness centrality (0.071) - this node is a cross-community bridge._
-- **Why does `OptionQuote` connect `OptionQuote` to `run_paper_replay.py`, `test_order_manager.py`, `AppConfig`, `DatabasePool`, `MinuteBar`, `run_backtest_db.py`, `HttpMarketDataProvider`, `StrategySettings`, `run_entry_analysis.py`, `ProfitStateMachine`, `SyntheticChainGenerator`, `AtomicSnapshotStore`, `trade_service.py`, `report_exit_mark_parity.py`, `MarketSnapshot`, `DbDataLoader`, `feed.py`, `ChainDay`, `core/config.py`, `entry_selection.py`, `SnapshotIdentity`, `SessionClose`?**
-  _High betweenness centrality (0.058) - this node is a cross-community bridge._
+- **Why does `get_logger()` connect `core/config.py` to `run_paper_replay.py`, `token_manager.py`, `send_test_chart.py`, `DatabasePool`, `MinuteBar`, `run_backtest_db.py`, `run_live.py`, `simulation_engine.py`, `StrategySettings`, `run_entry_analysis.py`, `ProfitStateMachine`, `news.py`, `api.py`, `SchwabDataLoader`, `refresh_equity_universes.py`, `DbDataLoader`, `feed.py`, `run_morning_scan.py`, `ButterflySelector`, `ButterflyOrderBuilder`, `weekend_review.py`, `AtomicTokenManager`, `services/daily_report_card.py`, `StaticTokenReadinessProvider`?**
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+- **Why does `OptionQuote` connect `OptionQuote` to `run_paper_replay.py`, `test_order_manager.py`, `AppConfig`, `DatabasePool`, `exit_mark_parity.py`, `TradeRecord`, `run_backtest_db.py`, `simulation_engine.py`, `HttpMarketDataProvider`, `StrategySettings`, `run_entry_analysis.py`, `ProfitStateMachine`, `SyntheticChainGenerator`, `AtomicSnapshotStore`, `core/config.py`, `.collect_once`, `MarketSnapshot`, `DbDataLoader`, `feed.py`, `SessionCloseUnavailableError`, `ChainDay`, `ButterflyCandidate`, `FakeProvider`, `test_candidate_snapshot.py`?**
+  _High betweenness centrality (0.063) - this node is a cross-community bridge._
 - **Are the 35 inferred relationships involving `ButterflyCandidate` (e.g. with `DayResult` and `DrawdownWindow`) actually correct?**
   _`ButterflyCandidate` has 35 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 31 inferred relationships involving `OptionQuote` (e.g. with `ChainDay` and `DbDataLoader`) actually correct?**
