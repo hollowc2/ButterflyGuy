@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "CODEX_STATE.md": {
-    "mtime": 1785964754.1073022,
-    "ast_hash": "2fade0f8497fbaee2729eed71bb4be85",
+    "mtime": 1785965964.3609498,
+    "ast_hash": "c5cddda31c627bf50006f64bd711aef2",
     "semantic_hash": ""
   },
   "docs/architecture/current-schwab-integration.md": {
@@ -1455,8 +1455,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-credential-proof.md": {
-    "mtime": 1785964719.6434357,
-    "ast_hash": "517b75e4bb9bccdbce6dc415a1f5b3b4",
+    "mtime": 1785965964.6129494,
+    "ast_hash": "1c2b3cd7230ab48dbf0f19356e8b0319",
     "semantic_hash": ""
   },
   "src/butterfly_guy/schwab_gateway/admission.py": {
@@ -1495,8 +1495,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/credential_proof_fingerprint.py": {
-    "mtime": 1785964669.0326345,
-    "ast_hash": "956f781add7c026c64ae63906a74b199",
+    "mtime": 1785965952.0849679,
+    "ast_hash": "a3bfabeaa1bd50d8f48e54f2402710aa",
     "semantic_hash": ""
   },
   "tests/test_credential_proof_fingerprint.py": {
@@ -1505,8 +1505,8 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_credential_proof_operator.py": {
-    "mtime": 1785964690.5035498,
-    "ast_hash": "db4d835343167333766734e5bdc2479a",
+    "mtime": 1785965980.4929254,
+    "ast_hash": "0825df162e0c407645b0ac0555debaa1",
     "semantic_hash": ""
   }
 }

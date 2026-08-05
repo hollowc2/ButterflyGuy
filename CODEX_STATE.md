@@ -36,9 +36,10 @@ then run under fresh authorization from exact release
 retained on Helios, the exact temporary source/archive were removed, and no live state was mutated.
 The separately authorized bounded reader then identified `failed_check=compose_hashes` but emitted
 no `mismatched_services`. The result therefore does not distinguish a trading-service hash mismatch
-from invalid bounded output while deriving a Compose hash. The current SPX/NDX/XSP set remains
-unaccepted as a replacement baseline. The current isolated slice adds a fake-tested three-consumer
-trust/admission boundary.
+from invalid bounded output while deriving a Compose hash. Local remediation now collects all three
+trading-service results and emits separate fixed `invalid_services` and `mismatched_services` lists
+without hashes or subprocess output. The current SPX/NDX/XSP set remains unaccepted as a replacement
+baseline. The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 

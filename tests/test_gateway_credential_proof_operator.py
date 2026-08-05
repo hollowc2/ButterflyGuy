@@ -1391,6 +1391,77 @@ def test_baseline_candidate_capture_reports_only_fixed_trading_compose_mismatche
     }
 
 
+def test_baseline_candidate_capture_distinguishes_invalid_compose_hash_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_baseline_candidate_success(monkeypatch)
+
+    def compose_hash(_path: Path, service: str) -> str:
+        if service == "ndx":
+            raise operator.OperatorFailure("compose_semantics_invalid")
+        return "f" * 64 if service == "xsp" else COMPOSE_HASH
+
+    monkeypatch.setattr(operator, "_compose_service_hash", compose_hash)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(baseline_candidate_args(tmp_path))
+
+    output = json.loads(capsys.readouterr().out)
+    assert output == {
+        "code": "compose_semantics_invalid",
+        "invalid_services": ["ndx"],
+        "mismatched_services": ["xsp"],
+        "status": "error",
+    }
+    assert SENSITIVE not in json.dumps(output)
+    evidence_path = tmp_path / "baseline-candidate.json"
+    stored = json.loads(evidence_path.read_text(encoding="utf-8"))
+    assert stored["candidate"] is None
+    assert stored["checks"]["compose_hashes"] == "fail"
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(
+            ["baseline-candidate-status", "--evidence", str(evidence_path.resolve())]
+        )
+    assert json.loads(capsys.readouterr().out) == {
+        "code": "compose_semantics_invalid",
+        "failed_check": "compose_hashes",
+        "invalid_services": ["ndx"],
+        "mismatched_services": ["xsp"],
+        "status": "error",
+    }
+
+
+def test_baseline_candidate_status_rejects_overlapping_compose_service_results(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_baseline_candidate_success(monkeypatch)
+    monkeypatch.setattr(
+        operator,
+        "_compose_service_hash",
+        lambda _path, service: "f" * 64 if service == "ndx" else COMPOSE_HASH,
+    )
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(baseline_candidate_args(tmp_path))
+    capsys.readouterr()
+
+    evidence_path = tmp_path / "baseline-candidate.json"
+    stored = json.loads(evidence_path.read_text(encoding="utf-8"))
+    stored["result"]["invalid_services"] = ["ndx"]
+    evidence_path.write_text(json.dumps(stored), encoding="utf-8")
+    evidence_path.chmod(0o600)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(
+            ["baseline-candidate-status", "--evidence", str(evidence_path.resolve())]
+        )
+    assert capsys.readouterr().out == '{"code":"evidence_invalid","status":"error"}\n'
+
+
 def test_baseline_candidate_status_rejects_extra_fields_without_disclosure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -2389,14 +2389,21 @@ def _baseline_candidate_capture(
 
         images: dict[str, str] = {}
         current_check = "compose_hashes"
-        compose_mismatches = [
-            name
-            for name in _TRADING_SERVICES
-            if _compose_service_hash(args.base_compose, name)
-            != records[name]["compose_config_hash"]
-        ]
+        compose_invalid: list[str] = []
+        compose_mismatches: list[str] = []
+        for name in _TRADING_SERVICES:
+            try:
+                expected_hash = _compose_service_hash(args.base_compose, name)
+            except OperatorFailure:
+                compose_invalid.append(name)
+                continue
+            if expected_hash != records[name]["compose_config_hash"]:
+                compose_mismatches.append(name)
+        if compose_invalid:
+            failure_fields["invalid_services"] = compose_invalid
         if compose_mismatches:
             failure_fields["mismatched_services"] = compose_mismatches
+        if compose_invalid or compose_mismatches:
             raise OperatorFailure("compose_semantics_invalid")
         checks[current_check] = "pass"
 
@@ -2518,25 +2525,43 @@ def _baseline_candidate_status(path: Path) -> tuple[str, str, dict[str, object]]
         result_fields = set(result)
         allowed_result_fields = {"code", "status"}
         if failed == ["compose_hashes"]:
-            allowed_result_fields.add("mismatched_services")
+            allowed_result_fields.update({"invalid_services", "mismatched_services"})
+        invalid_services = result.get("invalid_services")
         mismatches = result.get("mismatched_services")
         if (
             len(failed) != 1
-            or result_fields not in ({"code", "status"}, allowed_result_fields)
+            or not {"code", "status"}.issubset(result_fields)
+            or not result_fields.issubset(allowed_result_fields)
             or result.get("status") != "error"
             or result.get("code") not in _RESULT_CODES
+            or (
+                "invalid_services" in result
+                and (
+                    not isinstance(invalid_services, list)
+                    or not invalid_services
+                    or any(name not in _TRADING_SERVICES for name in invalid_services)
+                    or len(invalid_services) != len(set(invalid_services))
+                )
+            )
             or (
                 "mismatched_services" in result
                 and (
                     not isinstance(mismatches, list)
                     or not mismatches
-                    or len(mismatches) != len(set(mismatches))
                     or any(name not in _TRADING_SERVICES for name in mismatches)
+                    or len(mismatches) != len(set(mismatches))
                 )
+            )
+            or (
+                isinstance(invalid_services, list)
+                and isinstance(mismatches, list)
+                and not set(invalid_services).isdisjoint(mismatches)
             )
         ):
             raise OperatorFailure("evidence_invalid")
         fields: dict[str, object] = {"failed_check": failed[0]}
+        if "invalid_services" in result:
+            fields["invalid_services"] = invalid_services
         if "mismatched_services" in result:
             fields["mismatched_services"] = mismatches
         return "error", str(result["code"]), fields

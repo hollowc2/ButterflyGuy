@@ -287,3 +287,19 @@ not distinguish an actual trading-service hash mismatch from invalid bounded out
 a Compose hash. The evidence remained a Billy-owned regular file with mode `0600` and size 850
 bytes, and the exact temporary reader archive/source were removed and verified absent. There is no
 exact SPX/NDX/XSP candidate set to present for final acceptance.
+
+## Compose-hash ambiguity remediation
+
+The candidate capture previously stopped on the first `OperatorFailure` raised while deriving a
+Compose service hash. Its bounded evidence could therefore identify only the `compose_hashes` check,
+not whether a reviewed hash was unavailable or a successfully derived hash differed from the live
+container label.
+
+The local correction evaluates SPX, NDX, and XSP independently. It emits and persists only fixed
+service names in separate `invalid_services` and `mismatched_services` lists, may report both classes
+in one bounded result, and still persists no candidate whenever either list is non-empty. The strict
+artifact reader accepts those fields only for a `compose_hashes` failure, rejects unknown, duplicate,
+or overlapping service names, and remains compatible with the earlier evidence that has neither
+field. No raw hashes, Compose output, stderr, configuration, environment, or exceptions are emitted
+or persisted. This correction is fake-tested only; another exact release/archive and fresh read-only
+authorization are required before it may contact Helios.
