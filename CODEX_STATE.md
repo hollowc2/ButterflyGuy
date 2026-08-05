@@ -20,10 +20,11 @@ operator wrappers violated the bounded-output rule; no service mutation occurred
 the committed, read-only legacy-evidence locator after fresh Approval 1; it returned the bounded
 `no_acceptance` disposition, so no service mutation occurred. The operator-accepted SPX/NDX/XSP
 baseline is not uniquely proven by the reviewed legacy evidence. Its bounded result was not
-persisted to the approved evidence destination before temporary staging cleanup. The current local
-remediation adds a committed evidence-capturing locator; it has not been run on Helios. No
-production cutover has begun. The current isolated slice adds a fake-tested three-consumer
-trust/admission boundary.
+persisted to the approved evidence destination before temporary staging cleanup. The committed
+evidence-capturing locator was subsequently run on Helios under fresh approval; it returned the
+same bounded `no_acceptance` disposition and durably retained a mode-`0600` evidence artifact
+before temporary source cleanup. No service mutation occurred. No production cutover has begun.
+The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
 
 ## Repository Findings
 
@@ -192,10 +193,8 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Use a new exact archive from the committed remediation and obtain fresh Approval 1 before Helios
-contact. Re-run the reviewed legacy locator through `legacy-evidence-capture` so its bounded outcome
-is durably retained at the approved mode-`0600` destination. If it again cannot uniquely prove one
-complete SPX/NDX/XSP set, stop before service mutation and request an explicit operator decision:
-provide qualifying non-rejected evidence or authorize a specifically defined new baseline. Do not
-adopt current state or a prior snapshot automatically. No gateway deployment, staging,
-credential/token read, Schwab request, or cutover is currently authorized.
+An explicit operator decision is required: provide qualifying non-rejected evidence that uniquely
+links canonical fingerprints to exactly one complete SPX/NDX/XSP record, or authorize a
+specifically defined new baseline. Do not adopt current state or a prior snapshot automatically.
+Until that decision, leave the direct-access paper services unchanged. No gateway deployment,
+staging, credential/token read, Schwab request, or cutover is currently authorized.

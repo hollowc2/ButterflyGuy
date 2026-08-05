@@ -203,6 +203,12 @@ fixed result codes, retry count zero, and explicit false values for service muta
 read, token read, and Schwab request. It contains no evidence roots, paths, credential values, token
 metadata, payloads, URLs, or raw exceptions and will not overwrite an existing destination.
 
-This remediation is local and fake-tested only. A new exact SHA/archive and fresh Approval 1 are
-required before it may be run on Helios. It does not authorize staging, quiescence, Approval 2, or
-the real AAPL quote.
+The remediation was subsequently run on Helios under fresh approval using exact commit
+`57d4e3792204847a99a6246611877a29cb94e208` and its reviewed mode-`0600` archive. The locator again
+returned the bounded `no_acceptance` disposition. This time it durably wrote the approved evidence
+artifact before returning; a read-only check verified that the artifact is a Billy-owned regular
+file with mode `0600`. The temporary archive and source directory were removed and verified absent.
+
+No Compose, container, process, cron, credential, token, Schwab, staging, quiescence, or Approval 2
+operation occurred. The retained evidence does not establish a baseline: an explicit operator
+new-baseline decision or newly supplied qualifying legacy evidence remains required.
