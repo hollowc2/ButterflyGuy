@@ -24,7 +24,10 @@ persisted to the approved evidence destination before temporary staging cleanup.
 evidence-capturing locator was subsequently run on Helios under fresh approval; it returned the
 same bounded `no_acceptance` disposition and durably retained a mode-`0600` evidence artifact
 before temporary source cleanup. No service mutation occurred. No production cutover has begun.
-The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
+An authorized read-only new-baseline candidate capture then failed closed with the bounded
+`compose_semantics_invalid` result before producing any candidate set; its mode-`0600` failure
+evidence was retained and temporary source removed. The current isolated slice adds a fake-tested
+three-consumer trust/admission boundary.
 
 ## Repository Findings
 
@@ -94,6 +97,10 @@ The current isolated slice adds a fake-tested three-consumer trust/admission bou
   and Compose source, direct-access runtime settings, running/unpaused services, staging absence,
   health, uniqueness, read-only candidate ownership, writer absence, Compose-hash equality, and
   image equality before persisting the exact three-service hash/image set.
+- `scripts/credential_proof_fingerprint.py`: `baseline-candidate-status` strictly validates a
+  retained candidate artifact and emits only the fixed failed-check name or the successful
+  candidate-set digest. It rejects extra fields, partial records, inconsistent checks, and altered
+  candidate hashes without disclosing stored content.
 
 ## Token-Manager Tests Added
 
@@ -119,8 +126,8 @@ The current isolated slice adds a fake-tested three-consumer trust/admission bou
 
 ## Tests Passing
 
-- Required focused gateway/remediation suite: 164 passed.
-- Full suite: 663 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
+- Required focused gateway/remediation suite: 165 passed.
+- Full suite: 664 passed, 1 skipped because `CI_DATABASE_URL` is only supplied by the
   real-database workflow, and 2 pre-existing warnings.
 - `uv run ruff check .`, `git diff --check`, wheel/sdist builds and content checks, and
   `graphify update .` pass.
@@ -198,9 +205,9 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Commit and archive the fake-tested `baseline-candidate-capture` remediation, then obtain fresh
-authorization tied to that exact release before Helios contact. If its read-only safety gate passes,
-present the resulting candidate-set hash for a separate explicit acceptance decision. Do not adopt
-the candidate automatically. Until acceptance, leave the direct-access paper services unchanged.
-No gateway deployment, staging, credential/token read, Schwab request, or cutover is currently
-authorized.
+Commit and archive the bounded `baseline-candidate-status` reader, then obtain fresh authorization
+tied to that exact release to identify which fixed Compose-related check failed in the retained
+artifact. Do not inspect raw Docker or evidence content and do not adopt a candidate automatically.
+Until an exact candidate passes and is explicitly accepted, leave the direct-access paper services
+unchanged. No gateway deployment, staging, credential/token read, Schwab request, or cutover is
+currently authorized.

@@ -198,6 +198,19 @@ _CHECK_NAMES = (
     "restoration_errors",
 )
 _CHECK_VALUES = frozenset({"pending", "pass", "fail", "invalid"})
+_BASELINE_CANDIDATE_CHECKS = (
+    "candidate_ownership",
+    "compose_hashes",
+    "direct_access",
+    "health",
+    "images",
+    "no_staging",
+    "no_writers",
+    "paper_mode",
+    "process_uniqueness",
+    "reviewed_sources",
+    "running_unpaused",
+)
 _EVIDENCE_REASON_CODES = frozenset(
     {
         "directory_invalid",
@@ -2311,19 +2324,7 @@ def _baseline_candidate_capture(
     if _sha256_file(Path(__file__).resolve(), max_bytes=MAX_SOURCE_BYTES) != operator_sha:
         raise OperatorFailure("provenance_invalid")
 
-    checks = {
-        "candidate_ownership": "pending",
-        "compose_hashes": "pending",
-        "direct_access": "pending",
-        "health": "pending",
-        "images": "pending",
-        "no_staging": "pending",
-        "no_writers": "pending",
-        "paper_mode": "pending",
-        "process_uniqueness": "pending",
-        "reviewed_sources": "pending",
-        "running_unpaused": "pending",
-    }
+    checks = {name: "pending" for name in _BASELINE_CANDIDATE_CHECKS}
     started = int(time.time())
     current_check = "reviewed_sources"
     candidate: dict[str, object] | None = None
@@ -2446,6 +2447,114 @@ def _baseline_candidate_capture(
     }
     _write_bounded_evidence_record(args.evidence_output, evidence)
     return succeeded, result
+
+
+def _baseline_candidate_status(path: Path) -> tuple[str, str, dict[str, object]]:
+    try:
+        value = json.loads(_read_private_bytes(path).decode("utf-8", errors="strict"))
+    except (OperatorFailure, UnicodeError, ValueError):
+        raise OperatorFailure("evidence_invalid") from None
+    expected_fields = {
+        "approval_reference_sha256",
+        "approved_sha",
+        "archive_sha256",
+        "candidate",
+        "checks",
+        "credential_read",
+        "ended_utc",
+        "evidence_type",
+        "result",
+        "retry_count",
+        "schema_version",
+        "service_mutation",
+        "schwab_request",
+        "started_utc",
+        "token_read",
+        "window_end_utc",
+        "window_start_utc",
+    }
+    if not isinstance(value, dict) or set(value) != expected_fields:
+        raise OperatorFailure("evidence_invalid")
+    if not (
+        value["schema_version"] == LEGACY_EVIDENCE_RECORD_VERSION
+        and value["evidence_type"] == "baseline_candidate"
+        and isinstance(value["approved_sha"], str)
+        and _GIT_SHA_PATTERN.fullmatch(value["approved_sha"])
+        and isinstance(value["archive_sha256"], str)
+        and _HASH_PATTERN.fullmatch(value["archive_sha256"])
+        and isinstance(value["approval_reference_sha256"], str)
+        and _HASH_PATTERN.fullmatch(value["approval_reference_sha256"])
+        and value["retry_count"] == 0
+        and value["service_mutation"] is False
+        and value["credential_read"] is False
+        and value["token_read"] is False
+        and value["schwab_request"] is False
+        and all(
+            isinstance(value[name], int) and value[name] > 0
+            for name in ("started_utc", "ended_utc", "window_start_utc", "window_end_utc")
+        )
+        and value["started_utc"] <= value["ended_utc"]
+        and value["window_start_utc"] <= value["started_utc"] <= value["window_end_utc"]
+    ):
+        raise OperatorFailure("evidence_invalid")
+    checks = value["checks"]
+    result = value["result"]
+    if (
+        not isinstance(checks, dict)
+        or set(checks) != set(_BASELINE_CANDIDATE_CHECKS)
+        or any(item not in {"pending", "pass", "fail"} for item in checks.values())
+        or not isinstance(result, dict)
+    ):
+        raise OperatorFailure("evidence_invalid")
+
+    candidate = value["candidate"]
+    if candidate is None:
+        failed = [name for name, result_value in checks.items() if result_value == "fail"]
+        if (
+            len(failed) != 1
+            or set(result) != {"code", "status"}
+            or result.get("status") != "error"
+            or result.get("code") not in _RESULT_CODES
+        ):
+            raise OperatorFailure("evidence_invalid")
+        return "error", str(result["code"]), {"failed_check": failed[0]}
+
+    if not isinstance(candidate, dict) or set(candidate) != {
+        "candidate_set_sha256",
+        "images",
+        "records",
+    }:
+        raise OperatorFailure("evidence_invalid")
+    images = candidate["images"]
+    records = candidate["records"]
+    candidate_hash = candidate["candidate_set_sha256"]
+    if not (
+        isinstance(images, dict)
+        and set(images) == set(_TRADING_SERVICES)
+        and all(
+            isinstance(item, str) and _IMAGE_ID_PATTERN.fullmatch(item)
+            for item in images.values()
+        )
+        and isinstance(records, dict)
+        and set(records) == set(_TRADING_SERVICES)
+        and all(_valid_record(item) for item in records.values())
+        and isinstance(candidate_hash, str)
+        and _HASH_PATTERN.fullmatch(candidate_hash)
+        and candidate_hash == _digest({"images": images, "records": records})
+        and all(item == "pass" for item in checks.values())
+        and result
+        == {
+            "candidate_set_sha256": candidate_hash,
+            "code": "baseline_candidate_ready",
+            "service_count": len(_TRADING_SERVICES),
+            "status": "ok",
+        }
+    ):
+        raise OperatorFailure("evidence_invalid")
+    return "ok", "baseline_candidate_ready", {
+        "candidate_set_sha256": candidate_hash,
+        "service_count": len(_TRADING_SERVICES),
+    }
 
 
 def _prepare(args: argparse.Namespace) -> None:
@@ -3293,6 +3402,11 @@ def _parser() -> argparse.ArgumentParser:
     baseline_candidate_capture.add_argument("--ndx-config", required=True, type=Path)
     baseline_candidate_capture.add_argument("--xsp-config", required=True, type=Path)
 
+    baseline_candidate_status = subparsers.add_parser(
+        "baseline-candidate-status", add_help=False
+    )
+    baseline_candidate_status.add_argument("--evidence", required=True, type=Path)
+
     prepare = subparsers.add_parser("prepare", add_help=False)
     prepare.add_argument("--state", required=True, type=Path)
     prepare.add_argument("--approved-sha", required=True)
@@ -3408,6 +3522,12 @@ def main(argv: list[str] | None = None) -> None:
             if not succeeded:
                 raise SystemExit(1)
             return
+        if args.command == "baseline-candidate-status":
+            status_value, code, fields = _baseline_candidate_status(args.evidence)
+            _emit(status_value, code, **fields)
+            if status_value == "error":
+                raise SystemExit(1)
+            return
         if args.command == "prepare":
             _prepare(args)
             return
@@ -3471,6 +3591,7 @@ def main(argv: list[str] | None = None) -> None:
             "legacy-evidence-status",
             "legacy-evidence-capture",
             "baseline-candidate-capture",
+            "baseline-candidate-status",
         }:
             _emit(
                 "error",

@@ -233,3 +233,20 @@ bounded failure and no partial candidate. The artifact contains no raw Docker in
 environment values, evidence roots, credential/token data, payloads, URLs, or exceptions. A fresh
 authorization tied to the new exact SHA/archive is required before this command may contact Helios,
 and its output still requires separate explicit operator acceptance before becoming a baseline.
+
+## Candidate capture safety stop — 2026-08-05
+
+Under fresh authorization, exact release `d4ba8fa5b6dd4833c5a310595f160e9275089743`
+ran the committed read-only candidate capture on Helios. The command failed closed with the bounded
+`compose_semantics_invalid` result before creating a candidate set. It durably retained the failure
+artifact as a Billy-owned regular file with mode `0600`; the temporary archive and source directory
+were removed and verified absent. No Compose or service mutation, process/cron action,
+credential/token read, Schwab request, staging, quiescence, or baseline acceptance occurred.
+
+The broad result does not identify which fixed Compose-related check failed without reading the
+artifact. The local remediation adds `baseline-candidate-status`, a strict reader that validates the
+entire bounded artifact schema and emits only the single failed-check name. For a successful
+artifact it re-derives and emits only the exact candidate-set digest and service count. It rejects
+extra fields, partial records, inconsistent check states, invalid images, and altered candidate
+hashes without printing stored content. A new exact SHA/archive and fresh authorization are required
+before this reader may access the retained Helios artifact.

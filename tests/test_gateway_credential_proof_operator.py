@@ -1283,6 +1283,11 @@ def test_baseline_candidate_capture_persists_exact_hash_only_candidate(
     assert SENSITIVE not in stored_text
     assert "/sensitive/host/token/path" not in stored_text
 
+    operator.main(
+        ["baseline-candidate-status", "--evidence", str(evidence_path.resolve())]
+    )
+    assert json.loads(capsys.readouterr().out) == output
+
 
 def test_baseline_candidate_capture_persists_bounded_failed_check(
     monkeypatch: pytest.MonkeyPatch,
@@ -1305,6 +1310,44 @@ def test_baseline_candidate_capture_persists_bounded_failed_check(
     assert stored["candidate"] is None
     assert stored["checks"]["health"] == "fail"
     assert stored["result"] == {"code": "health_invalid", "status": "error"}
+    assert SENSITIVE not in output
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(
+            [
+                "baseline-candidate-status",
+                "--evidence",
+                str((tmp_path / "baseline-candidate.json").resolve()),
+            ]
+        )
+    assert json.loads(capsys.readouterr().out) == {
+        "code": "health_invalid",
+        "failed_check": "health",
+        "status": "error",
+    }
+
+
+def test_baseline_candidate_status_rejects_extra_fields_without_disclosure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    patch_baseline_candidate_success(monkeypatch)
+    operator.main(baseline_candidate_args(tmp_path))
+    capsys.readouterr()
+    evidence_path = tmp_path / "baseline-candidate.json"
+    stored = json.loads(evidence_path.read_text(encoding="utf-8"))
+    stored["raw_environment"] = SENSITIVE
+    evidence_path.write_text(json.dumps(stored), encoding="utf-8")
+    evidence_path.chmod(0o600)
+
+    with pytest.raises(SystemExit, match="1"):
+        operator.main(
+            ["baseline-candidate-status", "--evidence", str(evidence_path.resolve())]
+        )
+
+    output = capsys.readouterr().out
+    assert output == '{"code":"evidence_invalid","status":"error"}\n'
     assert SENSITIVE not in output
 
 
