@@ -49,7 +49,14 @@ file through a read-only bind; and binds the three runtime records, actual image
 Compose observation into one candidate digest. Compose invalid/mismatch classifications remain
 explicit but are not acceptance gates. The strict Compose-equality capture remains unchanged. This
 runtime path is local and fake-tested only until a new exact release receives fresh read-only Helios
-authorization. The current isolated slice adds a fake-tested three-consumer trust/admission boundary.
+authorization. Under that authorization, exact release
+`1e5ccfe7d72478ef73da5b54e4ede18baa697345` failed closed at
+`runtime_config_mounts` before producing a candidate. Its protected failure evidence was retained,
+the temporary paths were removed, and no live mutation occurred. The exact-host-path requirement is
+overstrict for a runtime baseline because a different bind source may contain the identical reviewed
+file. Local remediation will require the expected read-only destination and bounded content equality,
+with fixed per-service classifications. The current isolated slice adds a fake-tested three-consumer
+trust/admission boundary.
 
 ## Repository Findings
 

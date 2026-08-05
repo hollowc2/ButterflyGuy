@@ -354,3 +354,27 @@ rejects altered records, images, classifications, checks, or extra fields withou
 content. Neither command reads credentials or tokens, calls Schwab, or mutates services. A fresh
 authorization tied to an exact release, archive, evidence destination, and UTC window is required
 before the capture may contact Helios.
+
+## Runtime-baseline config-mount safety stop — 2026-08-05
+
+Under fresh authorization, exact release `1e5ccfe7d72478ef73da5b54e4ede18baa697345`
+and archive SHA-256 `226191b0f566a0783f1ce26feba1594276cac8c7ed802d37ff4ece8d6c9b33ae`
+ran the committed read-only runtime-baseline capture on Helios. It failed closed with
+`baseline_mismatch`; the companion strict reader identified
+`failed_check=runtime_config_mounts`. No candidate set was produced.
+
+The failure artifact remains at
+`/opt/butterflyguy/.runtime-baseline-evidence-20260805-1e5ccfe.json` and was verified as a
+Billy-owned regular file with mode `0600` and size 872 bytes. The exact temporary archive and source
+directory were removed and verified absent. No Compose or service mutation, restart, process/cron
+action, credential/token read, Schwab request, staging, quiescence, trading action, or baseline
+acceptance occurred.
+
+The first runtime implementation required the Docker bind source pathname to equal the reviewed
+pathname. That is stronger than the selected runtime-baseline policy requires: a different regular
+host file can safely represent the reviewed config when its bounded content hash is identical and it
+is mounted read-only at the exact in-container destination. The next local remediation must classify
+every trading service explicitly, require exact read-only destination and content equality, bind that
+classification into the candidate digest, and remain fail-closed for missing, duplicate, writable,
+non-bind, unreadable, oversized, or content-different sources. Fresh authorization remains required
+before another Helios capture.
