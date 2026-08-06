@@ -584,3 +584,24 @@ operator states are retained as evidence. No retry was attempted.
 The next correction must remove the import-time dependency from `schwab_gateway/__init__.py` so the
 reviewed subset imports standalone, and should also propagate the staged command's own bounded
 failure code instead of collapsing it into `subprocess_failed`.
+
+## Standalone reviewed-subset correction — 2026-08-06
+
+`schwab_gateway/__init__.py` now resolves `create_app` through a module-level `__getattr__` instead
+of importing `api` at package-import time. Real consumers keep `from butterfly_guy.schwab_gateway
+import create_app`, while the reviewed subset imports `credential_probe` without requiring the
+omitted `api`, `auth`, and `admission` modules or their dependencies.
+
+`_run_exact_json` now returns the staged command's own bounded failure code when the staged process
+exits nonzero, writes nothing to stderr, and emits exactly `{"code": ..., "status": "error"}` whose
+code is one of the fixed staged codes `credential_refused`, `native_smoke_failed`, or
+`signal_invalid`. Any stderr output, malformed payload, extra field, unexpected status, or
+unlisted code still yields the generic `subprocess_failed`, so container output can never introduce
+an arbitrary operator code. `credential_refused` now maps to the `refusal_gate` check.
+
+A regression test copies exactly the `_ARCHIVE_PATHS` member set into a temporary tree and imports
+`butterfly_guy.schwab_gateway.credential_probe` in a separate interpreter with only that tree
+prepended to `sys.path`, asserting both the package and the probe resolve inside it. It reproduces
+the live failure with `ModuleNotFoundError: No module named 'butterfly_guy.schwab_gateway.api'`
+against the previous package init. This closes the gap that let a staged-environment defect reach
+Helios twice: the reviewed subset is now exercised in isolation locally.

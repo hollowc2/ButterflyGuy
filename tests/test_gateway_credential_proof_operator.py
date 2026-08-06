@@ -4,8 +4,10 @@ import copy
 import hashlib
 import io
 import json
+import shutil
 import stat
 import subprocess
+import sys
 import tarfile
 import time
 from argparse import Namespace
@@ -387,6 +389,63 @@ def test_container_archive_staging_verifies_every_command_and_digest(
         "status=none",
     ]
     assert inputs == [None, b"reviewed-archive", None, None]
+
+
+@pytest.mark.parametrize(
+    ("stdout", "stderr", "expected"),
+    [
+        ('{"code":"native_smoke_failed","status":"error"}\n', "", "native_smoke_failed"),
+        ('{"code":"credential_refused","status":"error"}\n', "", "credential_refused"),
+        ('{"code":"signal_invalid","status":"error"}\n', "", "signal_invalid"),
+        ('{"code":"baseline_mismatch","status":"error"}\n', "", "subprocess_failed"),
+        ('{"code":"native_smoke_failed","status":"ok"}\n', "", "subprocess_failed"),
+        ('{"code":"native_smoke_failed","status":"error","x":1}\n', "", "subprocess_failed"),
+        ("not-json\n", "", "subprocess_failed"),
+        ('{"code":"native_smoke_failed","status":"error"}\n', SENSITIVE, "subprocess_failed"),
+    ],
+)
+def test_staged_command_failure_code_is_propagated_when_bounded(
+    stdout: str,
+    stderr: str,
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        operator,
+        "_run",
+        lambda *_args, **_kwargs: result(returncode=1, stdout=stdout, stderr=stderr),
+    )
+    with pytest.raises(operator.OperatorFailure, match=expected):
+        operator._run_exact_json(["docker", "exec", "x"], {"code": "ok", "status": "ok"})
+
+
+def test_reviewed_archive_subset_imports_credential_probe_standalone(tmp_path: Path) -> None:
+    """The staged subset must import on its own; the deployed image has no schwab_gateway."""
+    repo_root = Path(operator.__file__).resolve().parents[3]
+    staged = tmp_path / "staged"
+    for member in operator._ARCHIVE_PATHS:
+        destination = staged / member
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(repo_root / member, destination)
+    staged_src = str(staged / "src")
+    code = (
+        "import sys\n"
+        f"sys.path.insert(0, {staged_src!r})\n"
+        "import butterfly_guy\n"
+        "import butterfly_guy.schwab_gateway.credential_probe as probe\n"
+        f"assert butterfly_guy.__file__.startswith({staged_src!r}), butterfly_guy.__file__\n"
+        f"assert probe.__file__.startswith({staged_src!r}), probe.__file__\n"
+        "print('staged-import-ok')\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=str(tmp_path),
+    )
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    assert completed.stdout.strip() == "staged-import-ok"
 
 
 def test_container_archive_staging_uses_runtime_root_for_every_command(

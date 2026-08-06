@@ -99,7 +99,11 @@ and digest-verified the archive under `/tmp` — clearing both prior staging sto
 native smoke check, reported as generic `subprocess_failed`. Automatic exact restoration passed,
 services were never quiesced, and no credential/token read or Schwab request occurred. The cause is
 that `schwab_gateway/__init__.py` eagerly imports `api`, which the minimal reviewed archive
-deliberately omits, so importing `credential_probe` raises `ModuleNotFoundError`.
+deliberately omits, so importing `credential_probe` raises `ModuleNotFoundError`. The local
+correction makes `create_app` resolve through a module-level `__getattr__`, propagates the staged
+command's own bounded failure code from `_run_exact_json` when the payload is exactly one of the
+fixed staged codes, and adds an isolation test that imports the reviewed subset in a separate
+interpreter with only the `_ARCHIVE_PATHS` member set on `sys.path`.
 
 ## Repository Findings
 

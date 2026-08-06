@@ -263,6 +263,7 @@ _FAILURE_CHECK = {
     "compose_dry_run_invalid": "compose_dry_run",
     "compose_semantics_invalid": "compose_semantics",
     "credential_output_invalid": "proof",
+    "credential_refused": "refusal_gate",
     "credential_proof_failed": "proof",
     "health_invalid": "health",
     "host_client_active": "host_clients",
@@ -278,6 +279,13 @@ _FAILURE_CHECK = {
     "staging_target_invalid": "field_hashes",
     "watchdog_invalid": "watchdog",
 }
+_STAGED_FAILURE_CODES = frozenset(
+    {
+        "credential_refused",
+        "native_smoke_failed",
+        "signal_invalid",
+    }
+)
 _RESULT_CODES = frozenset(
     {
         "approval_1_ready",
@@ -3427,12 +3435,30 @@ def _prepare(args: argparse.Namespace) -> None:
         raise OperatorFailure("internal_failure") from None
 
 
+def _staged_failure_code(result: CapturedProcess) -> str:
+    """Return the staged command's own bounded failure code, else the generic code."""
+    if result.stderr:
+        return "subprocess_failed"
+    try:
+        payload = json.loads(result.stdout)
+    except (TypeError, ValueError):
+        return "subprocess_failed"
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"code", "status"}
+        or payload.get("status") != "error"
+        or payload.get("code") not in _STAGED_FAILURE_CODES
+    ):
+        return "subprocess_failed"
+    return str(payload["code"])
+
+
 def _run_exact_json(
     command: Sequence[str], expected: dict[str, object], *, timeout: int = 15
 ) -> None:
     result = _run(command, timeout=timeout)
     if result.returncode != 0 or result.stderr:
-        raise OperatorFailure("subprocess_failed")
+        raise OperatorFailure(_staged_failure_code(result))
     try:
         payload = json.loads(result.stdout)
     except (TypeError, ValueError):
