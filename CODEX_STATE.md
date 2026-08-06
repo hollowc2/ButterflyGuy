@@ -166,8 +166,49 @@ marker burst is excluded by time rather than by an allowance, and fresh errors r
 the release archive but deliberately keeps the rollback override and cron snapshot for manual
 recovery, and an early `prepare` reports `approval_window_pending` instead of the generic
 `invalid_arguments`. Exact release `58a5b0d64a1cbf1665d09e664d12d1415fa3b10d` has archive SHA-256
-`5c115f494c6224a0f8b463a9ba1d7f1ffcdd32b039fe2e4f01ef29aca2d44723`. This release is local and
-fake-tested only; it has never run against Helios.
+`5c115f494c6224a0f8b463a9ba1d7f1ffcdd32b039fe2e4f01ef29aca2d44723`. Fresh Approval 1 and
+Approval 2 then authorized one attempt for that exact release on Helios during
+`2026-08-06T17:15:00Z`–`2026-08-06T18:15:00Z`, and both corrections are now host-proven. Under
+Approval 1's authorization to read the real credential environment, a bounded presence-only check
+emitted booleans showing the API key and secret key set and the SPX container's
+`SCHWAB_TOKEN_PATH` set but **not absolute**, so `GatewayCredentialProbeSettings()` was certain to
+raise; the staged probe inherits that container environment and nothing on its import path calls
+`load_dotenv`. The operator was told the attempt would fail at that stage and chose to spend it to
+prove the machinery. The first `prepare` was issued nine seconds early and returned the new
+distinct `approval_window_pending` without creating a state file; a fresh state path returned
+`approval_1_ready`. `approval1-execute` returned `approval_2_required` in 52 seconds, and
+`approval2-execute` returned `probe_settings_invalid` in 65 seconds including restoration. That is
+the first proof failure to name its own stage: it is raised before the `schwab.auth` import and
+before any manager transaction opens the token store, so no token read and no Schwab request
+occurred on this attempt. Because `schwab_gateway/config.py` is byte-identical between `a1ce6eb`
+and `58a5b0d` and the earlier probe built settings at the same point, the 2026-08-06 failure would
+have failed at the same gate — strong circumstantial evidence of a settings failure with no token
+read, but not retroactive proof, so the withdrawn no-read claim stays withdrawn. The lock
+hypothesis is ruled out by code: no live service path acquires `.tokens.json.lock`, so a suspended
+SPX cannot hold it, and the token document is a regular non-symlink file at mode `0600`.
+Restoration returned `restoration_passed` with per-service filtered error counts `spx=0`, `ndx=0`,
+`xsp=0`; the resume burst fell inside `RESUME_SETTLE_SECONDS` and **all three services stayed
+running**, so no mid-session pause occurred. Twenty-five of twenty-six checks passed with only
+`proof` failing; both watchdogs cancelled and cron was restored at two keepalive entries. The
+archive, rollback override, cron snapshot, extracted host source, and in-container staging are all
+gone; the mode-`0600` state
+`/opt/butterflyguy/.credential-proof-state-20260806-58a5b0d-r2.json` and every
+`.runtime-baseline-evidence-*.json` are retained. The remaining defect — that the probe cannot
+reach a token read in the SPX container as invoked — is now fixed in local source. `approval2-execute`
+requires an explicit `--proof-token-path`, validated absolute, normalized, at most 255 printable
+non-space ASCII characters, and passed only as a second `docker exec -e SCHWAB_TOKEN_PATH=...`
+argument; the probe's absolute-path guard, the inherited-only handling of the two secrets, and every
+live service configuration are unchanged. Validation runs before the attempt is claimed, so a
+malformed path leaves `attempted=false` and `attempt_count=0` while the quiesced services are still
+restored. A bounded `docker exec ... test -f` gate then proves the document exists, because
+otherwise a mistyped path would return `probe_token_invalid` and falsely assert that a token read
+occurred. The new `proof_token_path_invalid` is registered in `_RESULT_CODES`, mapped to the `proof`
+check, and adoptable by `_approval_2_execute`, but is deliberately excluded from
+`_STAGED_FAILURE_CODES` because no container payload may claim an operator-side gate. Twelve new
+tests cover the exec shape, credential absence from the command line, non-persistence of the path,
+seven rejected path forms, the absent-document case, unexpected gate output, and the argparse
+requirement: `uv run pytest` is 756 passed, 1 skipped, and `uv run ruff check .` is clean. This fix
+is local source only; no release archive has been cut for it and it has never run on Helios.
 
 ## Repository Findings
 
@@ -345,10 +386,25 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Obtain fresh Approval 1 and Approval 2 tied to the new exact release, then run one supervised
-attempt on Helios. The release is untested against the live host: the bounded probe codes, the
-settled restoration error window, the failed-restoration cleanup split, and
-`approval_window_pending` have only been proven against fakes. Issue `prepare` at or after the
-window start — not before — and expect a failed proof to now name its own stage, and with it whether
-a token read occurred. No gateway deployment, trading action, configuration change, order/account
-operation, or cutover is authorized.
+Commit the `--proof-token-path` change, cut and verify a new exact release archive at mode `0600`,
+then obtain fresh Approval 1 and Approval 2 and run one supervised attempt on Helios. Approval 1
+must name the new release commit, and Approval 2 must additionally name the absolute in-container
+token document the operator authorizes the proof to open, since the operator now supplies it
+explicitly. Relaxing the probe's absolute-path guard to resolve against the working directory and
+editing the SPX container environment were both considered and rejected, the latter because it would
+invalidate the accepted runtime-baseline digest.
+
+That attempt will be the first to exercise the token document itself. Mode `0600` and non-symlink
+status are already confirmed on the host, but token expiry and payload shape are not, so
+`probe_token_invalid` is a realistic outcome and would be a genuine token-read result rather than a
+configuration artifact.
+
+Already host-proven and not in need of re-proof: bounded staged-code propagation, the settled
+restoration error window (zero filtered errors on all three services, no pause),
+`approval_window_pending`, and the whole staging/smoke/refusal/watchdog/quiescence path. Still
+unproven against the live host: the failed-restoration cleanup split, since restoration has not
+failed under this release.
+
+Issue `prepare` at or after the window start — not before — and always against a fresh state path.
+No gateway deployment, trading action, configuration change, order/account operation, or cutover is
+authorized.

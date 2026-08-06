@@ -109,6 +109,7 @@ def approval_args(tmp_path: Path) -> Namespace:
         rollback_override=tmp_path / "rollback.yml",
         cron_snapshot=tmp_path / "cron.txt",
         archive=tmp_path / "reviewed.tar",
+        proof_token_path=Path("/app/tokens.json"),
         watchdog_fired=False,
     )
 
@@ -125,6 +126,7 @@ def patch_approval_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(operator, "_require_no_host_writers", lambda: None)
     monkeypatch.setattr(operator, "_require_no_unowned_runtime_processes", lambda *_args: None)
     monkeypatch.setattr(operator, "_matching_host_processes", lambda *_args: [])
+    monkeypatch.setattr(operator, "_require_proof_token_document", lambda *_args: None)
 
 
 def test_subprocess_timeout_maps_to_fixed_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1090,6 +1092,177 @@ def test_runtime_baseline_approval_2_uses_only_fixed_tmpfs_source(
         f"{operator.RUNTIME_STAGING_TMPFS_TARGET}/source/src/"
         "butterfly_guy/scripts/probe_schwab_gateway_credentials.py"
     ) in command
+
+
+def test_approval_2_injects_only_the_operator_named_absolute_token_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    args = approval_args(tmp_path)
+    args.proof_token_path = Path("/app/tokens.json")
+    state = runtime_baseline_state("approval_2_pending")
+    state["watchdog"].update(
+        {
+            "hard": "armed",
+            "approval": "armed",
+            "hard_deadline": int(time.time()) + 300,
+            "approval_deadline": int(time.time()) + 120,
+        }
+    )
+    write_state(args.state, state)
+    patch_approval_checks(monkeypatch)
+    proof_commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        proof_commands.append(list(command))
+        return result(stdout='{"quote_count":1,"status":"ok","token_state":"ready"}\n')
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    monkeypatch.setattr(operator, "_restore_operation", lambda *_args, **_kwargs: True)
+
+    operator._approval_2_execute(args)
+
+    assert len(proof_commands) == 1
+    command = proof_commands[0]
+    assert command.count("-e") == 2
+    assert "SCHWAB_TOKEN_PATH=/app/tokens.json" in command
+    assert f"PYTHONPATH={operator.RUNTIME_STAGING_TMPFS_TARGET}/source/src" in command
+    # The credentials themselves are never placed on the command line.
+    assert not any("SCHWAB_API_KEY" in part or "SCHWAB_SECRET_KEY" in part for part in command)
+    # The named path is an exec argument only; it is never persisted.
+    assert "/app/tokens.json" not in args.state.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "token_path",
+    [
+        "tokens.json",
+        "app/tokens.json",
+        "/app/../app/tokens.json",
+        "/app/tokens\tjson",
+        "/app/toke ns.json",
+        "/app/tokens.json\n",
+        "/" + "a" * operator.MAX_PROOF_TOKEN_PATH_CHARS,
+    ],
+)
+def test_unusable_proof_token_path_fails_before_the_attempt_is_claimed(
+    token_path: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    args = approval_args(tmp_path)
+    args.proof_token_path = Path(token_path)
+    state = populated_state()
+    state["watchdog"].update(
+        {
+            "hard": "armed",
+            "approval": "armed",
+            "hard_deadline": int(time.time()) + 300,
+            "approval_deadline": int(time.time()) + 120,
+        }
+    )
+    write_state(args.state, state)
+    patch_approval_checks(monkeypatch)
+
+    def unreachable(*_args, **_kwargs):
+        raise AssertionError("no command may run for an unusable token path")
+
+    monkeypatch.setattr(operator, "_run", unreachable)
+    restorations: list[str | None] = []
+    monkeypatch.setattr(
+        operator,
+        "_restore_operation",
+        lambda _args, failure_code=None: restorations.append(failure_code) or True,
+    )
+
+    with pytest.raises(operator.OperatorFailure, match="proof_token_path_invalid"):
+        operator._approval_2_execute(args)
+
+    stored = operator._read_state(args.state)
+    assert stored["proof"]["attempted"] is False
+    assert stored["proof"]["attempt_count"] == 0
+    assert stored["proof"]["retry_count"] == 0
+    assert restorations == ["proof_token_path_invalid"]
+
+
+def test_absent_token_document_is_not_reported_as_a_token_read(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A mistyped path must not surface as probe_token_invalid, which asserts a token read."""
+    args = approval_args(tmp_path)
+    state = populated_state()
+    state["watchdog"].update(
+        {
+            "hard": "armed",
+            "approval": "armed",
+            "hard_deadline": int(time.time()) + 300,
+            "approval_deadline": int(time.time()) + 120,
+        }
+    )
+    write_state(args.state, state)
+    real_gate = operator._require_proof_token_document
+    patch_approval_checks(monkeypatch)
+    monkeypatch.setattr(operator, "_require_proof_token_document", real_gate)
+    commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(list(command))
+        return result(returncode=1)
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    monkeypatch.setattr(operator, "_restore_operation", lambda *_args, **_kwargs: True)
+
+    with pytest.raises(operator.OperatorFailure, match="proof_token_path_invalid"):
+        operator._approval_2_execute(args)
+
+    assert commands == [
+        ["docker", "exec", "butterfly_spx_app", "test", "-f", "/app/tokens.json"]
+    ]
+    assert not any(operator._PROOF_MARKER in " ".join(command) for command in commands)
+    proof = operator._read_state(args.state)["proof"]
+    assert proof["reason_code"] == "proof_token_path_invalid"
+    assert proof["result"] == "fail"
+    assert proof["retry_count"] == 0
+
+
+def test_proof_token_document_gate_rejects_unexpected_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        operator, "_run", lambda *_args, **_kwargs: result(stdout=SENSITIVE)
+    )
+    with pytest.raises(operator.OperatorFailure) as exc:
+        operator._require_proof_token_document("/app/tokens.json")
+    assert exc.value.code == "proof_token_path_invalid"
+    assert SENSITIVE not in str(exc.value)
+
+
+def test_proof_token_path_invalid_is_a_registered_bounded_proof_code() -> None:
+    assert "proof_token_path_invalid" in operator._RESULT_CODES
+    assert operator._FAILURE_CHECK["proof_token_path_invalid"] == "proof"
+    # It is an operator-side gate, so no staged container command may claim it.
+    assert "proof_token_path_invalid" not in operator._STAGED_FAILURE_CODES
+
+
+def test_approval_2_requires_an_explicit_proof_token_path() -> None:
+    parser = operator._parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "approval2-execute",
+                "--state",
+                "/tmp/state.json",
+                "--approval-reference",
+                "approved-in-chat",
+                "--base-compose",
+                "/tmp/compose.yml",
+                "--rollback-override",
+                "/tmp/rollback.yml",
+                "--cron-snapshot",
+                "/tmp/cron.txt",
+            ]
+        )
 
 
 def test_malformed_secret_credential_output_is_not_persisted(

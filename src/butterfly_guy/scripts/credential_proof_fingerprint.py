@@ -38,6 +38,7 @@ MAX_EVIDENCE_FILES = 4096
 MAX_EVIDENCE_CANDIDATES = 256
 MAX_EVIDENCE_JSON_NODES = 512
 MAX_EVIDENCE_DEPTH = 3
+MAX_PROOF_TOKEN_PATH_CHARS = 255
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 15
 PROOF_TIMEOUT_SECONDS = 45
 RESTORE_BUDGET_SECONDS = 120
@@ -54,6 +55,9 @@ _GIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 _IMAGE_ID_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 _PID_PATTERN = re.compile(r"[1-9][0-9]{0,9}")
 _CONTAINER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+# Printable ASCII with no space or control character, so the path cannot smuggle output
+# through an `-e KEY=VALUE` argument or a bounded result line.
+_PROOF_TOKEN_PATH_PATTERN = re.compile(r"/[\x21-\x7e]*")
 _UNIT_PATTERN = re.compile(r"butterfly-credential-proof-[0-9a-f]{12}-(?:hard|approval|probe)")
 # The operator account has no passwordless sudo on the non-interactive proof path; it does have a
 # lingering user manager, so transient watchdog units are created and managed there.
@@ -290,6 +294,7 @@ _FAILURE_CHECK = {
     "probe_state_invalid": "proof",
     "probe_token_invalid": "proof",
     "process_uniqueness_invalid": "process_uniqueness",
+    "proof_token_path_invalid": "proof",
     "provenance_invalid": "archive_provenance",
     "restoration_errors_detected": "restoration_errors",
     "single_writer_invalid": "single_writer",
@@ -361,6 +366,7 @@ _RESULT_CODES = frozenset(
         "probe_state_invalid",
         "probe_token_invalid",
         "process_uniqueness_invalid",
+        "proof_token_path_invalid",
         "provenance_invalid",
         "restoration_errors_detected",
         "restoration_failed_paused",
@@ -3658,6 +3664,41 @@ def _prepare_runtime_staging() -> None:
         raise OperatorFailure("staging_target_invalid")
 
 
+def _validated_proof_token_path(path: Path) -> str:
+    """Return the operator-named absolute in-container token document path.
+
+    The probe reads credentials from the environment `docker exec` inherits, but the trading
+    containers export a relative `SCHWAB_TOKEN_PATH`, which the probe's absolute-path guard
+    rejects before any token read. The operator names the document for the one authorized
+    attempt instead, so the guard stays intact and no live service configuration changes. The
+    value is passed only to that one exec and is never written to state or evidence.
+    """
+    text = str(path)
+    if (
+        not path.is_absolute()
+        or len(text) > MAX_PROOF_TOKEN_PATH_CHARS
+        or _PROOF_TOKEN_PATH_PATTERN.fullmatch(text) is None
+        or os.path.normpath(text) != text
+    ):
+        raise OperatorFailure("proof_token_path_invalid")
+    return text
+
+
+def _require_proof_token_document(token_path: str) -> None:
+    """Prove the named document exists before the probe is invoked.
+
+    A mistyped path would otherwise reach the token manager and fail as
+    `probe_token_invalid`, which the bounded code table defines as a token read having been
+    reached. `test -f` only stats the path; it reads no token content.
+    """
+    result = _run(
+        ["docker", "exec", "butterfly_spx_app", "test", "-f", token_path],
+        timeout=10,
+    )
+    if result.returncode != 0 or result.stdout or result.stderr:
+        raise OperatorFailure("proof_token_path_invalid")
+
+
 def _cleanup_runtime_staging() -> None:
     result = _run(
         ["docker", "exec", "butterfly_spx_app", "rm", "-rf", RUNTIME_STAGING_TMPFS_TARGET],
@@ -4248,6 +4289,8 @@ def _watchdog_cancel_command(args: argparse.Namespace) -> None:
 def _approval_2_execute(args: argparse.Namespace) -> None:
     proof_code = "credential_proof_failed"
     try:
+        # Validated before the attempt is claimed so a malformed path costs no attempt.
+        token_path = _validated_proof_token_path(args.proof_token_path)
         with _state_lock(args.state):
             state = _read_state(args.state)
             now = int(time.time())
@@ -4308,6 +4351,7 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
         _require_no_unowned_runtime_processes([spx_pid, candidate_pid])
         if _matching_host_processes(_PROOF_MARKER):
             raise OperatorFailure("single_writer_invalid")
+        _require_proof_token_document(token_path)
 
         _, _, source_target = _staging_targets(state)
         proof_command = [
@@ -4315,6 +4359,8 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
             "exec",
             "-e",
             f"PYTHONPATH={source_target}/src",
+            "-e",
+            f"SCHWAB_TOKEN_PATH={token_path}",
             "butterfly_spx_app",
             "python",
             f"{source_target}/src/butterfly_guy/scripts/probe_schwab_gateway_credentials.py",
@@ -4345,6 +4391,7 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
         proof_code = exc.code if exc.code in _PROOF_FAILURE_CODES | {
             "credential_proof_failed",
             "credential_output_invalid",
+            "proof_token_path_invalid",
             "single_writer_invalid",
             "subprocess_timeout",
             "watchdog_invalid",
@@ -4517,6 +4564,7 @@ def _parser() -> argparse.ArgumentParser:
     approval_2 = subparsers.add_parser("approval2-execute", add_help=False)
     approval_2.add_argument("--state", required=True, type=Path)
     approval_2.add_argument("--approval-reference", required=True)
+    approval_2.add_argument("--proof-token-path", required=True, type=Path)
     approval_2.add_argument("--base-compose", required=True, type=Path)
     approval_2.add_argument("--rollback-override", required=True, type=Path)
     approval_2.add_argument("--cron-snapshot", required=True, type=Path)

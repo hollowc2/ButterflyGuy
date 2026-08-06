@@ -932,3 +932,169 @@ unchanged: an early command still fails and still burns its state path.
 
 Approval 1 must be requested against commit `58a5b0d64a1cbf1665d09e664d12d1415fa3b10d`.
 Nothing in this release has run on Helios.
+
+## Stage-named proof failure and an unpaused restoration — 2026-08-06
+
+Fresh Approval 1 and Approval 2 authorized one attempt for release
+`58a5b0d64a1cbf1665d09e664d12d1415fa3b10d` and archive SHA-256
+`5c115f494c6224a0f8b463a9ba1d7f1ffcdd32b039fe2e4f01ef29aca2d44723` on Helios during
+`2026-08-06T17:15:00Z`–`2026-08-06T18:15:00Z`, against accepted runtime digest
+`6872c3582cf728f67acba78bf5f7e226b735c40a4be09ea27c135c7641e5320d`. The operator was also
+the rollback owner. Both corrections in the release are now proven against the live host.
+
+### The failure stage was identified read-only before the attempt was spent
+
+Under Approval 1's explicit authorization to read the real credential environment, a
+bounded presence-only check of the SPX container emitted four booleans and no values: the
+API key and secret key are set, the token path is set, and **the token path is not
+absolute**. `GatewayCredentialProbeSettings.token_path_must_be_absolute` rejects a relative
+path, so `settings_type()` was certain to raise.
+
+The prediction was not a guess. `_approval_2_execute` builds the staged probe command with
+only `-e PYTHONPATH=<source>/src` and inherits everything else from the container's
+`Config.Env`, which is exactly what the check read. Nothing on the probe's import path calls
+`load_dotenv` — `core/config.py` does, but only inside `load_config()`, which the probe never
+calls — so no absolute path can be injected at import time.
+
+The operator was told the attempt would return `probe_settings_invalid` and chose to spend it
+anyway, because a run still converts the two untested corrections into host-proven behaviour.
+
+### Result
+
+| Command | Result |
+|---|---|
+| `prepare` (first) | `approval_window_pending`, issued nine seconds early |
+| `prepare` (fresh state path) | `approval_1_ready` |
+| `approval1-execute` | `approval_2_required` in 52 s |
+| `approval2-execute` | `probe_settings_invalid` in 65 s including restoration |
+
+`approval_window_pending` is confirmed on the host: the early command is now
+self-explanatory instead of reporting `invalid_arguments`. It also created **no state file**,
+because `_approved_window` raises before `_write_state_new`; the path was abandoned regardless,
+since a used state path is never reused.
+
+`proof.reason_code=probe_settings_invalid`, `attempt_count=1`, `retry_count=0`,
+`information_exposure=pass`, `quote_count=null`, `token_state=null`. This is the first
+credential-proof failure that names its own stage, which was the point of the window. The code
+is in the no-token-read group: it is raised before `from schwab.auth import ...` and before any
+manager transaction opens the token store, so **no token read and no Schwab request occurred on
+this attempt**.
+
+Twenty-five of the twenty-six checks passed. Only `proof` failed.
+
+### What this does and does not say about the previous window
+
+`schwab_gateway/config.py` is byte-identical between `a1ce6eb` and `58a5b0d`
+(`eff6b88bccbf3da1d9125fa9d23451230dc66ce2a46ef2ae0cf4040ca3b1c369`; no commit in that range
+touches it), and the earlier probe also constructed settings immediately after its imports.
+The 2026-08-06 attempt therefore ran the same gate against the same container environment and
+would have failed at the same stage. That is strong circumstantial evidence that the generic
+`credential_proof_failed` was a settings failure with no token read.
+
+It is not retroactive proof. That attempt's retained state records only a return code, so the
+withdrawn claim that no credential or token read has ever occurred stays withdrawn, on the
+strength of one reproduction under matching conditions.
+
+The lock hypothesis — that a SIGSTOPped SPX holds the atomic token lock and starves the probe —
+is separately ruled out by code rather than merely unobserved. `AtomicTokenManager` is imported
+only by `credential_probe.py` and `token_adapter.py`; no live service path acquires
+`.tokens.json.lock`, and no stale lock file exists on the host. The quiescence order is not
+implicated. Two `probe_token_invalid` branches are also excluded: the token document is a
+regular non-symlink file at mode `0600`.
+
+### The restoration no longer pauses trading
+
+`restoration.result=pass` with per-service filtered error counts `spx=0`, `ndx=0`, `xsp=0`.
+The burst that failed the previous window fell inside `RESUME_SETTLE_SECONDS`, so the settled
+counting window is confirmed on the host and all three services stayed running. Both watchdogs
+report `cancelled`; cron was restored with `keepalive_entries=2`.
+
+Independent post-run observation: SPX `state=running paused=false` on its original container and
+recorded image `sha256:faa85d74…`, NDX and XSP back up, the in-container staging directory absent,
+no residual `--user` watchdog unit, the keepalive crontab at two entries, and SPX position
+monitoring live and updating. XSP's metrics port returned nothing both before and after the run,
+so it is pre-existing and not a regression.
+
+The attempt ran mid-session with open SPX and NDX paper positions, which the operator accepted
+after being shown that quiescence suspends exit monitoring for roughly three to four minutes.
+SPX was 36.6 % off its peak against a 40 % afternoon drawdown threshold at the time. No exit
+trigger fired during the gap.
+
+### Disposition
+
+The operator's success path removed the release archive, rollback override, and cron snapshot.
+The extracted host source directory was removed separately, as it is not an operator input. The
+retained artifacts are the mode-`0600` state
+`/opt/butterflyguy/.credential-proof-state-20260806-58a5b0d-r2.json` and every
+`.runtime-baseline-evidence-*.json`, including the accepted `…-20260805-dd1d9ef.json`.
+
+### The remaining defect
+
+The probe cannot reach a token read in the SPX container as invoked, because that container's
+`SCHWAB_TOKEN_PATH` is relative and the probe correctly requires an absolute path. Three options
+were considered:
+
+1. **Operator-supplied absolute path at exec time.** Add an explicit `--proof-token-path`
+   argument to `approval2-execute`, validate it is absolute, and pass it as
+   `docker exec -e SCHWAB_TOKEN_PATH=...`. The probe's guard stays intact, no live service
+   configuration changes, and the path is never written to state or evidence. This is the
+   recommended shape; note that it does put a token path on a command line, which the runbook
+   otherwise avoids, so the deviation is deliberate and bounded to the exec invocation.
+2. **Relax the probe validator** to resolve a relative path against the process working
+   directory. Rejected as the default: the absolute requirement exists so the proof targets a
+   deterministic document regardless of cwd.
+3. **Change the SPX container environment.** Rejected. It is a live configuration change, is not
+   authorized, and would invalidate the accepted runtime-baseline digest.
+
+No option is implemented yet. Any of them needs a new committed release, full verification, and
+fresh Approval 1 and Approval 2 before another attempt.
+
+`graphify update .` remains skipped: the binary recorded in `AGENTS.md`
+(`/home/billy/.local/bin/graphify`) does not exist for the current user and `graphify` is not on
+`PATH`, so the graph is stale with respect to this release.
+
+## Operator-named absolute token path
+
+Option 1 above is implemented. `approval2-execute` now takes a **required**
+`--proof-token-path`, and the staged proof command passes it as a second exec environment
+argument:
+
+```
+docker exec -e PYTHONPATH=<source>/src -e SCHWAB_TOKEN_PATH=<absolute path> \
+  butterfly_spx_app python <source>/src/.../probe_schwab_gateway_credentials.py ...
+```
+
+The argument is required rather than optional so the one supported invocation always names the
+document explicitly and deterministically, instead of silently inheriting whatever the container
+exports. `SCHWAB_API_KEY` and `SCHWAB_SECRET_KEY` are still read only from the inherited
+environment and never appear on a command line. The probe's absolute-path guard is unchanged, and
+no live service configuration is touched.
+
+`_validated_proof_token_path` runs **before the attempt is claimed**, so a malformed path costs no
+attempt: `proof.attempted` stays `false` and `attempt_count` stays `0`, while the existing
+failure path still restores the quiesced services. It requires an absolute path of at most 255
+characters, printable ASCII with no space or control character, that is already normalized — so
+`..`, whitespace, and control bytes are rejected. Note that `Path` canonicalizes `//` and a
+trailing slash itself, so those are valid inputs rather than rejected ones.
+
+`_require_proof_token_document` then runs `docker exec butterfly_spx_app test -f <path>` and
+requires exit 0 with empty stdout and stderr. This gate exists for a diagnostic reason, not a
+safety one: without it a mistyped path reaches the token manager and returns
+`probe_token_invalid`, which the code table defines as *a token read was reached*. The gate keeps
+that code honest. `test -f` stats the path and reads no token content.
+
+The new `proof_token_path_invalid` is registered in `_RESULT_CODES` and mapped to the `proof`
+check in `_FAILURE_CHECK`, and is added to the codes `_approval_2_execute` may adopt. It is
+deliberately **not** in `_STAGED_FAILURE_CODES`: it is an operator-side gate, so no container
+payload may claim it.
+
+Twelve tests cover this: the exec argument shape and that exactly two `-e` arguments are passed;
+that no `SCHWAB_API_KEY`/`SCHWAB_SECRET_KEY` reaches the command line; that the named path never
+appears in the retained state; seven rejected path forms, each proven to run no command and to
+leave the attempt unclaimed while restoration still runs; that an absent document fails as
+`proof_token_path_invalid` with the probe never invoked; that unexpected gate output fails closed
+without echoing it; and that `approval2-execute` refuses to parse without the argument.
+`uv run pytest`: 756 passed, 1 skipped. `uv run ruff check .`: clean.
+
+This is committed source only. No release archive has been cut for it and it has not run on
+Helios, so it needs a new exact release plus fresh Approval 1 and Approval 2.
