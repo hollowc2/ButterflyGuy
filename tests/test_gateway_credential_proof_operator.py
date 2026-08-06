@@ -1344,7 +1344,7 @@ def test_host_reviewed_source_must_match_every_archive_member(
     monkeypatch.setattr(
         operator,
         "_archive_member_sha256",
-        lambda _archive, member: hashlib.sha256(
+        lambda _archive, member, **_kwargs: hashlib.sha256(
             f"contents of {member}\n".encode()
         ).hexdigest(),
     )
@@ -1359,6 +1359,36 @@ def test_host_reviewed_source_must_match_every_archive_member(
         with pytest.raises(operator.OperatorFailure) as exc:
             operator._require_host_reviewed_source(candidate)
         assert exc.value.code == "proof_source_invalid"
+
+
+def test_reviewed_source_check_handles_members_larger_than_the_per_source_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`uv.lock` is larger than MAX_SOURCE_BYTES, and a real archive must still verify."""
+    oversize_member = "uv.lock"
+    assert oversize_member in operator._ARCHIVE_PATHS
+    payload = ("lock line\n" * 40_000).encode()
+    assert len(payload) > operator.MAX_SOURCE_BYTES
+
+    root = tmp_path / "release"
+    for member in operator._ARCHIVE_PATHS:
+        target = root / member
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload if member == oversize_member else b"small\n")
+
+    archive = tmp_path / "reviewed.tar"
+    with tarfile.open(archive, "w") as handle:
+        for member in operator._ARCHIVE_PATHS:
+            handle.add(root / member, arcname=member)
+    monkeypatch.setattr(operator, "_host_reviewed_source_root", lambda: root)
+
+    assert operator._require_host_reviewed_source(archive) == root
+
+    # Altering the oversize member must report this gate, never a generic archive code.
+    (root / oversize_member).write_bytes(payload + b"tampered\n")
+    with pytest.raises(operator.OperatorFailure) as exc:
+        operator._require_host_reviewed_source(archive)
+    assert exc.value.code == "proof_source_invalid"
 
 
 def test_host_native_smoke_runs_the_reviewed_operator_under_the_named_interpreter(

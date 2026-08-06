@@ -1927,17 +1927,19 @@ def _require_candidate_ownership(inspected: dict[str, Any]) -> None:
         raise OperatorFailure("candidate_ownership_invalid")
 
 
-def _archive_member_sha256(path: Path, member_name: str) -> str:
+def _archive_member_sha256(
+    path: Path, member_name: str, *, max_bytes: int = MAX_SOURCE_BYTES
+) -> str:
     try:
         with tarfile.open(path, mode="r:") as archive:
             member = archive.getmember(member_name)
             handle = archive.extractfile(member)
             if handle is None:
                 raise OperatorFailure("archive_invalid")
-            payload = handle.read(MAX_SOURCE_BYTES + 1)
+            payload = handle.read(max_bytes + 1)
     except (KeyError, OSError, tarfile.TarError):
         raise OperatorFailure("archive_invalid") from None
-    if len(payload) > MAX_SOURCE_BYTES:
+    if len(payload) > max_bytes:
         raise OperatorFailure("archive_invalid")
     return hashlib.sha256(payload).hexdigest()
 
@@ -3777,12 +3779,13 @@ def _require_host_reviewed_source(archive: Path | None) -> Path:
         raise OperatorFailure("proof_source_invalid")
     root = _host_reviewed_source_root()
     for member in _ARCHIVE_PATHS:
-        expected = _archive_member_sha256(archive, member)
+        # Reviewed members are bounded by the archive, not by the per-source limit: `uv.lock`
+        # alone is larger than MAX_SOURCE_BYTES. Both hashes are taken inside the boundary so
+        # a size or read failure reports this gate rather than leaking a generic archive code.
         try:
-            actual = _sha256_file(root / member, max_bytes=MAX_SOURCE_BYTES)
-        except OperatorFailure:
-            raise OperatorFailure("proof_source_invalid") from None
-        except OSError:
+            expected = _archive_member_sha256(archive, member, max_bytes=MAX_ARCHIVE_BYTES)
+            actual = _sha256_file(root / member, max_bytes=MAX_ARCHIVE_BYTES)
+        except (OperatorFailure, OSError):
             raise OperatorFailure("proof_source_invalid") from None
         if actual != expected:
             raise OperatorFailure("proof_source_invalid")
