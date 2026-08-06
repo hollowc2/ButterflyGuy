@@ -920,3 +920,15 @@ mode-`0600` state JSON and every `.runtime-baseline-evidence-*.json` are never t
 so a command issued seconds before the window opens is self-explanatory instead of
 reporting the generic `invalid_arguments`, as happened this window. The window rule is
 unchanged: an early command still fails and still burns its state path.
+
+### Release
+
+- Commit: `58a5b0d64a1cbf1665d09e664d12d1415fa3b10d`
+- Archive: `/tmp/butterfly-gateway-multi-consumer-foundation-58a5b0d.tar` (mode `0600`)
+- Archive SHA-256: `5c115f494c6224a0f8b463a9ba1d7f1ffcdd32b039fe2e4f01ef29aca2d44723`
+- `uv run pytest`: 744 passed, 1 skipped (`CI_DATABASE_URL` only). `uv run ruff check .`: clean.
+- Local self-check: `_validate_archive` accepts the archive against the commit, and the
+  archived operator member matches the checked-out file byte for byte.
+
+Approval 1 must be requested against commit `58a5b0d64a1cbf1665d09e664d12d1415fa3b10d`.
+Nothing in this release has run on Helios.

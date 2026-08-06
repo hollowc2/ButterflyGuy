@@ -165,7 +165,9 @@ marker burst is excluded by time rather than by an allowance, and fresh errors r
 `restoration_errors_detected` instead of `subprocess_output_invalid`. Failed restoration now removes
 the release archive but deliberately keeps the rollback override and cron snapshot for manual
 recovery, and an early `prepare` reports `approval_window_pending` instead of the generic
-`invalid_arguments`. This release is local and fake-tested only; it has never run against Helios.
+`invalid_arguments`. Exact release `58a5b0d64a1cbf1665d09e664d12d1415fa3b10d` has archive SHA-256
+`5c115f494c6224a0f8b463a9ba1d7f1ffcdd32b039fe2e4f01ef29aca2d44723`. This release is local and
+fake-tested only; it has never run against Helios.
 
 ## Repository Findings
 
