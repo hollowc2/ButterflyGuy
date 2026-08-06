@@ -698,7 +698,7 @@ def test_watchdog_arm_failure_is_bounded(
         operator._arm_watchdog(state, "hard", 300, ["safe-restore"])
 
 
-def test_watchdog_arm_is_system_level_and_output_is_exactly_validated(
+def test_watchdog_arm_is_user_level_and_output_is_exactly_validated(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     state = populated_state("approval_1_running")
@@ -716,9 +716,110 @@ def test_watchdog_arm_is_system_level_and_output_is_exactly_validated(
 
     monkeypatch.setattr(operator, "_run", fake_run)
     operator._arm_watchdog(state, "hard", 300, ["safe-restore"])
-    assert commands[0][:4] == ["sudo", "-n", "systemd-run", "--collect"]
+    assert commands[0][:3] == ["systemd-run", "--user", "--collect"]
     assert any(part.startswith("--uid=") for part in commands[0])
     assert any(part.startswith("--gid=") for part in commands[0])
+    assert "sudo" not in commands[0]
+
+
+def test_watchdog_commands_never_require_sudo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The operator account has no passwordless sudo on the non-interactive proof path."""
+    state = populated_state("approval_1_running")
+    unit = operator._watchdog_unit(state, "hard")
+    commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(list(command))
+        if "is-active" in command:
+            return result(stdout="active\n")
+        if "systemd-run" in command:
+            return result(
+                stdout=(
+                    f"Running timer as unit: {unit}.timer. "
+                    f"Will run service as unit: {unit}.service.\n"
+                )
+            )
+        return result()
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    operator._arm_watchdog(state, "hard", 300, ["safe-restore"])
+    operator._watchdog_active(state, "hard")
+    operator._watchdog_service_active(state, "hard")
+    operator._cancel_watchdog(state, "hard")
+    assert commands
+    for command in commands:
+        assert "sudo" not in command, command
+        if command[0] == "systemctl":
+            assert command[1] == "--user", command
+
+
+def test_watchdog_capability_probe_arms_verifies_and_cancels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = populated_state("approval_1_running")
+    unit = operator._watchdog_unit(state, "probe")
+    commands: list[list[str]] = []
+    active = {"value": False}
+
+    def fake_run(command, **_kwargs):
+        commands.append(list(command))
+        if "systemd-run" in command:
+            active["value"] = True
+            return result(
+                stdout=(
+                    f"Running timer as unit: {unit}.timer. "
+                    f"Will run service as unit: {unit}.service.\n"
+                )
+            )
+        if "is-active" in command:
+            return result(stdout="active\n") if active["value"] else result(returncode=3)
+        if "stop" in command:
+            active["value"] = False
+            return result()
+        return result()
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    operator._require_watchdog_capability(state)
+    assert any("systemd-run" in command for command in commands)
+    assert any("stop" in command for command in commands)
+    assert all(f"{unit}.timer" in " ".join(command) or "systemd-run" in command
+               for command in commands if "is-active" in command or "stop" in command)
+    assert not active["value"]
+
+
+def test_watchdog_capability_probe_fails_closed_when_arming_is_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        operator,
+        "_run",
+        lambda *_args, **_kwargs: result(returncode=1, stderr="sudo: a password is required"),
+    )
+    with pytest.raises(operator.OperatorFailure, match="watchdog_invalid"):
+        operator._require_watchdog_capability(populated_state("approval_1_running"))
+
+
+def test_watchdog_capability_probe_fails_closed_when_timer_never_activates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = populated_state("approval_1_running")
+    unit = operator._watchdog_unit(state, "probe")
+
+    def fake_run(command, **_kwargs):
+        if "systemd-run" in command:
+            return result(
+                stdout=(
+                    f"Running timer as unit: {unit}.timer. "
+                    f"Will run service as unit: {unit}.service.\n"
+                )
+            )
+        if "is-active" in command:
+            return result(returncode=3)
+        return result()
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    with pytest.raises(operator.OperatorFailure, match="watchdog_invalid"):
+        operator._require_watchdog_capability(state)
 
 
 @pytest.mark.parametrize(
@@ -1152,6 +1253,8 @@ def patch_prepare_success(
     monkeypatch.setattr(operator, "_compose_service_hash", lambda *_args: COMPOSE_HASH)
     monkeypatch.setattr(operator, "_require_base_image", lambda *_args: None)
     monkeypatch.setattr(operator, "_validate_compose_dry_run", lambda *_args: None)
+    # Never create real transient units from the test suite.
+    monkeypatch.setattr(operator, "_require_watchdog_capability", lambda *_args: None)
 
     def capture_cron(path: Path):
         operator._write_private_bytes(path, b"")
@@ -1184,6 +1287,29 @@ def test_prepare_captures_fresh_accepted_baseline_and_rollback_inputs(
     assert stat.S_IMODE(args.state.stat().st_mode) == 0o600
     assert stat.S_IMODE(args.cron_snapshot.stat().st_mode) == 0o600
     assert stat.S_IMODE(args.rollback_override.stat().st_mode) == 0o600
+
+
+def test_prepare_gates_watchdog_capability_before_approval_1_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A watchdog prerequisite must fail in preflight, not inside the one authorized attempt."""
+    args = prepare_args(tmp_path)
+    patch_prepare_success(monkeypatch, args)
+    calls: list[str] = []
+
+    def denied(_state):
+        calls.append("probe")
+        raise operator.OperatorFailure("watchdog_invalid")
+
+    monkeypatch.setattr(operator, "_require_watchdog_capability", denied)
+    with pytest.raises(operator.OperatorFailure, match="watchdog_invalid"):
+        operator._prepare(args)
+    assert calls == ["probe"]
+    state = operator._read_state(args.state)
+    assert state["phase"] == "failed"
+    assert state["failure_code"] == "watchdog_invalid"
+    assert state["checks"]["watchdog"] == "fail"
 
 
 def test_prepare_refuses_contact_outside_exact_approval_window(tmp_path: Path) -> None:

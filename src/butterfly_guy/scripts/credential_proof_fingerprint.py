@@ -50,7 +50,12 @@ _GIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 _IMAGE_ID_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 _PID_PATTERN = re.compile(r"[1-9][0-9]{0,9}")
 _CONTAINER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
-_UNIT_PATTERN = re.compile(r"butterfly-credential-proof-[0-9a-f]{12}-(?:hard|approval)")
+_UNIT_PATTERN = re.compile(r"butterfly-credential-proof-[0-9a-f]{12}-(?:hard|approval|probe)")
+# The operator account has no passwordless sudo on the non-interactive proof path; it does have a
+# lingering user manager, so transient watchdog units are created and managed there.
+_SYSTEMD_RUN_COMMAND = ("systemd-run", "--user")
+_SYSTEMCTL_COMMAND = ("systemctl", "--user")
+WATCHDOG_PROBE_DELAY_SECONDS = 3600
 _MATERIAL_FIELDS = (
     "cmd",
     "entrypoint",
@@ -1685,9 +1690,7 @@ def _arm_watchdog(state: dict[str, Any], kind: str, delay: int, restore_argv: li
     unit = _watchdog_unit(state, kind)
     result = _run(
         [
-            "sudo",
-            "-n",
-            "systemd-run",
+            *_SYSTEMD_RUN_COMMAND,
             "--collect",
             f"--uid={os.getuid()}",
             f"--gid={os.getgid()}",
@@ -1712,25 +1715,37 @@ def _arm_watchdog(state: dict[str, Any], kind: str, delay: int, restore_argv: li
 
 def _watchdog_active(state: dict[str, Any], kind: str) -> bool:
     unit = f"{_watchdog_unit(state, kind)}.timer"
-    result = _run(["sudo", "-n", "systemctl", "is-active", unit], timeout=10)
+    result = _run([*_SYSTEMCTL_COMMAND, "is-active", unit], timeout=10)
     return bool(result.returncode == 0 and result.stdout.strip() == "active" and not result.stderr)
 
 
 def _watchdog_service_active(state: dict[str, Any], kind: str) -> bool:
     unit = f"{_watchdog_unit(state, kind)}.service"
-    result = _run(["sudo", "-n", "systemctl", "is-active", unit], timeout=10)
+    result = _run([*_SYSTEMCTL_COMMAND, "is-active", unit], timeout=10)
     return bool(result.returncode == 0 and result.stdout.strip() == "active" and not result.stderr)
 
 
 def _cancel_watchdog(state: dict[str, Any], kind: str) -> None:
     unit = _watchdog_unit(state, kind)
     result = _run(
-        ["sudo", "-n", "systemctl", "stop", f"{unit}.timer"],
+        [*_SYSTEMCTL_COMMAND, "stop", f"{unit}.timer"],
         timeout=10,
     )
     if result.returncode == 0 and (result.stdout or result.stderr):
         raise OperatorFailure("watchdog_invalid")
     if result.returncode not in {0, 5}:
+        raise OperatorFailure("watchdog_invalid")
+
+
+def _require_watchdog_capability(state: dict[str, Any]) -> None:
+    """Prove a transient watchdog unit can be armed and cancelled before anything is quiesced."""
+    _arm_watchdog(state, "probe", WATCHDOG_PROBE_DELAY_SECONDS, ["/bin/true"])
+    try:
+        if not _watchdog_active(state, "probe"):
+            raise OperatorFailure("watchdog_invalid")
+    finally:
+        _cancel_watchdog(state, "probe")
+    if _watchdog_active(state, "probe"):
         raise OperatorFailure("watchdog_invalid")
 
 
@@ -3405,6 +3420,8 @@ def _prepare(args: argparse.Namespace) -> None:
         state["checks"]["compose_semantics"] = "pass"
         _validate_compose_dry_run(args.base_compose, args.staging_override)
         state["checks"]["compose_dry_run"] = "pass"
+
+        _require_watchdog_capability(state)
 
         cron_sha256, keepalive_entries, cron_present = _capture_crontab(args.cron_snapshot)
         state["cron"]["sha256"] = cron_sha256

@@ -111,7 +111,12 @@ that correction. It failed closed at `watchdog_invalid` while arming the hard wa
 exact restoration passed, no transient unit remained, quiescence never started, and no
 credential/token read or Schwab request occurred. The account has `Linger=yes` and a running user
 manager, so the watchdog can move to `systemd-run --user`/`systemctl --user` without privilege
-escalation; preflight must also gate watchdog-arming capability before quiescence.
+escalation; preflight must also gate watchdog-arming capability before quiescence. An authorized
+bounded capability probe confirmed a `--user` transient timer arms, reports active, cancels, and
+leaves no residual unit, and that such a run accepts `--uid`/`--gid` and emits byte-identical output.
+The local correction moves every watchdog command to `systemd-run --user`/`systemctl --user`, removes
+all `sudo` use, and adds `_require_watchdog_capability` to `prepare` so a watchdog prerequisite fails
+in preflight rather than inside the one authorized attempt.
 
 ## Repository Findings
 

@@ -636,6 +636,37 @@ operator state was retained. No retry was attempted.
 
 The watchdog mechanism must therefore either move to `systemd-run --user` with `systemctl --user`
 management, or the operator account must be granted a narrowly scoped passwordless sudoers rule for
-the fixed watchdog units. The first requires dropping `--uid`/`--gid`, which a user-manager run
-rejects. Whichever is chosen, preflight should verify watchdog-arming capability before quiescence
-so this prerequisite cannot consume another attempt.
+the fixed watchdog units. Whichever is chosen, preflight should verify watchdog-arming capability
+before quiescence so this prerequisite cannot consume another attempt.
+
+## User-level watchdog and preflight capability gate — 2026-08-06
+
+The operator chose the user-manager path, which needs no privilege escalation and no host security
+change. An authorized bounded capability probe on Helios armed one distinctively named transient
+`--user` timer far in the future, observed it `active`, cancelled it, and left no residual unit in
+either manager. The probe corrected two assumptions: a user-manager run **accepts** `--uid`/`--gid`,
+so those arguments are unchanged, and its output is byte-identical to the system-level form:
+
+```
+Running timer as unit: <unit>.timer
+Will run service as unit: <unit>.service
+```
+
+so the existing exact output validation needs no change either.
+
+`_arm_watchdog` now invokes `systemd-run --user`, and `_watchdog_active`,
+`_watchdog_service_active`, and `_cancel_watchdog` invoke `systemctl --user`. No operator command
+uses `sudo`. The lingering user manager keeps an armed timer alive across session close, so
+restoration still fires without the operator process.
+
+`prepare` now calls `_require_watchdog_capability` before capturing the crontab and writing the
+rollback override. It arms a transient `probe` unit one hour out, requires it to report active,
+cancels it, and requires it to be gone, failing closed with `watchdog_invalid`. `_UNIT_PATTERN`
+accepts the added `probe` kind. A watchdog prerequisite therefore now fails during preflight, where
+a failure costs nothing, instead of inside the single authorized attempt.
+
+The test suite must never create real transient units: `patch_prepare_success` stubs the capability
+gate, and a dedicated test asserts `prepare` invokes the gate and fails closed with
+`checks["watchdog"] == "fail"` when it is denied. Further tests assert no watchdog command contains
+`sudo`, that `systemctl` calls are `--user`, and that the probe fails closed both when arming is
+denied and when the timer never activates.
