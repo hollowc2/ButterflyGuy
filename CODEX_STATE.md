@@ -233,8 +233,10 @@ under the new `proof_prerequisites` check and the fixed codes `proof_environment
 smoke runs the existing bounded command under the same interpreter. Verified read-only on Helios:
 the venv interpreter passes its gate and is a symlink, `scipy.special` and `schwab.auth` import
 under it, and the token directory is writable. `uv run pytest` is 761 passed, 1 skipped, and
-`uv run ruff check .` is clean. This host-execution change has no release archive and has never run
-against Helios.
+`uv run ruff check .` is clean. Exact release `22643615f2125107dba8a54fd4cf1a0e5b8f939e` has archive
+`/tmp/butterfly-gateway-multi-consumer-foundation-2264361.tar` at mode `0600` with SHA-256
+`cf11fdfcdfc23585acf166293d3ce8e137eb2bc4b07302a1824d6d227c404467`, reproducible bit-for-bit from
+the commit. This host-execution release has never run against Helios.
 
 ## Repository Findings
 

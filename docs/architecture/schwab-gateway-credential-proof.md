@@ -1223,5 +1223,19 @@ The container staging step is now vestigial for the proof itself — it still pr
 host the reviewed subset, and restoration still requires its absence, but nothing executes from it.
 Removing it is a candidate follow-up, deliberately not bundled here.
 
-`uv run pytest`: 761 passed, 1 skipped. `uv run ruff check .`: clean. No release archive has been
-cut for this change and it has not run on Helios.
+### Release
+
+- Commit: `22643615f2125107dba8a54fd4cf1a0e5b8f939e`
+- Archive: `/tmp/butterfly-gateway-multi-consumer-foundation-2264361.tar` (mode `0600`)
+- Archive SHA-256: `cf11fdfcdfc23585acf166293d3ce8e137eb2bc4b07302a1824d6d227c404467`
+- `uv run pytest`: 761 passed, 1 skipped (`CI_DATABASE_URL` only). `uv run ruff check .`: clean.
+- Local self-check: `_validate_archive` accepts the archive against the commit, and the archived
+  operator member matches the checked-out file byte for byte.
+
+The archive is reproducible bit-for-bit from the commit, so a lost `/tmp` copy can be regenerated
+with `archive-create` and the SHA-256 above still holds. This was verified after a host reboot
+cleared `/tmp` and every worktree in it; all commits survive in the main repository's object store.
+
+Approval 1 must name commit `22643615f2125107dba8a54fd4cf1a0e5b8f939e`, not the follow-up commit
+that records these identifiers. Approval 2 must name the **host** token document
+`/opt/butterflyguy/tokens.json`. Nothing in this release has run on Helios.
