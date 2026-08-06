@@ -91,7 +91,15 @@ verified the fixed legacy `/app` target rather than the caller's own root target
 runtime-baseline path would have staged correctly under `/tmp` and failed closed at
 `staging_digest_invalid`. No live attempt was made under that release. The digest gate now uses the
 caller's archive target, and new tests cover the runtime root target and reject a legacy-path digest
-reply in runtime mode.
+reply in runtime mode. Fresh Approval 1 for release `a54c2343c2ac8cb2e20d6c60329f1a1b1edd720e`
+first failed `prepare` at `baseline_mismatch` because archive-extracted config paths classify the
+runtime config mounts as `content_match` while the accepted digest records `exact`; the corrected
+`prepare` passed with the live config paths. The single authorized attempt then streamed, extracted,
+and digest-verified the archive under `/tmp` — clearing both prior staging stops — and failed at the
+native smoke check, reported as generic `subprocess_failed`. Automatic exact restoration passed,
+services were never quiesced, and no credential/token read or Schwab request occurred. The cause is
+that `schwab_gateway/__init__.py` eagerly imports `api`, which the minimal reviewed archive
+deliberately omits, so importing `credential_probe` raises `ModuleNotFoundError`.
 
 ## Repository Findings
 

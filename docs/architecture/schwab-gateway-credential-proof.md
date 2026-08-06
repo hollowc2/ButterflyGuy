@@ -543,3 +543,44 @@ references the legacy root. It fails against the defective release with the exac
 runtime mode. The digest gate now verifies the caller's own archive target. No live attempt was
 made under the defective release, and a new committed release, full verification, and fresh
 Approval 1 are required before any live attempt.
+
+## Runtime-baseline Approval 1 native-smoke stop — 2026-08-06
+
+Fresh Approval 1 authorized one attempt for release
+`a54c2343c2ac8cb2e20d6c60329f1a1b1edd720e` and archive SHA-256
+`5f3b5c056988a25bb33069c7b1f41c0bcc721767817d5440ba4bc81eb0bb1697` during
+`2026-08-06T02:45:00Z`–`2026-08-06T04:35:00Z`.
+
+The first `prepare` failed closed at `baseline_mismatch`. The accepted artifact revalidated to its
+exact digest, and live records, images, direct access, and the Compose observation all matched. The
+sole difference was the config-mount observation: the accepted digest records
+`config_exact_services=[spx,ndx,xsp]`, but passing archive-extracted config paths classifies the
+same byte-identical files as `config_content_match_services`. The reviewed config arguments must
+therefore be the live config paths whose provenance is separately verified against the archive; only
+the staging override, which is absent from the live checkout, comes from the extracted source. The
+corrected `prepare` returned `approval_1_ready`.
+
+The single authorized attempt then created the `/tmp` staging target, streamed the archive through
+`docker exec -i ... dd`, extracted it, and passed the in-container SHA-256 check at the corrected
+target — clearing both the earlier `staging_copy_invalid` stop and the digest-path defect. It failed
+at the bounded native smoke check. `_run_exact_json` collapses the staged command's own exit into
+the generic `subprocess_failed` code, so the specific inner reason was not recorded.
+
+A bounded read-only check confirmed the running SPX image imports `scipy.special` and `schwab.auth`
+cleanly with no stderr. The deployed venv contains a regular, non-editable `butterfly_guy`
+distribution with no `schwab_gateway` subpackage, so under the staged `PYTHONPATH` the whole
+`butterfly_guy` namespace resolves to the archive's partial tree. `schwab_gateway/__init__.py`
+eagerly executes `from butterfly_guy.schwab_gateway.api import create_app`, and the minimal reviewed
+archive deliberately omits `api.py` together with its admission/auth dependencies. Importing
+`credential_probe` therefore raises `ModuleNotFoundError` inside the package `__init__`.
+
+Automatic exact restoration passed every fingerprint, image, config-content, health, uniqueness,
+ownership, keepalive/cron, and fresh-error check with zero filtered errors per service. Quiescence
+never started, SPX was never suspended, NDX/XSP were never stopped, and service uptimes were
+unchanged. No credential or token was read and no Schwab request occurred. The exact temporary
+archive, source directory, rollback override, and cron snapshot were removed; the two mode-`0600`
+operator states are retained as evidence. No retry was attempted.
+
+The next correction must remove the import-time dependency from `schwab_gateway/__init__.py` so the
+reviewed subset imports standalone, and should also propagate the staged command's own bounded
+failure code instead of collapsing it into `subprocess_failed`.
