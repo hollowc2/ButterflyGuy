@@ -670,3 +670,49 @@ gate, and a dedicated test asserts `prepare` invokes the gate and fails closed w
 `checks["watchdog"] == "fail"` when it is denied. Further tests assert no watchdog command contains
 `sudo`, that `systemctl` calls are `--user`, and that the probe fails closed both when arming is
 denied and when the timer never activates.
+
+## Runtime-baseline Approval 1 single-writer stop — 2026-08-06
+
+Fresh Approval 1 authorized one attempt for release
+`cc614567b035f8a62cd9355ed3302eb11db44012` and archive SHA-256
+`c40d6879e7f339d06808546d58b7be6dfb542d09eb4088f5760f093804cb9e12` during
+`2026-08-06T04:42:00Z`–`2026-08-06T06:32:00Z`. `prepare` returned `approval_1_ready`, and its new
+capability gate armed and cancelled a transient `--user` probe timer on the host with no residual
+unit, proving the watchdog mechanism before the attempt rather than inside it.
+
+The attempt passed staging, native smoke, the refusal gate, and — for the first time — `watchdog`,
+confirming the user-manager correction. It armed the hard watchdog, disabled the token keepalive,
+and stopped NDX. It then failed closed at `single_writer_invalid` before XSP was stopped, before SPX
+was suspended, and before the approval watchdog was armed.
+
+The cause is Docker CLI 29.6.2. The quiescence loop invoked `docker stop --time 20`, and the CLI now
+writes `Flag --time has been deprecated, use --timeout instead` to **stdout**, so the captured output
+was that notice followed by the container name while the gate required exactly the container name.
+The stop itself succeeded; the exact-output rule correctly rejected the extra line. `docker stop
+--help` now documents only `-t, --timeout`.
+
+Automatic exact restoration passed every fingerprint, image, config-content, health, uniqueness,
+ownership, keepalive/cron, and fresh-error check with zero filtered errors per service. NDX was
+restarted on its recorded image and reported no errors afterward; XSP was never stopped; SPX was
+never suspended and its uptime was unchanged. The keepalive crontab was restored to its recorded
+entries, both watchdogs were cancelled with no residual unit, and staging was removed. No credential
+or token was read and no Schwab request occurred. The exact temporary archive, source directory,
+rollback override, and cron snapshot were removed and the mode-`0600` operator state was retained.
+No retry was attempted.
+
+## Current-flag quiescence stop and stop-output gate — 2026-08-06
+
+Quiescence now stops NDX and XSP with `docker stop --timeout 20`, the form `docker stop --help`
+documents, so no deprecation notice reaches stdout.
+
+`prepare` now also calls `_require_docker_stop_output_shape` before the watchdog capability gate. It
+requires a fixed probe container name to be absent, then runs the exact quiescence stop command
+against that name and requires a nonzero exit with empty stdout. A deprecated or otherwise noisy flag
+therefore fails during preflight instead of after NDX has already been stopped. The probe refuses to
+run the stop at all if a container with the probe name exists.
+
+Tests assert the stop command uses `--timeout` and never `--time`, that the probe passes on empty
+stdout, that it fails closed on the exact observed deprecation notice, that it never issues a stop
+when the probe container exists, and that `prepare` fails closed with
+`checks["single_writer"] == "fail"` when the gate is denied. `patch_prepare_success` stubs the gate
+so the suite never touches Docker.

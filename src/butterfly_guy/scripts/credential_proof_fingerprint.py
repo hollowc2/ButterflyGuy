@@ -56,6 +56,10 @@ _UNIT_PATTERN = re.compile(r"butterfly-credential-proof-[0-9a-f]{12}-(?:hard|app
 _SYSTEMD_RUN_COMMAND = ("systemd-run", "--user")
 _SYSTEMCTL_COMMAND = ("systemctl", "--user")
 WATCHDOG_PROBE_DELAY_SECONDS = 3600
+# Docker deprecated `--time` in favour of `--timeout` and writes the deprecation notice to stdout,
+# which breaks the exact-output rule during quiescence.
+_DOCKER_STOP_COMMAND = ("docker", "stop", "--timeout", "20")
+_DOCKER_STOP_PROBE_CONTAINER = "butterfly-credential-proof-absent-probe"
 _MATERIAL_FIELDS = (
     "cmd",
     "entrypoint",
@@ -1735,6 +1739,23 @@ def _cancel_watchdog(state: dict[str, Any], kind: str) -> None:
         raise OperatorFailure("watchdog_invalid")
     if result.returncode not in {0, 5}:
         raise OperatorFailure("watchdog_invalid")
+
+
+def _require_docker_stop_output_shape() -> None:
+    """Prove the quiescence stop command writes nothing to stdout for a container that cannot exist.
+
+    A deprecated flag makes Docker print a notice to stdout, which would break the exact-output
+    rule only after NDX had already been stopped.
+    """
+    present = _run(
+        ["docker", "inspect", "--type", "container", _DOCKER_STOP_PROBE_CONTAINER],
+        timeout=10,
+    )
+    if present.returncode == 0:
+        raise OperatorFailure("single_writer_invalid")
+    result = _run([*_DOCKER_STOP_COMMAND, _DOCKER_STOP_PROBE_CONTAINER], timeout=15)
+    if result.returncode == 0 or result.stdout:
+        raise OperatorFailure("single_writer_invalid")
 
 
 def _require_watchdog_capability(state: dict[str, Any]) -> None:
@@ -3421,6 +3442,7 @@ def _prepare(args: argparse.Namespace) -> None:
         _validate_compose_dry_run(args.base_compose, args.staging_override)
         state["checks"]["compose_dry_run"] = "pass"
 
+        _require_docker_stop_output_shape()
         _require_watchdog_capability(state)
 
         cron_sha256, keepalive_entries, cron_present = _capture_crontab(args.cron_snapshot)
@@ -3735,7 +3757,7 @@ def _approval_1_execute(args: argparse.Namespace) -> None:
 
         for service in ("ndx", "xsp"):
             result = _run(
-                ["docker", "stop", "--time", "20", str(_SERVICE_SPECS[service]["container"])],
+                [*_DOCKER_STOP_COMMAND, str(_SERVICE_SPECS[service]["container"])],
                 timeout=30,
             )
             expected_stop = f"{_SERVICE_SPECS[service]['container']}\n"

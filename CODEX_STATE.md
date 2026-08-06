@@ -116,7 +116,16 @@ bounded capability probe confirmed a `--user` transient timer arms, reports acti
 leaves no residual unit, and that such a run accepts `--uid`/`--gid` and emits byte-identical output.
 The local correction moves every watchdog command to `systemd-run --user`/`systemctl --user`, removes
 all `sudo` use, and adds `_require_watchdog_capability` to `prepare` so a watchdog prerequisite fails
-in preflight rather than inside the one authorized attempt.
+in preflight rather than inside the one authorized attempt. Fresh Approval 1 for release
+`cc614567b035f8a62cd9355ed3302eb11db44012` passed that new capability gate on the host and then
+passed staging, native smoke, the refusal gate, and `watchdog` for the first time. It armed the hard
+watchdog, disabled the keepalive, stopped NDX, and failed closed at `single_writer_invalid` before
+XSP was stopped or SPX suspended, because Docker CLI 29.6.2 writes `Flag --time has been deprecated,
+use --timeout instead` to stdout and the gate requires exactly the container name. Automatic exact
+restoration passed, NDX restarted clean, and no credential/token read or Schwab request occurred. The
+local correction switches quiescence to `docker stop --timeout` and adds
+`_require_docker_stop_output_shape` to `prepare`, which proves the stop command writes nothing to
+stdout using a container name that must not exist.
 
 ## Repository Findings
 

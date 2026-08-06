@@ -753,6 +753,65 @@ def test_watchdog_commands_never_require_sudo(monkeypatch: pytest.MonkeyPatch) -
             assert command[1] == "--user", command
 
 
+def test_quiescence_stop_uses_current_docker_timeout_flag() -> None:
+    """Docker writes the --time deprecation notice to stdout, breaking the exact-output rule."""
+    assert operator._DOCKER_STOP_COMMAND == ("docker", "stop", "--timeout", "20")
+    assert "--time" not in operator._DOCKER_STOP_COMMAND
+
+
+def test_docker_stop_probe_passes_when_stdout_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(list(command))
+        if command[1] == "inspect":
+            return result(returncode=1, stderr="Error: No such container")
+        return result(returncode=1, stderr="Error response from daemon: No such container")
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    operator._require_docker_stop_output_shape()
+    assert commands[0][:3] == ["docker", "inspect", "--type"]
+    assert commands[1][:4] == ["docker", "stop", "--timeout", "20"]
+    assert commands[1][-1] == operator._DOCKER_STOP_PROBE_CONTAINER
+
+
+def test_docker_stop_probe_fails_closed_on_deprecation_notice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(command, **_kwargs):
+        if command[1] == "inspect":
+            return result(returncode=1, stderr="Error: No such container")
+        return result(
+            returncode=1,
+            stdout="Flag --time has been deprecated, use --timeout instead\n",
+            stderr="Error response from daemon: No such container",
+        )
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    with pytest.raises(operator.OperatorFailure, match="single_writer_invalid"):
+        operator._require_docker_stop_output_shape()
+
+
+def test_docker_stop_probe_refuses_when_probe_container_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Never stop a container that actually exists."""
+    stopped: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        if command[1] == "inspect":
+            return result(returncode=0, stdout="[{}]")
+        stopped.append(list(command))
+        return result()
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    with pytest.raises(operator.OperatorFailure, match="single_writer_invalid"):
+        operator._require_docker_stop_output_shape()
+    assert stopped == []
+
+
 def test_watchdog_capability_probe_arms_verifies_and_cancels(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1253,8 +1312,9 @@ def patch_prepare_success(
     monkeypatch.setattr(operator, "_compose_service_hash", lambda *_args: COMPOSE_HASH)
     monkeypatch.setattr(operator, "_require_base_image", lambda *_args: None)
     monkeypatch.setattr(operator, "_validate_compose_dry_run", lambda *_args: None)
-    # Never create real transient units from the test suite.
+    # Never create real transient units or touch Docker from the test suite.
     monkeypatch.setattr(operator, "_require_watchdog_capability", lambda *_args: None)
+    monkeypatch.setattr(operator, "_require_docker_stop_output_shape", lambda: None)
 
     def capture_cron(path: Path):
         operator._write_private_bytes(path, b"")
@@ -1287,6 +1347,26 @@ def test_prepare_captures_fresh_accepted_baseline_and_rollback_inputs(
     assert stat.S_IMODE(args.state.stat().st_mode) == 0o600
     assert stat.S_IMODE(args.cron_snapshot.stat().st_mode) == 0o600
     assert stat.S_IMODE(args.rollback_override.stat().st_mode) == 0o600
+
+
+def test_prepare_gates_docker_stop_output_shape_before_approval_1_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A stop-output defect must fail in preflight, not after NDX has already been stopped."""
+    args = prepare_args(tmp_path)
+    patch_prepare_success(monkeypatch, args)
+
+    def denied():
+        raise operator.OperatorFailure("single_writer_invalid")
+
+    monkeypatch.setattr(operator, "_require_docker_stop_output_shape", denied)
+    with pytest.raises(operator.OperatorFailure, match="single_writer_invalid"):
+        operator._prepare(args)
+    state = operator._read_state(args.state)
+    assert state["phase"] == "failed"
+    assert state["failure_code"] == "single_writer_invalid"
+    assert state["checks"]["single_writer"] == "fail"
 
 
 def test_prepare_gates_watchdog_capability_before_approval_1_ready(
