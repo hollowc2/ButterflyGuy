@@ -9,6 +9,8 @@ from butterfly_guy.schwab_gateway.config import GatewayCredentialProbeSettings
 from butterfly_guy.schwab_gateway.token_adapter import (
     LockedSchwabClientAdapter,
     SchwabAccessFunctionClientFactory,
+    SchwabClientConstructionError,
+    SchwabClientOperationError,
     SchwabTokenAdapterError,
 )
 from butterfly_guy.schwab_gateway.token_manager import (
@@ -20,9 +22,27 @@ from butterfly_guy.schwab_gateway.token_manager import (
 
 PROBE_SYMBOL = "AAPL"
 
+# Every reason below is raised only after the manager transaction has opened the token
+# store, so each one proves a token read was reached. Failures that occur before the
+# transaction opens are not represented here; they are classified by the CLI instead.
+GatewayCredentialProbeReason = Literal[
+    "token_invalid",
+    "client_construction_failed",
+    "quote_failed",
+    "state_invalid",
+]
+
 
 class GatewayCredentialProbeError(RuntimeError):
-    """Bounded failure safe for operator output."""
+    """Bounded failure safe for operator output.
+
+    The message is fixed. ``reason`` is a fixed literal naming the failing stage; it never
+    carries exception text, token state, paths, payloads, or account identifiers.
+    """
+
+    def __init__(self, reason: GatewayCredentialProbeReason) -> None:
+        super().__init__("Schwab gateway credential probe failed")
+        self.reason: GatewayCredentialProbeReason = reason
 
 
 @dataclass(frozen=True)
@@ -63,11 +83,19 @@ def run_gateway_credential_probe(
 
     try:
         quote_count = adapter.execute(quote_operation)
-    except (TokenManagerError, SchwabTokenAdapterError):
-        raise GatewayCredentialProbeError("Schwab gateway credential probe failed") from None
+    except TokenManagerError:
+        raise GatewayCredentialProbeError("token_invalid") from None
+    except SchwabClientConstructionError:
+        raise GatewayCredentialProbeError("client_construction_failed") from None
+    except SchwabClientOperationError:
+        raise GatewayCredentialProbeError("quote_failed") from None
+    except SchwabTokenAdapterError:
+        # The adapter only raises the two subclasses above; a bare adapter error is
+        # classified as the earliest of them so the reason never overstates progress.
+        raise GatewayCredentialProbeError("client_construction_failed") from None
 
     if manager.health().state is not TokenManagerState.READY or quote_count != 1:
-        raise GatewayCredentialProbeError("Schwab gateway credential probe failed")
+        raise GatewayCredentialProbeError("state_invalid")
     return GatewayCredentialProbeResult(
         status="ok",
         token_state="ready",

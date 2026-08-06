@@ -147,7 +147,25 @@ keepalive/cron checks — and failed only `restoration_errors` with `spx=6, ndx=
 benign post-pause burst recorded on 2026-08-04. The rollback owner authorized the resume; all three
 services unpaused with zero fresh filtered errors over 30 seconds, one process each, staging absent,
 keepalive intact, and no residual watchdog unit. Exact temporary paths were removed and the
-mode-`0600` state and all baseline evidence were retained.
+mode-`0600` state and all baseline evidence were retained. Both defects from that window are now
+corrected locally. The credential proof no longer collapses every failure into one stderr message:
+it emits exactly one of seven fixed codes on stdout, nothing on stderr, and a nonzero exit, split so
+that `probe_import_failed`, `probe_settings_invalid`, and `probe_sdk_import_failed` prove no token
+read occurred while `probe_token_invalid`, `probe_client_construction_failed`, `probe_quote_failed`,
+and `probe_state_invalid` prove one was reached. The adapter taxonomy that already distinguished
+construction from operation is surfaced through a fixed `reason` literal on
+`GatewayCredentialProbeError`; `TokenManagerState` was explicitly rejected as a ride-along field
+because carrying it would widen the shared staged-payload schema for every staged command.
+`_approval_2_execute` now propagates the probe's own code through `_staged_failure_code`, with
+stderr, malformed payloads, extra fields, unlisted codes, and codes belonging to other staged
+commands all collapsing to `credential_proof_failed`. The success line and the argparse refusal
+behaviour are byte-identical to before. The restoration error gate now counts a window that begins
+`RESUME_SETTLE_SECONDS` after all three services were running again, so the recorded post-resume
+marker burst is excluded by time rather than by an allowance, and fresh errors raise the distinct
+`restoration_errors_detected` instead of `subprocess_output_invalid`. Failed restoration now removes
+the release archive but deliberately keeps the rollback override and cron snapshot for manual
+recovery, and an early `prepare` reports `approval_window_pending` instead of the generic
+`invalid_arguments`. This release is local and fake-tested only; it has never run against Helios.
 
 ## Repository Findings
 
@@ -325,13 +343,10 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Make two local corrections before any further live attempt. First, `approval2-execute` must
-propagate the staged probe's own bounded failure code instead of inspecting only the return code, so
-a credential-proof failure names itself; reuse the existing `_run_exact_json` bounded-code mechanism
-and add the probe's fixed codes to the staged set. Second, the restoration fresh-error gate must
-stop reporting the known immediately-post-resume marker burst as a failure — add a short settle
-window or an explicit recorded allowance — while keeping the identity, image, config-content,
-health, uniqueness, and ownership checks strict, so a successful restoration no longer leaves
-trading paused. Add focused tests for both, then commit and archive a new exact release and obtain
-fresh Approval 1 and Approval 2 tied to it. No gateway deployment, trading action, configuration
-change, order/account operation, or cutover is authorized.
+Obtain fresh Approval 1 and Approval 2 tied to the new exact release, then run one supervised
+attempt on Helios. The release is untested against the live host: the bounded probe codes, the
+settled restoration error window, the failed-restoration cleanup split, and
+`approval_window_pending` have only been proven against fakes. Issue `prepare` at or after the
+window start — not before — and expect a failed proof to now name its own stage, and with it whether
+a token read occurred. No gateway deployment, trading action, configuration change, order/account
+operation, or cutover is authorized.

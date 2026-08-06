@@ -13,6 +13,7 @@ import time
 from argparse import Namespace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -1120,6 +1121,124 @@ def test_malformed_secret_credential_output_is_not_persisted(
     assert proof["information_exposure"] == "pass"
 
 
+def armed_approval_state(args: Namespace) -> None:
+    state = populated_state()
+    state["watchdog"].update(
+        {
+            "hard": "armed",
+            "approval": "armed",
+            "hard_deadline": int(time.time()) + 300,
+            "approval_deadline": int(time.time()) + 120,
+        }
+    )
+    write_state(args.state, state)
+
+
+@pytest.mark.parametrize("code", sorted(operator._PROOF_FAILURE_CODES))
+def test_approval_2_propagates_each_probe_failure_code(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, code: str
+) -> None:
+    """A failed proof must name its own stage, and with it whether a token read occurred."""
+    args = approval_args(tmp_path)
+    armed_approval_state(args)
+    patch_approval_checks(monkeypatch)
+    monkeypatch.setattr(
+        operator,
+        "_run",
+        lambda *_args, **_kwargs: result(
+            returncode=1, stdout='{"code":"%s","status":"error"}\n' % code
+        ),
+    )
+    monkeypatch.setattr(operator, "_restore_operation", lambda *_args, **_kwargs: True)
+
+    with pytest.raises(operator.OperatorFailure, match=code):
+        operator._approval_2_execute(args)
+
+    state = operator._read_state(args.state)
+    assert state["proof"]["reason_code"] == code
+    assert state["failure_code"] == code
+    assert state["checks"]["proof"] == "fail"
+    assert operator._FAILURE_CHECK[code] == "proof"
+
+
+@pytest.mark.parametrize(
+    "captured",
+    [
+        result(returncode=1, stdout='{"code":"probe_quote_failed","status":"error"}\n', stderr="e"),
+        result(returncode=1, stdout=SENSITIVE),
+        result(returncode=1, stdout=""),
+        result(
+            returncode=1,
+            stdout='{"code":"probe_quote_failed","status":"error","token_state":"expired"}\n',
+        ),
+        result(returncode=1, stdout='{"code":"native_smoke_failed","status":"error"}\n'),
+        result(returncode=1, stdout='{"code":"restoration_passed","status":"error"}\n'),
+    ],
+)
+def test_approval_2_falls_back_to_the_generic_code_for_unexpected_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, captured: operator.CapturedProcess
+) -> None:
+    """Container output may never introduce an arbitrary or borrowed operator code."""
+    args = approval_args(tmp_path)
+    armed_approval_state(args)
+    patch_approval_checks(monkeypatch)
+    monkeypatch.setattr(operator, "_run", lambda *_args, **_kwargs: captured)
+    monkeypatch.setattr(operator, "_restore_operation", lambda *_args, **_kwargs: True)
+
+    with pytest.raises(operator.OperatorFailure, match="credential_proof_failed"):
+        operator._approval_2_execute(args)
+
+    stored = args.state.read_text(encoding="utf-8")
+    assert SENSITIVE not in stored
+    assert operator._read_state(args.state)["proof"]["reason_code"] == "credential_proof_failed"
+
+
+def test_refusal_gate_still_accepts_the_probe_argparse_refusal() -> None:
+    """Refusal must stay an argparse stderr exit-2, not one of the new bounded codes."""
+    operator._internal_refusal_gate()
+
+
+def test_probe_success_output_stays_byte_identical_to_the_expected_string(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The operator compares the probe's success line exactly; the probe must still emit it."""
+    from butterfly_guy.schwab_gateway.credential_probe import GatewayCredentialProbeResult
+    from butterfly_guy.scripts import probe_schwab_gateway_credentials as probe_command
+
+    emitted: list[str] = []
+    monkeypatch.setattr("builtins.print", lambda line: emitted.append(f"{line}\n"))
+    monkeypatch.setattr(
+        probe_command,
+        "_load_runtime_dependencies",
+        lambda: (
+            lambda *_args, **_kwargs: None,
+            object,
+            lambda *_args: GatewayCredentialProbeResult(
+                status="ok", token_state="ready", quote_count=1
+            ),
+            RuntimeError,
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "schwab.auth", SimpleNamespace(client_from_access_functions=1))
+    probe_command.main(
+        [
+            "--authorize-real-credential-read",
+            "--confirm-single-token-writer",
+            "--confirm-no-deployment",
+        ]
+    )
+
+    args = approval_args(tmp_path)
+    armed_approval_state(args)
+    patch_approval_checks(monkeypatch)
+    monkeypatch.setattr(operator, "_run", lambda *_args, **_kwargs: result(stdout=emitted[0]))
+    monkeypatch.setattr(operator, "_restore_operation", lambda *_args, **_kwargs: True)
+
+    operator._approval_2_execute(args)
+
+    assert operator._read_state(args.state)["proof"]["reason_code"] == "credential_proof_passed"
+
+
 def test_approval_timer_race_restores_without_invoking_credentials(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1176,6 +1295,7 @@ def patch_restoration_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(operator, "_require_candidate_ownership", lambda *_args: None)
     monkeypatch.setattr(operator, "_require_no_host_writers", lambda: None)
     monkeypatch.setattr(operator, "_require_no_unowned_runtime_processes", lambda *_args: None)
+    monkeypatch.setattr(operator, "_settled_error_window_start", lambda resumed: resumed)
     monkeypatch.setattr(
         operator,
         "_fresh_error_counts",
@@ -1331,6 +1451,138 @@ def test_fresh_error_parser_counts_without_echoing_secret(
         lambda *_args, **_kwargs: result(stdout=f"INFO ok\nERROR {SENSITIVE}\n"),
     )
     assert operator._fresh_error_counts(1) == {"spx": 1, "ndx": 1, "xsp": 1}
+
+
+def test_error_window_starts_after_the_resume_settle_period(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The counted window must begin after resume, so the known burst is never counted."""
+    resumed = 1_000
+    slept: list[float] = []
+    monkeypatch.setattr(operator.time, "sleep", lambda seconds: slept.append(seconds))
+    monkeypatch.setattr(operator.time, "time", lambda: 1_005.0)
+
+    start = operator._settled_error_window_start(resumed)
+
+    assert slept == [resumed + operator.RESUME_SETTLE_SECONDS - 1_005]
+    assert start > resumed
+
+
+def test_error_window_does_not_wait_when_the_settle_period_already_elapsed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resumed = 1_000
+    slept: list[float] = []
+    monkeypatch.setattr(operator.time, "sleep", lambda seconds: slept.append(seconds))
+    monkeypatch.setattr(
+        operator.time, "time", lambda: resumed + operator.RESUME_SETTLE_SECONDS + 5.0
+    )
+
+    start = operator._settled_error_window_start(resumed)
+
+    assert slept == []
+    assert start == resumed + operator.RESUME_SETTLE_SECONDS + 5
+
+
+def test_restoration_error_gate_excludes_the_recorded_post_resume_burst(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Six benign markers at resume must no longer pause trading after a good restoration."""
+    resumed = 1_000
+    settle_end = resumed + operator.RESUME_SETTLE_SECONDS
+    monkeypatch.setattr(operator.time, "sleep", lambda *_args: None)
+    monkeypatch.setattr(operator.time, "time", lambda: float(settle_end))
+
+    def fake_run(command, **_kwargs):
+        since = int(command[command.index("--since") + 1])
+        # The burst is emitted at resume; the service is clean once it has settled.
+        return result(stdout="ERROR burst\n" * 6 if since < settle_end else "INFO ok\n")
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+
+    counts = operator._fresh_error_counts(operator._settled_error_window_start(resumed))
+
+    assert counts == {"spx": 0, "ndx": 0, "xsp": 0}
+    assert operator._fresh_error_counts(resumed) == {"spx": 6, "ndx": 6, "xsp": 6}
+
+
+def test_restoration_still_fails_closed_on_errors_inside_the_counted_window(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    args = approval_args(tmp_path)
+    state = populated_state("approval_2_running")
+    write_state(args.state, state)
+    patch_restoration_success(monkeypatch)
+    monkeypatch.setattr(
+        operator,
+        "_fresh_error_counts",
+        lambda *_args: {"spx": 1, "ndx": 0, "xsp": 0},
+    )
+    monkeypatch.setattr(operator, "_best_effort_runtime_restore", lambda: None)
+    paused: list[bool] = []
+    monkeypatch.setattr(operator, "_pause_fail_closed", lambda: paused.append(True))
+
+    with pytest.raises(operator.OperatorFailure, match="restoration_failed_paused"):
+        operator._restore_operation(args)
+
+    assert paused == [True]
+    restored = operator._read_state(args.state)
+    assert restored["restoration"]["error_counts"] == {"spx": 1, "ndx": 0, "xsp": 0}
+    assert restored["checks"]["restoration_errors"] == "invalid"
+
+
+cleanup_temporary_inputs = operator._cleanup_temporary_inputs
+
+
+def test_failed_restoration_keeps_the_inputs_a_manual_recovery_needs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Only the release archive is removed; the rollback override and cron snapshot stay."""
+    args = approval_args(tmp_path)
+    for path in (args.archive, args.rollback_override, args.cron_snapshot):
+        path.write_text("input", encoding="utf-8")
+    write_state(args.state, populated_state("approval_2_running"))
+    patch_restoration_success(monkeypatch)
+    monkeypatch.setattr(operator, "_cleanup_temporary_inputs", cleanup_temporary_inputs)
+    monkeypatch.setattr(
+        operator,
+        "_fresh_error_counts",
+        lambda *_args: {"spx": 1, "ndx": 0, "xsp": 0},
+    )
+    monkeypatch.setattr(operator, "_best_effort_runtime_restore", lambda: None)
+    monkeypatch.setattr(operator, "_pause_fail_closed", lambda: None)
+
+    with pytest.raises(operator.OperatorFailure, match="restoration_failed_paused"):
+        operator._restore_operation(args)
+
+    assert not args.archive.exists()
+    assert args.rollback_override.exists()
+    assert args.cron_snapshot.exists()
+    assert args.state.exists()
+
+
+def test_restoration_error_code_is_distinct_from_a_parsing_fault() -> None:
+    """A live service emitting errors is not an output-parsing fault."""
+    assert operator._FAILURE_CHECK["restoration_errors_detected"] == "restoration_errors"
+    assert "restoration_errors_detected" in operator._RESULT_CODES
+    assert operator._FAILURE_CHECK.get("subprocess_output_invalid") != "restoration_errors"
+
+
+def test_early_prepare_reports_a_distinct_pending_window_code() -> None:
+    """An early command must be self-explanatory; the window rule itself is unchanged."""
+    now = datetime.now(timezone.utc)
+    with pytest.raises(operator.OperatorFailure, match="approval_window_pending"):
+        operator._approved_window(
+            "approved-in-chat",
+            (now + timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            (now + timedelta(minutes=65)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+    with pytest.raises(operator.OperatorFailure, match="invalid_arguments"):
+        operator._approved_window(
+            "approved-in-chat",
+            (now - timedelta(minutes=65)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            (now - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
 
 
 def prepare_args(tmp_path: Path) -> Namespace:

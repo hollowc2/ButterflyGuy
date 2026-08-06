@@ -44,6 +44,11 @@ RESTORE_BUDGET_SECONDS = 120
 APPROVAL_TIMEOUT_SECONDS = 120
 HARD_RESTORE_SECONDS = 300
 FRESH_ERROR_WINDOW_SECONDS = 30
+# Services emit a short burst of filtered markers immediately after being resumed. It was
+# recorded on 2026-08-04 (six per service, then zero) and reproduced on 2026-08-06. The
+# counted window starts only after this period, so the burst is excluded by time rather
+# than by an allowance that could also hide a real fault.
+RESUME_SETTLE_SECONDS = 30
 _HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
 _GIT_SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 _IMAGE_ID_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
@@ -277,8 +282,16 @@ _FAILURE_CHECK = {
     "host_client_active": "host_clients",
     "keepalive_active": "keepalive",
     "native_smoke_failed": "native_smoke",
+    "probe_client_construction_failed": "proof",
+    "probe_import_failed": "proof",
+    "probe_quote_failed": "proof",
+    "probe_sdk_import_failed": "proof",
+    "probe_settings_invalid": "proof",
+    "probe_state_invalid": "proof",
+    "probe_token_invalid": "proof",
     "process_uniqueness_invalid": "process_uniqueness",
     "provenance_invalid": "archive_provenance",
+    "restoration_errors_detected": "restoration_errors",
     "single_writer_invalid": "single_writer",
     "staging_copy_invalid": "field_hashes",
     "staging_digest_invalid": "field_hashes",
@@ -291,14 +304,28 @@ _STAGED_FAILURE_CODES = frozenset(
     {
         "credential_refused",
         "native_smoke_failed",
+        "probe_client_construction_failed",
+        "probe_import_failed",
+        "probe_quote_failed",
+        "probe_sdk_import_failed",
+        "probe_settings_invalid",
+        "probe_state_invalid",
+        "probe_token_invalid",
         "signal_invalid",
     }
+)
+# The staged probe codes the proof invocation may adopt as its own result. Any other
+# staged code, including one belonging to a different staged command, collapses to the
+# generic `credential_proof_failed`, so container output cannot pick an operator code.
+_PROOF_FAILURE_CODES = frozenset(
+    code for code in _STAGED_FAILURE_CODES if code.startswith("probe_")
 )
 _RESULT_CODES = frozenset(
     {
         "approval_1_ready",
         "approval_2_required",
         "approval_2_timeout",
+        "approval_window_pending",
         "archive_created",
         "archive_invalid",
         "archive_mismatch",
@@ -326,8 +353,16 @@ _RESULT_CODES = frozenset(
         "native_smoke_failed",
         "native_smoke_passed",
         "operator_state_invalid",
+        "probe_client_construction_failed",
+        "probe_import_failed",
+        "probe_quote_failed",
+        "probe_sdk_import_failed",
+        "probe_settings_invalid",
+        "probe_state_invalid",
+        "probe_token_invalid",
         "process_uniqueness_invalid",
         "provenance_invalid",
+        "restoration_errors_detected",
         "restoration_failed_paused",
         "restoration_passed",
         "snapshot_captured",
@@ -2355,8 +2390,12 @@ def _approved_window(reference: str, start_utc: str, end_utc: str) -> tuple[int,
     except ValueError:
         raise OperatorFailure("invalid_arguments") from None
     now = int(time.time())
-    if start >= end or end - start > 2 * 60 * 60 or now < start or now > end:
+    if start >= end or end - start > 2 * 60 * 60 or now > end:
         raise OperatorFailure("invalid_arguments")
+    if now < start:
+        # Diagnostics only; the window rule is unchanged. A command issued seconds early
+        # otherwise reports the same generic code as a malformed argument.
+        raise OperatorFailure("approval_window_pending")
     return start, end, hashlib.sha256(reference.encode()).hexdigest()
 
 
@@ -3933,6 +3972,14 @@ def _wait_for_health() -> None:
         time.sleep(2)
 
 
+def _settled_error_window_start(resumed_epoch: int) -> int:
+    """Wait out the known post-resume marker burst and return the counting window start."""
+    remaining = resumed_epoch + RESUME_SETTLE_SECONDS - int(time.time())
+    if remaining > 0:
+        time.sleep(remaining)
+    return int(time.time())
+
+
 def _fresh_error_counts(since_epoch: int) -> dict[str, int]:
     time.sleep(FRESH_ERROR_WINDOW_SECONDS)
     counts: dict[str, int] = {}
@@ -3971,8 +4018,18 @@ def _pause_fail_closed() -> None:
             continue
 
 
-def _cleanup_temporary_inputs(args: argparse.Namespace) -> None:
-    for attribute in ("archive", "rollback_override", "cron_snapshot"):
+# Removed on any restoration outcome: the release archive is reproducible from the commit
+# and no restoration path reads it. The rollback override and cron snapshot are removed
+# only on success, because they are exactly what a human needs to finish restoring by hand
+# after a failure. Retained state JSON and baseline evidence are never touched here.
+_FAILED_RESTORE_CLEANUP = ("archive",)
+
+
+def _cleanup_temporary_inputs(
+    args: argparse.Namespace,
+    attributes: Sequence[str] = ("archive", "rollback_override", "cron_snapshot"),
+) -> None:
+    for attribute in attributes:
         path = getattr(args, attribute, None)
         if isinstance(path, Path):
             with contextlib.suppress(FileNotFoundError):
@@ -4025,7 +4082,6 @@ def _restore_operation(
             expected_image = state["baseline"]["spx"]["image_id"]
             if not isinstance(expected_image, str):
                 raise OperatorFailure("operator_state_invalid")
-            restoration_started = int(time.time())
             if _runtime_mode(state):
                 _resume_spx()
             else:
@@ -4046,6 +4102,7 @@ def _restore_operation(
                     raise OperatorFailure("docker_inspect_invalid")
                 if state_value.get("Running") is not True:
                     _start_container(service)
+            services_resumed = int(time.time())
             if _runtime_mode(state):
                 _cleanup_runtime_staging()
 
@@ -4080,10 +4137,10 @@ def _restore_operation(
             _require_no_host_writers()
             _require_no_unowned_runtime_processes(list(service_pids.values()))
             state["checks"]["restoration_keepalive"] = "pass"
-            counts = _fresh_error_counts(restoration_started)
+            counts = _fresh_error_counts(_settled_error_window_start(services_resumed))
             state["restoration"]["error_counts"] = counts
             if any(counts.values()):
-                raise OperatorFailure("subprocess_output_invalid")
+                raise OperatorFailure("restoration_errors_detected")
             state["checks"]["restoration_errors"] = "pass"
 
             for kind in ("approval", "hard"):
@@ -4139,6 +4196,8 @@ def _restore_operation(
             state["failure_code"] = "restoration_failed_paused"
             with contextlib.suppress(Exception):
                 _replace_state(args.state, state)
+            with contextlib.suppress(Exception):
+                _cleanup_temporary_inputs(args, _FAILED_RESTORE_CLEANUP)
             if emit_result:
                 _emit("error", "restoration_failed_paused")
             raise OperatorFailure("restoration_failed_paused") from None
@@ -4266,7 +4325,9 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
         result = _run(proof_command, timeout=PROOF_TIMEOUT_SECONDS)
         expected_output = '{"quote_count":1,"status":"ok","token_state":"ready"}\n'
         if result.returncode != 0:
-            raise OperatorFailure("credential_proof_failed")
+            # Adopt the probe's own bounded code so a failure names its stage, and with it
+            # whether a token read was reached. Anything else stays generic.
+            raise OperatorFailure(_staged_failure_code(result))
         if result.stderr or result.stdout != expected_output:
             raise OperatorFailure("credential_output_invalid")
         with _state_lock(args.state):
@@ -4281,7 +4342,7 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
             _replace_state(args.state, state)
         proof_code = "credential_proof_passed"
     except OperatorFailure as exc:
-        proof_code = exc.code if exc.code in {
+        proof_code = exc.code if exc.code in _PROOF_FAILURE_CODES | {
             "credential_proof_failed",
             "credential_output_invalid",
             "single_writer_invalid",

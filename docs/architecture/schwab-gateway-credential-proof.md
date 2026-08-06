@@ -823,3 +823,100 @@ Two corrections follow from this window:
    paused mid-session. It needs either a short settle window before counting or an explicit
    allowance for the recorded post-resume marker burst, with the identity, image, config, health,
    uniqueness, and ownership checks remaining strict.
+
+## Bounded proof failure codes and a settled restoration error window — 2026-08-06
+
+Two defects from the Approval 2 window are fixed. Neither has been exercised against the
+live host; the release below is untested and needs fresh Approval 1 and Approval 2.
+
+### The proof now names its own failure stage
+
+`probe_schwab_gateway_credentials.py` previously wrapped its whole run in one
+`except Exception` that called `_parser().exit(status=1, message=...)`, which writes to
+stderr and emits no code. `_approval_2_execute` inspected only the return code and raised
+the blanket `credential_proof_failed`, so the first real credential-proof failure could not
+say whether it reached the token read.
+
+The probe now runs one stage at a time and, on failure, writes exactly
+`{"code":"<fixed_code>","status":"error"}` and a newline to stdout, writes nothing to
+stderr, and exits 1. The success line is unchanged and still byte-identical to the string
+the operator compares. The code set is closed and split by the question the window left
+open:
+
+| Code | Stage | Token read |
+|---|---|---|
+| `probe_import_failed` | `_load_runtime_dependencies` / `setup_logging` | no |
+| `probe_settings_invalid` | `GatewayCredentialProbeSettings()` | no |
+| `probe_sdk_import_failed` | `from schwab.auth import ...` | no |
+| `probe_token_invalid` | `TokenManagerError` | yes |
+| `probe_client_construction_failed` | `SchwabClientConstructionError` | yes |
+| `probe_quote_failed` | `SchwabClientOperationError` | yes |
+| `probe_state_invalid` | post-conditions, unexpected result, serialization | yes |
+
+The first three are raised before the credential probe is entered, so no token store was
+opened and no Schwab request was made. The last four are raised from inside the probe,
+after the manager transaction has opened the token store, so a token read was reached.
+
+The taxonomy was surfaced, not invented. `token_adapter.py` already separated
+`SchwabClientConstructionError` from `SchwabClientOperationError` and re-raised
+`TokenManagerError` untouched; `credential_probe.py` flattened all three into one
+`GatewayCredentialProbeError`. That error now carries a fixed `reason` literal
+(`token_invalid`, `client_construction_failed`, `quote_failed`, `state_invalid`) which the
+CLI maps to a code. The message is unchanged and no exception text, token state, path,
+payload, header, or account identifier reaches the code, which is always a source literal.
+
+Refusal is deliberately unchanged. `_internal_refusal_gate` proves the exact argparse
+behaviour — stderr message, empty stdout, exit 2 — so the missing-confirmation path emits
+no bounded code. A new test pins that gate against the real probe module.
+
+**`TokenManagerState` was considered as a separate fixed field and rejected.** It is
+bounded and non-secret, but carrying it would require widening
+`_staged_failure_code`'s `set(payload) == {"code", "status"}` check, which is shared by
+every staged command and currently guarantees that container output cannot add fields to
+any of them. The seven codes already localize the fault to import, settings, SDK, token,
+construction, quote, or post-condition, which answers the question this window raised. If
+finer token localization is wanted later it can be added as an explicitly schema'd field
+for the proof invocation alone, without relaxing the shared staged contract.
+
+In the operator, the seven codes are in `_STAGED_FAILURE_CODES`, `_RESULT_CODES`, and
+`_FAILURE_CHECK` (all mapped to the `proof` check). `_approval_2_execute` now raises
+`OperatorFailure(_staged_failure_code(result))` instead of a blanket code, and
+`_PROOF_FAILURE_CODES` restricts which codes the proof may adopt. Stderr output, an
+unparseable payload, an extra field, an unlisted code, and a code belonging to a different
+staged command all collapse to `credential_proof_failed`. `credential_output_invalid`
+still covers a zero-exit run with unexpected output.
+
+### The restoration error gate now counts a settled window
+
+`_fresh_error_counts(restoration_started)` slept 30 seconds and then ran
+`docker logs --since <restoration_started>`, so the counted window always began before
+services were resumed and therefore always contained the post-resume marker burst — six
+per service on 2026-08-04 and `spx=6` on 2026-08-06, both followed by zero new markers. A
+manual 30-second count taken after resume returned 0 for all three services.
+
+`_settled_error_window_start(resumed_epoch)` now waits out `RESUME_SETTLE_SECONDS` (30)
+measured from the moment all three services were running again, and returns that instant
+as the counting window start. `_fresh_error_counts` then counts its own 30-second window
+from there. The burst is excluded by time rather than by a count allowance, which would
+also have hidden a real fault. The settle overlaps the health wait and the fingerprint
+checks, so it does not meaningfully extend the restore budget. Every other restoration
+check — identity, image, config content, health, uniqueness, ownership, keepalive/cron —
+is unchanged and still fails closed.
+
+Fresh errors now raise the distinct `restoration_errors_detected` rather than
+`subprocess_output_invalid`, which described a parsing fault. It is registered in
+`_RESULT_CODES` and mapped to the `restoration_errors` check.
+
+### Two smaller decisions
+
+`_cleanup_temporary_inputs` accepts an explicit attribute list. On failed restoration the
+release archive is now removed, because it is reproducible from the commit and no
+restoration path reads it. The rollback override and cron snapshot are deliberately
+**kept** on the failure path: they are exactly what a human needs to finish restoring by
+hand, and `_emergency_restore_spx` and `_best_effort_restore_cron` read them. The retained
+mode-`0600` state JSON and every `.runtime-baseline-evidence-*.json` are never touched.
+
+`_approved_window` now raises the distinct `approval_window_pending` when `now < start`,
+so a command issued seconds before the window opens is self-explanatory instead of
+reporting the generic `invalid_arguments`, as happened this window. The window rule is
+unchanged: an early command still fails and still burns its state path.
