@@ -236,7 +236,23 @@ under it, and the token directory is writable. `uv run pytest` is 761 passed, 1 
 `uv run ruff check .` is clean. Exact release `22643615f2125107dba8a54fd4cf1a0e5b8f939e` has archive
 `/tmp/butterfly-gateway-multi-consumer-foundation-2264361.tar` at mode `0600` with SHA-256
 `cf11fdfcdfc23585acf166293d3ce8e137eb2bc4b07302a1824d6d227c404467`, reproducible bit-for-bit from
-the commit. This host-execution release has never run against Helios.
+the commit. That release reached Helios preflight in an approved window and stopped twice without
+mutating anything, both times with `proof.attempted=false` and `attempt_count=0`: first at
+`proof_environment_invalid`, because the credentials were not exported in the operator's shell,
+which is what the gate exists to catch; then at `archive_invalid`, a defect in the release, because
+`_require_host_reviewed_source` hashed every reviewed member with `MAX_SOURCE_BYTES` while `uv.lock`
+is 481750 bytes, and the archive-member hash sat outside the gate's failure boundary so a generic
+code escaped where `proof_source_invalid` was intended. Both hashes are now bounded by
+`MAX_ARCHIVE_BYTES` and taken inside the boundary, with a regression test that builds a real tar
+whose oversize member is verified and then tampered with. Exact release
+`ad8394277f9ee224b4d8e19f77f7599dc5b0f4fc` has archive
+`/tmp/butterfly-gateway-multi-consumer-foundation-ad83942.tar` at mode `0600` with SHA-256
+`679800b5cdf98b0f523023aed56681b095c0b47b0171dd85baabb06588c09d87`; `_validate_archive` accepts it,
+the archived operator member matches the checkout, and the gate that failed on Helios passes against
+it locally. `uv run pytest` is 762 passed, 1 skipped, and `uv run ruff check .` is clean. This
+release has never run against Helios. Separately, a credential value was echoed to a visible shell
+prompt during that window and must be treated as compromised; rotation is an operator decision with
+consequences for the live services and the token document, not a proof step.
 
 ## Repository Findings
 
@@ -419,9 +435,8 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Cut a release archive for the host-execution commit, then obtain fresh Approval 1 and Approval 2 and
-run one supervised attempt on Helios. Approval 1 must name the new host-execution commit, not the
-follow-up commit that records the release identifiers. Approval 2 must name the **host** token
+Obtain fresh Approval 1 and Approval 2 and run one supervised attempt on Helios. Approval 1 must
+name commit `ad8394277f9ee224b4d8e19f77f7599dc5b0f4fc`, whose archive is already cut and verified. Approval 2 must name the **host** token
 document `/opt/butterflyguy/tokens.json` — no longer the in-container `/app/tokens.json` — and must
 re-acknowledge the unmitigated token-rotation risk, which is now live because the manager can
 actually persist.

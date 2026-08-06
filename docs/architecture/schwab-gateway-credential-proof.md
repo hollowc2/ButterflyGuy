@@ -1236,6 +1236,52 @@ The archive is reproducible bit-for-bit from the commit, so a lost `/tmp` copy c
 with `archive-create` and the SHA-256 above still holds. This was verified after a host reboot
 cleared `/tmp` and every worktree in it; all commits survive in the main repository's object store.
 
-Approval 1 must name commit `22643615f2125107dba8a54fd4cf1a0e5b8f939e`, not the follow-up commit
-that records these identifiers. Approval 2 must name the **host** token document
+Approval 2 must name the **host** token document `/opt/butterflyguy/tokens.json`. This release was
+superseded during preflight; see below.
+
+## Preflight stops on the host-executed release — 2026-08-06
+
+Release `2264361` reached Helios preflight under an approved window and stopped twice without
+mutating anything. Both stops were preflight, not attempts: `proof.attempted` stayed `false` and
+`attempt_count` stayed `0` in both, no rollback override or cron snapshot was written, no watchdog
+unit remained, SPX stayed running and unpaused, and the keepalive crontab stayed at two entries.
+
+**`proof_environment_invalid`.** The credentials were not exported in the operator's shell, which
+is exactly what the gate exists to catch. Fifteen checks passed first — fingerprints, provenance,
+compose semantics and dry run, health, uniqueness, ownership, keepalive — because the gate is placed
+after the docker-stop, SPX-signal, and watchdog capability probes. It is the cheapest and most
+likely gate to fail and should run first in `prepare`; deferred rather than changed mid-window.
+
+**`archive_invalid`, a defect in the release.** `_require_host_reviewed_source` hashed every
+reviewed member with `MAX_SOURCE_BYTES` (256 KB), but `uv.lock` is 481 750 bytes, so the gate failed
+before the token document was ever inspected. The operator source file, at 187 032 bytes, was close
+to the same cap. Worse, the `_archive_member_sha256` call sat outside the gate's failure boundary,
+so a generic `archive_invalid` escaped where `proof_source_invalid` was intended — the same
+diagnostic-leak class this effort has repeatedly closed.
+
+Both hashes are now bounded by `MAX_ARCHIVE_BYTES` and taken inside the boundary, so a size or read
+fault reports the gate that owns it. A regression test builds a real tar whose `uv.lock` member
+exceeds `MAX_SOURCE_BYTES`, verifies it, then tampers with that member and requires
+`proof_source_invalid`.
+
+### Release
+
+- Commit: `ad8394277f9ee224b4d8e19f77f7599dc5b0f4fc`
+- Archive: `/tmp/butterfly-gateway-multi-consumer-foundation-ad83942.tar` (mode `0600`)
+- Archive SHA-256: `679800b5cdf98b0f523023aed56681b095c0b47b0171dd85baabb06588c09d87`
+- `uv run pytest`: 762 passed, 1 skipped (`CI_DATABASE_URL` only). `uv run ruff check .`: clean.
+- Local self-check: `_validate_archive` accepts the archive against the commit, the archived
+  operator member matches the checkout byte for byte, and `_require_host_reviewed_source` — the
+  gate that failed on Helios — passes against this archive.
+
+Approval 1 must name commit `ad8394277f9ee224b4d8e19f77f7599dc5b0f4fc`. Approval 2 must name
 `/opt/butterflyguy/tokens.json`. Nothing in this release has run on Helios.
+
+### Credential exposure during the window
+
+While exporting credentials for `prepare`, a value was typed at a visible shell prompt after
+`read -rs` had already returned, so it was echoed to the terminal and captured in the session
+transcript and shell history. It must be treated as compromised and rotated, and the environment
+variable it was intended for may hold an unintended value. Rotation is an operational task with
+consequences beyond this proof — the live services read the same credentials, and re-authorization
+replaces the token document — so it is recorded here as an operator decision, not a proof step.
