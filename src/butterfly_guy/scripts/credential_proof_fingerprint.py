@@ -3412,6 +3412,11 @@ def _prepare(args: argparse.Namespace) -> None:
     }
     _write_state_new(args.state, state)
     try:
+        # The cheapest gate and the one most likely to fail, so it runs before any archive,
+        # Docker, or capability work. The 2026-08-06 window spent fifteen checks and three
+        # capability probes before learning the credentials were not exported.
+        _require_proof_credential_environment()
+
         archive_sha256 = _validate_archive(
             args.archive, args.approved_sha, args.expected_archive_sha256
         )
@@ -3500,10 +3505,9 @@ def _prepare(args: argparse.Namespace) -> None:
         _require_spx_signal_capability()
         _require_watchdog_capability(state)
 
-        # Everything the host-executed proof needs is proven here, in preflight, rather than
-        # inside the one authorized attempt. The 2026-08-06 window spent an attempt to learn
-        # that the container's token directory is read-only.
-        _require_proof_credential_environment()
+        # Everything else the host-executed proof needs is proven here, in preflight, rather
+        # than inside the one authorized attempt. The 2026-08-06 window spent an attempt to
+        # learn that the container's token directory is read-only.
         proof_source_root = _require_host_reviewed_source(args.archive)
         proof_interpreter = _validated_proof_interpreter(args.proof_interpreter)
         _require_host_native_smoke(proof_interpreter, proof_source_root)

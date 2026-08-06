@@ -2117,6 +2117,40 @@ def test_prepare_gates_watchdog_capability_before_approval_1_ready(
     assert state["checks"]["watchdog"] == "fail"
 
 
+def test_prepare_gates_the_credential_environment_before_any_other_work(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The cheapest and most failure-prone gate must run first, not after fifteen checks."""
+    args = prepare_args(tmp_path)
+    patch_prepare_success(monkeypatch, args)
+    order: list[str] = []
+
+    def denied():
+        order.append("credential_environment")
+        raise operator.OperatorFailure("proof_environment_invalid")
+
+    monkeypatch.setattr(operator, "_require_proof_credential_environment", denied)
+    for name in (
+        "_validate_archive",
+        "_inspect_all",
+        "_require_docker_stop_output_shape",
+        "_require_spx_signal_capability",
+        "_require_watchdog_capability",
+    ):
+        monkeypatch.setattr(operator, name, lambda *_args, _name=name: order.append(_name))
+
+    with pytest.raises(operator.OperatorFailure, match="proof_environment_invalid"):
+        operator._prepare(args)
+
+    # Nothing costlier than reading two environment variables ran before the gate.
+    assert order == ["credential_environment"]
+    state = operator._read_state(args.state)
+    assert state["phase"] == "failed"
+    assert state["failure_code"] == "proof_environment_invalid"
+    assert state["checks"]["proof_prerequisites"] == "fail"
+
+
 def test_prepare_refuses_contact_outside_exact_approval_window(tmp_path: Path) -> None:
     args = prepare_args(tmp_path)
     past = datetime.now(timezone.utc) - timedelta(hours=2)

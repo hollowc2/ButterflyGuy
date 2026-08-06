@@ -271,9 +271,19 @@ window, both watchdogs cancelled, cron restored at two keepalive entries, SPX st
 container and recorded image and never recreated, NDX/XSP restarted healthy, no staging directory,
 and no residual watchdog unit. Temporary inputs and the extracted host source were removed and the
 mode-`0600` state was retained. Separately, a credential value was echoed to a visible shell prompt
-during this window and must be treated as compromised; rotation is an operator decision with
-consequences for the live services and the token document, not a proof step, and it remains
-outstanding.
+during this window. Rotation was then evaluated and deliberately declined. The Schwab developer
+portal offers no in-place secret regeneration, so replacing the credential requires provisioning a
+new app and waiting out its approval. Bounded read-only checks established the exposure surface: the
+app key and secret are the application's identity, not the account's, and Schwab issues tokens only
+through the user-authorized code flow, so account access additionally requires either an interactive
+login with MFA or the refresh token in `tokens.json` — neither of which was exposed, the document
+having stayed mode `0600` and never printed or copied. Helios `~/.bash_history` had mtime
+`2026-08-04T04:30:38Z`, predating the window, and matched no named-variable or bare-token shape, so
+the value was never flushed to disk there; two interactive login shells from `21:07` and `21:13`
+still held it in memory and would have appended it on clean exit. The surviving copies are the
+operator's terminal scrollback and the 2026-08-06 session transcript. The operator accepted the
+residual risk and retained the credentials. The remaining exposure is a loss of defence in depth:
+the secret is now the only factor standing between a future token exposure and account access.
 
 ## Repository Findings
 
@@ -458,20 +468,22 @@ process-uniqueness completion.
 
 The credential proof is complete. No further proof window is needed.
 
-Two operator actions are outstanding and neither is a proof step. First, rotate the credential that
-was echoed to a visible shell prompt on 2026-08-06; this replaces the token document and requires
-updating the live services, so it is a production change with its own planning. Second, decide
-whether the proven manager and adapter should now move toward Phase 3 shadow reads, which is a
-separate reviewed change requiring its own approvals. Nothing in the completed proof authorizes a
-gateway deployment, a shadow read, a consumer cutover, or any account or order operation.
+Credential rotation was evaluated and declined; see Current Phase. One operator decision remains and
+it is not a proof step: whether the proven manager and adapter should now move toward Phase 3 shadow
+reads, which is a separate reviewed change requiring its own approvals. Nothing in the completed
+proof authorizes a gateway deployment, a shadow read, a consumer cutover, or any account or order
+operation.
 
-Two deferred code items remain, both recorded and neither urgent: the credential-presence gate
-should run first in `prepare` rather than after the docker-stop, SPX-signal, and watchdog capability
-probes, since it is the cheapest and most likely gate to fail; and the container staging step is now
+The first deferred code item is done: `_require_proof_credential_environment` is now the first
+statement in `prepare`'s failure boundary, ahead of archive validation, Docker inspection, and the
+docker-stop, SPX-signal, and watchdog capability probes, with a test that records call order and
+fails if anything costlier runs first. One deferred item remains: the container staging step is now
 vestigial for the proof itself, because nothing executes from it, though it still proves the image
-can host the reviewed subset and restoration still requires its absence.
+can host the reviewed subset and restoration still requires its absence. Removing it is not
+recommended while no further proof window is planned, since it would weaken what restoration
+verifies in exchange for nothing.
 
-Baselines: `uv run pytest` is 762 passed, 1 skipped, and `uv run ruff check .` is clean.
+Baselines: `uv run pytest` is 763 passed, 1 skipped, and `uv run ruff check .` is clean.
 `graphify update .` remains skipped because the recorded binary does not exist for the current user.
 The branch has never been pushed or merged; the accumulated change set still has to land on `main`
 as a reviewed change.
