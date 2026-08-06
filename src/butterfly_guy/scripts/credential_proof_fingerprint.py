@@ -32,6 +32,7 @@ STAGING_SOURCE_TARGET = f"{STAGING_TMPFS_TARGET}/source"
 RUNTIME_STAGING_TMPFS_TARGET = "/tmp/.schwab-credential-proof-runtime"
 MAX_CAPTURE_BYTES = 64 * 1024
 MAX_SOURCE_BYTES = 256 * 1024
+MAX_ARCHIVE_BYTES = 8 * 1024 * 1024
 MAX_RESULT_BYTES = 512
 MAX_EVIDENCE_DIRECTORIES = 128
 MAX_EVIDENCE_FILES = 4096
@@ -3468,39 +3469,54 @@ def _stage_archive(
 ) -> None:
     archive_target = f"{root_target}/reviewed.tar"
     source_target = f"{root_target}/source"
-    commands = (
-        (
-            ["docker", "exec", "butterfly_spx_app", "mkdir", "-p", source_target],
-            "staging_target_invalid",
-        ),
-        (
-            [
-                "docker",
-                "cp",
-                "--quiet",
-                str(archive_path),
-                f"butterfly_spx_app:{archive_target}",
-            ],
-            "staging_copy_invalid",
-        ),
-        (
-            [
-                "docker",
-                "exec",
-                "butterfly_spx_app",
-                "tar",
-                "-xf",
-                archive_target,
-                "-C",
-                source_target,
-            ],
-            "staging_extract_invalid",
-        ),
+    try:
+        archive_stat = archive_path.lstat()
+        if (
+            not stat.S_ISREG(archive_stat.st_mode)
+            or archive_stat.st_size > MAX_ARCHIVE_BYTES
+        ):
+            raise OSError
+        archive_payload = archive_path.read_bytes()
+        if len(archive_payload) != archive_stat.st_size:
+            raise OSError
+    except OSError:
+        raise OperatorFailure("staging_copy_invalid") from None
+    target = _run(
+        ["docker", "exec", "butterfly_spx_app", "mkdir", "-p", source_target],
+        timeout=30,
     )
-    for command, failure_code in commands:
-        result = _run(command, timeout=30)
-        if result.returncode != 0 or result.stdout or result.stderr:
-            raise OperatorFailure(failure_code)
+    if target.returncode != 0 or target.stdout or target.stderr:
+        raise OperatorFailure("staging_target_invalid")
+    copied = _run(
+        [
+            "docker",
+            "exec",
+            "-i",
+            "butterfly_spx_app",
+            "dd",
+            f"of={archive_target}",
+            "status=none",
+        ],
+        input_bytes=archive_payload,
+        timeout=30,
+    )
+    if copied.returncode != 0 or copied.stdout or copied.stderr:
+        raise OperatorFailure("staging_copy_invalid")
+    extracted = _run(
+        [
+            "docker",
+            "exec",
+            "butterfly_spx_app",
+            "tar",
+            "-xf",
+            archive_target,
+            "-C",
+            source_target,
+        ],
+        timeout=30,
+    )
+    if extracted.returncode != 0 or extracted.stdout or extracted.stderr:
+        raise OperatorFailure("staging_extract_invalid")
     digest_result = _run(
         ["docker", "exec", "butterfly_spx_app", "sha256sum", STAGING_ARCHIVE_TARGET],
         timeout=10,

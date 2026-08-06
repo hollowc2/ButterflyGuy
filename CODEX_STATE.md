@@ -79,7 +79,13 @@ for release `5a472b3da1feefbc1e592785839704b104e94c28` passed corrected prefligh
 inside the generic staging-copy gate before native smoke or quiescence. Automatic exact restoration
 passed, all temporary staging material was removed, two private failure states were retained, and no
 credential/token read or Schwab request occurred. The local correction now uses `docker cp --quiet`
-and distinct bounded target/copy/extract/digest failure codes.
+and distinct bounded target/copy/extract/digest failure codes. Fresh Approval 1 for release
+`62d32ad73243a4bf36819f8e3c838e477c57611a` passed full preflight and then identified the exact
+failure as `staging_copy_invalid`; target creation passed, but `docker cp` did not copy into the SPX
+tmpfs. Automatic exact restoration passed again, all exact temporary material was removed, a third
+private failure state was retained, and no smoke/quiescence/credential/Schwab action occurred. GNU
+`dd` 9.7 is present in the running image. The local correction now replaces `docker cp` with a
+bounded `docker exec -i ... dd` byte stream followed by the existing in-container SHA-256 check.
 
 ## Repository Findings
 
@@ -257,7 +263,7 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Finish local verification, commit and archive the granular staging correction, then obtain fresh
+Finish local verification, commit and archive the streaming staging correction, then obtain fresh
 Approval 1 tied to that new exact release/archive, accepted digest/evidence path, bounded UTC window,
 and fixed actions. Approval 1 may revalidate the baseline, stage reviewed Python source only under
 `/tmp/.schwab-credential-proof-runtime`, run synthetic smoke/refusal checks, arm watchdogs, and

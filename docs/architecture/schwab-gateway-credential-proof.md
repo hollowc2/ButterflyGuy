@@ -500,3 +500,26 @@ The corrected local operator uses Docker's supported `cp --quiet` mode and emits
 codes for target creation, archive copy, extraction, and digest verification. No further live
 staging attempt is authorized until that correction is committed, archived, fully tested, and tied
 to fresh Approval 1.
+
+## Runtime-baseline Approval 1 copy stop — 2026-08-05
+
+Fresh Approval 1 authorized one attempt for release
+`62d32ad73243a4bf36819f8e3c838e477c57611a` and archive SHA-256
+`765b2179be64695814348d8330adab1149500401ca5843ede95e1ea5ee2ac4f6`. Archive and Git
+provenance matched, and the complete accepted-runtime preflight passed. The attempt then returned
+the new exact result `staging_copy_invalid`: fixed target creation passed, but Docker's
+host-to-container `cp` mechanism did not copy the archive into the existing SPX tmpfs. Native smoke,
+watchdog arming, cron disablement, writer quiescence, credential/token access, and Schwab access did
+not occur.
+
+Automatic restoration again passed every exact fingerprint, image, config-content, health,
+uniqueness, ownership, keepalive/cron, and fresh-error check. The container staging target, private
+archive, rollback override, cron snapshot, and exact host source directory were removed; the private
+mode-`0600` failure state remains as evidence. A read-only capability check confirmed that the
+running SPX image provides GNU `dd` 9.7.
+
+The next local correction removes `docker cp` entirely. It reads only the already validated bounded
+archive, streams those exact bytes through `docker exec -i ... dd` into the fixed tmpfs target,
+requires silent success, re-verifies the in-container SHA-256, and only then extracts. This remains
+local and requires a new committed release, full verification, and fresh Approval 1 before any live
+attempt.

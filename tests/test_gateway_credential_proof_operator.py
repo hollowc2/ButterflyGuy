@@ -365,31 +365,42 @@ def test_container_archive_staging_verifies_every_command_and_digest(
 ) -> None:
     calls = 0
     commands: list[list[str]] = []
+    inputs: list[bytes | None] = []
+    archive = tmp_path / "reviewed.tar"
+    archive.write_bytes(b"reviewed-archive")
 
-    def fake_run(command, **_kwargs):
+    def fake_run(command, **kwargs):
         nonlocal calls
         calls += 1
         commands.append(list(command))
+        inputs.append(kwargs.get("input_bytes"))
         if command[:3] == ["docker", "exec", "butterfly_spx_app"] and "sha256sum" in command:
             return result(stdout=f"{ARCHIVE_SHA}  {operator.STAGING_ARCHIVE_TARGET}\n")
         return result()
 
     monkeypatch.setattr(operator, "_run", fake_run)
-    operator._stage_archive(tmp_path / "reviewed.tar", ARCHIVE_SHA)
+    operator._stage_archive(archive, ARCHIVE_SHA)
     assert calls == 4
-    assert commands[1][0:3] == ["docker", "cp", "--quiet"]
+    assert commands[1][0:4] == ["docker", "exec", "-i", "butterfly_spx_app"]
+    assert commands[1][-2:] == [
+        f"of={operator.STAGING_ARCHIVE_TARGET}",
+        "status=none",
+    ]
+    assert inputs == [None, b"reviewed-archive", None, None]
 
 
 def test_container_archive_staging_rejects_success_with_unexpected_output(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    archive = tmp_path / "reviewed.tar"
+    archive.write_bytes(b"reviewed-archive")
     monkeypatch.setattr(
         operator,
         "_run",
         lambda *_args, **_kwargs: result(stdout=SENSITIVE),
     )
     with pytest.raises(operator.OperatorFailure, match="staging_target_invalid"):
-        operator._stage_archive(tmp_path / "reviewed.tar", ARCHIVE_SHA)
+        operator._stage_archive(archive, ARCHIVE_SHA)
 
 
 @pytest.mark.parametrize(
@@ -408,6 +419,8 @@ def test_container_archive_staging_reports_exact_failed_gate(
     tmp_path: Path,
 ) -> None:
     calls = 0
+    archive = tmp_path / "reviewed.tar"
+    archive.write_bytes(b"reviewed-archive")
 
     def fake_run(command, **_kwargs):
         nonlocal calls
@@ -420,7 +433,19 @@ def test_container_archive_staging_reports_exact_failed_gate(
 
     monkeypatch.setattr(operator, "_run", fake_run)
     with pytest.raises(operator.OperatorFailure, match=expected_code):
-        operator._stage_archive(tmp_path / "reviewed.tar", ARCHIVE_SHA)
+        operator._stage_archive(archive, ARCHIVE_SHA)
+
+
+def test_container_archive_staging_rejects_missing_host_archive(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        operator,
+        "_run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+    with pytest.raises(operator.OperatorFailure, match="staging_copy_invalid"):
+        operator._stage_archive(tmp_path / "missing.tar", ARCHIVE_SHA)
 
 
 def test_runtime_staging_requires_absent_fixed_target_and_cleanup_is_exact(
