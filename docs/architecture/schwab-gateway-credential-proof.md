@@ -1285,3 +1285,71 @@ transcript and shell history. It must be treated as compromised and rotated, and
 variable it was intended for may hold an unintended value. Rotation is an operational task with
 consequences beyond this proof — the live services read the same credentials, and re-authorization
 replaces the token document — so it is recorded here as an operator decision, not a proof step.
+
+## Credential proof passed — 2026-08-06
+
+Fresh Approval 1 and Approval 2 authorized one attempt for release
+`ad8394277f9ee224b4d8e19f77f7599dc5b0f4fc`, archive SHA-256
+`679800b5cdf98b0f523023aed56681b095c0b47b0171dd85baabb06588c09d87`, during
+`2026-08-06T21:10:00Z`–`2026-08-06T23:10:00Z`, with Approval 2 naming the host token document
+`/opt/butterflyguy/tokens.json` and the operator accepting the token-rotation risk. The operator
+was also the rollback owner. The market was closed and both paper positions were flat.
+
+| Command | Result |
+|---|---|
+| `prepare` | `approval_1_ready` |
+| `approval1-execute` | `approval_2_required` in 55 s (21:24:31→21:25:26Z) |
+| `approval2-execute` | **`credential_proof_passed`** in 66 s including restoration (21:25:26→21:26:32Z) |
+
+`proof.result=pass`, `reason_code=credential_proof_passed`, `quote_count=1`, `token_state=ready`,
+`attempt_count=1`, `retry_count=0`, `information_exposure=pass`. **All 27 checks passed**, the first
+window with no failed check at all.
+
+One real AAPL quote was retrieved from Schwab through `AtomicTokenManager` and
+`LockedSchwabClientAdapter`, using the real credential environment and the real token document. This
+is the objective the standalone credential proof was built for, reached after sixteen supervised
+windows.
+
+### The production token was rotated, as designed
+
+The token document was written at `21:25:29.524Z`, three seconds into the probe. The keepalive was
+disabled for the window and its hourly schedule does not fall there, so **this was the gateway
+manager's own atomic write** — the first time gateway code has written the production token.
+
+Afterwards the document is a regular non-symlink file at mode `0600` with a valid
+`{creation_timestamp, token}` envelope, and `creation_timestamp` is unchanged at 4.03 days, as
+expected: `schwab-py` preserves it across refreshes, so the seven-day refresh-token life is
+unaffected. The acknowledged rotation risk therefore materialized and was benign, and the
+validate/`fsync`/atomic-replace path is now proven against the real document rather than only fakes.
+
+`/opt/butterflyguy/.tokens.json.lock` now exists — owner `billy`, mode `0600`, zero bytes, held by
+no process. It is the manager's advisory `flock` file and is expected to persist and be reused.
+Note that preflight checks which treated the presence of that file as a stale-lock signal will now
+always see it; presence alone is no longer meaningful, only whether a process holds it.
+
+### Restoration
+
+`restoration.result=pass` with per-service filtered error counts `spx=0`, `ndx=0`, `xsp=0` — the
+third consecutive window with a clean settled error window and no pause. Both watchdogs cancelled;
+cron restored at two keepalive entries. Verified afterwards: SPX still on its original container and
+recorded image `sha256:faa85d74…`, unpaused, never recreated; NDX and XSP restarted and healthy with
+metrics endpoints returning 200; the candidate feed untouched; no in-container staging directory; no
+residual `--user` watchdog unit.
+
+### Disposition
+
+The operator's success path removed the release archive, rollback override, and cron snapshot. The
+extracted host source directory was removed separately. Retained: the mode-`0600` state
+`/opt/butterflyguy/.credential-proof-state-20260806-ad83942.json` and every
+`.runtime-baseline-evidence-*.json`.
+
+### What this does and does not authorize
+
+It proves one public quote through the manager and adapter. It authorizes no gateway deployment, no
+Phase 3 shadow read, no consumer cutover, and no account or order operation. Those remain separate
+reviewed changes with their own approvals.
+
+Still outstanding from this window: the exposed credential must be rotated, which will replace the
+token document and requires updating the live services. Two deferred code items remain — the
+credential-presence gate should run first in `prepare` rather than after the capability probes, and
+the container staging step is now vestigial for the proof itself.

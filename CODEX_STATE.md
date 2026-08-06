@@ -250,9 +250,30 @@ whose oversize member is verified and then tampered with. Exact release
 `679800b5cdf98b0f523023aed56681b095c0b47b0171dd85baabb06588c09d87`; `_validate_archive` accepts it,
 the archived operator member matches the checkout, and the gate that failed on Helios passes against
 it locally. `uv run pytest` is 762 passed, 1 skipped, and `uv run ruff check .` is clean. This
-release has never run against Helios. Separately, a credential value was echoed to a visible shell
-prompt during that window and must be treated as compromised; rotation is an operator decision with
-consequences for the live services and the token document, not a proof step.
+release then ran on Helios under fresh Approval 1 and Approval 2 during
+`2026-08-06T21:10:00Z`-`2026-08-06T23:10:00Z`, with Approval 2 naming the host token document
+`/opt/butterflyguy/tokens.json` and the operator accepting the rotation risk. `prepare` returned
+`approval_1_ready`, `approval1-execute` returned `approval_2_required` in 55 seconds, and
+`approval2-execute` returned **`credential_proof_passed`** with `quote_count=1`,
+`token_state=ready`, `attempt_count=1`, `retry_count=0`, and `information_exposure=pass`. All 27
+checks passed, the first window with no failed check. One real AAPL quote was retrieved from Schwab
+through `AtomicTokenManager` and `LockedSchwabClientAdapter` using the real credential environment
+and the real token document, which is the objective this standalone proof was built for. The
+manager also performed the first gateway write of the production token: the document was atomically
+rewritten at `21:25:29.524Z`, three seconds into the probe, with the keepalive disabled and its
+hourly schedule not falling there. Afterwards it is a regular non-symlink file at mode `0600` with a
+valid envelope and an unchanged `creation_timestamp` of 4.03 days, since `schwab-py` preserves that
+field across refreshes, so the seven-day refresh life is unaffected. The advisory lock file
+`/opt/butterflyguy/.tokens.json.lock` now exists, owned by `billy` at mode `0600`, zero bytes, held
+by no process; it is expected to persist, so its presence alone is no longer a stale-lock signal.
+Restoration passed with per-service error counts `spx=0, ndx=0, xsp=0` for the third consecutive
+window, both watchdogs cancelled, cron restored at two keepalive entries, SPX still on its original
+container and recorded image and never recreated, NDX/XSP restarted healthy, no staging directory,
+and no residual watchdog unit. Temporary inputs and the extracted host source were removed and the
+mode-`0600` state was retained. Separately, a credential value was echoed to a visible shell prompt
+during this window and must be treated as compromised; rotation is an operator decision with
+consequences for the live services and the token document, not a proof step, and it remains
+outstanding.
 
 ## Repository Findings
 
@@ -435,29 +456,22 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Obtain fresh Approval 1 and Approval 2 and run one supervised attempt on Helios. Approval 1 must
-name commit `ad8394277f9ee224b4d8e19f77f7599dc5b0f4fc`, whose archive is already cut and verified. Approval 2 must name the **host** token
-document `/opt/butterflyguy/tokens.json` — no longer the in-container `/app/tokens.json` — and must
-re-acknowledge the unmitigated token-rotation risk, which is now live because the manager can
-actually persist.
+The credential proof is complete. No further proof window is needed.
 
-**The operator must run `prepare` and `approval2-execute` personally, with `SCHWAB_API_KEY` and
-`SCHWAB_SECRET_KEY` exported.** They are absent from a non-interactive `ssh` session, and the agent
-may not source or inspect `.env`, so the agent cannot supply them or run those two commands. Expect
-`proof_environment_invalid` in preflight if they are missing. `approval1-execute` needs no
-credentials and can be run normally, but the 120-second approval watchdog means it must be chained
-to `approval2-execute` in the same invocation.
+Two operator actions are outstanding and neither is a proof step. First, rotate the credential that
+was echoed to a visible shell prompt on 2026-08-06; this replaces the token document and requires
+updating the live services, so it is a production change with its own planning. Second, decide
+whether the proven manager and adapter should now move toward Phase 3 shadow reads, which is a
+separate reviewed change requiring its own approvals. Nothing in the completed proof authorizes a
+gateway deployment, a shadow read, a consumer cutover, or any account or order operation.
 
-That attempt will be the first able to complete a token read, construct a client, and issue the
-quote. Realistic outcomes are `credential_proof_passed`, `probe_client_construction_failed`, or
-`probe_quote_failed` — the last being the only code proving a Schwab request was issued.
+Two deferred code items remain, both recorded and neither urgent: the credential-presence gate
+should run first in `prepare` rather than after the docker-stop, SPX-signal, and watchdog capability
+probes, since it is the cheapest and most likely gate to fail; and the container staging step is now
+vestigial for the proof itself, because nothing executes from it, though it still proves the image
+can host the reviewed subset and restoration still requires its absence.
 
-Already host-proven and not in need of re-proof: bounded staged-code propagation, the settled
-restoration error window (zero filtered errors, no pause, twice), `approval_window_pending`, the
-whole staging/smoke/refusal/watchdog/quiescence path, and the token read itself. Still unproven
-against the live host: the host-executed proof step, its four new prerequisite gates, and the
-failed-restoration cleanup split, since restoration has not failed under either release.
-
-Issue `prepare` at or after the window start — not before — and always against a fresh state path.
-No gateway deployment, trading action, configuration change, order/account operation, or cutover is
-authorized.
+Baselines: `uv run pytest` is 762 passed, 1 skipped, and `uv run ruff check .` is clean.
+`graphify update .` remains skipped because the recorded binary does not exist for the current user.
+The branch has never been pushed or merged; the accumulated change set still has to land on `main`
+as a reviewed change.
