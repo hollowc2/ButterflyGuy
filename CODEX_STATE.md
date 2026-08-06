@@ -103,7 +103,15 @@ deliberately omits, so importing `credential_probe` raises `ModuleNotFoundError`
 correction makes `create_app` resolve through a module-level `__getattr__`, propagates the staged
 command's own bounded failure code from `_run_exact_json` when the payload is exactly one of the
 fixed staged codes, and adds an isolation test that imports the reviewed subset in a separate
-interpreter with only the `_ARCHIVE_PATHS` member set on `sys.path`.
+interpreter with only the `_ARCHIVE_PATHS` member set on `sys.path`. Fresh Approval 1 for release
+`ca0d3481dbb53edfde5b1ba9ee03d61935ca4bad` reached `approval_1_ready` on the first `prepare` and then
+passed staging, the bounded native smoke check, and the refusal gate for the first time, confirming
+that correction. It failed closed at `watchdog_invalid` while arming the hard watchdog because
+`sudo -n` requires a password for the operator account on the non-interactive proof path. Automatic
+exact restoration passed, no transient unit remained, quiescence never started, and no
+credential/token read or Schwab request occurred. The account has `Linger=yes` and a running user
+manager, so the watchdog can move to `systemd-run --user`/`systemctl --user` without privilege
+escalation; preflight must also gate watchdog-arming capability before quiescence.
 
 ## Repository Findings
 

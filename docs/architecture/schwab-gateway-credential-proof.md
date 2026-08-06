@@ -605,3 +605,37 @@ prepended to `sys.path`, asserting both the package and the probe resolve inside
 the live failure with `ModuleNotFoundError: No module named 'butterfly_guy.schwab_gateway.api'`
 against the previous package init. This closes the gap that let a staged-environment defect reach
 Helios twice: the reviewed subset is now exercised in isolation locally.
+
+## Runtime-baseline Approval 1 watchdog stop — 2026-08-06
+
+Fresh Approval 1 authorized one attempt for release
+`ca0d3481dbb53edfde5b1ba9ee03d61935ca4bad` and archive SHA-256
+`d980b64558e0f553ff94c3430dee102957f96d071d98682838b86100bbecdf62` during
+`2026-08-06T03:41:00Z`–`2026-08-06T05:31:00Z`. `prepare` returned `approval_1_ready` on the first
+run once the reviewed config arguments were the live config paths.
+
+The single authorized attempt passed staging, and for the first time passed both the bounded native
+smoke check and the refusal gate, confirming the standalone-subset correction. It then failed closed
+at `watchdog_invalid` while arming the hard watchdog.
+
+The cause is an access-path prerequisite rather than a code defect in the proof itself.
+`_arm_watchdog` invokes `sudo -n systemd-run`, and `_watchdog_active`,
+`_watchdog_service_active`, and `_cancel_watchdog` invoke `sudo -n systemctl`. A bounded read-only
+check confirmed that `sudo -n` returns `a password is required` for the operator account over the
+non-interactive session used for the proof, so no system-level transient unit can be created on this
+path. The same check confirmed the account has `Linger=yes` and a running user manager, so a
+user-level transient timer is available without privilege escalation and survives session close.
+
+Automatic exact restoration passed every fingerprint, image, config-content, health, uniqueness,
+ownership, keepalive/cron, and fresh-error check with zero filtered errors per service. Both
+watchdogs recorded `cancelled`, and no transient unit remained in either the system or user manager.
+Quiescence never started, SPX was never suspended, NDX/XSP were never stopped, and service uptimes
+were unchanged. No credential or token was read and no Schwab request occurred. The exact temporary
+archive, source directory, rollback override, and cron snapshot were removed and the mode-`0600`
+operator state was retained. No retry was attempted.
+
+The watchdog mechanism must therefore either move to `systemd-run --user` with `systemctl --user`
+management, or the operator account must be granted a narrowly scoped passwordless sudoers rule for
+the fixed watchdog units. The first requires dropping `--uid`/`--gid`, which a user-manager run
+rejects. Whichever is chosen, preflight should verify watchdog-arming capability before quiescence
+so this prerequisite cannot consume another attempt.
