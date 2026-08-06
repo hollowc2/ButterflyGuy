@@ -765,3 +765,61 @@ Tests assert that suspend and resume issue exactly `docker kill --signal STOP|CO
 unexpected output fails closed, that the capability probe uses only `CONT` and never `STOP`, and
 that `prepare` fails closed when the gate is denied. The approval-1 fake now echoes the container
 name for `docker kill` as well as `docker stop`, matching real CLI behaviour.
+
+## Runtime-baseline Approval 2 credential-proof failure and paused restoration — 2026-08-06
+
+Fresh Approval 1 authorized one attempt for release
+`a1ce6eb6543c7654132347679cb608e6145767ff` and archive SHA-256
+`6c60e94106381867a4f113016038a0642a61bf70186becb4cf112593917b6b44` during
+`2026-08-06T15:55:00Z`–`2026-08-06T17:45:00Z`, against accepted runtime digest
+`6872c3582cf728f67acba78bf5f7e226b735c40a4be09ea27c135c7641e5320d`.
+
+The first `prepare` failed closed at `invalid_arguments` because it was issued seconds before
+the window opened and `_approved_window` requires `now >= start`. No state file was created and
+no host or service state was touched. The re-run against a new `-r2` state path returned
+`approval_1_ready`, with all three host capability gates — docker-stop output shape, the no-op
+`CONT` SPX signal, and watchdog arm/cancel — passing on the host.
+
+The single authorized attempt passed staging, the bounded native smoke check, the refusal gate,
+watchdog arming, keepalive disablement, and the NDX/XSP stops, and then **suspended SPX for the
+first time** via the host-delivered `docker kill --signal STOP`, returning `approval_2_required`.
+This confirms the host-delivered suspension correction; the previous attempt had failed at
+`signal_invalid` inside the PID namespace.
+
+Approval 2 was granted inside the 120-second window and authorized exactly one credential/token
+read and one AAPL quote. The staged probe exited nonzero, so `approval2-execute` recorded
+`proof.result=fail`, `proof.reason_code=credential_proof_failed`, `attempt_count=1`,
+`retry_count=0`, and `information_exposure=pass`. No retry was attempted.
+
+The standing claim that no credential or token read has ever occurred no longer holds. The proof
+command was executed under Approval 2. Because only its return code is inspected, the state does
+not record whether it reached the token read and the Schwab request or exited earlier, so the
+attempt must be treated as a possible real credential/token read.
+
+Automatic restoration then ran and passed 24 of its 26 checks — every container fingerprint,
+image, config-content, health, process-uniqueness, candidate-ownership, and keepalive/cron check.
+It failed only `restoration_errors`, with per-service filtered counts `spx=6`, `ndx=0`, `xsp=0`,
+and returned the bounded `restoration_failed_paused`, pausing SPX, NDX, and XSP fail-closed as
+designed. Those six SPX markers match the benign immediately-post-pause burst first recorded on
+2026-08-04, where six markers per service were followed by zero new filtered errors.
+
+The rollback owner was escalated to rather than improvising, and authorized the resume. All three
+services unpaused cleanly and then reported zero fresh filtered errors over a 30-second window,
+one application process each, an absent SPX staging directory, the keepalive crontab intact at its
+recorded entry count, and no residual `--user` watchdog unit. The exact temporary archive, source
+directory, rollback override, and cron snapshot were removed; the mode-`0600` operator state and
+every baseline-evidence artifact were retained.
+
+Two corrections follow from this window:
+
+1. `approval2-execute` discards the staged probe's own bounded failure code. It inspects only the
+   return code before raising `credential_proof_failed`, unlike `_run_exact_json`, which already
+   propagates the fixed staged codes. The specific reason for the first real credential-proof
+   failure is therefore unrecoverable, exactly the diagnostic gap that the earlier
+   `subprocess_failed` collapse caused at the native smoke step. The proof invocation should reuse
+   the bounded-code propagation so a failure inside the probe names itself.
+2. The restoration fresh-error gate cannot distinguish the known resume burst from a real fault,
+   so a fully successful restoration is reported as `restoration_failed_paused` and leaves trading
+   paused mid-session. It needs either a short settle window before counting or an explicit
+   allowance for the recorded post-resume marker burst, with the identity, image, config, health,
+   uniqueness, and ownership checks remaining strict.

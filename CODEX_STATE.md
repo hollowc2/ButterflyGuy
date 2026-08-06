@@ -133,7 +133,21 @@ ignores a default-action signal sent to a PID-namespace init from inside that na
 staged `os.kill(1, SIGSTOP)` did nothing. Automatic exact restoration passed and no credential/token
 read or Schwab request occurred. Suspension is now symmetric with the already host-delivered resume:
 `_signal_spx` issues `docker kill --signal STOP|CONT`, and `prepare` gains
-`_require_spx_signal_capability`, which proves the command with a no-op `CONT`.
+`_require_spx_signal_capability`, which proves the command with a no-op `CONT`. Fresh Approval 1
+for release `a1ce6eb6543c7654132347679cb608e6145767ff` then passed every gate and suspended SPX for
+the first time, returning `approval_2_required`. Approval 2 was granted inside the 120-second window
+for exactly one credential/token read and one AAPL quote; the staged probe exited nonzero and was
+recorded as `credential_proof_failed` with `attempt_count=1`, `retry_count=0`, and
+`information_exposure=pass`. Because only the return code is inspected, the state does not record
+whether the probe reached the token read and Schwab request, so this must be treated as a possible
+real credential/token read and the prior no-read claim no longer holds. Automatic restoration passed
+24 of 26 checks — all fingerprint, image, config-content, health, uniqueness, ownership, and
+keepalive/cron checks — and failed only `restoration_errors` with `spx=6, ndx=0, xsp=0`, returning
+`restoration_failed_paused` and pausing all three services fail-closed. Those six markers match the
+benign post-pause burst recorded on 2026-08-04. The rollback owner authorized the resume; all three
+services unpaused with zero fresh filtered errors over 30 seconds, one process each, staging absent,
+keepalive intact, and no residual watchdog unit. Exact temporary paths were removed and the
+mode-`0600` state and all baseline evidence were retained.
 
 ## Repository Findings
 
@@ -311,11 +325,13 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Finish local verification, commit and archive the streaming staging correction, then obtain fresh
-Approval 1 tied to that new exact release/archive, accepted digest/evidence path, bounded UTC window,
-and fixed actions. Approval 1 may revalidate the baseline, stage reviewed Python source only under
-`/tmp/.schwab-credential-proof-runtime`, run synthetic smoke/refusal checks, arm watchdogs, and
-quiesce the three direct writers; it may not read credentials/tokens or call Schwab. Request fresh
-Approval 2 only after those gates pass; Approval 2 permits exactly one credential/token read and one
-AAPL quote with no retry, followed by exact runtime restoration. No gateway deployment, trading
-action, configuration change, order/account operation, or cutover is authorized.
+Make two local corrections before any further live attempt. First, `approval2-execute` must
+propagate the staged probe's own bounded failure code instead of inspecting only the return code, so
+a credential-proof failure names itself; reuse the existing `_run_exact_json` bounded-code mechanism
+and add the probe's fixed codes to the staged set. Second, the restoration fresh-error gate must
+stop reporting the known immediately-post-resume marker burst as a failure — add a short settle
+window or an explicit recorded allowance — while keeping the identity, image, config-content,
+health, uniqueness, and ownership checks strict, so a successful restoration no longer leaves
+trading paused. Add focused tests for both, then commit and archive a new exact release and obtain
+fresh Approval 1 and Approval 2 tied to it. No gateway deployment, trading action, configuration
+change, order/account operation, or cutover is authorized.
