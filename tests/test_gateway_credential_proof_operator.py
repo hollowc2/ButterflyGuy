@@ -753,6 +753,75 @@ def test_watchdog_commands_never_require_sudo(monkeypatch: pytest.MonkeyPatch) -
             assert command[1] == "--user", command
 
 
+@pytest.mark.parametrize(
+    ("helper", "expected_signal"),
+    [("_suspend_spx", "STOP"), ("_resume_spx", "CONT")],
+)
+def test_spx_suspend_and_resume_are_delivered_from_the_host(
+    helper: str,
+    expected_signal: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The container init is the app; a namespace-internal SIGSTOP to PID 1 is ignored."""
+    container = str(operator._SERVICE_SPECS["spx"]["container"])
+    commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(list(command))
+        return result(stdout=f"{container}\n")
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    getattr(operator, helper)()
+    assert commands == [["docker", "kill", "--signal", expected_signal, container]]
+
+
+def test_spx_signal_fails_closed_on_unexpected_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        operator,
+        "_run",
+        lambda *_args, **_kwargs: result(stdout=SENSITIVE),
+    )
+    with pytest.raises(operator.OperatorFailure, match="signal_invalid"):
+        operator._suspend_spx()
+
+
+def test_spx_signal_capability_probe_uses_a_no_op_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The probe must never suspend SPX during preflight."""
+    container = str(operator._SERVICE_SPECS["spx"]["container"])
+    commands: list[list[str]] = []
+
+    def fake_run(command, **_kwargs):
+        commands.append(list(command))
+        return result(stdout=f"{container}\n")
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    operator._require_spx_signal_capability()
+    assert commands == [["docker", "kill", "--signal", "CONT", container]]
+    assert not any("STOP" in command for command in commands)
+
+
+def test_prepare_gates_spx_signal_capability_before_approval_1_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    args = prepare_args(tmp_path)
+    patch_prepare_success(monkeypatch, args)
+
+    def denied():
+        raise operator.OperatorFailure("signal_invalid")
+
+    monkeypatch.setattr(operator, "_require_spx_signal_capability", denied)
+    with pytest.raises(operator.OperatorFailure, match="signal_invalid"):
+        operator._prepare(args)
+    state = operator._read_state(args.state)
+    assert state["phase"] == "failed"
+    assert state["failure_code"] == "signal_invalid"
+
+
 def test_quiescence_stop_uses_current_docker_timeout_flag() -> None:
     """Docker writes the --time deprecation notice to stdout, breaking the exact-output rule."""
     assert operator._DOCKER_STOP_COMMAND == ("docker", "stop", "--timeout", "20")
@@ -1315,6 +1384,7 @@ def patch_prepare_success(
     # Never create real transient units or touch Docker from the test suite.
     monkeypatch.setattr(operator, "_require_watchdog_capability", lambda *_args: None)
     monkeypatch.setattr(operator, "_require_docker_stop_output_shape", lambda: None)
+    monkeypatch.setattr(operator, "_require_spx_signal_capability", lambda: None)
 
     def capture_cron(path: Path):
         operator._write_private_bytes(path, b"")
@@ -2497,7 +2567,8 @@ def patch_approval_1_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(operator, "_watchdog_active", lambda *_args: True)
     monkeypatch.setattr(operator, "_disable_keepalive_cron", lambda *_args, **_kwargs: None)
     def fake_run(command, **_kwargs):
-        if command[:2] == ["docker", "stop"]:
+        # Both `docker stop` and `docker kill` echo the container name.
+        if command[:2] in (["docker", "stop"], ["docker", "kill"]):
             return result(stdout=f"{command[-1]}\n")
         return result()
 

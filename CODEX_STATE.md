@@ -125,7 +125,15 @@ use --timeout instead` to stdout and the gate requires exactly the container nam
 restoration passed, NDX restarted clean, and no credential/token read or Schwab request occurred. The
 local correction switches quiescence to `docker stop --timeout` and adds
 `_require_docker_stop_output_shape` to `prepare`, which proves the stop command writes nothing to
-stdout using a container name that must not exist.
+stdout using a container name that must not exist. Fresh Approval 1 for release
+`b825f5f2a022d0c2d2d463295dd63e2dc522fee7` then passed both new gates, staging, native smoke, the
+refusal gate, watchdog arming, and keepalive disablement, and stopped both NDX and XSP before failing
+closed at `signal_invalid`. The SPX container's init is the application itself, and the kernel
+ignores a default-action signal sent to a PID-namespace init from inside that namespace, so the
+staged `os.kill(1, SIGSTOP)` did nothing. Automatic exact restoration passed and no credential/token
+read or Schwab request occurred. Suspension is now symmetric with the already host-delivered resume:
+`_signal_spx` issues `docker kill --signal STOP|CONT`, and `prepare` gains
+`_require_spx_signal_capability`, which proves the command with a no-op `CONT`.
 
 ## Repository Findings
 

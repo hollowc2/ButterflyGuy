@@ -11,7 +11,6 @@ import io
 import json
 import os
 import re
-import signal
 import stat
 import subprocess
 import sys
@@ -1741,6 +1740,15 @@ def _cancel_watchdog(state: dict[str, Any], kind: str) -> None:
         raise OperatorFailure("watchdog_invalid")
 
 
+def _require_spx_signal_capability() -> None:
+    """Prove the host-side SPX signal command works, using a signal that cannot change state.
+
+    SIGCONT to an already-running process is a no-op, so this validates permission and the
+    exact output shape without suspending SPX.
+    """
+    _signal_spx("CONT")
+
+
 def _require_docker_stop_output_shape() -> None:
     """Prove the quiescence stop command writes nothing to stdout for a container that cannot exist.
 
@@ -1807,16 +1815,6 @@ def _internal_refusal_gate() -> None:
         raise
     except Exception:
         raise OperatorFailure("credential_refused") from None
-
-
-def _internal_signal(action: str) -> None:
-    signal_number = {"stop": signal.SIGSTOP, "continue": signal.SIGCONT}.get(action)
-    if signal_number is None:
-        raise OperatorFailure("signal_invalid")
-    try:
-        os.kill(1, signal_number)
-    except Exception:
-        raise OperatorFailure("signal_invalid") from None
 
 
 def _internal_signal_status(expected: str) -> None:
@@ -3443,6 +3441,7 @@ def _prepare(args: argparse.Namespace) -> None:
         state["checks"]["compose_dry_run"] = "pass"
 
         _require_docker_stop_output_shape()
+        _require_spx_signal_capability()
         _require_watchdog_capability(state)
 
         cron_sha256, keepalive_entries, cron_present = _capture_crontab(args.cron_snapshot)
@@ -3763,10 +3762,7 @@ def _approval_1_execute(args: argparse.Namespace) -> None:
             expected_stop = f"{_SERVICE_SPECS[service]['container']}\n"
             if result.returncode != 0 or result.stdout != expected_stop or result.stderr:
                 raise OperatorFailure("single_writer_invalid")
-        _run_exact_json(
-            _staged_operator_command(state, "internal-signal", "--action", "stop"),
-            {"code": "signal_passed", "status": "ok"},
-        )
+        _suspend_spx()
         if not all(_container_is_stopped(service) for service in ("ndx", "xsp")):
             raise OperatorFailure("single_writer_invalid")
         _run_exact_json(
@@ -3890,14 +3886,28 @@ def _start_container(service: str) -> None:
         raise OperatorFailure("subprocess_failed")
 
 
-def _resume_spx() -> None:
+def _signal_spx(signal_name: str) -> None:
+    """Signal SPX from the host.
+
+    The container's init is the application itself, and the kernel ignores a default-action
+    signal sent to a PID-namespace init from inside that namespace, so SIGSTOP must be
+    delivered by the daemon from the host namespace.
+    """
     result = _run(
-        ["docker", "kill", "--signal", "CONT", str(_SERVICE_SPECS["spx"]["container"])],
+        ["docker", "kill", "--signal", signal_name, str(_SERVICE_SPECS["spx"]["container"])],
         timeout=15,
     )
     expected = f"{_SERVICE_SPECS['spx']['container']}\n"
     if result.returncode != 0 or result.stdout != expected or result.stderr:
         raise OperatorFailure("signal_invalid")
+
+
+def _suspend_spx() -> None:
+    _signal_spx("STOP")
+
+
+def _resume_spx() -> None:
+    _signal_spx("CONT")
 
 
 def _best_effort_runtime_restore() -> None:
@@ -4461,8 +4471,6 @@ def _parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("internal-native-smoke", add_help=False)
     subparsers.add_parser("internal-refusal-gate", add_help=False)
-    internal_signal = subparsers.add_parser("internal-signal", add_help=False)
-    internal_signal.add_argument("--action", choices=("stop", "continue"), required=True)
     signal_status = subparsers.add_parser("internal-signal-status", add_help=False)
     signal_status.add_argument("--expect", choices=("stopped", "running"), required=True)
     return parser
@@ -4562,10 +4570,6 @@ def main(argv: list[str] | None = None) -> None:
         if args.command == "internal-refusal-gate":
             _internal_refusal_gate()
             _emit("ok", "refusal_gate_passed")
-            return
-        if args.command == "internal-signal":
-            _internal_signal(args.action)
-            _emit("ok", "signal_passed")
             return
         if args.command == "internal-signal-status":
             _internal_signal_status(args.expect)

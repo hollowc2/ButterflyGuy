@@ -716,3 +716,52 @@ stdout, that it fails closed on the exact observed deprecation notice, that it n
 when the probe container exists, and that `prepare` fails closed with
 `checks["single_writer"] == "fail"` when the gate is denied. `patch_prepare_success` stubs the gate
 so the suite never touches Docker.
+
+## Runtime-baseline Approval 1 suspend stop — 2026-08-06
+
+Fresh Approval 1 authorized one attempt for release
+`b825f5f2a022d0c2d2d463295dd63e2dc522fee7` and archive SHA-256
+`d0cb4566fbc0908b8854660db25f7bc0f083c0fea81bb380ffc0e875c37e1157`. `prepare` returned
+`approval_1_ready` with both new capability gates passing on the host.
+
+The attempt passed staging, native smoke, the refusal gate, watchdog arming, and keepalive
+disablement, then stopped **both** NDX and XSP — confirming the `--timeout` correction, since the
+previous attempt had failed after NDX alone. It failed closed at `signal_invalid` before SPX was
+suspended and before the approval watchdog was armed. The staged command's own bounded code
+propagated rather than collapsing to `subprocess_failed`, confirming that earlier correction too.
+
+The cause is PID-namespace signal semantics. The SPX container's init is the application itself
+(`/proc/1/status` reports `Name: python`, `SigCgt: 0000000100000002`, catching only SIGINT and one
+real-time signal). The kernel ignores a default-action signal sent to a PID-namespace init from
+**inside** that namespace, and SIGSTOP can never have a handler, so the staged
+`internal-signal --action stop` performed `os.kill(1, SIGSTOP)` with no effect and no error. PID 1
+remained `S (sleeping)`, and the following `internal-signal-status --expect stopped` correctly
+reported `signal_invalid`.
+
+Restoration passed every check with zero filtered errors per service. NDX and XSP were restarted on
+their recorded images and reported no errors, SPX was never suspended and its uptime was unchanged,
+the keepalive crontab was restored, both watchdogs were cancelled with no residual unit, and staging
+was removed. No credential or token was read and no Schwab request occurred. Exact temporary paths
+were removed and the mode-`0600` operator state was retained. No retry was attempted.
+
+## Host-delivered SPX suspension — 2026-08-06
+
+Restoration already resumed SPX from the host with `docker kill --signal CONT`, which the daemon
+delivers from an ancestor namespace where init protection does not apply; only the suspend path went
+through the container. Suspension is now symmetric: `_signal_spx` issues
+`docker kill --signal <NAME>`, with `_suspend_spx` sending `STOP` and `_resume_spx` sending `CONT`,
+both requiring exactly the container name on stdout. `docker exec` is served by the runtime shim
+rather than by PID 1, so a suspended init still permits the separate proof process the runbook
+requires. A read-only check confirmed the operator account and the SPX init share uid 1001 with no
+user-namespace remapping, so no privilege escalation is involved.
+
+`prepare` now also calls `_require_spx_signal_capability`, which issues the exact host-side signal
+command with `CONT`. Sending SIGCONT to an already-running process is a no-op, so the gate proves
+permission and output shape without suspending SPX. The orphaned in-container `internal-signal`
+command, its `_internal_signal` implementation, and the then-unused `signal` import were removed;
+`internal-signal-status` remains in use.
+
+Tests assert that suspend and resume issue exactly `docker kill --signal STOP|CONT`, that an
+unexpected output fails closed, that the capability probe uses only `CONT` and never `STOP`, and
+that `prepare` fails closed when the gate is denied. The approval-1 fake now echoes the container
+name for `docker kill` as well as `docker stop`, matching real CLI behaviour.
