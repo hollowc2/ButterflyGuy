@@ -207,8 +207,12 @@ check, and adoptable by `_approval_2_execute`, but is deliberately excluded from
 `_STAGED_FAILURE_CODES` because no container payload may claim an operator-side gate. Twelve new
 tests cover the exec shape, credential absence from the command line, non-persistence of the path,
 seven rejected path forms, the absent-document case, unexpected gate output, and the argparse
-requirement: `uv run pytest` is 756 passed, 1 skipped, and `uv run ruff check .` is clean. This fix
-is local source only; no release archive has been cut for it and it has never run on Helios.
+requirement: `uv run pytest` is 756 passed, 1 skipped, and `uv run ruff check .` is clean. Exact
+release `76317442402095df03009dabb3d4453bc73064d3` has archive
+`/tmp/butterfly-gateway-multi-consumer-foundation-7631744.tar` at mode `0600` with SHA-256
+`a499c3eca7c51e7d1381cfff29e3f2a1f5d83842afa8eb31348953be81954fbf`; `_validate_archive` accepts it
+against the commit and the archived operator member matches the checkout byte for byte. This
+release is local and fake-tested only; it has never run against Helios.
 
 ## Repository Findings
 
@@ -383,12 +387,17 @@ process-uniqueness completion.
 - New gateway code must remain disabled and isolated until shadow/session proof.
 - Container runtime packaging still needs proof on a host where starting Docker cannot affect
   live or unrelated services.
+- A successful credential proof will very likely trigger an SDK refresh, and the manager durably
+  rewrites the live token document. The standing rules forbid copying the token, so there is no
+  rollback for a damaged document; recovery would be a manual Schwab re-authorization. The write
+  path validates, `fsync`s, and atomically replaces at mode `0600` and is extensively fake-tested,
+  so the risk is low, but it is unmitigated and must be acknowledged before the next approval.
 
 ## Next Exact Action
 
-Commit the `--proof-token-path` change, cut and verify a new exact release archive at mode `0600`,
-then obtain fresh Approval 1 and Approval 2 and run one supervised attempt on Helios. Approval 1
-must name the new release commit, and Approval 2 must additionally name the absolute in-container
+Obtain fresh Approval 1 and Approval 2 and run one supervised attempt on Helios. Approval 1 must
+name commit `76317442402095df03009dabb3d4453bc73064d3` — not the follow-up commit that records the
+release identifiers — and Approval 2 must additionally name the absolute in-container
 token document the operator authorizes the proof to open, since the operator now supplies it
 explicitly. Relaxing the probe's absolute-path guard to resolve against the working directory and
 editing the SPX container environment were both considered and rejected, the latter because it would

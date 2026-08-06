@@ -1096,5 +1096,26 @@ leave the attempt unclaimed while restoration still runs; that an absent documen
 without echoing it; and that `approval2-execute` refuses to parse without the argument.
 `uv run pytest`: 756 passed, 1 skipped. `uv run ruff check .`: clean.
 
-This is committed source only. No release archive has been cut for it and it has not run on
-Helios, so it needs a new exact release plus fresh Approval 1 and Approval 2.
+### Release
+
+- Commit: `76317442402095df03009dabb3d4453bc73064d3`
+- Archive: `/tmp/butterfly-gateway-multi-consumer-foundation-7631744.tar` (mode `0600`)
+- Archive SHA-256: `a499c3eca7c51e7d1381cfff29e3f2a1f5d83842afa8eb31348953be81954fbf`
+- `uv run pytest`: 756 passed, 1 skipped (`CI_DATABASE_URL` only). `uv run ruff check .`: clean.
+- Local self-check: `_validate_archive` accepts the archive against the commit, and the archived
+  operator member matches the checked-out file byte for byte.
+
+Approval 1 must be requested against commit `76317442402095df03009dabb3d4453bc73064d3`, not
+against the follow-up commit that records these identifiers. Approval 2 must additionally name
+the absolute in-container token document the proof may open, which is `/app/tokens.json`.
+
+Nothing in this release has run on Helios. It will be the first attempt able to reach the token
+document, so `probe_token_invalid`, `probe_client_construction_failed`, and `probe_quote_failed`
+all become realistic outcomes and would be genuine results rather than configuration artifacts.
+
+**One unmitigated risk to acknowledge before the next approval.** A successful proof will very
+likely trigger an SDK refresh, and the manager durably rewrites the live token document. That is
+by design and is why single-writer quiescence exists, but the standing rules forbid copying the
+token, so there is no rollback for a damaged document — recovery would be a manual Schwab
+re-authorization. The write path validates, `fsync`s, and atomically replaces at mode `0600` and
+is extensively fake-tested, so the risk is low; it is not zero and it is unmitigated.
