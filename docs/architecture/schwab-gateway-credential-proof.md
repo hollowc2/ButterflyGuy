@@ -1109,9 +1109,7 @@ Approval 1 must be requested against commit `76317442402095df03009dabb3d4453bc73
 against the follow-up commit that records these identifiers. Approval 2 must additionally name
 the absolute in-container token document the proof may open, which is `/app/tokens.json`.
 
-Nothing in this release has run on Helios. It will be the first attempt able to reach the token
-document, so `probe_token_invalid`, `probe_client_construction_failed`, and `probe_quote_failed`
-all become realistic outcomes and would be genuine results rather than configuration artifacts.
+This release ran on Helios and reached the token document. See the next section.
 
 **One unmitigated risk to acknowledge before the next approval.** A successful proof will very
 likely trigger an SDK refresh, and the manager durably rewrites the live token document. That is
@@ -1119,3 +1117,111 @@ by design and is why single-writer quiescence exists, but the standing rules for
 token, so there is no rollback for a damaged document — recovery would be a manual Schwab
 re-authorization. The write path validates, `fsync`s, and atomically replaces at mode `0600` and
 is extensively fake-tested, so the risk is low; it is not zero and it is unmitigated.
+
+## First token read, and a read-only container filesystem — 2026-08-06
+
+Fresh Approval 1 and Approval 2 authorized one attempt for release
+`76317442402095df03009dabb3d4453bc73064d3`, archive SHA-256
+`a499c3eca7c51e7d1381cfff29e3f2a1f5d83842afa8eb31348953be81954fbf`, during
+`2026-08-06T18:00:00Z`–`2026-08-06T19:00:00Z`, with Approval 2 naming `/app/tokens.json` and the
+operator acknowledging the unmitigated token-rotation risk. The operator was also the rollback
+owner.
+
+| Command | Result |
+|---|---|
+| `prepare` | `approval_1_ready` on the first issue |
+| `approval1-execute` | `approval_2_required` in 51 s |
+| `approval2-execute` | `probe_token_invalid` in 66 s including restoration |
+
+**A token read was reached for the first time.** `probe_token_invalid` is raised from inside the
+credential probe, after the manager transaction has opened the token store. Every prior attempt
+across fifteen windows failed upstream of the credential path.
+
+`proof.reason_code=probe_token_invalid`, `attempt_count=1`, `retry_count=0`,
+`information_exposure=pass`. Restoration returned `restoration_passed` with per-service filtered
+error counts `spx=0`, `ndx=0`, `xsp=0`, for the second window running; 25 of 26 checks passed with
+only `proof` failing, both watchdogs cancelled, and cron restored at two keepalive entries.
+
+**The token document was not modified.** It was last written by the keepalive about twenty-one
+minutes before the post-run read, so the acknowledged rotation risk did not materialize and no
+re-authorization is needed.
+
+### The document is valid; its directory is read-only
+
+A bounded metadata check of the live document found nothing wrong with it: valid JSON,
+`creation_timestamp` a positive number only 3.89 days old against the 7-day refresh TTL, a `token`
+object with non-empty `access_token` and `refresh_token`, a regular non-symlink file at mode
+`0600`, 787 bytes. Every `validate_token_document` and `_load_from_transaction` gate passes.
+
+The failure is `TokenPersistenceError("token lock could not be acquired")`, from the `except OSError`
+around the lock open. The live containers set `read_only: true`, so `/` is mounted `ro` and `/app`
+is read-only, while `/app/tokens.json` is readable only because a file-level bind mount is its own
+read-write mount point. `AtomicTokenManager` derives its lock as a **sibling** of the token
+document, so it needs a writable directory, not a writable file. Confirmed on the host:
+`test -w /app` fails and no lock file exists in the container overlay.
+
+Fixing only the lock would not have been enough. The persistence path writes its replacement in
+the document's own directory and `os.replace`s it, which also needs a writable directory, and the
+temporary file cannot be moved to `/tmp` because `os.replace` cannot cross filesystems. The atomic
+manager therefore cannot operate on a token document whose directory is read-only, and the
+in-container proof path cannot work for any of these services as configured.
+
+This traces to a pivot rather than an oversight. The original design ran the probe on the host with
+`uv run`; it moved into the container after the 2026-08-04 native-dependency import failure, and
+that move silently traded a writable directory for a read-only one.
+
+## Host-executed proof step
+
+The proof step now runs on the host, where the token document's directory is writable by the same
+uid the containers run as. Staging, native smoke, the refusal gate, watchdog arming, quiescence,
+and restoration are unchanged.
+
+`_approval_2_execute` runs `[interpreter, <reviewed root>/…/probe_schwab_gateway_credentials.py,
+--authorize-real-credential-read, --confirm-single-token-writer, --confirm-no-deployment]` with
+`PYTHONPATH` and `SCHWAB_TOKEN_PATH` overridden in a copy of the operator's own environment. No
+`docker exec`, and no credential on any command line.
+
+Four gates run in `prepare` as well as immediately before the probe, so this whole class of
+failure lands in preflight instead of consuming the one authorized attempt:
+
+| Gate | Fixed code | What it proves |
+|---|---|---|
+| `_require_proof_credential_environment` | `proof_environment_invalid` | both credentials present in the operator's environment, by presence only |
+| `_validated_proof_interpreter` | `proof_interpreter_invalid` | absolute, normalized, executable regular file |
+| `_require_host_reviewed_source` | `proof_source_invalid` | every one of the 18 reviewed members matches its archive member |
+| `_require_proof_token_document` | `proof_token_path_invalid` | regular non-symlink file at mode `0600` **whose directory is writable** |
+
+The last gate is the direct lesson of this window: a read-only token directory now fails in
+preflight with its own code instead of surfacing as `probe_token_invalid`, which the code table
+defines as a token read having occurred. `_require_host_native_smoke` additionally runs the
+existing bounded `internal-native-smoke` command under the *same* interpreter that will run the
+proof, because host execution reintroduces the native-import risk that stopped 2026-08-04.
+
+`--proof-interpreter` is required on both `prepare` and `approval2-execute`. The interpreter gate
+deliberately follows symlinks, since a virtualenv interpreter is normally a symlink, unlike the
+token document where a symlink is rejected. All four codes are registered in `_RESULT_CODES` and
+mapped to the new `proof_prerequisites` check, and are deliberately excluded from
+`_STAGED_FAILURE_CODES` because no container payload may claim an operator-side gate.
+
+Host-side locking is also more correct than the container path would have been: the lock now lands
+beside the real document, where the keepalive and any future host writer would contend for it,
+rather than in a container overlay invisible to them.
+
+Verified read-only on Helios: `/opt/butterflyguy/.venv/bin/python` is absolute, normalized,
+executable and a symlink; `scipy.special` and `schwab.auth` both import under it; and
+`/opt/butterflyguy` is writable by uid 1001.
+
+### Workflow consequence the next window must plan for
+
+`SCHWAB_API_KEY` and `SCHWAB_SECRET_KEY` are **not** present in a non-interactive `ssh` session,
+so `prepare` and `approval2-execute` must be invoked by the operator with both already exported.
+The rules forbid the agent from sourcing or inspecting `.env`, so the agent cannot supply them and
+cannot run those two commands itself. `_require_proof_credential_environment` makes this fail in
+preflight with `proof_environment_invalid` rather than inside the attempt.
+
+The container staging step is now vestigial for the proof itself — it still proves the image can
+host the reviewed subset, and restoration still requires its absence, but nothing executes from it.
+Removing it is a candidate follow-up, deliberately not bundled here.
+
+`uv run pytest`: 761 passed, 1 skipped. `uv run ruff check .`: clean. No release archive has been
+cut for this change and it has not run on Helios.

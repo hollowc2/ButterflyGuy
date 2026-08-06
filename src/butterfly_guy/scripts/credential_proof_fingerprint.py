@@ -212,6 +212,7 @@ _CHECK_NAMES = (
     "native_smoke",
     "refusal_gate",
     "watchdog",
+    "proof_prerequisites",
     "single_writer",
     "proof",
     "restoration_fingerprints",
@@ -294,7 +295,10 @@ _FAILURE_CHECK = {
     "probe_state_invalid": "proof",
     "probe_token_invalid": "proof",
     "process_uniqueness_invalid": "process_uniqueness",
-    "proof_token_path_invalid": "proof",
+    "proof_environment_invalid": "proof_prerequisites",
+    "proof_interpreter_invalid": "proof_prerequisites",
+    "proof_source_invalid": "proof_prerequisites",
+    "proof_token_path_invalid": "proof_prerequisites",
     "provenance_invalid": "archive_provenance",
     "restoration_errors_detected": "restoration_errors",
     "single_writer_invalid": "single_writer",
@@ -366,6 +370,9 @@ _RESULT_CODES = frozenset(
         "probe_state_invalid",
         "probe_token_invalid",
         "process_uniqueness_invalid",
+        "proof_environment_invalid",
+        "proof_interpreter_invalid",
+        "proof_source_invalid",
         "proof_token_path_invalid",
         "provenance_invalid",
         "restoration_errors_detected",
@@ -453,6 +460,7 @@ def _run(
     *,
     timeout: int = DEFAULT_COMMAND_TIMEOUT_SECONDS,
     input_bytes: bytes | None = None,
+    env: dict[str, str] | None = None,
 ) -> CapturedProcess:
     try:
         result = subprocess.run(
@@ -461,6 +469,7 @@ def _run(
             capture_output=True,
             check=False,
             timeout=timeout,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         raise OperatorFailure("subprocess_timeout") from None
@@ -3489,6 +3498,16 @@ def _prepare(args: argparse.Namespace) -> None:
         _require_spx_signal_capability()
         _require_watchdog_capability(state)
 
+        # Everything the host-executed proof needs is proven here, in preflight, rather than
+        # inside the one authorized attempt. The 2026-08-06 window spent an attempt to learn
+        # that the container's token directory is read-only.
+        _require_proof_credential_environment()
+        proof_source_root = _require_host_reviewed_source(args.archive)
+        proof_interpreter = _validated_proof_interpreter(args.proof_interpreter)
+        _require_host_native_smoke(proof_interpreter, proof_source_root)
+        _require_proof_token_document(_validated_proof_token_path(args.proof_token_path))
+        state["checks"]["proof_prerequisites"] = "pass"
+
         cron_sha256, keepalive_entries, cron_present = _capture_crontab(args.cron_snapshot)
         state["cron"]["sha256"] = cron_sha256
         state["cron"]["keepalive_entries"] = keepalive_entries
@@ -3537,9 +3556,13 @@ def _staged_failure_code(result: CapturedProcess) -> str:
 
 
 def _run_exact_json(
-    command: Sequence[str], expected: dict[str, object], *, timeout: int = 15
+    command: Sequence[str],
+    expected: dict[str, object],
+    *,
+    timeout: int = 15,
+    env: dict[str, str] | None = None,
 ) -> None:
-    result = _run(command, timeout=timeout)
+    result = _run(command, timeout=timeout, env=env)
     if result.returncode != 0 or result.stderr:
         raise OperatorFailure(_staged_failure_code(result))
     try:
@@ -3664,15 +3687,8 @@ def _prepare_runtime_staging() -> None:
         raise OperatorFailure("staging_target_invalid")
 
 
-def _validated_proof_token_path(path: Path) -> str:
-    """Return the operator-named absolute in-container token document path.
-
-    The probe reads credentials from the environment `docker exec` inherits, but the trading
-    containers export a relative `SCHWAB_TOKEN_PATH`, which the probe's absolute-path guard
-    rejects before any token read. The operator names the document for the one authorized
-    attempt instead, so the guard stays intact and no live service configuration changes. The
-    value is passed only to that one exec and is never written to state or evidence.
-    """
+def _validated_absolute_proof_path(path: Path, code: str) -> str:
+    """Return an operator-named absolute host path, or fail with the caller's fixed code."""
     text = str(path)
     if (
         not path.is_absolute()
@@ -3680,23 +3696,125 @@ def _validated_proof_token_path(path: Path) -> str:
         or _PROOF_TOKEN_PATH_PATTERN.fullmatch(text) is None
         or os.path.normpath(text) != text
     ):
-        raise OperatorFailure("proof_token_path_invalid")
+        raise OperatorFailure(code)
+    return text
+
+
+def _validated_proof_token_path(path: Path) -> str:
+    """Return the operator-named absolute host path of the token document.
+
+    The trading containers export a relative `SCHWAB_TOKEN_PATH`, which the probe's
+    absolute-path guard rejects before any token read, so the operator names the document
+    explicitly. The value is passed only to the one authorized proof process and is never
+    written to state or evidence.
+    """
+    return _validated_absolute_proof_path(path, "proof_token_path_invalid")
+
+
+def _validated_proof_interpreter(path: Path) -> str:
+    """Return the operator-named interpreter that must import the real runtime dependencies.
+
+    The proof runs on the host because the token document's directory is read-only inside
+    every trading container, so the manager can create neither its lock nor its atomic
+    replacement file there. The host interpreter must therefore be one that already has the
+    real `schwab-py` and settings dependencies installed.
+    """
+    text = _validated_absolute_proof_path(path, "proof_interpreter_invalid")
+    # `is_file` follows symlinks deliberately: a virtualenv interpreter is normally a symlink
+    # to the base interpreter, unlike the token document, where a symlink is rejected.
+    if not path.is_file() or not os.access(text, os.X_OK):
+        raise OperatorFailure("proof_interpreter_invalid")
     return text
 
 
 def _require_proof_token_document(token_path: str) -> None:
-    """Prove the named document exists before the probe is invoked.
+    """Prove the named document is usable by the atomic manager before the probe runs.
 
-    A mistyped path would otherwise reach the token manager and fail as
-    `probe_token_invalid`, which the bounded code table defines as a token read having been
-    reached. `test -f` only stats the path; it reads no token content.
+    Two distinct failures are caught here rather than inside the one authorized attempt. A
+    mistyped path would otherwise reach the token manager and fail as `probe_token_invalid`,
+    which the bounded code table defines as a token read having been reached. A document whose
+    directory is not writable fails the same way, because the manager creates its lock and its
+    atomic replacement as siblings of the document; that is exactly how the 2026-08-06
+    in-container attempt failed, since `/app` is read-only. Only metadata is inspected: no
+    token content is read.
     """
-    result = _run(
-        ["docker", "exec", "butterfly_spx_app", "test", "-f", token_path],
-        timeout=10,
-    )
-    if result.returncode != 0 or result.stdout or result.stderr:
+    document = Path(token_path)
+    try:
+        file_stat = document.lstat()
+    except OSError:
+        raise OperatorFailure("proof_token_path_invalid") from None
+    if not stat.S_ISREG(file_stat.st_mode) or stat.S_IMODE(file_stat.st_mode) != 0o600:
         raise OperatorFailure("proof_token_path_invalid")
+    directory = document.parent
+    if not directory.is_dir() or not os.access(directory, os.W_OK | os.X_OK):
+        raise OperatorFailure("proof_token_path_invalid")
+
+
+def _require_proof_credential_environment() -> None:
+    """Require the two credentials in the operator's own environment, by presence only.
+
+    The probe reads them from the environment it inherits and they must never be placed on a
+    command line, so the operator is invoked with them already exported. Only emptiness is
+    tested; no value is read, compared, logged, or persisted.
+    """
+    if not all(os.environ.get(name) for name in ("SCHWAB_API_KEY", "SCHWAB_SECRET_KEY")):
+        raise OperatorFailure("proof_environment_invalid")
+
+
+def _host_reviewed_source_root() -> Path:
+    """Return the reviewed release root this operator is running from."""
+    return Path(__file__).resolve().parents[3]
+
+
+def _require_host_reviewed_source(archive: Path | None) -> Path:
+    """Prove every reviewed member on the host matches the archive before executing any of it.
+
+    The in-container path streams the archive in and verifies one digest inside the container.
+    The host path executes the extracted tree directly, so each member is compared to its
+    archive member instead.
+    """
+    if archive is None:
+        raise OperatorFailure("proof_source_invalid")
+    root = _host_reviewed_source_root()
+    for member in _ARCHIVE_PATHS:
+        expected = _archive_member_sha256(archive, member)
+        try:
+            actual = _sha256_file(root / member, max_bytes=MAX_SOURCE_BYTES)
+        except OperatorFailure:
+            raise OperatorFailure("proof_source_invalid") from None
+        except OSError:
+            raise OperatorFailure("proof_source_invalid") from None
+        if actual != expected:
+            raise OperatorFailure("proof_source_invalid")
+    return root
+
+
+def _proof_process_environment(
+    source_root: Path, token_path: str | None = None
+) -> dict[str, str]:
+    """Return the proof environment: the operator's own, with only these keys overridden."""
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(source_root / "src")
+    if token_path is not None:
+        environment["SCHWAB_TOKEN_PATH"] = token_path
+    return environment
+
+
+def _require_host_native_smoke(interpreter: str, source_root: Path) -> None:
+    """Prove the reviewed subset imports under the exact interpreter that will run the proof.
+
+    Host execution reintroduces the native-import risk that stopped the 2026-08-04 window, so
+    the same bounded smoke command the container path uses is run here first.
+    """
+    _run_exact_json(
+        [
+            interpreter,
+            str(source_root / "src/butterfly_guy/scripts/credential_proof_fingerprint.py"),
+            "internal-native-smoke",
+        ],
+        {"code": "native_smoke_passed", "status": "ok"},
+        env=_proof_process_environment(source_root),
+    )
 
 
 def _cleanup_runtime_staging() -> None:
@@ -4289,8 +4407,9 @@ def _watchdog_cancel_command(args: argparse.Namespace) -> None:
 def _approval_2_execute(args: argparse.Namespace) -> None:
     proof_code = "credential_proof_failed"
     try:
-        # Validated before the attempt is claimed so a malformed path costs no attempt.
+        # Validated before the attempt is claimed so a malformed input costs no attempt.
         token_path = _validated_proof_token_path(args.proof_token_path)
+        interpreter = _validated_proof_interpreter(args.proof_interpreter)
         with _state_lock(args.state):
             state = _read_state(args.state)
             now = int(time.time())
@@ -4351,24 +4470,28 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
         _require_no_unowned_runtime_processes([spx_pid, candidate_pid])
         if _matching_host_processes(_PROOF_MARKER):
             raise OperatorFailure("single_writer_invalid")
+        _require_proof_credential_environment()
         _require_proof_token_document(token_path)
-
-        _, _, source_target = _staging_targets(state)
+        # The proof runs on the host, not in the container: the token document's directory is
+        # read-only inside every trading container, so the manager can create neither its lock
+        # nor its atomic replacement file beside it. Re-verify the reviewed tree immediately
+        # before executing any of it.
+        source_root = _require_host_reviewed_source(args.archive)
         proof_command = [
-            "docker",
-            "exec",
-            "-e",
-            f"PYTHONPATH={source_target}/src",
-            "-e",
-            f"SCHWAB_TOKEN_PATH={token_path}",
-            "butterfly_spx_app",
-            "python",
-            f"{source_target}/src/butterfly_guy/scripts/probe_schwab_gateway_credentials.py",
+            interpreter,
+            str(
+                source_root
+                / "src/butterfly_guy/scripts/probe_schwab_gateway_credentials.py"
+            ),
             "--authorize-real-credential-read",
             "--confirm-single-token-writer",
             "--confirm-no-deployment",
         ]
-        result = _run(proof_command, timeout=PROOF_TIMEOUT_SECONDS)
+        result = _run(
+            proof_command,
+            timeout=PROOF_TIMEOUT_SECONDS,
+            env=_proof_process_environment(source_root, token_path),
+        )
         expected_output = '{"quote_count":1,"status":"ok","token_state":"ready"}\n'
         if result.returncode != 0:
             # Adopt the probe's own bounded code so a failure names its stage, and with it
@@ -4391,6 +4514,9 @@ def _approval_2_execute(args: argparse.Namespace) -> None:
         proof_code = exc.code if exc.code in _PROOF_FAILURE_CODES | {
             "credential_proof_failed",
             "credential_output_invalid",
+            "proof_environment_invalid",
+            "proof_interpreter_invalid",
+            "proof_source_invalid",
             "proof_token_path_invalid",
             "single_writer_invalid",
             "subprocess_timeout",
@@ -4531,6 +4657,8 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--expected-archive-sha256", required=True)
     prepare.add_argument("--rollback-override", required=True, type=Path)
     prepare.add_argument("--cron-snapshot", required=True, type=Path)
+    prepare.add_argument("--proof-token-path", required=True, type=Path)
+    prepare.add_argument("--proof-interpreter", required=True, type=Path)
 
     approval_1 = subparsers.add_parser("approval1-execute", add_help=False)
     approval_1.add_argument("--state", required=True, type=Path)
@@ -4565,6 +4693,7 @@ def _parser() -> argparse.ArgumentParser:
     approval_2.add_argument("--state", required=True, type=Path)
     approval_2.add_argument("--approval-reference", required=True)
     approval_2.add_argument("--proof-token-path", required=True, type=Path)
+    approval_2.add_argument("--proof-interpreter", required=True, type=Path)
     approval_2.add_argument("--base-compose", required=True, type=Path)
     approval_2.add_argument("--rollback-override", required=True, type=Path)
     approval_2.add_argument("--cron-snapshot", required=True, type=Path)

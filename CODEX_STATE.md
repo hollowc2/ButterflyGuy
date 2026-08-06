@@ -204,15 +204,37 @@ restored. A bounded `docker exec ... test -f` gate then proves the document exis
 otherwise a mistyped path would return `probe_token_invalid` and falsely assert that a token read
 occurred. The new `proof_token_path_invalid` is registered in `_RESULT_CODES`, mapped to the `proof`
 check, and adoptable by `_approval_2_execute`, but is deliberately excluded from
-`_STAGED_FAILURE_CODES` because no container payload may claim an operator-side gate. Twelve new
-tests cover the exec shape, credential absence from the command line, non-persistence of the path,
-seven rejected path forms, the absent-document case, unexpected gate output, and the argparse
-requirement: `uv run pytest` is 756 passed, 1 skipped, and `uv run ruff check .` is clean. Exact
-release `76317442402095df03009dabb3d4453bc73064d3` has archive
-`/tmp/butterfly-gateway-multi-consumer-foundation-7631744.tar` at mode `0600` with SHA-256
-`a499c3eca7c51e7d1381cfff29e3f2a1f5d83842afa8eb31348953be81954fbf`; `_validate_archive` accepts it
-against the commit and the archived operator member matches the checkout byte for byte. This
-release is local and fake-tested only; it has never run against Helios.
+`_STAGED_FAILURE_CODES` because no container payload may claim an operator-side gate. Exact release
+`76317442402095df03009dabb3d4453bc73064d3` has archive SHA-256
+`a499c3eca7c51e7d1381cfff29e3f2a1f5d83842afa8eb31348953be81954fbf`, reproducible bit-for-bit from
+the commit. Under fresh Approval 1 and Approval 2 naming `/app/tokens.json`, with the rotation risk
+acknowledged, that release ran on Helios during `2026-08-06T18:00:00Z`–`2026-08-06T19:00:00Z`.
+`prepare` returned `approval_1_ready` first time, `approval1-execute` returned
+`approval_2_required` in 51 seconds, and `approval2-execute` returned **`probe_token_invalid`** —
+the first time a token read has ever been reached, since that code is raised from inside the probe
+after the manager transaction opens the token store. Restoration passed again with per-service
+error counts `spx=0, ndx=0, xsp=0`, 25 of 26 checks passed with only `proof` failing, and the token
+document was **not** modified, so the rotation risk did not materialize. The document itself is
+valid: positive `creation_timestamp` only 3.89 days old against the 7-day TTL, non-empty
+`access_token`/`refresh_token`, regular non-symlink file at mode `0600`. The real cause is
+`TokenPersistenceError` on the lock open: the containers set `read_only: true`, so `/app` is
+read-only while `/app/tokens.json` is writable only as its own bind mount point, and
+`AtomicTokenManager` creates both its lock and its atomic replacement as siblings of the document.
+Relocating the temporary file cannot fix it because `os.replace` cannot cross filesystems, so the
+in-container proof path cannot work for any of these services. The proof step is therefore now
+executed on the host, where `/opt/butterflyguy` is writable by the same uid the containers use:
+`_approval_2_execute` runs the probe under an operator-named `--proof-interpreter` with `PYTHONPATH`
+and `SCHWAB_TOKEN_PATH` overridden in a copy of its own environment, with no `docker exec` and no
+credential on a command line. Four gates — credential-environment presence, interpreter validity,
+per-member reviewed-source equality against the archive, and a token document that is a private
+regular file **in a writable directory** — run in `prepare` as well as immediately before the probe,
+under the new `proof_prerequisites` check and the fixed codes `proof_environment_invalid`,
+`proof_interpreter_invalid`, `proof_source_invalid`, and `proof_token_path_invalid`; a host native
+smoke runs the existing bounded command under the same interpreter. Verified read-only on Helios:
+the venv interpreter passes its gate and is a symlink, `scipy.special` and `schwab.auth` import
+under it, and the token directory is writable. `uv run pytest` is 761 passed, 1 skipped, and
+`uv run ruff check .` is clean. This host-execution change has no release archive and has never run
+against Helios.
 
 ## Repository Findings
 
@@ -395,24 +417,29 @@ process-uniqueness completion.
 
 ## Next Exact Action
 
-Obtain fresh Approval 1 and Approval 2 and run one supervised attempt on Helios. Approval 1 must
-name commit `76317442402095df03009dabb3d4453bc73064d3` — not the follow-up commit that records the
-release identifiers — and Approval 2 must additionally name the absolute in-container
-token document the operator authorizes the proof to open, since the operator now supplies it
-explicitly. Relaxing the probe's absolute-path guard to resolve against the working directory and
-editing the SPX container environment were both considered and rejected, the latter because it would
-invalidate the accepted runtime-baseline digest.
+Cut a release archive for the host-execution commit, then obtain fresh Approval 1 and Approval 2 and
+run one supervised attempt on Helios. Approval 1 must name the new host-execution commit, not the
+follow-up commit that records the release identifiers. Approval 2 must name the **host** token
+document `/opt/butterflyguy/tokens.json` — no longer the in-container `/app/tokens.json` — and must
+re-acknowledge the unmitigated token-rotation risk, which is now live because the manager can
+actually persist.
 
-That attempt will be the first to exercise the token document itself. Mode `0600` and non-symlink
-status are already confirmed on the host, but token expiry and payload shape are not, so
-`probe_token_invalid` is a realistic outcome and would be a genuine token-read result rather than a
-configuration artifact.
+**The operator must run `prepare` and `approval2-execute` personally, with `SCHWAB_API_KEY` and
+`SCHWAB_SECRET_KEY` exported.** They are absent from a non-interactive `ssh` session, and the agent
+may not source or inspect `.env`, so the agent cannot supply them or run those two commands. Expect
+`proof_environment_invalid` in preflight if they are missing. `approval1-execute` needs no
+credentials and can be run normally, but the 120-second approval watchdog means it must be chained
+to `approval2-execute` in the same invocation.
+
+That attempt will be the first able to complete a token read, construct a client, and issue the
+quote. Realistic outcomes are `credential_proof_passed`, `probe_client_construction_failed`, or
+`probe_quote_failed` — the last being the only code proving a Schwab request was issued.
 
 Already host-proven and not in need of re-proof: bounded staged-code propagation, the settled
-restoration error window (zero filtered errors on all three services, no pause),
-`approval_window_pending`, and the whole staging/smoke/refusal/watchdog/quiescence path. Still
-unproven against the live host: the failed-restoration cleanup split, since restoration has not
-failed under this release.
+restoration error window (zero filtered errors, no pause, twice), `approval_window_pending`, the
+whole staging/smoke/refusal/watchdog/quiescence path, and the token read itself. Still unproven
+against the live host: the host-executed proof step, its four new prerequisite gates, and the
+failed-restoration cleanup split, since restoration has not failed under either release.
 
 Issue `prepare` at or after the window start — not before — and always against a fresh state path.
 No gateway deployment, trading action, configuration change, order/account operation, or cutover is

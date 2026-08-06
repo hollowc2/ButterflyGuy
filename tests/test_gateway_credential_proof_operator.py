@@ -109,8 +109,23 @@ def approval_args(tmp_path: Path) -> Namespace:
         rollback_override=tmp_path / "rollback.yml",
         cron_snapshot=tmp_path / "cron.txt",
         archive=tmp_path / "reviewed.tar",
-        proof_token_path=Path("/app/tokens.json"),
+        proof_token_path=Path("/opt/butterflyguy/tokens.json"),
+        proof_interpreter=Path("/opt/butterflyguy/.venv/bin/python"),
         watchdog_fired=False,
+    )
+
+
+REVIEWED_ROOT = Path("/var/tmp/reviewed-release")
+PROBE_RELATIVE = "src/butterfly_guy/scripts/probe_schwab_gateway_credentials.py"
+
+
+def patch_proof_prerequisites(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Neutralize the host proof gates that would read real credentials or real files."""
+    monkeypatch.setattr(operator, "_require_proof_credential_environment", lambda: None)
+    monkeypatch.setattr(operator, "_require_proof_token_document", lambda *_args: None)
+    monkeypatch.setattr(operator, "_require_host_reviewed_source", lambda *_args: REVIEWED_ROOT)
+    monkeypatch.setattr(
+        operator, "_validated_proof_interpreter", lambda path: str(path)
     )
 
 
@@ -126,7 +141,7 @@ def patch_approval_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(operator, "_require_no_host_writers", lambda: None)
     monkeypatch.setattr(operator, "_require_no_unowned_runtime_processes", lambda *_args: None)
     monkeypatch.setattr(operator, "_matching_host_processes", lambda *_args: [])
-    monkeypatch.setattr(operator, "_require_proof_token_document", lambda *_args: None)
+    patch_proof_prerequisites(monkeypatch)
 
 
 def test_subprocess_timeout_maps_to_fixed_code(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1087,11 +1102,13 @@ def test_runtime_baseline_approval_2_uses_only_fixed_tmpfs_source(
 
     assert len(proof_commands) == 1
     command = proof_commands[0]
-    assert f"PYTHONPATH={operator.RUNTIME_STAGING_TMPFS_TARGET}/source/src" in command
-    assert (
-        f"{operator.RUNTIME_STAGING_TMPFS_TARGET}/source/src/"
-        "butterfly_guy/scripts/probe_schwab_gateway_credentials.py"
-    ) in command
+    # The proof runs the reviewed host tree, never the container staging copy: the token
+    # document's directory is read-only inside the container, so the manager cannot lock it.
+    assert command[0] == str(args.proof_interpreter)
+    assert command[1] == str(REVIEWED_ROOT / PROBE_RELATIVE)
+    assert not any(operator.RUNTIME_STAGING_TMPFS_TARGET in part for part in command)
+    assert not any(operator.STAGING_TMPFS_TARGET in part for part in command)
+    assert "docker" not in command
 
 
 def test_approval_2_injects_only_the_operator_named_absolute_token_path(
@@ -1099,7 +1116,7 @@ def test_approval_2_injects_only_the_operator_named_absolute_token_path(
     tmp_path: Path,
 ) -> None:
     args = approval_args(tmp_path)
-    args.proof_token_path = Path("/app/tokens.json")
+    args.proof_token_path = Path("/opt/butterflyguy/tokens.json")
     state = runtime_baseline_state("approval_2_pending")
     state["watchdog"].update(
         {
@@ -1111,10 +1128,12 @@ def test_approval_2_injects_only_the_operator_named_absolute_token_path(
     )
     write_state(args.state, state)
     patch_approval_checks(monkeypatch)
-    proof_commands: list[list[str]] = []
+    monkeypatch.setenv("SCHWAB_API_KEY", "environment-only-key")
+    monkeypatch.setenv("SCHWAB_SECRET_KEY", "environment-only-secret")
+    calls: list[tuple[list[str], dict]] = []
 
-    def fake_run(command, **_kwargs):
-        proof_commands.append(list(command))
+    def fake_run(command, **kwargs):
+        calls.append((list(command), kwargs))
         return result(stdout='{"quote_count":1,"status":"ok","token_state":"ready"}\n')
 
     monkeypatch.setattr(operator, "_run", fake_run)
@@ -1122,15 +1141,30 @@ def test_approval_2_injects_only_the_operator_named_absolute_token_path(
 
     operator._approval_2_execute(args)
 
-    assert len(proof_commands) == 1
-    command = proof_commands[0]
-    assert command.count("-e") == 2
-    assert "SCHWAB_TOKEN_PATH=/app/tokens.json" in command
-    assert f"PYTHONPATH={operator.RUNTIME_STAGING_TMPFS_TARGET}/source/src" in command
-    # The credentials themselves are never placed on the command line.
-    assert not any("SCHWAB_API_KEY" in part or "SCHWAB_SECRET_KEY" in part for part in command)
-    # The named path is an exec argument only; it is never persisted.
-    assert "/app/tokens.json" not in args.state.read_text(encoding="utf-8")
+    assert len(calls) == 1
+    command, kwargs = calls[0]
+    # The token path is delivered through the environment, never on the command line.
+    assert command == [
+        str(args.proof_interpreter),
+        str(REVIEWED_ROOT / PROBE_RELATIVE),
+        "--authorize-real-credential-read",
+        "--confirm-single-token-writer",
+        "--confirm-no-deployment",
+    ]
+    environment = kwargs["env"]
+    assert environment["SCHWAB_TOKEN_PATH"] == "/opt/butterflyguy/tokens.json"
+    assert environment["PYTHONPATH"] == str(REVIEWED_ROOT / "src")
+    # The two credentials are inherited, never rewritten and never put in argv.
+    assert environment["SCHWAB_API_KEY"] == "environment-only-key"
+    assert environment["SCHWAB_SECRET_KEY"] == "environment-only-secret"
+    assert not any(
+        "SCHWAB_API_KEY" in part or "SCHWAB_SECRET_KEY" in part for part in command
+    )
+    # Neither the named path nor any credential is persisted.
+    stored = args.state.read_text(encoding="utf-8")
+    assert "/opt/butterflyguy/tokens.json" not in stored
+    assert "environment-only-key" not in stored
+    assert "environment-only-secret" not in stored
 
 
 @pytest.mark.parametrize(
@@ -1201,9 +1235,12 @@ def test_absent_token_document_is_not_reported_as_a_token_read(
         }
     )
     write_state(args.state, state)
+    args.proof_token_path = tmp_path / "absent-tokens.json"
     real_gate = operator._require_proof_token_document
     patch_approval_checks(monkeypatch)
     monkeypatch.setattr(operator, "_require_proof_token_document", real_gate)
+    monkeypatch.setenv("SCHWAB_API_KEY", "k")
+    monkeypatch.setenv("SCHWAB_SECRET_KEY", "s")
     commands: list[list[str]] = []
 
     def fake_run(command, **_kwargs):
@@ -1216,53 +1253,210 @@ def test_absent_token_document_is_not_reported_as_a_token_read(
     with pytest.raises(operator.OperatorFailure, match="proof_token_path_invalid"):
         operator._approval_2_execute(args)
 
-    assert commands == [
-        ["docker", "exec", "butterfly_spx_app", "test", "-f", "/app/tokens.json"]
-    ]
-    assert not any(operator._PROOF_MARKER in " ".join(command) for command in commands)
+    # The probe was never invoked, so the failure cannot be mistaken for a token read.
+    assert commands == []
     proof = operator._read_state(args.state)["proof"]
     assert proof["reason_code"] == "proof_token_path_invalid"
     assert proof["result"] == "fail"
     assert proof["retry_count"] == 0
 
 
-def test_proof_token_document_gate_rejects_unexpected_output(
+def test_token_document_gate_requires_private_regular_file_and_writable_directory(
+    tmp_path: Path,
+) -> None:
+    """The manager creates its lock and atomic replacement beside the document."""
+    document = tmp_path / "tokens.json"
+    document.write_text("{}", encoding="utf-8")
+    document.chmod(0o600)
+    operator._require_proof_token_document(str(document))
+
+    # A group- or world-readable document is what the manager itself rejects.
+    document.chmod(0o644)
+    with pytest.raises(operator.OperatorFailure, match="proof_token_path_invalid"):
+        operator._require_proof_token_document(str(document))
+    document.chmod(0o600)
+
+    # A directory is not a token document.
+    with pytest.raises(operator.OperatorFailure, match="proof_token_path_invalid"):
+        operator._require_proof_token_document(str(tmp_path))
+
+    # This is the 2026-08-06 in-container failure: /app was read-only, so the lock and the
+    # atomic replacement could not be created next to a perfectly valid document.
+    read_only_dir = tmp_path / "read-only"
+    read_only_dir.mkdir()
+    nested = read_only_dir / "tokens.json"
+    nested.write_text("{}", encoding="utf-8")
+    nested.chmod(0o600)
+    read_only_dir.chmod(0o500)
+    try:
+        with pytest.raises(operator.OperatorFailure, match="proof_token_path_invalid"):
+            operator._require_proof_token_document(str(nested))
+    finally:
+        read_only_dir.chmod(0o700)
+
+
+def test_credential_environment_gate_tests_presence_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("SCHWAB_API_KEY", "k")
+    monkeypatch.setenv("SCHWAB_SECRET_KEY", "s")
+    operator._require_proof_credential_environment()
+
+    for missing in ("SCHWAB_API_KEY", "SCHWAB_SECRET_KEY"):
+        monkeypatch.setenv("SCHWAB_API_KEY", "k")
+        monkeypatch.setenv("SCHWAB_SECRET_KEY", "s")
+        monkeypatch.setenv(missing, "")
+        with pytest.raises(operator.OperatorFailure) as exc:
+            operator._require_proof_credential_environment()
+        assert exc.value.code == "proof_environment_invalid"
+        # The gate never reveals which value it inspected.
+        assert missing not in str(exc.value)
+
+
+def test_interpreter_gate_accepts_a_symlinked_venv_python_but_not_a_directory(
+    tmp_path: Path,
+) -> None:
+    real = tmp_path / "python3.12"
+    real.write_text("#!/bin/sh\n", encoding="utf-8")
+    real.chmod(0o755)
+    link = tmp_path / "python"
+    link.symlink_to(real)
+    # A virtualenv interpreter is normally a symlink, so it must be accepted.
+    assert operator._validated_proof_interpreter(link) == str(link)
+
+    not_executable = tmp_path / "plain.py"
+    not_executable.write_text("x = 1\n", encoding="utf-8")
+    for candidate in (tmp_path, not_executable, tmp_path / "absent", Path("python3")):
+        with pytest.raises(operator.OperatorFailure) as exc:
+            operator._validated_proof_interpreter(candidate)
+        assert exc.value.code == "proof_interpreter_invalid"
+
+
+def test_host_reviewed_source_must_match_every_archive_member(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = tmp_path / "release"
+    for member in operator._ARCHIVE_PATHS:
+        target = root / member
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(f"contents of {member}\n", encoding="utf-8")
+    monkeypatch.setattr(operator, "_host_reviewed_source_root", lambda: root)
     monkeypatch.setattr(
-        operator, "_run", lambda *_args, **_kwargs: result(stdout=SENSITIVE)
+        operator,
+        "_archive_member_sha256",
+        lambda _archive, member: hashlib.sha256(
+            f"contents of {member}\n".encode()
+        ).hexdigest(),
     )
-    with pytest.raises(operator.OperatorFailure) as exc:
-        operator._require_proof_token_document("/app/tokens.json")
-    assert exc.value.code == "proof_token_path_invalid"
-    assert SENSITIVE not in str(exc.value)
+    archive = tmp_path / "reviewed.tar"
+
+    assert operator._require_host_reviewed_source(archive) == root
+
+    # One altered member fails closed, and so does a missing archive.
+    altered = operator._ARCHIVE_PATHS[-1]
+    (root / altered).write_text("tampered\n", encoding="utf-8")
+    for candidate in (archive, None):
+        with pytest.raises(operator.OperatorFailure) as exc:
+            operator._require_host_reviewed_source(candidate)
+        assert exc.value.code == "proof_source_invalid"
 
 
-def test_proof_token_path_invalid_is_a_registered_bounded_proof_code() -> None:
-    assert "proof_token_path_invalid" in operator._RESULT_CODES
-    assert operator._FAILURE_CHECK["proof_token_path_invalid"] == "proof"
-    # It is an operator-side gate, so no staged container command may claim it.
-    assert "proof_token_path_invalid" not in operator._STAGED_FAILURE_CODES
+def test_host_native_smoke_runs_the_reviewed_operator_under_the_named_interpreter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[list[str], dict]] = []
+
+    def fake_run(command, **kwargs):
+        calls.append((list(command), kwargs))
+        return result(stdout='{"code":"native_smoke_passed","status":"ok"}\n')
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+
+    operator._require_host_native_smoke("/venv/bin/python", REVIEWED_ROOT)
+
+    command, kwargs = calls[0]
+    assert command == [
+        "/venv/bin/python",
+        str(REVIEWED_ROOT / "src/butterfly_guy/scripts/credential_proof_fingerprint.py"),
+        "internal-native-smoke",
+    ]
+    assert kwargs["env"]["PYTHONPATH"] == str(REVIEWED_ROOT / "src")
+    # The smoke check has no business naming a token document.
+    assert "SCHWAB_TOKEN_PATH" not in kwargs["env"]
 
 
-def test_approval_2_requires_an_explicit_proof_token_path() -> None:
-    parser = operator._parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(
-            [
-                "approval2-execute",
-                "--state",
-                "/tmp/state.json",
-                "--approval-reference",
-                "approved-in-chat",
-                "--base-compose",
-                "/tmp/compose.yml",
-                "--rollback-override",
-                "/tmp/rollback.yml",
-                "--cron-snapshot",
-                "/tmp/cron.txt",
-            ]
-        )
+def test_host_proof_prerequisite_codes_are_registered_and_not_claimable_by_containers() -> None:
+    codes = (
+        "proof_token_path_invalid",
+        "proof_interpreter_invalid",
+        "proof_environment_invalid",
+        "proof_source_invalid",
+    )
+    for code in codes:
+        assert code in operator._RESULT_CODES
+        assert operator._FAILURE_CHECK[code] == "proof_prerequisites"
+        # These are operator-side gates, so no staged container command may claim one.
+        assert code not in operator._STAGED_FAILURE_CODES
+    assert "proof_prerequisites" in operator._CHECK_NAMES
+
+
+@pytest.mark.parametrize("omitted", ["--proof-token-path", "--proof-interpreter"])
+def test_approval_2_and_prepare_require_the_explicit_host_proof_inputs(
+    omitted: str,
+) -> None:
+    approval_2 = [
+        "approval2-execute",
+        "--state",
+        "/tmp/state.json",
+        "--approval-reference",
+        "approved-in-chat",
+        "--base-compose",
+        "/tmp/compose.yml",
+        "--rollback-override",
+        "/tmp/rollback.yml",
+        "--cron-snapshot",
+        "/tmp/cron.txt",
+        "--proof-token-path",
+        "/opt/butterflyguy/tokens.json",
+        "--proof-interpreter",
+        "/opt/butterflyguy/.venv/bin/python",
+    ]
+    prepare = [
+        "prepare",
+        "--state",
+        "/tmp/state.json",
+        "--approved-sha",
+        APPROVED_SHA,
+        "--approval-reference",
+        "approved-in-chat",
+        "--window-start-utc",
+        "2026-08-06T18:00:00Z",
+        "--window-end-utc",
+        "2026-08-06T19:00:00Z",
+        "--base-compose",
+        "/tmp/compose.yml",
+        "--staging-override",
+        "/tmp/staging.yml",
+        "--archive",
+        "/tmp/reviewed.tar",
+        "--expected-archive-sha256",
+        ARCHIVE_SHA,
+        "--rollback-override",
+        "/tmp/rollback.yml",
+        "--cron-snapshot",
+        "/tmp/cron.txt",
+        "--proof-token-path",
+        "/opt/butterflyguy/tokens.json",
+        "--proof-interpreter",
+        "/opt/butterflyguy/.venv/bin/python",
+    ]
+    # Both commands require both inputs, so the prerequisites fail in preflight rather than
+    # inside the one authorized attempt.
+    for argv in (approval_2, prepare):
+        index = argv.index(omitted)
+        with pytest.raises(SystemExit):
+            operator._parser().parse_args(argv[:index] + argv[index + 2 :])
+        assert operator._parser().parse_args(argv)
 
 
 def test_malformed_secret_credential_output_is_not_persisted(
@@ -1776,6 +1970,8 @@ def prepare_args(tmp_path: Path) -> Namespace:
         expected_archive_sha256=ARCHIVE_SHA,
         rollback_override=tmp_path / "rollback.yml",
         cron_snapshot=tmp_path / "cron.txt",
+        proof_token_path=Path("/opt/butterflyguy/tokens.json"),
+        proof_interpreter=Path("/opt/butterflyguy/.venv/bin/python"),
         watchdog_fired=False,
     )
 
@@ -1810,6 +2006,10 @@ def patch_prepare_success(
     monkeypatch.setattr(operator, "_require_watchdog_capability", lambda *_args: None)
     monkeypatch.setattr(operator, "_require_docker_stop_output_shape", lambda: None)
     monkeypatch.setattr(operator, "_require_spx_signal_capability", lambda: None)
+    # Host proof prerequisites: never touch the real credential environment, token document,
+    # interpreter, or reviewed tree from the test suite.
+    patch_proof_prerequisites(monkeypatch)
+    monkeypatch.setattr(operator, "_require_host_native_smoke", lambda *_args: None)
 
     def capture_cron(path: Path):
         operator._write_private_bytes(path, b"")
