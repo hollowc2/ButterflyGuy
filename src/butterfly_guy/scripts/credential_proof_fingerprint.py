@@ -3518,7 +3518,7 @@ def _stage_archive(
     if extracted.returncode != 0 or extracted.stdout or extracted.stderr:
         raise OperatorFailure("staging_extract_invalid")
     digest_result = _run(
-        ["docker", "exec", "butterfly_spx_app", "sha256sum", STAGING_ARCHIVE_TARGET],
+        ["docker", "exec", "butterfly_spx_app", "sha256sum", archive_target],
         timeout=10,
     )
     parts = digest_result.stdout.strip().split()

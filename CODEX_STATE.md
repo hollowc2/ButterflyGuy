@@ -86,6 +86,12 @@ tmpfs. Automatic exact restoration passed again, all exact temporary material wa
 private failure state was retained, and no smoke/quiescence/credential/Schwab action occurred. GNU
 `dd` 9.7 is present in the running image. The local correction now replaces `docker cp` with a
 bounded `docker exec -i ... dd` byte stream followed by the existing in-container SHA-256 check.
+Local review of release `768dc6d21c6121210e7ed597026ecf49bbb1b99f` then found that its digest gate
+verified the fixed legacy `/app` target rather than the caller's own root target, so the
+runtime-baseline path would have staged correctly under `/tmp` and failed closed at
+`staging_digest_invalid`. No live attempt was made under that release. The digest gate now uses the
+caller's archive target, and new tests cover the runtime root target and reject a legacy-path digest
+reply in runtime mode.
 
 ## Repository Findings
 

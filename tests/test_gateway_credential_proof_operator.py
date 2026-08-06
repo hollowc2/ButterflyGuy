@@ -389,6 +389,50 @@ def test_container_archive_staging_verifies_every_command_and_digest(
     assert inputs == [None, b"reviewed-archive", None, None]
 
 
+def test_container_archive_staging_uses_runtime_root_for_every_command(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = operator.RUNTIME_STAGING_TMPFS_TARGET
+    archive_target = f"{root}/reviewed.tar"
+    commands: list[list[str]] = []
+    archive = tmp_path / "reviewed.tar"
+    archive.write_bytes(b"reviewed-archive")
+
+    def fake_run(command, **_kwargs):
+        commands.append(list(command))
+        if "sha256sum" in command:
+            return result(stdout=f"{ARCHIVE_SHA}  {archive_target}\n")
+        return result()
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    operator._stage_archive(archive, ARCHIVE_SHA, root_target=root)
+    assert commands[0][-1] == f"{root}/source"
+    assert commands[1][-2:] == [f"of={archive_target}", "status=none"]
+    assert commands[2][-3:] == [archive_target, "-C", f"{root}/source"]
+    assert commands[3][-1] == archive_target
+    assert not any(operator.STAGING_TMPFS_TARGET in part for c in commands for part in c)
+
+
+def test_container_archive_staging_rejects_runtime_digest_from_legacy_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    archive = tmp_path / "reviewed.tar"
+    archive.write_bytes(b"reviewed-archive")
+
+    def fake_run(command, **_kwargs):
+        if "sha256sum" in command:
+            return result(stdout=f"{ARCHIVE_SHA}  {operator.STAGING_ARCHIVE_TARGET}\n")
+        return result()
+
+    monkeypatch.setattr(operator, "_run", fake_run)
+    with pytest.raises(operator.OperatorFailure, match="staging_digest_invalid"):
+        operator._stage_archive(
+            archive,
+            ARCHIVE_SHA,
+            root_target=operator.RUNTIME_STAGING_TMPFS_TARGET,
+        )
+
+
 def test_container_archive_staging_rejects_success_with_unexpected_output(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

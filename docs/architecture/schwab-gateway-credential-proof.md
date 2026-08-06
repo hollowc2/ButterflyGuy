@@ -523,3 +523,23 @@ archive, streams those exact bytes through `docker exec -i ... dd` into the fixe
 requires silent success, re-verifies the in-container SHA-256, and only then extracts. This remains
 local and requires a new committed release, full verification, and fresh Approval 1 before any live
 attempt.
+
+## Runtime-baseline staging digest-path defect — 2026-08-06
+
+Local review of release `768dc6d21c6121210e7ed597026ecf49bbb1b99f` found that the streaming
+correction verified the staged archive at the fixed legacy `/app` target instead of the caller's
+own root target. The runtime-baseline path stages under `/tmp`, and the legacy `/app` tmpfs exists
+only under the prohibited staging override, so that path is affirmatively absent whenever the
+accepted runtime baseline is in force. The release would therefore have created the target,
+streamed the bytes, and extracted them successfully, then failed closed at `staging_digest_invalid`
+before native smoke, watchdog arming, quiescence, credential access, or Schwab access.
+
+The existing staging tests only exercised the default legacy root target and monkeypatched both
+runtime-mode call sites, so no test covered the runtime root. A reproduction test drives the
+runtime root target and asserts that target creation, the `dd` stream, extraction, and the
+in-container digest all resolve under `/tmp/.schwab-credential-proof-runtime` and that no command
+references the legacy root. It fails against the defective release with the exact `/app` versus
+`/tmp` mismatch. A second test requires a digest reply naming the legacy path to be rejected in
+runtime mode. The digest gate now verifies the caller's own archive target. No live attempt was
+made under the defective release, and a new committed release, full verification, and fresh
+Approval 1 are required before any live attempt.
