@@ -3,6 +3,18 @@
 Both the gateway's chain upstream and the consumer-side shadow comparator must derive
 the same summary from the same raw Schwab payload, so the derivation lives here rather
 than inside either of them. It never returns, counts, or copies contract rows.
+
+A payload carrying neither ``callExpDateMap`` nor ``putExpDateMap`` (or carrying one or
+both as something other than a dict, e.g. absent, ``null``, or empty) is treated as a
+legitimate zero-result chain, exactly like the two live parsers (``data.chain_utils
+.iter_chain_options`` and ``data.collector.OptionChainCollector._parse_chain_response``,
+both of which use ``payload.get(map_key, {})`` and never raise on a missing map). This
+used to raise ``ValueError`` here as a guard against unparseable payloads, but that guard
+had a real cost: the gateway's ``/v1/chain`` upstream converted the raise into a 502, and
+the shadow comparator logged it as a "parsing" discrepancy, for a shape (e.g. an
+after-hours or halted-symbol response with no expiration maps) that the collector already
+handles as zero rows without complaint. Only a payload that is not a dict at all is still
+rejected, since that is a shape none of the three parsers can walk.
 """
 
 from __future__ import annotations
@@ -93,15 +105,14 @@ def extract_chain_metadata(
 ) -> ChainMetadataFields:
     """Summarize a raw Schwab option-chain response for one expiration.
 
-    Raises ``ValueError`` when the payload carries neither expiration map, which is the
-    only shape that cannot be summarized at all.
+    Raises ``ValueError`` only when the payload itself is not an object; that is the one
+    shape none of the three chain parsers can walk. A payload missing one or both
+    expiration maps is not an error here, matching both live parsers.
     """
     if not isinstance(payload, dict):
         raise ValueError("option chain payload must be an object")
     call_map = payload.get("callExpDateMap")
     put_map = payload.get("putExpDateMap")
-    if not isinstance(call_map, dict) and not isinstance(put_map, dict):
-        raise ValueError("option chain payload has no expiration map")
 
     call_contracts, call_strikes = _count_expiration(call_map, expiration)
     put_contracts, put_strikes = _count_expiration(put_map, expiration)

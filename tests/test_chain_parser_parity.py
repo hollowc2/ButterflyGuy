@@ -10,8 +10,18 @@ and answer different questions about it:
   the gateway's ``/v1/chain`` surface and the shadow comparator.
 
 The live parsers are read-only here. These tests assert the *relationship* between the
-three so the trio cannot drift apart silently, and deliberately record the two places
-where the semantics genuinely differ rather than papering over them.
+three so the trio cannot drift apart silently, and deliberately record the one place
+where the semantics genuinely differ rather than papering over it.
+
+A second divergence used to be pinned here: a payload with neither expiration map raised
+``ValueError`` from ``extract_chain_metadata`` while both live parsers tolerated it as a
+zero-result shape. That divergence was removed (not papered over) by relaxing
+``extract_chain_metadata`` to agree with the live parsers on that shape, because the
+raise had a real production cost — the gateway's ``/v1/chain`` upstream turned it into a
+502 and the shadow comparator logged a false "parsing" discrepancy for degenerate-but-
+legitimate responses (e.g. after-hours or halted-symbol chains) that the collector
+already handles as zero rows. See ``test_neither_expiration_map_present_is_tolerated_by_all_three``
+below, which now asserts agreement instead of divergence.
 
 These are **synthetic fixtures, not golden recorded inputs**. No raw Schwab
 ``callExpDateMap`` payload exists anywhere in this repository outside test files —
@@ -279,12 +289,25 @@ def test_a_non_numeric_strike_key_diverges_and_the_divergence_is_recorded() -> N
         _parse_rows(NON_NUMERIC_STRIKE_KEY, EXPIRATION)
 
 
-def test_neither_expiration_map_present_is_the_only_shape_the_metadata_refuses() -> None:
-    """The live parsers tolerate a payload with no maps; the metadata refuses it."""
+def test_neither_expiration_map_present_is_tolerated_by_all_three() -> None:
+    """A payload with no expiration maps is a normal zero-result shape for all three.
+
+    ``extract_chain_metadata`` used to raise ``ValueError`` on this shape while both live
+    parsers quietly produced zero rows/yields for it. That was a genuine divergence with
+    a real cost once shadow reads compare the two: a degenerate-but-legitimate response
+    (e.g. after-hours or a halted symbol) made the gateway's ``/v1/chain`` return 502 and
+    made the shadow comparator log a false "parsing" discrepancy, for a shape the direct
+    collector path never treated as an error. The raise was removed so all three now
+    agree: this is tolerated, not refused.
+    """
     payload: dict[str, Any] = {"underlyingPrice": 5500.0}
 
-    with pytest.raises(ValueError):
-        extract_chain_metadata(payload, EXPIRATION)
+    fields = extract_chain_metadata(payload, EXPIRATION)
+    assert (fields.call_contract_count, fields.put_contract_count, fields.strike_count) == (
+        0,
+        0,
+        0,
+    )
 
     assert _parse_rows(payload, EXPIRATION) == []
     assert list(iter_chain_options(payload, EXPIRATION)) == []
