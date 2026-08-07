@@ -812,6 +812,96 @@ binds, issue the consumer keys, re-run the preflight, then one bring-up and tear
 latch is fixed and no longer gates any of this. Wiring any consumer, `GET /v1/history`, and any
 account or order operation all remain out of scope.
 
+## Multi-Agent Review Remediation (offline, still unwired)
+
+A `/code-review` pass against the full branch (main..HEAD) surfaced eight findings, five of them
+genuinely new correctness/efficiency defects and three real-but-already-documented tradeoffs. All
+eight were independently verified against the actual code before being addressed, then dispatched
+to five agents working disjoint files in parallel, then re-reviewed by direct diff inspection
+before this commit — not on the agents' self-reports alone.
+
+- **Spot upstream misclassified malformed data as unavailable.**
+  `DirectSchwabSpotUpstream.get_spot` wrapped fetch and parse in one `except Exception`, so a
+  malformed price payload and a genuine network failure both reported `UpstreamUnavailableError`.
+  Fixed by moving `extract_spot_price` outside the locked transaction in
+  `live_provider.py`'s `get_spot_price` — `LockedSchwabMarketDataProvider.get_spot_price` now
+  returns the raw JSON from inside the transaction and parses it after, so a malformed payload
+  raises a bare `ValueError` instead of being folded into the adapter's generic
+  `SchwabClientOperationError`. `upstream.py` gained an `except ValueError` clause ahead of the
+  generic one, mapping it to `UpstreamMalformedError`, matching the pattern
+  `DirectSchwabChainMetadataUpstream` already used. No protocol or return-type change, so no other
+  caller is affected.
+- **Shadow reads ran sequentially, adding gateway latency to every collector cycle.**
+  `ShadowComparingMarketDataProvider.get_spot_price`/`get_option_chain` now start the direct and
+  gateway calls as concurrent `asyncio.Task`s and return the direct result immediately; the
+  comparison runs as a tracked background task (`_spawn_background`, `_background_tasks` set with
+  a done-callback so nothing is garbage-collected mid-flight or leaves an unretrieved-exception
+  warning) via a new `wait_for_shadow_reads()` method, used only by tests and available for future
+  graceful shutdown. Proven by a real timing test: a gateway fake that sleeps 1.0s, asserting the
+  call returns in under 0.2s while the gateway call is provably still in flight (`started.is_set()`
+  and `finished is False`), then that the comparison completes and is observable after
+  `wait_for_shadow_reads()`. The existing per-request `upstream_timeout_seconds` already bounds
+  each gateway call, so no additional bound on background-task growth was added.
+- **`chain_metadata` refused a payload shape the live parsers tolerate.** This divergence was
+  previously discovered and deliberately pinned as accepted; the review found its unconsidered
+  cost — a degenerate-but-legitimate chain response (after-hours, halted symbol) made `GET
+  /v1/chain` return 502 and made the shadow comparator log a false "parsing" discrepancy for a
+  shape the collector already treats as zero rows. Resolved, not worked around: the raise on
+  "neither expiration map present" was removed from `extract_chain_metadata`, so it now agrees
+  with both live parsers on that shape exactly (`_count_expiration` already tolerated a non-dict
+  input from before this fix). The one remaining raise is a payload that is not a dict at all — the
+  one shape none of the three parsers can walk. This is an intentional behavior change: `GET
+  /v1/chain` now returns 200 with zero counts for that shape instead of 502. The differential test
+  suite's docstring and the affected test were rewritten from asserting divergence to asserting
+  agreement, following the file's existing differential-test style. One genuine divergence remains
+  and is unaffected: a non-numeric strike key is skipped by the metadata but raises in both live
+  parsers.
+- **`TokenReadinessRecovery.run_forever` could die silently on a non-`TokenManagerError`
+  exception**, defeating the entire point of the class — permanently latching the gateway
+  not-ready with nothing left to retry it. `run_forever` now catches any `Exception` around each
+  attempt (propagating `asyncio.CancelledError` unchanged so shutdown cancellation still works),
+  logging a bounded `reason="unexpected_error"` and continuing to the next interval, matching the
+  redaction pattern already used in `api.py`'s `_token_readiness`.
+- **`access_mode="gateway"` plus `shadow_reads=True` was representable with undefined meaning.**
+  `GatewayClientSettings` gained a third `model_validator(mode="after")`, matching the existing two
+  in style, rejecting that exact combination — shadow reads compare a direct read against the
+  gateway and have no meaning once the client is gateway-only. Verified no other code reads
+  `.access_mode` or `.shadow_reads` before adding the validator rather than restructuring the two
+  fields into one enum.
+- **Two already-documented tradeoffs were hardened rather than changed**, since changing either
+  would have been worse than the status quo. `GatewayUpstreamSettings` continues to deliberately
+  duplicate `GatewayCredentialProbeSettings` (the latter is a member of the credential proof's
+  reviewed archive and must not be edited); a new test asserts the two classes' field names,
+  validation aliases, and absolute-path validation stay identical, so future drift between them
+  fails a test immediately instead of going unnoticed. `extract_spot_price`'s falsy-zero gap (a
+  legitimate all-zero quote is misreported as absent) remains a deliberate bug-for-bug mirror of
+  `data/schwab_client.py`'s identical gap in the live production path, which stays untouched and
+  out of scope; a new differential test pins that both extractors reject the same all-zero payload
+  identically, and the docstring states plainly that fixing one without the other would create a
+  new gateway/direct divergence.
+- The double full-chain-fetch cost of a chain shadow comparison (one direct, one via the gateway's
+  own independent Schwab call) was reviewed and left unchanged: it is inherent to what a shadow
+  comparison is for — proving the gateway's own path to Schwab works, not recomputing off the
+  collector's bytes — and reducing it (e.g. shadow reads at less than full cadence) is a design
+  decision for wiring time, not a bug to silently code around now.
+
+Baseline after remediation: `uv run python -m pytest` is **952 passed, 1 skipped, 0 failed**, and
+`uv run ruff check .` is clean. `git diff --check` is clean. No file under `data/`, `services/`,
+`strategy/`, `execution/`, `position/`, `risk/`, `configs/`, `infra/`, `uv.lock`, or `Dockerfile` is
+touched, and `schwab_gateway/config.py` (the credential-proof archive member) is unmodified. Nothing
+new is wired; `SCHWAB_GATEWAY_SHADOW_READS` still defaults to false and no service constructs any of
+this.
+
+One residual note, not fixed and not blocking: wrapping the direct read in `asyncio.create_task` for
+the shadow-concurrency fix means that if the *caller* of `get_spot_price`/`get_option_chain` is
+itself cancelled while the direct call is in flight, the direct call's task is not automatically
+cancelled with it — a well-known asyncio structured-concurrency gap, not specific to this fix. With
+shadow reads enabled the background comparison task still holds and eventually awaits the direct
+task, so nothing is orphaned; with shadow reads disabled and no other awaiter, an abandoned direct
+task could in principle log an unretrieved-exception warning if it later fails. This has zero
+current impact, since nothing wires this class to a live cancellable call path yet. Worth a look at
+wiring time, not before.
+
 Baselines on the current host: `uv run python -m pytest` is **930 passed, 1 skipped, 0 failed**, and
 `uv run ruff check .` is clean. This is the first fully green suite recorded on any host. The prior
 baseline here was 851 passed, 1 skipped, 2 failed; the parity slice added 24 tests and cleared the
