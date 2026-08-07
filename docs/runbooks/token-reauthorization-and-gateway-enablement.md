@@ -34,12 +34,59 @@ token `c5f05cc3fe64`.
 
 ## A0 — Snapshot (read-only)
 
-Record, so the verification step has a baseline:
+Run this exact block. It was executed read-only on 2026-08-06 and is known to produce
+bounded output. **Do not improvise a variant under time pressure** — this project has
+already lost a window to an ad-hoc wrapper that emitted a raw traceback and tripped the
+information-exposure stop condition.
 
-- container and image IDs for `butterfly_spx_app`, `butterfly_ndx_app`, `butterfly_xsp_app`
-  (last seen `faa85d748358`, `ca2ca79ca2c6`, `cc58c70ea998`);
-- the token document's inode, mode, uid/gid, and SHA-256 prefix;
-- `crontab -l | grep -c schwab_token_keepalive` (expected: 2).
+```sh
+set -u
+for c in butterfly_spx_app butterfly_ndx_app butterfly_xsp_app; do
+  echo "$c status=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo missing)" \
+       "image=$(docker inspect -f '{{.Image}}' "$c" 2>/dev/null | cut -c8-19)" \
+       "restarts=$(docker inspect -f '{{.RestartCount}}' "$c" 2>/dev/null)"
+done
+stat -c 'host_inode=%i mode=%a uid=%u gid=%g' /opt/butterflyguy/tokens.json
+for c in butterfly_spx_app butterfly_ndx_app butterfly_xsp_app; do
+  echo "$c inode=$(docker exec "$c" stat -c '%i' /app/tokens.json 2>/dev/null || echo NA)"
+done
+echo "keepalive_cron_entries=$(crontab -l 2>/dev/null | grep -c schwab_token_keepalive)"
+```
+
+Expected at last check: images `faa85d748358` / `ca2ca79ca2c6` / `cc58c70ea998`; host inode
+`1067464` at mode `600`, uid/gid `1001`; SPX inode `1112240` with NDX/XSP on `1067464`;
+2 cron entries. **If SPX already reports `1067464`, it has restarted on its own and the
+divergence is already retired** — this changes nothing else in the window.
+
+### Token field digests (read-only)
+
+Used in A0 and again in A7. Compares SHA-256 prefixes only; no value is printed, copied,
+or stored, and a digest cannot be reversed to the token.
+
+```sh
+probe='
+import json,hashlib,sys
+try:
+    d=json.load(open(sys.argv[1]))
+    t=d.get("token",{})
+    for f in ("refresh_token","access_token"):
+        v=t.get(f)
+        print(f"{f}_sha12=" + (hashlib.sha256(v.encode()).hexdigest()[:12]
+              if isinstance(v,str) and v else "absent"))
+    ct=int(d.get("creation_timestamp",0))
+    import time
+    print(f"age_days={(time.time()-ct)/86400:.2f}" if ct>0 else "age_days=invalid")
+except Exception:
+    print("unreadable")
+'
+echo "== host =="; python3 -c "$probe" /opt/butterflyguy/tokens.json
+for c in butterfly_spx_app butterfly_ndx_app butterfly_xsp_app; do
+  echo "== $c =="; docker exec -i "$c" python3 -c "$probe" /app/tokens.json 2>/dev/null || echo unavailable
+done
+```
+
+Expected before re-authorization: `refresh_token_sha12=c5f05cc3fe64` on all four, SPX's
+`access_token_sha12` differing, `age_days` near 4.3 on all four.
 
 ## A1 — Disable the keepalive
 
@@ -111,13 +158,27 @@ crontab -l | grep -c schwab_token_keepalive    # expect 2
 
 ## A7 — Verify
 
-1. All three containers `running` on the **same image IDs** recorded in A0.
-2. All three resolve `/app/tokens.json` to the **same inode** as the host document — this
-   is the SPX divergence fix; compare `docker exec … stat -c %i` against the host.
-3. All four `refresh_token` SHA-256 prefixes are identical, and all four `access_token`
-   prefixes now match too.
-4. No fresh filtered errors per service over a 30-second settle window.
-5. `/metrics` on each service still scrapes.
+Re-run the **A0 snapshot block** and the **token field digests block** verbatim, then check:
+
+1. All three containers `running` on the **same image IDs** recorded in A0, with
+   `restarts` unchanged — `docker start` must not have recreated anything.
+2. All three now resolve `/app/tokens.json` to the **same inode** as the host document.
+   This is the SPX divergence fix, and it is the check that proves it.
+3. All four `refresh_token_sha12` values identical **and different from `c5f05cc3fe64`** —
+   a value still equal to the old one means the authorization did not take effect.
+4. All four `access_token_sha12` values now identical too.
+5. `age_days` near `0.00` on all four.
+
+Then the settle window:
+
+```sh
+sleep 30
+for c in butterfly_spx_app butterfly_ndx_app butterfly_xsp_app; do
+  echo "$c errors_30s=$(docker logs --since 30s "$c" 2>&1 | grep -ci 'error\|traceback\|exception')"
+done
+```
+
+Expect `0` for each. Verify by inode and digest, never by "the container started".
 
 ## Window A rollback
 
@@ -162,7 +223,9 @@ The two tracked modifications, `configs/universes/liquid.txt` and
 of the 64 incoming commits touches either, so they will not conflict and can be left
 modified.
 
-Consider adding the evidence patterns to `.gitignore` as part of this window.
+The evidence patterns are now in `.gitignore` on the branch, so once B2 lands the hazard is
+structural rather than procedural and a stray `git add -A` can no longer capture them. Until
+B2 lands, the rule above is the only protection.
 
 ## B3 — Relocate the token document
 
