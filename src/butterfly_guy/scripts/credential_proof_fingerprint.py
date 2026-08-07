@@ -3799,11 +3799,19 @@ def _require_host_reviewed_source(archive: Path | None) -> Path:
 def _proof_process_environment(
     source_root: Path, token_path: str | None = None
 ) -> dict[str, str]:
-    """Return the proof environment: the operator's own, with only these keys overridden."""
+    """Return the proof environment: the operator's own, with only these keys overridden.
+
+    ``SCHWAB_TOKEN_PATH`` is set only when the caller names one. When it does not — the
+    native smoke check — the inherited value is removed rather than passed through, so a
+    command that has no business naming a token document cannot silently receive one from
+    the operator's shell. The approval-2 probe is unaffected: it always names a path.
+    """
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(source_root / "src")
     if token_path is not None:
         environment["SCHWAB_TOKEN_PATH"] = token_path
+    else:
+        environment.pop("SCHWAB_TOKEN_PATH", None)
     return environment
 
 

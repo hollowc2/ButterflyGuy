@@ -325,9 +325,10 @@ no Docker command was run, Helios was never contacted, no credential or token wa
 Schwab request was made. Nothing is wired to any consumer and `SCHWAB_GATEWAY_SHADOW_READS` still
 defaults to false.
 
-The credential proof's reviewed archive is unaffected. None of the fifteen `_ARCHIVE_PATHS` members
-is modified by this slice — `live_provider.py` is a new non-member and `run_schwab_gateway.py` was
-never a member — so the release archive hash and every proof gate are byte-identical.
+The live-serving slice left the credential proof's reviewed archive untouched: `live_provider.py` is
+a new non-member and `run_schwab_gateway.py` was never a member. A following slice deliberately
+edited one member, `scripts/credential_proof_fingerprint.py`, to stop the native smoke check
+inheriting `SCHWAB_TOKEN_PATH`; see Next Exact Action for the archive-hash consequence.
 
 ## Repository Findings
 
@@ -504,13 +505,21 @@ never a member — so the release archive hash and every proof gate are byte-ide
   committed.
 - `docs/architecture/schwab-gateway-option-a-deployment.md`: prerequisites, the single-writer
   problem, read-only preflight, start, verify, rollback, and five known limitations.
-- `tests/test_gateway_live_provider.py` and `tests/test_gateway_live_runner.py`: 45 tests covering
+- `TokenReadinessRecovery` closes the readiness latch that the first Option A slice shipped with.
+  It is registered as an aiohttp `cleanup_ctx` entry in live mode only — the demo app's readiness is
+  a static fake with nothing to recover — and retries `load()` on a 30-second interval, but only
+  while the manager is not READY, so a healthy gateway never touches the token document on this path
+  and a latched one cannot spin. Its interval is a constructor argument rather than a
+  `GatewaySettings` field, for the same archive-hash reason as `GatewayUpstreamSettings`.
+- `tests/test_gateway_live_provider.py` and `tests/test_gateway_live_runner.py`: 52 tests covering
   the read-only surface boundary, protocol signature match, one-transaction-per-call, session
   teardown on both success and failure, absence of retries, single-transaction batching, the
   spot-extraction differential against the live client, secret-free settings reprs, argparse
   refusal, demo-mode isolation, real-manager readiness, startup priming, fail-closed build on an
-  unusable token, no client construction at startup, and a route table with no account or order
-  surface.
+  unusable token, no client construction at startup, a route table with no account or order
+  surface, and a real latch-and-recover cycle that loads a manager, deletes its token to latch it,
+  proves recovery fails while the cause persists, restores the document, and proves the next tick
+  returns it to READY without any request.
 
 ## Token-Manager Tests Added
 
@@ -610,15 +619,15 @@ process-uniqueness completion.
 - Only the collector uses the new direct market-data adapter; trade/position/order separation
   remains later work.
 - New gateway code must remain disabled and isolated until shadow/session proof.
-- A token-level failure latches the live gateway not-ready until the process restarts. When a
+- A token-level failure takes the live gateway not-ready for up to one recovery interval. When a
   transaction fails with a `TokenManagerError`, `_record_load_failure` moves the manager out of
   READY, and every later request is refused with `gateway_not_ready` — including the request that
-  would have produced a recovering transaction, since nothing calls `load()` again. For missing,
-  expired, or corrupt tokens that is correct fail-closed behaviour; the one transient case that
-  latches unnecessarily is lock timeout, reachable whenever another writer holds the document longer
-  than `lock_timeout_seconds`. Schwab-side errors do not latch it, because
-  `SchwabClientOperationError` is not a `TokenManagerError` and the manager stays READY. This is the
-  first thing to fix before the gateway is depended on for anything.
+  would have produced a recovering transaction. `TokenReadinessRecovery` now retries `load()` every
+  30 seconds while not ready, so a transient lock timeout clears without a restart; a genuinely
+  missing, expired, or corrupt token stays fail-closed and keeps retrying harmlessly. Schwab-side
+  errors never latch it, because `SchwabClientOperationError` is not a `TokenManagerError`. The
+  residual exposure is the interval itself, which is harmless for a shadow reader and should be
+  re-evaluated before anything depends on the gateway for a trading decision.
 - A live gateway becomes a second writer of the production token document. `AtomicTokenManager`
   takes an exclusive advisory lock, but the direct services do not acquire `.tokens.json.lock`, so
   the lock protects gateway writers from each other, not from SPX/NDX/XSP or the keepalive cron. The
@@ -684,10 +693,11 @@ The readiness latch described in Risks should be fixed before the gateway is dep
 does not block a first supervised bring-up, where a restart is an acceptable remedy. Wiring any
 consumer and `GET /v1/history` both remain out of scope and unchanged by this slice.
 
-Baselines on the current host: `uv run python -m pytest` is 923 passed, 1 skipped, 1 failed, and
-`uv run ruff check .` is clean. The prior baseline on this host was 851 passed, 1 skipped, 2 failed;
-the parity slice added 24 tests and cleared one of the two failures, and the Option A slice added
-48 more. `uv run pytest` still cannot
+Baselines on the current host: `uv run python -m pytest` is **930 passed, 1 skipped, 0 failed**, and
+`uv run ruff check .` is clean. This is the first fully green suite recorded on any host. The prior
+baseline here was 851 passed, 1 skipped, 2 failed; the parity slice added 24 tests and cleared the
+Compose pin, the Option A slice added 48, and the readiness/environment slice added 7 more and
+cleared the last failure. `uv run pytest` still cannot
 spawn here because `.venv/bin/`'s console-script shebangs point at
 `/mnt/Files/Projects/Python/Butterflyguy/.venv/bin/python`, a path that does not exist for the
 current user, so `uv run python -m pytest` is used instead. The previously recorded 763 passed,
@@ -703,19 +713,26 @@ environment entry, so the assertion the test was written to make still holds. Th
 as `e006fa07f86e962c04231dc47a9a3830d8c28c5075c5c20536354c1dc6d14afc` with a comment naming both the
 original `6179f2e` value and why it moved. `infra/docker-compose.yml` itself is unchanged.
 
-The recorded cause of the one remaining failure,
-`test_gateway_credential_proof_operator.py::test_host_native_smoke_runs_the_reviewed_operator_under_the_named_interpreter`,
-was wrong and is corrected here. It is not the venv shebangs. The test passes in isolation and when
-its own file is run alone; it fails only in a full run. `core/config.py:228` calls
-`load_dotenv(env_file)`, which mutates the process `os.environ` for the remainder of the session, and
-`_require_host_native_smoke` passes a copy of `os.environ` to the smoke subprocess
-(`credential_proof_fingerprint.py:3823`). Once any earlier test loads a config — `tests/test_config.py`
-alone is enough, proven by running those two files together — the real repository `.env` has injected
-`SCHWAB_TOKEN_PATH`, and the test's assertion that the smoke environment does not name a token
-document fails. This is pre-existing cross-test environment pollution that requires a real `.env` at
-the repository root defining `SCHWAB_TOKEN_PATH`; it is a host-dependent test-isolation defect, not a
-gateway defect, and it was left unfixed because the fix belongs in `core/config.py` or a test fixture,
-neither of which is in this slice's scope.
+`test_gateway_credential_proof_operator.py::test_host_native_smoke_runs_the_reviewed_operator_under_the_named_interpreter`
+is now fixed, and its previously recorded cause was wrong twice over. It was never the venv
+shebangs. The test passed in isolation and failed only in a full run, because `core/config.py:228`
+calls `load_dotenv(env_file)`, which mutates the process `os.environ` for the remainder of the
+session; `tests/test_config.py` alone is enough to trigger it, proven by running those two files
+together. That looked like cross-test pollution, but the deeper reading is that the test was
+catching a real product gap and passing vacuously in a clean environment:
+`_proof_process_environment` copied `os.environ` wholesale, so the native smoke check inherited
+whatever `SCHWAB_TOKEN_PATH` the operator's shell carried — and on a real Helios proof run the
+operator does export exactly that. The fix is in the product, not the test:
+`_proof_process_environment` now removes `SCHWAB_TOKEN_PATH` when the caller names no token path, so
+a command with no business naming a token document cannot silently receive one. The approval-2
+probe, which always names a path explicitly, is unchanged; it is the only other caller.
+
+That edit changes one `_ARCHIVE_PATHS` member, `scripts/credential_proof_fingerprint.py`, so any
+future release archive built from this branch will have a different SHA-256 than
+`ad8394277f9ee224b4d8e19f77f7599dc5b0f4fc`'s
+`679800b5cdf98b0f523023aed56681b095c0b47b0171dd85baabb06588c09d87`. That costs nothing today — the
+credential proof is complete and no further window is planned — but a future proof window must build
+and re-record its own archive rather than reuse the retained hash.
 `graphify update .` remains skipped because the recorded binary does not exist for the current user.
 The branch has never been pushed. On 2026-08-06 the accumulated change set landed on `main` as a
 reviewed local fast-forward to `b9a6c61`: 62 commits, no merge commit, no rebase, squash, amend, or
