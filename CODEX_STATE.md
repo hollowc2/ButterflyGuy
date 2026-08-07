@@ -314,6 +314,21 @@ commit's diff is gateway-unrelated. `docs/architecture/schwab-gateway-deployment
 enumerates the four candidate gateway hosts for the operator. Nothing was wired, deployed, or run
 against Schwab.
 
+The operator then chose **Option A — Helios, containerized** — and authorized its offline package.
+The gateway can now serve real Schwab market data: `run_schwab_gateway.py` gained `--serve-live`,
+gated behind `--authorize-real-credential-read` and `--confirm-single-token-writer`, which builds the
+three read surfaces over `AtomicTokenManager` and `LockedSchwabClientAdapter`. `--demo` remains
+available and unchanged, and exactly one mode must be chosen. A separate `schwab_gateway_live`
+Compose service under the non-default `gateway-live` profile carries the same hardening as the demo
+service on a distinct port, container name, and token mount. This is built and tested offline only:
+no Docker command was run, Helios was never contacted, no credential or token was read, and no
+Schwab request was made. Nothing is wired to any consumer and `SCHWAB_GATEWAY_SHADOW_READS` still
+defaults to false.
+
+The credential proof's reviewed archive is unaffected. None of the fifteen `_ARCHIVE_PATHS` members
+is modified by this slice — `live_provider.py` is a new non-member and `run_schwab_gateway.py` was
+never a member — so the release archive hash and every proof gate are byte-identical.
+
 ## Repository Findings
 
 - SPX/NDX/XSP and host utilities independently construct `schwab-py` clients.
@@ -450,6 +465,53 @@ against Schwab.
   `gateway_client` anywhere in `src/` are `run_schwab_gateway.py` and
   `probe_schwab_gateway_credentials.py`.
 
+## Option A Live Serving (built offline, never deployed)
+
+- `schwab_gateway/live_provider.py`: `LockedSchwabMarketDataProvider` exposes exactly
+  `get_spot_price`, `get_option_chain`, and `get_equity_quotes` — no account, order, transaction,
+  movers, or streaming method exists to call. Each read runs one
+  `LockedSchwabClientAdapter.execute` on a worker thread via `asyncio.to_thread`, so the aiohttp
+  loop is never blocked by the synchronous adapter. All batches of a multi-batch quote request share
+  one transaction, so the token lock is taken once. No retries: the direct path's three-attempt
+  backoff would multiply the time every other caller waits inside a held lock.
+- `GatewayUpstreamSettings` lives in that new module rather than in `schwab_gateway/config.py`,
+  deliberately, because `config.py` is a member of the credential proof's reviewed archive and
+  editing it would change a release hash for a proof that is already complete.
+- `extract_spot_price` duplicates `SchwabClientWrapper.get_spot_price`'s extraction
+  (`data/schwab_client.py:122-130`), including the `lastPrice`/`mark`/`closePrice` preference, the
+  unprefixed-symbol fallback, and the falsy-zero fall-through. `data/schwab_client.py` is not
+  modified to share it; the duplication is pinned by a differential test that runs both against the
+  same six payload shapes, the same technique used for the three chain parsers.
+- `scripts/run_schwab_gateway.py`: `--serve-live` requires `--authorize-real-credential-read` and
+  `--confirm-single-token-writer`, and exactly one of `--demo`/`--serve-live` must be given.
+  Refusal happens in argparse before any setting, key file, or token is touched. `build_live_app`
+  injects the real `AtomicTokenManager` as the readiness provider and declares all three upstreams.
+- The startup `manager.load()` in `build_live_app` is load-bearing, not bookkeeping. `/ready` and
+  every route gate on `TokenManagerState.READY` (`api.py:244`, `:270`, `:315`), and the manager only
+  reaches READY inside a transaction, so without priming, no request could be admitted to produce
+  the transaction that would make it ready and the gateway would answer 503 forever while looking
+  healthy at the process level. A missing or invalid token fails the build closed.
+- `infra/docker-compose.gateway.yml`: new `schwab_gateway_live` service, profile `gateway-live`,
+  container `butterfly_schwab_gateway_live`, port `127.0.0.1:8011`, with the demo service left
+  byte-identical on `gateway-foundation`/8010. It carries the same `read_only`, `cap_drop: ALL`,
+  `no-new-privileges`, and non-root uid. The token **directory** is bind-mounted writable at its own
+  host path with no default value, because `AtomicTokenManager` creates its lock and its atomic
+  replacement as siblings of the document and `os.replace` cannot cross filesystems — a
+  document-only bind under `read_only: true` is exactly what stopped the in-container credential
+  proof.
+- `infra/schwab-gateway-keys.example.json`: placeholder template for the internal keys file, which
+  is Phase 3 dependency 4. Schema-checked against the real loader's rules; the real file is never
+  committed.
+- `docs/architecture/schwab-gateway-option-a-deployment.md`: prerequisites, the single-writer
+  problem, read-only preflight, start, verify, rollback, and five known limitations.
+- `tests/test_gateway_live_provider.py` and `tests/test_gateway_live_runner.py`: 45 tests covering
+  the read-only surface boundary, protocol signature match, one-transaction-per-call, session
+  teardown on both success and failure, absence of retries, single-transaction batching, the
+  spot-extraction differential against the live client, secret-free settings reprs, argparse
+  refusal, demo-mode isolation, real-manager readiness, startup priming, fail-closed build on an
+  unusable token, no client construction at startup, and a route table with no account or order
+  surface.
+
 ## Token-Manager Tests Added
 
 - Successful fake refresh and defensive-copy behavior.
@@ -548,6 +610,19 @@ process-uniqueness completion.
 - Only the collector uses the new direct market-data adapter; trade/position/order separation
   remains later work.
 - New gateway code must remain disabled and isolated until shadow/session proof.
+- A token-level failure latches the live gateway not-ready until the process restarts. When a
+  transaction fails with a `TokenManagerError`, `_record_load_failure` moves the manager out of
+  READY, and every later request is refused with `gateway_not_ready` — including the request that
+  would have produced a recovering transaction, since nothing calls `load()` again. For missing,
+  expired, or corrupt tokens that is correct fail-closed behaviour; the one transient case that
+  latches unnecessarily is lock timeout, reachable whenever another writer holds the document longer
+  than `lock_timeout_seconds`. Schwab-side errors do not latch it, because
+  `SchwabClientOperationError` is not a `TokenManagerError` and the manager stays READY. This is the
+  first thing to fix before the gateway is depended on for anything.
+- A live gateway becomes a second writer of the production token document. `AtomicTokenManager`
+  takes an exclusive advisory lock, but the direct services do not acquire `.tokens.json.lock`, so
+  the lock protects gateway writers from each other, not from SPX/NDX/XSP or the keepalive cron. The
+  first window should be outside market hours with the keepalive disabled.
 - Container runtime packaging still needs proof on a host where starting Docker cannot affect
   live or unrelated services.
 - A successful credential proof will very likely trigger an SDK refresh, and the manager durably
@@ -600,9 +675,19 @@ checks cover. The one bounded read-only check the brief asks for next is whether
 Helios can bind and release `127.0.0.1:8010`, emitting only two booleans — the capability probe
 already run proved a timer, not a socket. The brief recommends no host and authorizes nothing.
 
-Baselines on the current host: `uv run python -m pytest` is 875 passed, 1 skipped, 1 failed, and
+The operator selected Option A and its offline package is complete: a live serving mode, an isolated
+Compose service, a keys template, and a runbook. What remains before anything can actually run on
+Helios is not code. It is, in order: issue the internal consumer keys and create
+`secrets/schwab-gateway-keys.json` at mode `0600`; decide whether a second token writer is
+acceptable and when; obtain an approved window; and run the read-only preflight in the runbook.
+The readiness latch described in Risks should be fixed before the gateway is depended on, though it
+does not block a first supervised bring-up, where a restart is an acceptable remedy. Wiring any
+consumer and `GET /v1/history` both remain out of scope and unchanged by this slice.
+
+Baselines on the current host: `uv run python -m pytest` is 923 passed, 1 skipped, 1 failed, and
 `uv run ruff check .` is clean. The prior baseline on this host was 851 passed, 1 skipped, 2 failed;
-the parity slice added 24 tests and cleared one of the two failures. `uv run pytest` still cannot
+the parity slice added 24 tests and cleared one of the two failures, and the Option A slice added
+48 more. `uv run pytest` still cannot
 spawn here because `.venv/bin/`'s console-script shebangs point at
 `/mnt/Files/Projects/Python/Butterflyguy/.venv/bin/python`, a path that does not exist for the
 current user, so `uv run python -m pytest` is used instead. The previously recorded 763 passed,

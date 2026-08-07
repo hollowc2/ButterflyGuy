@@ -1,7 +1,15 @@
 import hashlib
+import json
+import re
 from pathlib import Path
 
 import yaml
+
+from butterfly_guy.schwab_gateway.auth import (
+    EXPECTED_PRIORITY_BY_CLIENT,
+    KNOWN_CAPABILITIES,
+    KNOWN_CLIENT_IDS,
+)
 
 
 def test_gateway_compose_matches_secret_owner_and_has_readiness_healthcheck() -> None:
@@ -18,6 +26,70 @@ def test_gateway_compose_matches_secret_owner_and_has_readiness_healthcheck() ->
     assert "/ready" in " ".join(service["healthcheck"]["test"])
     assert service["read_only"] is True
     assert service["cap_drop"] == ["ALL"]
+
+
+def test_gateway_live_service_is_isolated_and_read_only() -> None:
+    compose = yaml.safe_load(Path("infra/docker-compose.gateway.yml").read_text())
+    service = compose["services"]["schwab_gateway_live"]
+
+    # Its own non-default profile, distinct container name, distinct port.
+    assert service["profiles"] == ["gateway-live"]
+    assert service["container_name"] == "butterfly_schwab_gateway_live"
+    assert service["ports"] == ["127.0.0.1:8011:8011"]
+    assert service["restart"] == "no"
+
+    # The same hardening the demo service carries.
+    assert service["read_only"] is True
+    assert service["cap_drop"] == ["ALL"]
+    assert service["security_opt"] == ["no-new-privileges:true"]
+    assert service["user"] == "${SCHWAB_GATEWAY_UID:-1001}:${SCHWAB_GATEWAY_GID:-1001}"
+
+    # Live serving is explicit at the command line, never implicit.
+    assert service["command"][-3:] == [
+        "--serve-live",
+        "--authorize-real-credential-read",
+        "--confirm-single-token-writer",
+    ]
+    assert service["environment"]["SCHWAB_GATEWAY_ORDER_WRITES_ENABLED"] == "false"
+
+
+def test_gateway_live_service_mounts_the_token_directory_not_the_document() -> None:
+    """A document-only bind under read_only: true cannot support atomic replacement.
+
+    AtomicTokenManager creates its lock and its atomic replacement as siblings of the
+    token file and os.replace cannot cross filesystems, so the directory must be the
+    writable mount. This is the defect that stopped the in-container credential proof.
+    """
+    compose = yaml.safe_load(Path("infra/docker-compose.gateway.yml").read_text())
+    service = compose["services"]["schwab_gateway_live"]
+
+    token_mounts = [v for v in service["volumes"] if "TOKEN_DIR" in v]
+    assert len(token_mounts) == 1
+
+    # The directory is mounted at its own host path, writable, with no default value --
+    # a missing token directory must fail loudly rather than mount a guess.
+    directory = "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}"
+    assert ":?" in directory
+    assert token_mounts[0] == f"{directory}:{directory}:rw"
+    assert not directory.endswith("tokens.json")
+
+    # The document path is derived from that same directory.
+    assert service["environment"]["SCHWAB_TOKEN_PATH"] == f"{directory}/tokens.json"
+
+
+def test_gateway_keys_example_matches_the_authenticator_schema() -> None:
+    """The template must parse under the real loader's schema rules."""
+    payload = json.loads(Path("infra/schwab-gateway-keys.example.json").read_text())
+
+    assert set(payload) == {"version", "clients"}
+    assert payload["version"] == 1
+    assert {client["id"] for client in payload["clients"]} == KNOWN_CLIENT_IDS
+    for client in payload["clients"]:
+        assert set(client) == {"id", "key_sha256", "capabilities", "priority_class"}
+        assert set(client["capabilities"]) <= KNOWN_CAPABILITIES
+        assert client["priority_class"] == EXPECTED_PRIORITY_BY_CLIENT[client["id"]].value
+        # A placeholder, never a real digest.
+        assert not re.fullmatch(r"[0-9a-f]{64}", client["key_sha256"])
 
 
 def test_credential_proof_staging_override_is_isolated_and_mount_only() -> None:
