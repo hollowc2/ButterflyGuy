@@ -685,13 +685,40 @@ Helios can bind and release `127.0.0.1:8010`, emitting only two booleans — the
 already run proved a timer, not a socket. The brief recommends no host and authorizes nothing.
 
 The operator selected Option A and its offline package is complete: a live serving mode, an isolated
-Compose service, a keys template, and a runbook. What remains before anything can actually run on
-Helios is not code. It is, in order: issue the internal consumer keys and create
-`secrets/schwab-gateway-keys.json` at mode `0600`; decide whether a second token writer is
-acceptable and when; obtain an approved window; and run the read-only preflight in the runbook.
-The readiness latch described in Risks should be fixed before the gateway is depended on, though it
-does not block a first supervised bring-up, where a restart is an acceptable remedy. Wiring any
-consumer and `GET /v1/history` both remain out of scope and unchanged by this slice.
+Compose service, a keys template, a runbook, and `scripts/issue_gateway_keys.py`, which generates
+consumer keys, prints each plaintext exactly once, writes only SHA-256 digests at mode `0600`,
+refuses to overwrite an existing path, and round-trips the result through the real
+`InternalKeyAuthenticator` so a file the gateway would reject is never left behind.
+
+Under an operator authorization limited to non-mutating commands, a bounded read-only preflight then
+ran on Helios on 2026-08-06. Nothing was created, started, written, or changed, and no credential or
+token value was read. Full results are tabulated in the Option A runbook. Everything Option A
+depends on checks out: the token document is a regular non-symlink file at mode `0600` owned by uid
+`1001`, its directory is mode `755` owned by uid `1001` and writable by the operator account, and
+that account is itself uid `1001` — the same uid the containers run as — so the writable
+token-directory design is sound on this host. SPX/NDX/XSP are all running on recorded images, `.env`
+defines all three credential variable names, the keepalive cron has its two entries, and 45 GB is
+free.
+
+Three findings change the plan:
+
+- **The gateway code is not on Helios at all.** Its checkout is branch `main` at `de84d91`, 64
+  commits behind local `main`, so neither `infra/docker-compose.gateway.yml` nor any
+  `schwab_gateway` source exists there, and the branch has never been pushed anywhere. Bringing
+  Option A up is therefore not "start a container": it requires moving 64 commits onto the checkout
+  of the machine running live trading, including `5055991`, which edits the live
+  `infra/docker-compose.yml`. That needs its own plan and its own approval and is materially larger
+  than the runbook originally assumed.
+- **The Helios working tree is not clean.** Uncommitted changes are present and must be identified
+  and preserved before any checkout update.
+- **Port 8010 is bound** by the unrelated `halt_scanner` container, so the demo service as
+  configured cannot bind. The live service's 8011 is free, so Option A itself is unaffected.
+
+What remains is therefore, in order: resolve the uncommitted Helios working tree; plan and approve
+the checkout update; issue the consumer keys onto the host; decide whether a second token writer is
+acceptable and pick a window outside market hours with the keepalive disabled; re-run the preflight;
+then one supervised bring-up and teardown. The readiness latch is fixed and no longer gates this.
+Wiring any consumer and `GET /v1/history` both remain out of scope and unchanged by this slice.
 
 Baselines on the current host: `uv run python -m pytest` is **930 passed, 1 skipped, 0 failed**, and
 `uv run ruff check .` is clean. This is the first fully green suite recorded on any host. The prior

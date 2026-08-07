@@ -85,9 +85,54 @@ Consequences to accept explicitly before starting:
 The lowest-risk first window is therefore **outside market hours, with the keepalive cron
 disabled**, which is the same posture the credential proof used.
 
+## Recorded preflight — 2026-08-06, read-only
+
+Run under an operator authorization limited to non-mutating commands. Nothing was
+created, started, written, or changed. Bounded results:
+
+| Check | Result |
+|---|---|
+| Docker daemon | reachable, 21 containers running |
+| `butterfly_spx_app` / `ndx` / `xsp` | all `running`, images `faa85d748358` / `ca2ca79ca2c6` / `cc58c70ea998` |
+| Port 8011 (live service) | free |
+| Port 8010 (demo service) | **bound**, by the unrelated `halt_scanner` container |
+| Gateway containers | neither `..._foundation` nor `..._live` exists |
+| Helios checkout | branch `main` at `de84d91`, **64 commits behind local `main`** |
+| `infra/docker-compose.gateway.yml` there | **absent** |
+| `secrets/schwab-gateway-keys.json` there | absent, as expected |
+| Helios working tree | **not clean** — uncommitted local changes present |
+| Token document | regular file, not a symlink, mode `600`, uid/gid `1001` |
+| Token directory | mode `755`, uid `1001`, writable by the operator account |
+| Operator account | uid `1001`, gid `1001` — the same uid the containers run as |
+| `.env` | present; defines `SCHWAB_API_KEY`, `SCHWAB_SECRET_KEY`, `SCHWAB_TOKEN_PATH` (names only — no value was read) |
+| Keepalive cron | 2 entries |
+| Disk available | 45 GB |
+
+Three of these change the plan:
+
+**1. The gateway code is not on Helios at all.** The checkout is 64 commits behind local
+`main`, so neither `infra/docker-compose.gateway.yml` nor any `schwab_gateway` source
+exists there, and the branch has never been pushed anywhere. Bringing Option A up is
+therefore not "start a container" — it requires moving 64 commits onto the checkout of the
+machine running live trading. That includes the entire gateway change set *and* `5055991`,
+which changes the live `infra/docker-compose.yml`. This needs its own plan and its own
+approval; it is a larger step than this runbook originally assumed.
+
+**2. The Helios working tree is not clean.** Whatever is uncommitted there must be
+identified and preserved before any checkout update. Do not update the checkout until this
+is resolved.
+
+**3. Port 8010 is taken by `halt_scanner`.** The demo service as configured would fail to
+bind. The live service's 8011 is free, so Option A itself is unaffected, but the demo
+service needs a different port before it can ever run on this host.
+
+Everything Option A actually depends on checks out: the token document is a private regular
+file, its directory is writable by the operator account, and that account shares the uid the
+containers use — so the writable-token-directory design is sound on this host.
+
 ## Preflight — read-only, no mutation
 
-Run in the approved window before starting anything:
+Re-run in the approved window before starting anything:
 
 1. `docker compose -f infra/docker-compose.gateway.yml --profile gateway-live config`
    — renders and validates without creating anything. It fails loudly if
