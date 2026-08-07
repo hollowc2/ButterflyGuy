@@ -300,6 +300,20 @@ chain transport remains Phase 4. Nothing is wired: no service constructs the sha
 dependencies — a production-capable single token manager, a safe gateway deployment host, capability
 probe approval, and a read-only consumer key — remain unmet, and none is solvable offline.
 
+A following offline slice on the same branch corrected a defect introduced by `c8c673e` and made the
+suite a trustworthy gate again. `extract_chain_metadata` counted a strike whose option list was empty
+into `strike_count` while contributing no contracts to `call_contract_count`/`put_contract_count`, so
+the two count fields disagreed about whether that strike existed. `strike_count` is now defined as
+"distinct strikes carrying at least one contract", which is what both live parsers can actually act
+on, and the relationship between all three parsers is pinned by differential tests over shared
+synthetic fixtures. Golden recorded inputs remain unavailable: `data/chains/` holds already-parsed
+rows, no raw `callExpDateMap` payload exists outside test files, and none can be captured offline, so
+migration-doc line 199 is still unsatisfied and the three parsers are documented rather than unified.
+The stale `infra/docker-compose.yml` hash pin was re-recorded at `5055991` after proving that
+commit's diff is gateway-unrelated. `docs/architecture/schwab-gateway-deployment-options.md` now
+enumerates the four candidate gateway hosts for the operator. Nothing was wired, deployed, or run
+against Schwab.
+
 ## Repository Findings
 
 - SPX/NDX/XSP and host utilities independently construct `schwab-py` clients.
@@ -393,6 +407,24 @@ probe approval, and a read-only consumer key — remain unmet, and none is solva
 - `gateway_client/chain_metadata.py`: one pure `extract_chain_metadata` shared by the gateway's
   chain upstream and the consumer-side comparator, so both derive identical counts from the same
   raw payload. It mirrors the collector's expiration-key filter and never returns contract rows.
+  `strike_count` counts distinct strikes carrying at least one contract; a strike with an empty
+  option list is excluded, matching `iter_chain_options`' `if options:` guard and the empty row set
+  `_parse_chain_response` produces for it. The original `c8c673e` implementation added the strike
+  before the length check, so `strike_count` and the contract counts disagreed about that strike.
+  This never produced a false shadow discrepancy — `shadow.py:_shadow_chain` runs the same function
+  on both sides — but it changed what the metadata meant.
+- `tests/test_chain_parser_parity.py`: differential tests over shared synthetic fixtures pinning the
+  three parsers against each other. Asserted: `call_contract_count + put_contract_count` equals the
+  row count `_parse_chain_response` writes for the same payload and expiration, with the per-side
+  split also matching; `strike_count` equals both the distinct strikes `iter_chain_options` yields
+  across both directions and the distinct strikes the collector's rows cover; all three select the
+  same expiration when one map holds several. Fixtures cover multiple contracts at one strike, a
+  strike with an empty option list, several expirations, a non-numeric strike key, both maps present
+  but empty, and `callExpDateMap` present with `putExpDateMap` absent. Two divergences are recorded
+  as assertions rather than reconciled: a non-numeric strike key is skipped by the metadata and
+  raises `ValueError` in both live parsers, and a payload carrying neither map is tolerated by both
+  live parsers but refused by the metadata. These are synthetic fixtures, not golden recorded
+  inputs; migration-doc line 199 remains unsatisfied and no consolidation is licensed.
 - `schwab_gateway/upstream.py`: `SpotUpstream`/`ChainMetadataUpstream` protocols,
   `DirectSchwabSpotUpstream`, and `DirectSchwabChainMetadataUpstream`, reusing the existing
   `UpstreamUnavailableError`/`UpstreamMalformedError` classification. `get_spot_price` returns a
@@ -552,18 +584,53 @@ it. Two design points to settle at wiring time: the comparator awaits the gatewa
 direct read returns, adding gateway latency to each collector cycle; and `GET /v1/history` is
 deliberately absent, so `get_daily_bars` (`data/collector.py:117`) has no shadow surface.
 
-Baselines on the current host: `uv run python -m pytest` is 851 passed, 1 skipped, 2 failed, and
-`uv run ruff check .` is clean. Both failures reproduce on unmodified `main` and are unrelated to
-this slice. `test_gateway_compose.py::test_staging_package_does_not_change_default_compose` pins the
-SHA-256 of `infra/docker-compose.yml` as recorded at `origin/main` `6179f2e`, and commit `5055991`
-edited that file afterwards, so the pin is stale.
-`test_gateway_credential_proof_operator.py::test_host_native_smoke_runs_the_reviewed_operator_under_the_named_interpreter`
-fails because `.venv/bin/`'s console-script shebangs point at
+The deployment host that wiring waits on is now written up for the operator in
+`docs/architecture/schwab-gateway-deployment-options.md`. It evaluates four candidates — Helios
+containerized, zeus containerized, a separate/new host, and Helios as a `systemd --user` service —
+with requirements, risks, recorded evidence, and the smallest safe first step for each, and states
+which of Phase 3's four dependencies each moves. Its central finding is that no host option is
+sufficient by itself: `run_schwab_gateway.py` refuses to start without `--demo`, so no real-backed
+serving mode exists on any host, and the `secrets/schwab-gateway-keys.json` that
+`infra/docker-compose.gateway.yml` mounts has never been created. The `systemd --user` option is the
+cheapest to prove safe, because the credential proof already host-proved on Helios that a `--user`
+transient unit arms, reports active, cancels, and leaves no residual unit without privilege
+escalation, and that the account has `Linger=yes`; its cost is no image pinning, no Compose-level
+isolation, and a restoration story that none of this project's existing container-shaped restoration
+checks cover. The one bounded read-only check the brief asks for next is whether a `--user` unit on
+Helios can bind and release `127.0.0.1:8010`, emitting only two booleans — the capability probe
+already run proved a timer, not a socket. The brief recommends no host and authorizes nothing.
+
+Baselines on the current host: `uv run python -m pytest` is 875 passed, 1 skipped, 1 failed, and
+`uv run ruff check .` is clean. The prior baseline on this host was 851 passed, 1 skipped, 2 failed;
+the parity slice added 24 tests and cleared one of the two failures. `uv run pytest` still cannot
+spawn here because `.venv/bin/`'s console-script shebangs point at
 `/mnt/Files/Projects/Python/Butterflyguy/.venv/bin/python`, a path that does not exist for the
-current user; that is also why `uv run pytest` cannot spawn and `uv run python -m pytest` is used
-instead. Neither was fixed here: the compose pin is in the do-not-touch set, and the venv is host
-state. The previously recorded 763 passed, 1 skipped baseline was taken on a different host and does
-not reproduce here.
+current user, so `uv run python -m pytest` is used instead. The previously recorded 763 passed,
+1 skipped baseline was taken on a different host and does not reproduce here.
+
+`test_gateway_compose.py::test_staging_package_does_not_change_default_compose` is fixed. It pinned
+the SHA-256 of `infra/docker-compose.yml` as recorded at `origin/main` `6179f2e`, and `5055991` — the
+only commit to touch that file since, confirmed by `git log 6179f2e..HEAD -- infra/docker-compose.yml`
+— edited it afterwards, so the pin was stale rather than violated. `git show 5055991 --
+infra/docker-compose.yml` is a two-line change to `app_spx_candidate`: `restart: unless-stopped`
+becomes `restart: "no"` plus an explanatory comment. It adds no gateway service, profile, mount, or
+environment entry, so the assertion the test was written to make still holds. The pin is re-recorded
+as `e006fa07f86e962c04231dc47a9a3830d8c28c5075c5c20536354c1dc6d14afc` with a comment naming both the
+original `6179f2e` value and why it moved. `infra/docker-compose.yml` itself is unchanged.
+
+The recorded cause of the one remaining failure,
+`test_gateway_credential_proof_operator.py::test_host_native_smoke_runs_the_reviewed_operator_under_the_named_interpreter`,
+was wrong and is corrected here. It is not the venv shebangs. The test passes in isolation and when
+its own file is run alone; it fails only in a full run. `core/config.py:228` calls
+`load_dotenv(env_file)`, which mutates the process `os.environ` for the remainder of the session, and
+`_require_host_native_smoke` passes a copy of `os.environ` to the smoke subprocess
+(`credential_proof_fingerprint.py:3823`). Once any earlier test loads a config — `tests/test_config.py`
+alone is enough, proven by running those two files together — the real repository `.env` has injected
+`SCHWAB_TOKEN_PATH`, and the test's assertion that the smoke environment does not name a token
+document fails. This is pre-existing cross-test environment pollution that requires a real `.env` at
+the repository root defining `SCHWAB_TOKEN_PATH`; it is a host-dependent test-isolation defect, not a
+gateway defect, and it was left unfixed because the fix belongs in `core/config.py` or a test fixture,
+neither of which is in this slice's scope.
 `graphify update .` remains skipped because the recorded binary does not exist for the current user.
 The branch has never been pushed. On 2026-08-06 the accumulated change set landed on `main` as a
 reviewed local fast-forward to `b9a6c61`: 62 commits, no merge commit, no rebase, squash, amend, or
