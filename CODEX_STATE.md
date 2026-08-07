@@ -787,11 +787,30 @@ Three findings change the plan:
 - **Port 8010 is bound** by the unrelated `halt_scanner` container, so the demo service as
   configured cannot bind. The live service's 8011 is free, so Option A itself is unaffected.
 
-What remains is therefore, in order: resolve the uncommitted Helios working tree; plan and approve
-the checkout update; issue the consumer keys onto the host; decide whether a second token writer is
-acceptable and pick a window outside market hours with the keepalive disabled; re-run the preflight;
-then one supervised bring-up and teardown. The readiness latch is fixed and no longer gates this.
-Wiring any consumer and `GET /v1/history` both remain out of scope and unchanged by this slice.
+The sequence is now written up in `docs/runbooks/token-reauthorization-and-gateway-enablement.md`
+as two deliberately separate windows. This revises the earlier advice to bundle everything into one.
+Bundling looked attractive because both need the containers recreated, but the token relocation
+requires source changes to `tools/schwab_token_keepalive.py` (`TOKEN_PATH = ROOT / "tokens.json"`)
+and `tools/auth_init.py` (writes `tokens.json` relative to the working directory), which in turn
+requires the 64-commit checkout update. Putting a code delivery inside a deadline window means
+debugging new code and a fresh credential simultaneously.
+
+Window A is mandatory and deadline-driven: the refresh token expires around
+`2026-08-09T21:00Z`. It is stop three services, re-authorize in place with `tools/auth_init.py`,
+start three services — no code change, no Compose change, no rebuild, no checkout update. It fixes
+the SPX inode divergence for free, because a restart re-resolves the bind. Its only irreversible
+step is the authorization itself, which has no rollback because the standing rule forbids copying
+the token; the remedy for a bad document is to re-run the flow. Two details that have bitten before
+are called out: `docker stop --timeout`, never `--time`, whose deprecation warning breaks output
+gates; and `easy_client` does not guarantee mode `0600`, so the document must be checked and
+`chmod`ed before any service starts.
+
+Window B is optional and unhurried: decide the code-delivery mechanism (push versus reviewed
+archive), update the checkout without ever running `git clean` or `git add -A` since 33 untracked
+evidence artifacts are not gitignored, relocate the token document and update the three trading
+binds, issue the consumer keys, re-run the preflight, then one bring-up and teardown. The readiness
+latch is fixed and no longer gates any of this. Wiring any consumer, `GET /v1/history`, and any
+account or order operation all remain out of scope.
 
 Baselines on the current host: `uv run python -m pytest` is **930 passed, 1 skipped, 0 failed**, and
 `uv run ruff check .` is clean. This is the first fully green suite recorded on any host. The prior
