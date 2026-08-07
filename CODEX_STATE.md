@@ -485,5 +485,22 @@ verifies in exchange for nothing.
 
 Baselines: `uv run pytest` is 763 passed, 1 skipped, and `uv run ruff check .` is clean.
 `graphify update .` remains skipped because the recorded binary does not exist for the current user.
-The branch has never been pushed or merged; the accumulated change set still has to land on `main`
-as a reviewed change.
+The branch has never been pushed. On 2026-08-06 the accumulated change set landed on `main` as a
+reviewed local fast-forward to `b9a6c61`: 62 commits, no merge commit, no rebase, squash, amend, or
+reorder, and no remote interaction of any kind. `origin/main` is untouched at `6179f2e`.
+
+The pre-merge review confirmed that nothing changes SPX/NDX/XSP runtime behavior. Paper/live flags,
+risk limits, account guards, order routing, token handling, container entry points, resolved
+dependencies, and the `infra/docker-compose.yml` profiles are all unchanged; `uv.lock` and
+`Dockerfile` are not in the diff. Outside `graphify-out/` the change set is 16,560 insertions and 8
+deletions, and only four files are modified rather than added. The single runtime-adjacent change is
+`OptionChainCollector` receiving `DirectSchwabMarketDataProvider(schwab)`, a signature-identical
+delegation shim over the same client instance that adds no retry, caching, state, or extra calls.
+Gateway code remains disabled and isolated: no service imports `schwab_gateway` or `gateway_client`,
+no entry point references them, and both new Compose files require an explicit `-f` plus a
+non-default profile.
+
+The four `graphify-out/` artifacts were taken from the branch. The discarded main working-tree
+regeneration was a strict subset apart from nodes for `.claude/settings.local.json`,
+`Fable_refactor/fly_Spec.html`, and the then-uncommitted `infra/` edits; those edits had been
+uncommitted since 2026-07-28 and are now recorded separately in `5055991`.
