@@ -37,7 +37,13 @@ def test_credential_proof_staging_override_is_isolated_and_mount_only() -> None:
 def test_staging_package_does_not_change_default_compose() -> None:
     default_compose = Path("infra/docker-compose.yml").read_bytes()
 
-    # Recorded from origin/main 6179f2e before the isolated package was added.
+    # Originally recorded from origin/main 6179f2e as
+    # 87a41005a7f6c8c0b2aac860b6f301d52b422d8a3e873c1415b6f7ed747975b5, before the
+    # isolated package was added. Re-pinned at 5055991 ("Stop the legacy SPX candidate
+    # container from auto-restarting"), the only commit to touch this file since: it
+    # changes app_spx_candidate's restart policy from unless-stopped to "no" and adds a
+    # comment, and introduces no gateway service, profile, mount, or environment entry.
+    # The gateway package still contributes nothing to the default Compose file.
     assert hashlib.sha256(default_compose).hexdigest() == (
-        "87a41005a7f6c8c0b2aac860b6f301d52b422d8a3e873c1415b6f7ed747975b5"
+        "e006fa07f86e962c04231dc47a9a3830d8c28c5075c5c20536354c1dc6d14afc"
     )
