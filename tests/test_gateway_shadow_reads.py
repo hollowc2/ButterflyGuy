@@ -212,6 +212,7 @@ async def test_direct_result_is_unchanged_when_the_gateway_agrees() -> None:
 
     assert await provider.get_spot_price("$SPX") == DIRECT_SPOT
     assert await provider.get_option_chain("SPX", EXPIRATION) is CHAIN_PAYLOAD
+    await provider.wait_for_shadow_reads()
 
     assert gateway.calls == ["get_spot", "get_chain_metadata"]
     assert provider.recorder.total() == 0
@@ -228,6 +229,7 @@ async def test_direct_result_is_unchanged_when_the_gateway_disagrees() -> None:
 
     assert await provider.get_spot_price("$SPX") == DIRECT_SPOT
     assert await provider.get_option_chain("SPX", EXPIRATION) is CHAIN_PAYLOAD
+    await provider.wait_for_shadow_reads()
     assert provider.recorder.total() == 2
 
 
@@ -251,6 +253,7 @@ async def test_direct_result_is_unchanged_when_the_gateway_errors(error: Excepti
 
     assert await provider.get_spot_price("$SPX") == DIRECT_SPOT
     assert await provider.get_option_chain("SPX", EXPIRATION) is CHAIN_PAYLOAD
+    await provider.wait_for_shadow_reads()
     assert provider.recorder.total() == 2
 
 
@@ -270,6 +273,7 @@ async def test_direct_result_is_unchanged_when_the_gateway_times_out_in_real_tim
 
     assert await provider.get_spot_price("$SPX") == DIRECT_SPOT
     assert await provider.get_option_chain("SPX", EXPIRATION) is CHAIN_PAYLOAD
+    await provider.wait_for_shadow_reads()
     assert {d.classification for d in provider.recorder.counts()} == {"timing"}
 
 
@@ -314,6 +318,7 @@ async def test_gateway_errors_are_classified_by_fixed_code(
         DirectProvider(), RecordingGateway(spot_result=error), shadow_reads=True
     )
     await provider.get_spot_price("$SPX")
+    await provider.wait_for_shadow_reads()
 
     (discrepancy,) = provider.recorder.counts()
     assert discrepancy.operation == "spot"
@@ -344,6 +349,7 @@ async def test_value_differences_are_classified_by_provable_freshness(
 
     await provider.get_spot_price("$SPX")
     await provider.get_option_chain("SPX", EXPIRATION)
+    await provider.wait_for_shadow_reads()
 
     observed = sorted(provider.recorder.counts(), key=lambda d: d.operation)
     assert [d.operation for d in observed] == ["chain", "spot"]
@@ -361,11 +367,18 @@ async def test_every_declared_classification_is_one_of_the_four_migration_catego
 
 @pytest.mark.asyncio
 async def test_a_direct_payload_that_cannot_be_summarized_is_a_parsing_discrepancy() -> None:
-    direct = DirectProvider(chain={"status": "FAILED"})
+    """``extract_chain_metadata`` now tolerates a payload with no expiration maps (it
+    matches both live parsers on that shape), so ``{"status": "FAILED"}`` no longer
+    counts as unsummarizable -- it agrees with the gateway's chain_response() as a
+    plain field mismatch instead. The one shape ``extract_chain_metadata`` still
+    refuses is a payload that is not a dict at all, so that is what this test uses to
+    exercise the "direct_payload_invalid" classification."""
+    direct = DirectProvider(chain="not-a-chain-payload")
     gateway = RecordingGateway(chain_result=chain_response())
     provider = ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
 
-    assert await provider.get_option_chain("SPX", EXPIRATION) == {"status": "FAILED"}
+    assert await provider.get_option_chain("SPX", EXPIRATION) == "not-a-chain-payload"
+    await provider.wait_for_shadow_reads()
 
     (discrepancy,) = provider.recorder.counts()
     assert discrepancy.code == "direct_payload_invalid"
@@ -379,6 +392,7 @@ async def test_a_null_gateway_price_is_reported_as_a_field_level_difference() ->
         DirectProvider(), gateway, shadow_reads=True
     )
     await provider.get_spot_price("$SPX")
+    await provider.wait_for_shadow_reads()
 
     (discrepancy,) = provider.recorder.counts()
     assert discrepancy.fields == ("price",)
@@ -391,6 +405,7 @@ async def test_prices_within_tolerance_are_not_a_discrepancy() -> None:
         DirectProvider(), gateway, shadow_reads=True, price_tolerance=0.01
     )
     await provider.get_spot_price("$SPX")
+    await provider.wait_for_shadow_reads()
 
     assert provider.recorder.total() == 0
 
@@ -420,6 +435,7 @@ async def test_no_unbounded_detail_reaches_the_logs(monkeypatch) -> None:
 
     await provider.get_spot_price("$SPX")
     await provider.get_option_chain("SPX", EXPIRATION)
+    await provider.wait_for_shadow_reads()
 
     assert [event for event, _ in emitted] == [
         "gateway_shadow_discrepancy",
@@ -455,10 +471,77 @@ async def test_repeated_discrepancies_collapse_onto_a_fixed_key_space() -> None:
     )
     for _ in range(25):
         await provider.get_spot_price("$SPX")
+    await provider.wait_for_shadow_reads()
 
     counts = provider.recorder.counts()
     assert len(counts) == 1
     assert provider.recorder.total() == 25
+
+
+# --- the shadow read never sits on the caller's critical path --------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_spot_price_returns_before_a_slow_gateway_responds() -> None:
+    class SlowGateway:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.finished = False
+
+        async def get_spot(self, symbol: str):
+            self.started.set()
+            await asyncio.sleep(1.0)
+            self.finished = True
+            return spot_response(DIRECT_SPOT)
+
+    direct = DirectProvider()
+    gateway = SlowGateway()
+    provider = ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
+
+    loop = asyncio.get_running_loop()
+    start = loop.time()
+    price = await provider.get_spot_price("$SPX")
+    elapsed = loop.time() - start
+
+    assert price == DIRECT_SPOT
+    # The gateway call was in flight when we returned, but we didn't wait on it.
+    assert gateway.started.is_set()
+    assert gateway.finished is False
+    assert elapsed < 0.2  # well under the gateway's 1.0s delay
+
+    # The comparison still completes eventually, off the critical path.
+    await provider.wait_for_shadow_reads()
+    assert gateway.finished is True
+    assert provider.recorder.total() == 0
+
+
+@pytest.mark.asyncio
+async def test_get_option_chain_returns_before_a_slow_gateway_responds() -> None:
+    class SlowGateway:
+        def __init__(self) -> None:
+            self.finished = False
+
+        async def get_chain_metadata(self, symbol: str, expiration: dt.date):
+            await asyncio.sleep(1.0)
+            self.finished = True
+            return chain_response()
+
+    direct = DirectProvider()
+    gateway = SlowGateway()
+    provider = ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
+
+    loop = asyncio.get_running_loop()
+    start = loop.time()
+    chain = await provider.get_option_chain("SPX", EXPIRATION)
+    elapsed = loop.time() - start
+
+    assert chain is CHAIN_PAYLOAD
+    assert gateway.finished is False
+    assert elapsed < 0.2  # well under the gateway's 1.0s delay
+
+    await provider.wait_for_shadow_reads()
+    assert gateway.finished is True
+    assert provider.recorder.total() == 0
 
 
 # --- end to end against the real in-process gateway ------------------------------------
@@ -511,6 +594,7 @@ async def test_shadow_comparison_against_the_real_in_process_gateway_agrees() ->
             )
             spot = await provider.get_spot_price("$SPX")
             chain = await provider.get_option_chain("SPX", EXPIRATION)
+            await provider.wait_for_shadow_reads()
     finally:
         await server.close()
 

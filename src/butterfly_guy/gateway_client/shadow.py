@@ -7,6 +7,7 @@ what the caller receives; the gateway is observed and never trusted.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import math
 from dataclasses import dataclass
@@ -132,10 +133,41 @@ class ShadowComparingMarketDataProvider:
         self._shadow_reads = shadow_reads
         self._price_tolerance = price_tolerance
         self.recorder = recorder or ShadowDiscrepancyRecorder()
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def shadow_enabled(self) -> bool:
         return self._shadow_reads and self._gateway is not None
+
+    def _spawn_background(self, coro: Any, *, name: str) -> None:
+        """Run a shadow comparison off the caller's critical path.
+
+        The comparison methods already catch every gateway/comparison failure
+        internally, so this task should never raise -- the broad except here is
+        only a defensive backstop against "exception was never retrieved".
+        """
+        task = asyncio.create_task(coro, name=name)
+        self._background_tasks.add(task)
+
+        def _on_done(finished: asyncio.Task[None]) -> None:
+            self._background_tasks.discard(finished)
+            if finished.cancelled():
+                return
+            exc = finished.exception()
+            if exc is not None:
+                log.warning("gateway_shadow_task_failed", error=str(exc))
+
+        task.add_done_callback(_on_done)
+
+    async def wait_for_shadow_reads(self) -> None:
+        """Wait for any in-flight shadow comparisons to finish.
+
+        Not used on the collector's hot path -- only for tests and graceful
+        shutdown, where deterministically observing the recorder matters.
+        """
+        pending = tuple(self._background_tasks)
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     def _record(self, operation: str, code: str, fields: tuple[str, ...] = ()) -> None:
         discrepancy = ShadowDiscrepancy(
@@ -154,16 +186,31 @@ class ShadowComparingMarketDataProvider:
         )
 
     async def get_spot_price(self, symbol: str = "$SPX") -> float:
-        price = await self._direct.get_spot_price(symbol)
+        direct_task: asyncio.Task[float] = asyncio.create_task(
+            self._direct.get_spot_price(symbol)
+        )
         if self.shadow_enabled:
-            await self._shadow_spot(symbol, price)
-        return price
+            gateway_task = asyncio.create_task(self._gateway.get_spot(symbol))
+            self._spawn_background(
+                self._shadow_spot(direct_task, gateway_task),
+                name="gateway_shadow_spot",
+            )
+        return await direct_task
 
-    async def _shadow_spot(self, symbol: str, direct_price: float) -> None:
+    async def _shadow_spot(
+        self,
+        direct_task: asyncio.Task[float],
+        gateway_task: asyncio.Task[Any],
+    ) -> None:
         try:
-            response = await self._gateway.get_spot(symbol)
+            response = await gateway_task
         except Exception as exc:  # every gateway failure is observed, never propagated
             self._record("spot", _error_code(exc))
+            return
+        try:
+            direct_price = await direct_task
+        except Exception:
+            # The direct failure is the caller's problem; nothing to shadow.
             return
         observed = response.spot
         if _numbers_agree(direct_price, observed.price, self._price_tolerance):
@@ -177,18 +224,34 @@ class ShadowComparingMarketDataProvider:
     async def get_option_chain(
         self, symbol: str, expiration: dt.date
     ) -> dict[str, Any]:
-        payload = await self._direct.get_option_chain(symbol, expiration)
+        direct_task: asyncio.Task[dict[str, Any]] = asyncio.create_task(
+            self._direct.get_option_chain(symbol, expiration)
+        )
         if self.shadow_enabled:
-            await self._shadow_chain(symbol, expiration, payload)
-        return payload
+            gateway_task = asyncio.create_task(
+                self._gateway.get_chain_metadata(symbol, expiration)
+            )
+            self._spawn_background(
+                self._shadow_chain(expiration, direct_task, gateway_task),
+                name="gateway_shadow_chain",
+            )
+        return await direct_task
 
     async def _shadow_chain(
-        self, symbol: str, expiration: dt.date, payload: dict[str, Any]
+        self,
+        expiration: dt.date,
+        direct_task: asyncio.Task[dict[str, Any]],
+        gateway_task: asyncio.Task[Any],
     ) -> None:
         try:
-            response = await self._gateway.get_chain_metadata(symbol, expiration)
+            response = await gateway_task
         except Exception as exc:  # every gateway failure is observed, never propagated
             self._record("chain", _error_code(exc))
+            return
+        try:
+            payload = await direct_task
+        except Exception:
+            # The direct failure is the caller's problem; nothing to shadow.
             return
         try:
             direct_fields = extract_chain_metadata(payload, expiration)
