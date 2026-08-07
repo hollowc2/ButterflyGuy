@@ -43,3 +43,12 @@ class GatewayClientSettings(BaseSettings):
         ):
             raise ValueError("shadow reads require SCHWAB_GATEWAY_URL and API key")
         return self
+
+    @model_validator(mode="after")
+    def shadow_reads_incompatible_with_gateway_mode(self) -> GatewayClientSettings:
+        if self.access_mode == "gateway" and self.shadow_reads:
+            raise ValueError(
+                "shadow reads compare a direct read against the gateway and are "
+                "meaningless once access_mode is already 'gateway'"
+            )
+        return self
