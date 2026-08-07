@@ -16,7 +16,14 @@ UTC = dt.timezone.utc
 
 @dataclass(frozen=True)
 class ChainMetadataFields:
-    """The bounded summary shared by the gateway upstream and the shadow comparator."""
+    """The bounded summary shared by the gateway upstream and the shadow comparator.
+
+    ``strike_count`` counts distinct strikes that carry at least one contract, across
+    both maps. A strike whose option list is empty is not counted, because neither live
+    parser can produce anything from it: ``iter_chain_options`` skips it (``if options:``)
+    and ``_parse_chain_response`` writes no row for it. That keeps the count fields
+    mutually consistent — a strike is present here only if it contributed contracts.
+    """
 
     underlying_price: float | None
     call_contract_count: int
@@ -52,7 +59,11 @@ def _underlying_event_time(payload: dict[str, Any]) -> dt.datetime | None:
 
 
 def _count_expiration(exp_map: Any, expiration: dt.date) -> tuple[int, frozenset[float]]:
-    """Count contracts and distinct strikes for one expiration, mirroring the collector."""
+    """Count contracts and contract-carrying strikes for one expiration.
+
+    Mirrors the collector's expiration-key filter, and mirrors both live parsers in
+    ignoring a strike whose option list is empty.
+    """
     if not isinstance(exp_map, dict):
         return 0, frozenset()
     contracts = 0
@@ -68,6 +79,8 @@ def _count_expiration(exp_map: Any, expiration: dt.date) -> tuple[int, frozenset
             try:
                 strike = float(strike_str)
             except (TypeError, ValueError):
+                continue
+            if not options:
                 continue
             strikes.add(strike)
             contracts += len(options)
