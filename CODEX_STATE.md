@@ -628,10 +628,23 @@ finding. Whether SPX can still refresh at all depends on whether Schwab invalida
 when a newer one is issued; if it does, the keepalive's host-path refreshes have already retired
 SPX's generation. The next occasion SPX will attempt a Schwab call is the following regular session.
 
-This is a pre-existing production defect, not a gateway defect, and it is independent of every
-gateway change. The likely remedy is a restart of `butterfly_spx_app` while the market is closed,
-which re-resolves the bind exactly as NDX and XSP already did. It was not performed: the standing
-authorization for this session is read-only.
+Resolution — the divergence is benign and no action is required. A bounded field-level digest
+comparison (SHA-256 prefixes only; no value printed, copied, or stored) shows the **refresh token is
+identical across the host document and all three containers** at `c5f05cc3fe64`. Only SPX's
+short-lived access token differs. SPX therefore holds the same, still-valid refresh credential as
+everyone else and will refresh normally on its next Schwab call; the earlier concern that its
+generation might already have been retired is disproved.
+
+That the refresh token is unchanged after 4.32 days of hourly keepalive refreshes also establishes
+that Schwab does not rotate the refresh token when it issues a new access token, which is consistent
+with `schwab-py` preserving `creation_timestamp`. The practical consequence is that the divergence
+costs nothing: each side refreshes its own access token from a shared refresh credential.
+
+**No restart of `butterfly_spx_app` is warranted.** The remedy is free during the next
+re-authorization window, which is already required.
+
+This is a pre-existing production condition, not a gateway defect, and it is independent of every
+gateway change. Nothing was mutated; the standing authorization for this session is read-only.
 
 It also blocks the Option A token-directory move. Renaming the host document while SPX is pinned to
 an orphaned inode would deepen the divergence, and the move additionally requires updating the bind
