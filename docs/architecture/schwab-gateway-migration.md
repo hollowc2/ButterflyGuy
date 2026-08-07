@@ -290,7 +290,7 @@ only during a separately approved integration exercise.
 - [x] Confirm all direct writers for the selected token are quiesced and the proof command is
       the single token writer for the complete window.
 - [x] Obtain explicit authorization for the real credential/token read and one Schwab quote.
-- [ ] Execute and review the bounded evidence described in
+- [x] Execute and review the bounded evidence described in
       `schwab-gateway-credential-proof.md`.
 
 ## Current migration status
@@ -305,11 +305,13 @@ runner, a real token path, credentials, or deployment. `/ready` now fails closed
 non-ready bounded manager state through an injected provider, while `/health` remains
 liveness; focused fake tests prove state coverage and recovery. The operator checklist above
 now records the completed fake gates, supervised single-writer window, and authorization.
-The first command launch stopped during a native dependency import before credential settings,
-token access, or Schwab access was reachable; no real quote occurred and all direct services
-were restored. A focused remediation now bounds project/third-party import failures, but the
-real credential proof remains incomplete pending merge and fresh authorization. The gateway
-must remain disabled and outside the production stack.
+The real credential proof is complete: on 2026-08-06 the host-executed proof step returned
+`credential_proof_passed` with `quote_count=1` and `token_state=ready`, retrieving one real
+AAPL quote from Schwab through `AtomicTokenManager` and `LockedSchwabClientAdapter`. See
+"Credential proof passed — 2026-08-06" in `schwab-gateway-credential-proof.md`. The
+accumulated gateway change set was reviewed and merged to local `main` on the same day. The
+gateway must remain disabled and outside the production stack; the completed proof authorizes
+no deployment, shadow read, or consumer cutover.
 
 The multi-consumer local foundation now fixes three identities and separates ButterflyGuy's
 protected quote capacity from the scanner/lab background pool. Authentication, capability,
@@ -319,3 +321,12 @@ current runtime. The after-hours executable-staging override, approval runbook, 
 and redacted evidence template are prepared but have not been executed. See
 `schwab-gateway-multi-consumer.md` and
 `../runbooks/schwab-gateway-after-hours-credential-proof.md`.
+
+Phase 2's surfaces were complete for quotes only, which serve the equity scanner rather than the
+butterfly collector. Phase 3's offline prerequisites now exist, fake-backed and unwired:
+`GET /v1/spot` and `GET /v1/chain`, the matching `get_spot`/`get_chain_metadata` client methods, a
+shadow-comparison decorator that always returns the direct result, and the
+`SCHWAB_GATEWAY_SHADOW_READS` rollback flag named above, defaulting to false. `/v1/chain` carries
+fixed-shape metadata only; transporting contract rows is Phase 4. `GET /v1/history` is not built, so
+the collector's `get_daily_bars` read has no shadow surface yet. No consumer constructs any of this,
+and the four Phase 3 dependencies listed above are still unmet.

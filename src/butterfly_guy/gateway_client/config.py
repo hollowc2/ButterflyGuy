@@ -23,6 +23,10 @@ class GatewayClientSettings(BaseSettings):
         default=SecretStr(""),
         validation_alias="SCHWAB_GATEWAY_API_KEY",
     )
+    shadow_reads: bool = Field(
+        default=False,
+        validation_alias="SCHWAB_GATEWAY_SHADOW_READS",
+    )
 
     @model_validator(mode="after")
     def gateway_mode_requires_connection_settings(self) -> GatewayClientSettings:
@@ -30,4 +34,12 @@ class GatewayClientSettings(BaseSettings):
             not self.gateway_url or not self.gateway_api_key.get_secret_value()
         ):
             raise ValueError("gateway mode requires SCHWAB_GATEWAY_URL and API key")
+        return self
+
+    @model_validator(mode="after")
+    def shadow_reads_require_connection_settings(self) -> GatewayClientSettings:
+        if self.shadow_reads and (
+            not self.gateway_url or not self.gateway_api_key.get_secret_value()
+        ):
+            raise ValueError("shadow reads require SCHWAB_GATEWAY_URL and API key")
         return self

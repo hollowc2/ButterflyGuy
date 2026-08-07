@@ -285,6 +285,21 @@ operator's terminal scrollback and the 2026-08-06 session transcript. The operat
 residual risk and retained the credentials. The remaining exposure is a loss of defence in depth:
 the secret is now the only factor standing between a future token exposure and account access.
 
+Phase 3's offline prerequisites are now built on branch
+`codex/schwab-gateway-phase3-shadow-surfaces`, entirely fake-backed. Before this slice the gateway
+served the equity scanner's quote surface only: `DirectSchwabQuoteUpstream` wraps
+`EquityQuoteProvider.get_equity_quotes`, which in production is called only by
+`refresh_equity_universes.py` and `run_morning_scan.py`. The butterfly collector reads
+`get_spot_price` and `get_option_chain`, neither of which the gateway could serve, so no shadow
+comparison of the collector was possible. The gateway now also serves `GET /v1/spot` and
+`GET /v1/chain`, the client exposes `get_spot` and `get_chain_metadata`, and
+`SCHWAB_GATEWAY_SHADOW_READS` — the flag Phase 3's own rollback names — exists for the first time,
+defaulting to false. `/v1/chain` returns fixed-shape metadata only and never contract rows; full
+chain transport remains Phase 4. Nothing is wired: no service constructs the shadow decorator, and
+`run_live.py`, `run_collector.py`, and `data/collector.py` are untouched. Phase 3's four
+dependencies — a production-capable single token manager, a safe gateway deployment host, capability
+probe approval, and a read-only consumer key — remain unmet, and none is solvable offline.
+
 ## Repository Findings
 
 - SPX/NDX/XSP and host utilities independently construct `schwab-py` clients.
@@ -357,6 +372,51 @@ the secret is now the only factor standing between a future token exposure and a
   retained candidate artifact and emits only the fixed failed-check name or the successful
   candidate-set digest. It rejects extra fields, partial records, inconsistent checks, and altered
   candidate hashes without disclosing stored content.
+
+## Phase 3 Shadow Surfaces (unwired, default off)
+
+- `schwab_gateway/api.py`: `GET /v1/spot` and `GET /v1/chain` follow the quote handler's exact
+  order — capability, parameter validation, readiness, admission, then the upstream call inside
+  `asyncio.timeout`. `_serve_upstream` holds steps 3–5 once for both new routes; the quote handler
+  is unchanged.
+- Upstream injection decision: `create_app` keeps its single positional `upstream: QuoteUpstream`
+  and gains keyword-only `spot_upstream` and `chain_upstream`, each defaulting to a fail-closed
+  stub that raises `UpstreamUnavailableError` (503). A widened composite protocol was rejected
+  because Python protocols are not enforced at runtime, so every existing fake, test, and the demo
+  runner would have satisfied it structurally while returning `AttributeError` on a real spot or
+  chain request. Separate optional upstreams make each surface's availability an explicit
+  deployment declaration and keep every current caller and default unchanged.
+- `gateway_client/models.py`: `SpotV1`/`SpotResponseV1` and `ChainMetadataV1`/
+  `ChainMetadataResponseV1` — `extra="forbid"`, frozen, `schema_version: Literal["1.0"]`,
+  timezone-aware timestamp validators, nonnegative age and count validators, nullable data, and a
+  `data_quality_flags` tuple.
+- `gateway_client/chain_metadata.py`: one pure `extract_chain_metadata` shared by the gateway's
+  chain upstream and the consumer-side comparator, so both derive identical counts from the same
+  raw payload. It mirrors the collector's expiration-key filter and never returns contract rows.
+- `schwab_gateway/upstream.py`: `SpotUpstream`/`ChainMetadataUpstream` protocols,
+  `DirectSchwabSpotUpstream`, and `DirectSchwabChainMetadataUpstream`, reusing the existing
+  `UpstreamUnavailableError`/`UpstreamMalformedError` classification. `get_spot_price` returns a
+  bare float, so a direct spot read carries no upstream event time and is reported `stale` with
+  `missing_event_timestamp` rather than claiming a freshness it cannot prove.
+- `gateway_client/client.py`: `get_spot` and `get_chain_metadata` reuse every existing error class
+  and the explicit timeout, with no retries. `get_quotes` is untouched.
+- `gateway_client/shadow.py`: `ShadowComparingMarketDataProvider` wraps a
+  `CollectorMarketDataProvider`, returns the direct result unconditionally on every path, and
+  swallows every gateway failure. Discrepancies map to the four migration-doc categories through a
+  closed code table: timeouts and unprovable freshness are `timing`, a known-stale differing value
+  is `cache`, a provably fresh differing value or an invalid contract is `parsing`, and every
+  gateway-reported error is `upstream`. Diagnostics are fixed codes, classifications, operation
+  names, and field names only.
+- `gateway_client/config.py`: `SCHWAB_GATEWAY_SHADOW_READS` defaults to false and, like gateway
+  mode, requires the URL and key when enabled. `SCHWAB_ACCESS_MODE` still defaults to `direct` and
+  is still consumed by no service.
+- `tests/test_gateway_collector_surfaces.py`, `tests/test_gateway_shadow_reads.py`, and additions
+  to `tests/test_gateway_contract_boundaries.py` and `tests/test_gateway_models.py`: typed success
+  through the real in-process aiohttp app, 401/403/400/503/429/504/503/502 coverage per route, a
+  route table with no account or order surface, fail-closed undeclared surfaces, client status
+  classification with no retry, and proof that the only importers of `schwab_gateway`/
+  `gateway_client` anywhere in `src/` are `run_schwab_gateway.py` and
+  `probe_schwab_gateway_credentials.py`.
 
 ## Token-Manager Tests Added
 
@@ -483,7 +543,27 @@ can host the reviewed subset and restoration still requires its absence. Removin
 recommended while no further proof window is planned, since it would weaken what restoration
 verifies in exchange for nothing.
 
-Baselines: `uv run pytest` is 763 passed, 1 skipped, and `uv run ruff check .` is clean.
+The next decision is wiring. `ShadowComparingMarketDataProvider` exists and is proven against the
+real in-process gateway, but nothing constructs it. Wiring it into `run_live.py` behind
+`SCHWAB_GATEWAY_SHADOW_READS` would make gateway code reachable from a live trading entry point for
+the first time and needs its own approval. It is also blocked in practice: with no deployed gateway
+there is nothing for the flag to point at, so wiring should follow a deployment host, not precede
+it. Two design points to settle at wiring time: the comparator awaits the gateway read after the
+direct read returns, adding gateway latency to each collector cycle; and `GET /v1/history` is
+deliberately absent, so `get_daily_bars` (`data/collector.py:117`) has no shadow surface.
+
+Baselines on the current host: `uv run python -m pytest` is 851 passed, 1 skipped, 2 failed, and
+`uv run ruff check .` is clean. Both failures reproduce on unmodified `main` and are unrelated to
+this slice. `test_gateway_compose.py::test_staging_package_does_not_change_default_compose` pins the
+SHA-256 of `infra/docker-compose.yml` as recorded at `origin/main` `6179f2e`, and commit `5055991`
+edited that file afterwards, so the pin is stale.
+`test_gateway_credential_proof_operator.py::test_host_native_smoke_runs_the_reviewed_operator_under_the_named_interpreter`
+fails because `.venv/bin/`'s console-script shebangs point at
+`/mnt/Files/Projects/Python/Butterflyguy/.venv/bin/python`, a path that does not exist for the
+current user; that is also why `uv run pytest` cannot spawn and `uv run python -m pytest` is used
+instead. Neither was fixed here: the compose pin is in the do-not-touch set, and the venv is host
+state. The previously recorded 763 passed, 1 skipped baseline was taken on a different host and does
+not reproduce here.
 `graphify update .` remains skipped because the recorded binary does not exist for the current user.
 The branch has never been pushed. On 2026-08-06 the accumulated change set landed on `main` as a
 reviewed local fast-forward to `b9a6c61`: 62 commits, no merge commit, no rebase, squash, amend, or
