@@ -18,6 +18,7 @@ from butterfly_guy.data.providers import (
     OptionChainProvider,
     SpotPriceProvider,
 )
+from butterfly_guy.schwab_gateway.config import GatewayCredentialProbeSettings
 from butterfly_guy.schwab_gateway.live_provider import (
     GatewayUpstreamSettings,
     LockedSchwabMarketDataProvider,
@@ -174,6 +175,20 @@ async def test_spot_read_closes_its_session_even_when_the_call_fails() -> None:
 
 
 @pytest.mark.asyncio
+async def test_spot_read_raises_bare_value_error_on_a_malformed_payload() -> None:
+    """Parsing runs outside the locked transaction, so a malformed payload must raise a
+    bare ``ValueError`` from ``extract_spot_price`` rather than the adapter's generic
+    ``SchwabClientOperationError`` -- that is what lets the gateway boundary tell a
+    malformed response apart from a genuine fetch failure."""
+    client = _FakeClient()
+    client.quote_response = _Response({"$SPX": {"quote": {}}})
+    provider, _ = _provider(client)
+
+    with pytest.raises(ValueError):
+        await provider.get_spot_price("$SPX")
+
+
+@pytest.mark.asyncio
 async def test_spot_read_does_not_retry() -> None:
     """The direct path retries three times; inside a held token lock this one must not."""
     client = _FakeClient()
@@ -300,19 +315,54 @@ async def test_extract_spot_price_agrees_with_the_live_client_on_the_same_payloa
     assert live_price == expected == extract_spot_price(payload, "$SPX")
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        pytest.param({}, id="empty"),
-        pytest.param({"$SPX": {}}, id="no_price_fields"),
-        pytest.param({"$SPX": {"quote": {"lastPrice": None}}}, id="null_price"),
-        pytest.param(["not", "a", "dict"], id="not_an_object"),
-        pytest.param({"$SPX": "not-an-object"}, id="entry_not_an_object"),
-    ],
-)
+REJECTED_SPOT_PAYLOADS = [
+    pytest.param({}, id="empty"),
+    pytest.param({"$SPX": {}}, id="no_price_fields"),
+    pytest.param({"$SPX": {"quote": {"lastPrice": None}}}, id="null_price"),
+    pytest.param(["not", "a", "dict"], id="not_an_object"),
+    pytest.param({"$SPX": "not-an-object"}, id="entry_not_an_object"),
+    # A legitimate all-zero quote is a known, deliberately-mirrored gap: ``or`` treats a
+    # real 0 as falsy and falls through every field, so this raises even though 0.0 could
+    # be the true spot price. See ``extract_spot_price``'s docstring.
+    pytest.param(
+        {"$SPX": {"quote": {"lastPrice": 0, "mark": 0, "closePrice": 0}}},
+        id="all_fields_legitimately_zero",
+    ),
+]
+
+
+@pytest.mark.parametrize("payload", [p.values[0] for p in REJECTED_SPOT_PAYLOADS])
 def test_extract_spot_price_rejects_unusable_payloads(payload: Any) -> None:
     with pytest.raises(ValueError):
         extract_spot_price(payload, "$SPX")
+
+
+@pytest.mark.asyncio
+async def test_extract_spot_price_agrees_with_the_live_client_on_an_all_zero_quote() -> None:
+    """Differential test pinning the known zero-price gap bug-for-bug.
+
+    A legitimate all-zero quote (``lastPrice``/``mark``/``closePrice`` all ``0``) is
+    misreported as "no usable price" by both extractors, because ``or`` treats a real
+    ``0`` the same as a missing value. That is a bug, but fixing it in only one of the two
+    extractors would make the gateway's spot read disagree with the direct path on this
+    exact payload — worse than both sharing the limitation. This test only proves parity;
+    it does not assert either side returns ``0.0``, since neither currently does.
+    """
+    from butterfly_guy.data.schwab_client import SchwabClientWrapper
+
+    payload = {"$SPX": {"quote": {"lastPrice": 0, "mark": 0, "closePrice": 0}}}
+    wrapper = SchwabClientWrapper.__new__(SchwabClientWrapper)
+
+    async def fake_retry(_func: Any, *_args: Any, **_kwargs: Any) -> Any:
+        return _Response(payload)
+
+    wrapper._retry = fake_retry  # type: ignore[method-assign]
+    wrapper._client = _FakeClient()  # type: ignore[attr-defined]
+
+    with pytest.raises(ValueError):
+        extract_spot_price(payload, "$SPX")
+    with pytest.raises(ValueError):
+        await wrapper.get_spot_price("$SPX")
 
 
 # --- Settings ------------------------------------------------------------------------
@@ -344,3 +394,37 @@ def test_upstream_settings_do_not_expose_secrets_in_their_repr(
     assert "fake-key-value" not in rendered
     assert "fake-secret-value" not in rendered
     assert "/opt/butterflyguy/tokens.json" not in rendered
+
+
+def test_upstream_settings_stay_in_agreement_with_the_credential_probe_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression guard for the deliberate duplication of these two settings classes.
+
+    ``GatewayUpstreamSettings`` (here) and ``GatewayCredentialProbeSettings``
+    (``schwab_gateway/config.py``) are intentionally separate classes with identical
+    fields, env var aliases, and absolute-token-path validation, because ``config.py`` is
+    a member of a reviewed credential-proof archive pinned by SHA-256 and must not be
+    edited or reused. Nothing enforces that the two stay identical except this test: if
+    either class's fields, aliases, or validation drift from the other, this fails
+    immediately instead of the drift going unnoticed.
+    """
+    upstream_fields = GatewayUpstreamSettings.model_fields
+    probe_fields = GatewayCredentialProbeSettings.model_fields
+
+    assert set(upstream_fields) == set(probe_fields)
+    for name, field in upstream_fields.items():
+        assert field.validation_alias == probe_fields[name].validation_alias
+
+    monkeypatch.setenv("SCHWAB_API_KEY", "fake-key")
+    monkeypatch.setenv("SCHWAB_SECRET_KEY", "fake-secret")
+    monkeypatch.setenv("SCHWAB_TOKEN_PATH", "relative/tokens.json")
+
+    with pytest.raises(ValueError):
+        GatewayUpstreamSettings()
+    with pytest.raises(ValueError):
+        GatewayCredentialProbeSettings()
+
+    monkeypatch.setenv("SCHWAB_TOKEN_PATH", "/opt/butterflyguy/tokens.json")
+    assert GatewayUpstreamSettings().token_path.is_absolute()
+    assert GatewayCredentialProbeSettings().token_path.is_absolute()

@@ -629,6 +629,34 @@ async def test_direct_spot_upstream_classifies_provider_failure_as_unavailable()
 
 
 @pytest.mark.asyncio
+async def test_direct_spot_upstream_classifies_malformed_payload_as_malformed_not_unavailable() -> (
+    None
+):
+    """A parse failure (e.g. ``extract_spot_price`` raising on a malformed payload) must
+    surface as ``UpstreamMalformedError``, not be folded into the same
+    ``UpstreamUnavailableError`` a genuine fetch failure produces."""
+
+    class MalformedPayload:
+        async def get_spot_price(self, symbol: str = "$SPX") -> float:
+            raise ValueError("spot response carried no usable price")
+
+    with pytest.raises(UpstreamMalformedError):
+        await DirectSchwabSpotUpstream(MalformedPayload()).get_spot("$SPX")
+
+
+@pytest.mark.asyncio
+async def test_direct_spot_upstream_still_classifies_fetch_failure_as_unavailable() -> None:
+    """A non-parse failure (network/timeout/adapter error) must still be unavailable."""
+
+    class FetchFailure:
+        async def get_spot_price(self, symbol: str = "$SPX") -> float:
+            raise RuntimeError("connection reset")
+
+    with pytest.raises(UpstreamUnavailableError):
+        await DirectSchwabSpotUpstream(FetchFailure()).get_spot("$SPX")
+
+
+@pytest.mark.asyncio
 async def test_direct_chain_upstream_summarizes_without_contract_rows() -> None:
     payload = {
         "underlyingPrice": 5000.25,
@@ -677,10 +705,30 @@ async def test_direct_chain_upstream_summarizes_without_contract_rows() -> None:
 
 
 @pytest.mark.asyncio
-async def test_direct_chain_upstream_rejects_a_payload_with_no_expiration_map() -> None:
+async def test_direct_chain_upstream_tolerates_a_payload_with_no_expiration_map() -> None:
+    """``extract_chain_metadata`` now matches both live parsers on this shape (a payload
+    present but with neither ``callExpDateMap`` nor ``putExpDateMap``): it is a legitimate
+    zero-count chain, not a malformed one, so ``GET /v1/chain`` must return 200, not 502.
+    """
+
     class Provider:
         async def get_option_chain(self, symbol: str, expiration: dt.date):
             return {"status": "FAILED"}
+
+    fields = await DirectSchwabChainMetadataUpstream(Provider()).get_chain_metadata(
+        "SPX", EXPIRATION
+    )
+    assert fields.call_contract_count == 0
+    assert fields.put_contract_count == 0
+    assert fields.strike_count == 0
+
+
+async def test_direct_chain_upstream_rejects_a_payload_that_is_not_an_object() -> None:
+    """The one shape ``extract_chain_metadata`` still refuses: not a dict at all."""
+
+    class Provider:
+        async def get_option_chain(self, symbol: str, expiration: dt.date):
+            return "not-a-chain-payload"
 
     with pytest.raises(UpstreamMalformedError):
         await DirectSchwabChainMetadataUpstream(Provider()).get_chain_metadata(

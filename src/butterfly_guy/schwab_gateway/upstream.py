@@ -199,6 +199,10 @@ class DirectSchwabSpotUpstream:
     async def get_spot(self, symbol: str) -> SpotV1:
         try:
             price = await self._provider.get_spot_price(symbol)
+        except ValueError as exc:
+            # Raised by spot-price extraction/parsing (e.g. ``extract_spot_price`` on a
+            # malformed Schwab payload), not by the fetch itself.
+            raise UpstreamMalformedError("Schwab spot response was invalid") from exc
         except Exception as exc:
             raise UpstreamUnavailableError("Schwab spot request failed") from exc
         try:

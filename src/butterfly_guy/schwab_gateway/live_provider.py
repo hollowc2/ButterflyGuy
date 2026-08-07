@@ -79,6 +79,15 @@ def extract_spot_price(payload: Any, symbol: str) -> float:
     unprefixed-symbol fallback, so a gateway spot read and a direct spot read cannot
     disagree about the same payload. ``data/schwab_client.py`` is not modified to share
     this helper; the duplication is pinned by a differential test instead.
+
+    Known gap, deliberately mirrored rather than fixed here: the field preference uses
+    ``or``, so a legitimate ``0`` price in every one of ``lastPrice``/``mark``/
+    ``closePrice`` is indistinguishable from a missing price and this raises instead of
+    returning ``0.0``. The identical gap exists in ``SchwabClientWrapper.get_spot_price``,
+    which is the live production spot-price path and out of scope to change. Fixing it
+    only here would make the gateway's spot read disagree with the direct path on that one
+    payload shape, which is worse than both sharing the same known limitation — so this
+    must stay bug-for-bug identical to the direct path until both are fixed together.
     """
     if not isinstance(payload, dict):
         raise ValueError("spot response was not an object")
@@ -121,13 +130,20 @@ class LockedSchwabMarketDataProvider:
         return await asyncio.to_thread(self._adapter.execute, operation)
 
     async def get_spot_price(self, symbol: str = "$SPX") -> float:
-        def operation(client: Any) -> float:
+        def operation(client: Any) -> Any:
             with _closing_session(client):
                 response = client.get_quote(symbol)
                 response.raise_for_status()
-                return extract_spot_price(response.json(), symbol)
+                return response.json()
 
-        return await self._execute(operation)
+        # Parsing runs outside the locked transaction so a malformed payload (a
+        # ``ValueError`` from ``extract_spot_price``) surfaces as itself rather than
+        # being folded into the adapter's generic ``SchwabClientOperationError`` for a
+        # failed fetch. That keeps the two failure modes distinguishable at the gateway
+        # boundary the same way ``get_option_chain``/``normalize_schwab_chain_metadata``
+        # already are.
+        payload = await self._execute(operation)
+        return extract_spot_price(payload, symbol)
 
     async def get_option_chain(
         self, symbol: str, expiration: dt.date
@@ -220,6 +236,18 @@ class TokenReadinessRecovery:
         return True
 
     async def run_forever(self) -> None:
+        """Recover readiness forever, surviving any failure a single attempt can raise.
+
+        ``asyncio.CancelledError`` still propagates so shutdown can cancel this task; any
+        other exception from an attempt (including one ``attempt_once`` does not itself
+        catch, such as a raise from ``health()``) is caught here so the loop keeps ticking
+        instead of dying silently and latching readiness forever.
+        """
         while True:
             await asyncio.sleep(self._interval_seconds)
-            await self.attempt_once()
+            try:
+                await self.attempt_once()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.warning("gateway_readiness_recovery_attempt_crashed", reason="unexpected_error")
