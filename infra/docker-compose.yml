@@ -39,7 +39,8 @@ services:
       context: ..
       dockerfile: Dockerfile
     container_name: butterfly_spx_candidate
-    restart: unless-stopped
+    # Legacy BEST_RR rollback service; keep it stopped unless explicitly started.
+    restart: "no"
     command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "configs/config_spx_candidate.yaml"]
     env_file:
       - ../.env
