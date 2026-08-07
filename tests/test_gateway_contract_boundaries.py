@@ -251,11 +251,14 @@ def test_no_service_or_entry_point_imports_the_shadow_harness_or_gateway_client(
     """The Phase 3 surfaces stay unwired: nothing outside the gateway packages imports them."""
     gateway_packages = ("butterfly_guy/gateway_client/", "butterfly_guy/schwab_gateway/")
     gateway_modules = ("butterfly_guy.gateway_client", "butterfly_guy.schwab_gateway")
-    # The only permitted importers are the two standalone gateway entry points, neither of
-    # which is reachable from run_live.py, run_collector.py, or any Compose default profile.
+    # The only permitted importers are the standalone gateway entry points, none of which is
+    # reachable from run_live.py, run_collector.py, or any Compose default profile.
+    # issue_gateway_keys.py is an operator CLI that reads the auth module's fixed identity
+    # vocabulary to write a keys file; it starts no server and performs no market-data read.
     standalone_entry_points = {
         "butterfly_guy/scripts/run_schwab_gateway.py",
         "butterfly_guy/scripts/probe_schwab_gateway_credentials.py",
+        "butterfly_guy/scripts/issue_gateway_keys.py",
     }
 
     importers: set[str] = set()
