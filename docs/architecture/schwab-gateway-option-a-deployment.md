@@ -118,9 +118,44 @@ machine running live trading. That includes the entire gateway change set *and* 
 which changes the live `infra/docker-compose.yml`. This needs its own plan and its own
 approval; it is a larger step than this runbook originally assumed.
 
-**2. The Helios working tree is not clean.** Whatever is uncommitted there must be
-identified and preserved before any checkout update. Do not update the checkout until this
-is resolved.
+**2. The Helios working tree is not clean, but nothing there is at risk.** Enumerated
+read-only, names only: two tracked modifications, `configs/universes/liquid.txt` and
+`configs/universes/liquid_meta.json`, which are the weekly output of
+`refresh_equity_universes.py` rather than human edits; and 35 untracked entries, 33 of
+which are the retained credential-proof and runtime-baseline evidence artifacts, plus
+`.tokens.json.lock` and an `evidence/` directory. No stashes. **None of the 64 incoming
+commits touches either modified file**, so a checkout update has no conflict to resolve.
+
+Two follow-ups: the evidence artifacts are **not gitignored**, so a careless `git add -A`
+on that host would commit private artifacts and the lock file into the repository; and the
+retained evidence must survive any checkout update, so no clean/reset that removes
+untracked files may be used.
+
+**2b. The token document lives at the repository root — this blocks the Compose design.**
+`/opt/butterflyguy` is simultaneously the git checkout root, the evidence directory, and
+the directory holding `tokens.json`. Setting `SCHWAB_GATEWAY_TOKEN_DIR=/opt/butterflyguy`
+would therefore bind-mount **the entire source checkout, read-write, into the gateway
+container**, which is far broader than intended and largely defeats `read_only: true`.
+
+The knot is real, not cosmetic. `AtomicTokenManager` needs write access to the token
+document's *directory* for its lock and its atomic replacement; that directory is the repo
+root; and the trading containers avoid the problem only by bind-mounting the file itself,
+which is exactly why they cannot refresh and why the credential proof had to move to the
+host. Options, none of which is free:
+
+- **Move the token document to a dedicated directory.** Cleanest, and the gateway mount
+  becomes narrow and obvious. Costs a host-side change to the keepalive cron and to the
+  host proof path, both of which name `/opt/butterflyguy/tokens.json`. Does not affect the
+  running containers, which bind the file to their own in-container path.
+- **Accept the repo-root mount.** Requires no change, but hands a market-data service
+  write access to the source tree and the retained evidence. Not recommended.
+- **Give the gateway its own token document.** Reintroduces split refresh against a
+  seven-day refresh token — the critical risk in the migration doc's register. Rejected.
+
+The first option is the recommended one, but it mutates live infrastructure and needs its
+own approval. **Do not start the live service until this is decided**; the Compose file
+deliberately has no default for `SCHWAB_GATEWAY_TOKEN_DIR`, so it will refuse rather than
+guess.
 
 **3. Port 8010 is taken by `halt_scanner`.** The demo service as configured would fail to
 bind. The live service's 8011 is free, so Option A itself is unaffected, but the demo

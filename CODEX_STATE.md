@@ -709,8 +709,29 @@ Three findings change the plan:
   of the machine running live trading, including `5055991`, which edits the live
   `infra/docker-compose.yml`. That needs its own plan and its own approval and is materially larger
   than the runbook originally assumed.
-- **The Helios working tree is not clean.** Uncommitted changes are present and must be identified
-  and preserved before any checkout update.
+- **The Helios working tree is not clean, but nothing there is at risk.** Enumerated read-only,
+  names only: two tracked modifications, `configs/universes/liquid.txt` and
+  `configs/universes/liquid_meta.json`, which are weekly `refresh_equity_universes.py` output rather
+  than human edits; 35 untracked entries, 33 of them retained credential-proof and runtime-baseline
+  evidence artifacts, plus `.tokens.json.lock` and an `evidence/` directory; no stashes. None of the
+  64 incoming commits touches either modified file, so a checkout update has no conflict to resolve.
+  The evidence artifacts are **not gitignored**, so a careless `git add -A` there would commit
+  private artifacts and the lock file; and any checkout update must not remove untracked files.
+- **The token document lives at the repository root, which blocks the Compose design as written.**
+  `/opt/butterflyguy` is simultaneously the checkout root, the evidence directory, and the directory
+  holding `tokens.json`, so `SCHWAB_GATEWAY_TOKEN_DIR=/opt/butterflyguy` would bind-mount the entire
+  source checkout read-write into the gateway container and largely defeat `read_only: true`.
+  `AtomicTokenManager` needs write access to the document's directory for its lock and atomic
+  replacement, and the trading containers avoid that only by binding the file itself — which is
+  precisely why they cannot refresh and why the proof moved to the host. The recommended resolution
+  is to move the token document to a dedicated directory, which costs a host-side change to the
+  keepalive cron and the host proof path but does not affect the running containers. Accepting the
+  repo-root mount is not recommended, and a separate gateway token document is rejected because it
+  splits refresh against a seven-day refresh token. The live service must not start until this is
+  decided; the Compose file has no default for the variable and will refuse rather than guess.
+- **Helios is also 15 commits behind `origin/main`** and has nothing `origin/main` lacks, so the
+  delivery chain is Helios `de84d91` → 15 → `origin/main` `6179f2e` → 49 → local `main` `ba2e6bc` →
+  the branch commits.
 - **Port 8010 is bound** by the unrelated `halt_scanner` container, so the demo service as
   configured cannot bind. The live service's 8011 is free, so Option A itself is unaffected.
 
