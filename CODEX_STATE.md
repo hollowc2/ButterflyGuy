@@ -601,6 +601,45 @@ their just-captured baselines and were running and unpaused. Temporary host-side
 were removed. This proves no configuration change during the window, not accepted-fingerprint or
 process-uniqueness completion.
 
+## Live Finding — SPX is on a divergent orphaned token document (2026-08-06, unresolved)
+
+Found by bounded read-only inspection while planning the Option A token-directory move. No
+mutation was made and no token value was read; the comparison is by inode, mtime, SHA-256 prefix,
+and the integer `creation_timestamp` only.
+
+`butterfly_spx_app` binds `/opt/butterflyguy/tokens.json` to `/app/tokens.json`, but inside the
+container that path resolves to **inode 1112240**, while the host path is now **inode 1067464**.
+NDX and XSP both resolve to 1067464 and match the host document byte-for-byte by digest. SPX does
+not: its digest differs and its mtime is `2026-08-06 21:00:03Z` against the host's
+`2026-08-07 04:00:09Z`. `find -inum 1112240` under the repository root returns nothing, so SPX's
+document is reachable from no host path at all — only the container's bind mount keeps it alive.
+
+Cause: `AtomicTokenManager` and the keepalive replace the document with `os.replace`, which creates
+a new inode. A container restart re-resolves its bind mount; a running container does not. NDX and
+XSP were restarted during the 2026-08-06 credential-proof restoration and picked up the new inode.
+SPX was deliberately never recreated — it was suspended with `docker kill --signal STOP/CONT` and
+has `RestartCount=0` with `StartedAt=2026-08-04T21:14:26Z` — so it is still pinned to the inode that
+existed before the proof's atomic rewrite.
+
+Severity. All four documents report the same `creation_timestamp` age, 4.32 days, because
+`schwab-py` preserves that field across refreshes. SPX is therefore on the same token lineage, not a
+separate authorization, and shares the same seven-day refresh deadline — roughly 2.7 days from the
+finding. Whether SPX can still refresh at all depends on whether Schwab invalidates a refresh token
+when a newer one is issued; if it does, the keepalive's host-path refreshes have already retired
+SPX's generation. The next occasion SPX will attempt a Schwab call is the following regular session.
+
+This is a pre-existing production defect, not a gateway defect, and it is independent of every
+gateway change. The likely remedy is a restart of `butterfly_spx_app` while the market is closed,
+which re-resolves the bind exactly as NDX and XSP already did. It was not performed: the standing
+authorization for this session is read-only.
+
+It also blocks the Option A token-directory move. Renaming the host document while SPX is pinned to
+an orphaned inode would deepen the divergence, and the move additionally requires updating the bind
+source for all three services in `infra/docker-compose.yml` and recreating them, because a bind
+mount whose source path no longer exists does not fail loudly on the next `up`. Resolve the SPX
+divergence first, then treat the token move as a planned live-service maintenance operation rather
+than a file rename.
+
 ## Open Questions
 
 - Real Schwab extended-hours/streaming/EXTO capability results.
