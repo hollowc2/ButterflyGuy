@@ -34,9 +34,18 @@ from typing import Any
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from butterfly_guy.core.logging import get_logger
 from butterfly_guy.schwab_gateway.token_adapter import LockedSchwabClientAdapter
+from butterfly_guy.schwab_gateway.token_manager import (
+    AtomicTokenManager,
+    TokenManagerError,
+    TokenManagerState,
+)
+
+log = get_logger(__name__)
 
 DEFAULT_QUOTE_BATCH_SIZE = 150
+DEFAULT_READINESS_RECOVERY_SECONDS = 30.0
 
 
 class GatewayUpstreamSettings(BaseSettings):
@@ -167,3 +176,50 @@ class LockedSchwabMarketDataProvider:
         # Every batch shares one transaction, so a multi-batch scanner request takes the
         # token lock once rather than once per batch.
         return await self._execute(operation)
+
+
+class TokenReadinessRecovery:
+    """Re-prime a latched token manager from outside the request path.
+
+    A token-level failure moves the manager out of ``READY``. Every route and ``/ready``
+    then refuse with ``gateway_not_ready`` — including the request that would have
+    produced the transaction that would make it ready again — so nothing recovers on its
+    own. That is correct fail-closed behaviour for a missing, expired, or corrupt token,
+    but a lock timeout is transient: another writer simply held the document too long.
+
+    This retries ``load()`` on a fixed interval and only while the manager is not ready,
+    so a healthy gateway never touches the token document on this path and a latched one
+    cannot spin. A still-failing load leaves the state exactly as it was.
+    """
+
+    def __init__(
+        self,
+        manager: AtomicTokenManager,
+        *,
+        interval_seconds: float = DEFAULT_READINESS_RECOVERY_SECONDS,
+    ) -> None:
+        if interval_seconds <= 0:
+            raise ValueError("readiness recovery interval must be positive")
+        self._manager = manager
+        self._interval_seconds = interval_seconds
+
+    async def attempt_once(self) -> bool:
+        """Return True when the manager is ready, recovering it first if it is not."""
+        if self._manager.health().state is TokenManagerState.READY:
+            return True
+        try:
+            await asyncio.to_thread(self._manager.load)
+        except TokenManagerError:
+            # The manager has already recorded its own bounded state; nothing to add.
+            log.warning(
+                "gateway_readiness_recovery_failed",
+                state=self._manager.health().state.value,
+            )
+            return False
+        log.info("gateway_readiness_recovered")
+        return True
+
+    async def run_forever(self) -> None:
+        while True:
+            await asyncio.sleep(self._interval_seconds)
+            await self.attempt_once()

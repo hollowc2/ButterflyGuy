@@ -21,7 +21,9 @@ from butterfly_guy.schwab_gateway.api import (
     UPSTREAM_KEY,
 )
 from butterfly_guy.schwab_gateway.config import GatewaySettings
+from butterfly_guy.schwab_gateway.live_provider import TokenReadinessRecovery
 from butterfly_guy.schwab_gateway.token_manager import (
+    AtomicFileTokenStore,
     AtomicTokenManager,
     TokenManagerState,
     TokenMissingError,
@@ -217,6 +219,91 @@ def test_live_app_builds_no_client_and_makes_no_request(tmp_path: Path) -> None:
         recording_factory,
     )
     assert calls == []
+
+
+def test_live_app_registers_readiness_recovery(tmp_path: Path) -> None:
+    app = runner.build_live_app(
+        _settings(tmp_path),
+        _upstream_settings(_token_file(tmp_path)),
+        _unused_factory,
+    )
+    assert len(app.cleanup_ctx) == 1
+
+
+def test_demo_app_registers_no_readiness_recovery(tmp_path: Path) -> None:
+    """The demo readiness is a static fake; there is nothing to recover."""
+    app = runner.build_demo_app(_settings(tmp_path))
+    assert list(app.cleanup_ctx) == []
+
+
+# --- Readiness recovery --------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_recovery_does_not_touch_the_token_while_ready(tmp_path: Path) -> None:
+    """A healthy gateway must never take the token lock on the recovery path."""
+    manager = AtomicTokenManager(AtomicFileTokenStore(_token_file(tmp_path)))
+    manager.load()
+    loads = 0
+
+    original_load = manager.load
+
+    def counting_load():
+        nonlocal loads
+        loads += 1
+        return original_load()
+
+    manager.load = counting_load  # type: ignore[method-assign]
+
+    assert await TokenReadinessRecovery(manager).attempt_once() is True
+    assert loads == 0
+
+
+@pytest.mark.asyncio
+async def test_recovery_relifts_a_latched_manager(tmp_path: Path) -> None:
+    """The latch this fixes: a token-level failure that no request can clear.
+
+    Every route and /ready gate on READY, so once the manager leaves READY the request
+    that would have produced a recovering transaction is itself refused.
+    """
+    token = _token_file(tmp_path)
+    manager = AtomicTokenManager(AtomicFileTokenStore(token))
+    manager.load()
+    assert manager.health().state is TokenManagerState.READY
+
+    # Latch it the way a real token-level failure would.
+    token.unlink()
+    with pytest.raises(TokenMissingError):
+        manager.load()
+    assert manager.health().state is not TokenManagerState.READY
+
+    recovery = TokenReadinessRecovery(manager)
+    assert await recovery.attempt_once() is False
+    assert manager.health().state is not TokenManagerState.READY
+
+    # The transient condition clears; the next tick recovers without any request.
+    _token_file(tmp_path)
+    assert await recovery.attempt_once() is True
+    assert manager.health().state is TokenManagerState.READY
+
+
+@pytest.mark.asyncio
+async def test_recovery_leaves_the_recorded_state_alone_when_it_keeps_failing(
+    tmp_path: Path,
+) -> None:
+    manager = AtomicTokenManager(AtomicFileTokenStore(tmp_path / "absent.json"))
+    recovery = TokenReadinessRecovery(manager)
+
+    assert await recovery.attempt_once() is False
+    first = manager.health().state
+    assert await recovery.attempt_once() is False
+    assert manager.health().state is first
+
+
+def test_recovery_interval_must_be_positive(tmp_path: Path) -> None:
+    manager = AtomicTokenManager(AtomicFileTokenStore(_token_file(tmp_path)))
+    with pytest.raises(ValueError):
+        TokenReadinessRecovery(manager, interval_seconds=0)
 
 
 def test_live_app_exposes_no_account_or_order_route(tmp_path: Path) -> None:

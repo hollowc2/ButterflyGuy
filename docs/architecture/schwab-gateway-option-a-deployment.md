@@ -145,19 +145,28 @@ that ignore the gateway entirely.
 
 ## Known limitations — accept or fix before a real shadow period
 
-**1. A token-level failure latches the gateway not-ready until restart.** If a transaction
-fails with a token-level error, `_record_load_failure` moves the manager out of READY, and
-every subsequent request is refused with `gateway_not_ready` — including the request that
-would have produced a recovering transaction. Nothing calls `load()` again.
+**1. Token-level failures recover on a 30-second interval, not instantly.** A token-level
+failure moves the manager out of READY, and every route then refuses with
+`gateway_not_ready` — including the request that would have produced a recovering
+transaction. `TokenReadinessRecovery` runs for the application's lifetime and retries
+`load()` every 30 seconds while the manager is not ready, so a transient **lock timeout**
+— another writer holding the document too long — clears on its own within one interval
+rather than requiring a container restart.
 
-For missing, expired, or corrupt tokens this is correct fail-closed behaviour. The one
-transient case that latches unnecessarily is **lock timeout**, which is reachable whenever
-another writer holds the document longer than `lock_timeout_seconds`. Remedy today is to
-restart the container. Schwab-side errors do *not* latch it: a failed HTTP call raises
-`SchwabClientOperationError`, which is not a `TokenManagerError`, so the manager stays
-READY.
+What that means in practice:
 
-This is the first thing to fix before the gateway is depended on for anything.
+- a healthy gateway never touches the token document on this path, because the recovery
+  checks state before acting;
+- a genuinely missing, expired, or corrupt token stays fail-closed and keeps retrying
+  harmlessly until an operator fixes it;
+- Schwab-side errors never latch it at all: a failed HTTP call raises
+  `SchwabClientOperationError`, which is not a `TokenManagerError`, so the manager stays
+  READY throughout.
+
+The remaining exposure is the window itself: up to 30 seconds of `gateway_not_ready` after
+a transient lock contention. For a shadow reader that is harmless — the direct path is
+unaffected and the comparator swallows gateway failures. Re-evaluate the interval before
+anything depends on the gateway for a trading decision.
 
 **2. One client and one HTTP session per request.** Each transaction constructs a client
 and closes its session. That is the proven adapter lifecycle, but it means per-request

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import datetime as dt
+from collections.abc import AsyncIterator
+from contextlib import suppress
 from typing import Any
 
 from aiohttp import web
@@ -17,6 +20,7 @@ from butterfly_guy.schwab_gateway.config import GatewaySettings
 from butterfly_guy.schwab_gateway.live_provider import (
     GatewayUpstreamSettings,
     LockedSchwabMarketDataProvider,
+    TokenReadinessRecovery,
 )
 from butterfly_guy.schwab_gateway.token_adapter import LockedSchwabClientAdapter
 from butterfly_guy.schwab_gateway.token_manager import (
@@ -110,7 +114,7 @@ def build_live_app(
     # One token read, no Schwab request. Fails closed.
     manager.load()
 
-    return create_app(
+    app = create_app(
         DirectSchwabQuoteUpstream(provider),
         authenticator,
         upstream_timeout_seconds=settings.upstream_timeout_seconds,
@@ -122,6 +126,27 @@ def build_live_app(
         spot_upstream=DirectSchwabSpotUpstream(provider),
         chain_upstream=DirectSchwabChainMetadataUpstream(provider),
     )
+    app.cleanup_ctx.append(_readiness_recovery_ctx(TokenReadinessRecovery(manager)))
+    return app
+
+
+def _readiness_recovery_ctx(recovery: TokenReadinessRecovery) -> Any:
+    """Run readiness recovery for the lifetime of the application.
+
+    Registered only in live mode: the demo app's readiness is a static fake with nothing
+    to recover.
+    """
+
+    async def ctx(_app: web.Application) -> AsyncIterator[None]:
+        task = asyncio.create_task(recovery.run_forever())
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    return ctx
 
 
 def main(argv: list[str] | None = None) -> None:
