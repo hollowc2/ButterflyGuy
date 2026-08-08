@@ -116,9 +116,10 @@ def test_staging_package_does_not_change_default_compose() -> None:
     # from unless-stopped to "no" and adds a comment, and introduces no gateway service,
     # profile, mount, or environment entry. Re-pinned again for B3, which repoints the
     # four token binds at SCHWAB_GATEWAY_TOKEN_DIR -- a shared variable, not a gateway
-    # service, profile, or port. The gateway still contributes no service here.
+    # service, profile, or port, and pins each service's in-container SCHWAB_TOKEN_PATH.
+    # The gateway still contributes no service here.
     assert hashlib.sha256(default_compose).hexdigest() == (
-        "605a88e886495ef30ea3dab016b8cbbcdfc6d6aa3eb71cf70481e2e89cf560e3"
+        "5957840e7fb0a7d15d6c1a85c627cb260d2a7d9e53d713945542fab1872f141d"
     )
 
 
@@ -142,3 +143,10 @@ def test_default_compose_token_binds_require_the_shared_token_directory() -> Non
         "app_ndx": [f"{directory}/tokens.json:/app/tokens.json"],
         "app_xsp": [f"{directory}/tokens.json:/app/tokens.json"],
     }
+
+    # The host token path in ../.env names a host directory the container does not
+    # have; every service must override it with its own mount target.
+    assert all(
+        service["environment"]["SCHWAB_TOKEN_PATH"] == "/app/tokens.json"
+        for service in compose["services"].values()
+    )
