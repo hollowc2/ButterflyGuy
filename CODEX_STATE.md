@@ -1642,3 +1642,86 @@ a quote with `94dae53a535a` at status 200. **Confirm the feed publishes a snapsh
 Residual: the feed reads the document only at first use, so it will still not see a re-authorized
 refresh token until it is restarted. Restarting it after the 2026-08-14 re-authorization is now
 sufficient, where before no restart would have helped.
+
+## Window F — the refresh token re-authorized, six days early (2026-08-08)
+
+Executed 2026-08-08 21:56–22:15 UTC. The deadline item was closed on the first day of the window
+rather than the last, because the calendar left no better moment.
+
+### The scheduling finding
+
+The refresh token `94dae53a535a` expired **2026-08-14T21:49:55Z** (a Friday), with 144.8h remaining
+at 21:00 UTC — exactly as the keepalive reported and the brief claimed. Re-authorization requires
+restarting live trading containers, which is only safe with no open position. The last weekend
+before expiry was **2026-08-08/09 itself**; the next one begins after the token is already dead.
+The operator chose to execute immediately and approved the container restarts.
+
+### The correction that forced the restarts
+
+The Window F brief claimed that after the directory-bind fix "nothing else should need" a restart
+because all four trading services and the feed now bind the directory. **That is wrong**, and it
+would have left three trading apps on a dead credential.
+
+`SchwabClientWrapper.initialize()` (`schwab_client.py:37-43`) calls `client_from_token_file` exactly
+once, and `run_live.py:742` calls `initialize()` once at startup. schwab-py then holds the token in
+memory and writes back on refresh; it never re-reads the document. The directory bind lets a
+container *see* a new inode — it does not make it *re-read* one. That distinction is the same one
+that made the feed's orphan survive nine days, and it applies to the trading apps too. All five
+token consumers needed restarting, not just the feed.
+
+### Execution
+
+Preconditions verified before touching anything: baseline re-derived at **970 passed, 1 skipped**,
+`ruff` clean; zero open trades (`butterfly_trades` has 224 rows, all `CLOSED`, none with a null
+`exit_time`); market closed (Saturday); all five containers `RestartCount=0`; gateway
+`running`/`healthy` on `monitoring_net`; `up{job="schwab_gateway"} == 1`; `SchwabGatewayDown`
+inactive; cron 31 lines / 2 keepalive entries; keepalive succeeding hourly.
+
+zeus and Helios were confirmed to carry **identical** app credentials before the flow was run —
+API key sha `6888173cf7e1`, secret sha `872ed858a44d` on both — so a token minted on zeus is valid
+on Helios. That had been assumed in every prior window and never checked.
+
+The browser flow ran on zeus via `tools/auth_init.py` with `SCHWAB_TOKEN_PATH` pointed at a scratch
+file, so the operator's stale `./tokens.json` was left untouched. Drop-in was staged by `scp` to
+`.tokens.json.incoming` in the token directory, verified byte-identical by digest on both hosts
+(`046a27e34047`), `chmod 600`, then moved into place under `flock -w 30` on `.tokens.json.lock` —
+the same `fcntl.flock` primitive `token_manager.py:295` and the keepalive use, so the C1 lock was
+honoured rather than bypassed.
+
+Gateway restarted **first**, deliberately: it holds the old refresh token in memory and would have
+written it back over the new document on its next refresh.
+
+### Result
+
+New lineage: refresh token sha `94dae53a535a` → **`a44cc5263be9`**, `creation_timestamp`
+2026-08-08T22:05:28Z, expiry **2026-08-15T22:05:28Z**. Schema and size (787 bytes) identical.
+
+Host and all five consumers agree on inode **`20446`**, digest **`046a27e34047`**, mode 600, uid
+1001 — compared against the host, not only across containers. All five `running`, `RestartCount=0`,
+gateway `healthy`, `/ready` 200, `up == 1`, no Schwab alert. Feed
+`candidate_market_data_client_initialized`, zero errors; all six evaluators still running.
+
+**Proven on the production path:** all three trading apps resolved account hashes on startup with
+zero errors, which is a real authenticated Schwab call against the new document. The credential is
+therefore proven for the trading path — not merely mounted.
+
+### Still unproven
+
+The candidate feed makes no Schwab call while the market is closed, so its authentication against
+the new document is *not* observed. `/ready` returns `503 snapshot_unavailable`, which is expected
+of any restart on a Saturday. **The Monday check carried over from Window E is still owed, and now
+covers the new credential rather than the old one.**
+
+Reboot survival for the gateway remains proven by policy, not by test.
+
+### Incidental
+
+Running the auth flow through the session's `!` prefix failed on `EOFError` — that path has no
+stdin and schwab-py prompts for ENTER — and the library printed the **`client_id` (Schwab app key)**
+into the transcript before failing. Nothing was written and no credential was consumed. This is the
+same exposure class as the Window E `docker compose config` incident; the app key should be treated
+as disclosed. The secret key was not printed.
+
+The restarts took the full 30s SIGTERM timeout each before SIGKILL, confirming the open exit-137
+finding: the trading services still have no prompt SIGTERM handler. Harmless with the market closed
+and no position open; it is the reason a weekday-evening re-auth would have been worse.
