@@ -114,14 +114,47 @@ Confirm all three report `exited`.
 
 ## A3 — Re-authorize
 
+**Helios is headless.** The Schwab OAuth flow is browser-based and cannot complete there.
+Mint the token on `zeus`, which has a browser, then `scp` it across. `tools/auth_init.py`
+is byte-identical on both hosts — same API key and app secret by digest — so a token minted
+on zeus is valid on Helios.
+
+**`easy_client` silently no-ops if a live token is already present.** It calls
+`easy_client(..., max_token_age=561600.0)` — 6.5 days. If `tokens.json` in the working
+directory is younger than that, it loads the existing document and skips the login flow
+entirely, while `auth_init.py` still prints `tokens.json created successfully`. A token
+younger than 6.5 days will therefore not actually be replaced by re-running this step.
+**Park the existing document first, on whichever host is minting the token, so
+`easy_client` finds nothing:**
+
 ```
-cd /opt/butterflyguy
+cd /mnt/Repos/Trading/Butterflyguy      # on zeus
+mv tokens.json tokens.json.pre-reauth   # forces easy_client to authorize
 .venv/bin/python tools/auth_init.py
 ```
 
 `tools/auth_init.py` calls `easy_client` with callback `https://127.0.0.1:8182` and writes
 `tokens.json` **relative to the current directory**, so running it from anywhere else puts
-the document in the wrong place. Complete the Schwab login and MFA in the browser.
+the document in the wrong place. Complete the Schwab login and MFA in the browser. Then
+ship it:
+
+```
+scp /mnt/Repos/Trading/Butterflyguy/tokens.json helios:/opt/butterflyguy/tokens.json
+```
+
+Do the same parking on Helios (`mv tokens.json tokens.json.pre-reauth`) before the `scp`
+lands, so the old document doesn't collide with the incoming one.
+
+**`tokens.json.pre-reauth` is not covered by `.gitignore`** (only `tokens.json` is) on
+either host, and on Helios the repo root is also the token directory — move the parked
+file outside the working tree rather than leaving it in place. It supplies Window A's only
+rollback: the old refresh token stays valid until its own expiry, so if the flow fails or
+is aborted, `mv tokens.json.pre-reauth tokens.json` restores it at no cost. Once A7 verifies
+the new document, delete both parked copies — the old refresh token is retired the moment
+the new authorization succeeds, so it has no further value.
+
+**Never treat "the script said success" as evidence of re-authorization.** Only A4's digest
+check does — the printed message is identical whether or not the login flow actually ran.
 
 ## A4 — Verify the new document
 
@@ -129,8 +162,8 @@ the document in the wrong place. Complete the Schwab login and MFA in the browse
 stat -c 'mode=%a uid=%u gid=%g' /opt/butterflyguy/tokens.json
 ```
 
-**`easy_client` does not guarantee mode 0600.** If it is anything else, fix it before
-starting any service:
+**`scp` does not preserve mode 0600** (typically lands at `644`), and **`easy_client` does
+not guarantee it either**. Fix it before starting any service:
 
 ```
 chmod 600 /opt/butterflyguy/tokens.json
@@ -138,7 +171,10 @@ chmod 600 /opt/butterflyguy/tokens.json
 
 Then confirm: regular file, not a symlink, mode `600`, uid/gid `1001`, and a
 `creation_timestamp` age near zero. The advisory lock `/opt/butterflyguy/.tokens.json.lock`
-is expected to persist and is not a stale-lock signal.
+is expected to persist and is not a stale-lock signal. **`age_days` near zero and a changed
+`refresh_token_sha12` are the only proof the re-authorization took effect** — cross-check
+against the A0 digest, since a value still equal to the pre-A3 `refresh_token_sha12` means
+`easy_client` loaded the old document instead of re-authorizing.
 
 ## A5 — Start the three services
 
