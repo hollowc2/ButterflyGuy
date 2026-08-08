@@ -1827,3 +1827,28 @@ Two fixes, and they are not equivalent:
   fix. It is fiddlier than it looks: the loops are infinite tasks inside an `asyncio.TaskGroup`, and
   a cancellation path has to unwind them without the `except* Exception` handler reporting the
   shutdown as `task_group_error`.
+
+### Correction — the deadline recurs weekly; it was moved, not removed (2026-08-08)
+
+The Window F record above frames the re-authorization as closing the deadline "six days early".
+That is misleading and is corrected here.
+
+The Schwab refresh token has a hard **7-day life** from `creation_timestamp`, and an ordinary
+access-token refresh does not extend it (verified 2026-08-08: the value survives gateway and
+keepalive refreshes). So re-authorizing early does not buy a week of runway — it buys only the
+difference between the old expiry and seven days from the moment of re-authorization.
+
+Old expiry 2026-08-14T21:49:55Z, new expiry **2026-08-15T22:05:28Z**: roughly **24 hours gained**,
+not six days. **This deadline recurs every week and always will.** Manual re-authorization is a
+permanent weekly operating cost, not a one-off.
+
+What genuinely improved is the *weekday*. The old expiry fell on a **Friday**, when re-authorizing
+means restarting live trading containers on a trading day. The new one falls on a **Saturday**, and
+the cadence is self-perpetuating: re-authorize on a Saturday and the next expiry is the following
+Saturday. That is the durable win from this window, and it was a side effect of the timing rather
+than a designed outcome. **Keep it there** — re-authorizing mid-week would drag the deadline back
+onto a trading day and it would stay there.
+
+The real fix for the recurring cost is out of scope here and unexamined: whether the gateway can
+hold the sole credential and serve the trading apps, so that one re-authorization does not require
+restarting five containers. That is the question C3 and the eventual cutover exist to answer.
