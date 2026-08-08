@@ -1592,3 +1592,49 @@ never binds the token document, one asserting the live configs leave `token_path
   otherwise. `public.trades` in the same database is an unrelated crypto table.
 - `infra/docker-compose.yml` is pinned by SHA in `test_gateway_compose.py`; it was re-pinned to
   `5e7804fe…`. Any edit to that file must update it.
+
+### Window E addendum — the candidate fleet's orphaned token, fixed (2026-08-08)
+
+The defect recorded above as "pre-existing and untouched" was addressed on operator instruction.
+
+Only `butterfly_spx_candidate_feed` touched Schwab; the six evaluators have no token mount and
+consume the feed. The feed bound `../../tokens.json`, which resolves to
+`/opt/butterflyguy/tokens.json` — the **pre-B3 location**. B3 moved the document to
+`/opt/butterflyguy-tokens` and never updated `candidate_fleet/registry.py`, so the host path
+stopped existing and the container kept the inode it had resolved at start.
+
+The orphan was worse than the trading one. It carried a **separate credential lineage**: refresh
+token `c5f05cc3fe64`, created 2026-08-02T20:39:34Z, against the maintained `94dae53a535a` created
+2026-08-07T21:49:55Z. On a 7-day life that token expired **2026-08-09T20:39Z — roughly 23 hours
+after it was found**. The feed was still serving 200s from Schwab on Friday, so this would have
+failed silently, in a research stack nobody watches, a day later.
+
+It survived because of a deliberate design: `schwab_market_data.py` reads the token file **once**
+and keeps every refresh in memory (`_retain_token`), never writing. That is why the mount is `:ro`
+and why an orphaned document worked for nine days.
+
+`e48c2df` binds the token directory read-only from `SCHWAB_GATEWAY_TOKEN_DIR` and names the
+document absolutely. `:ro` is retained deliberately — the feed must never write the shared document,
+so it needs neither the lock nor a writable mount. `candidatectl` now also loads `infra/.env`,
+where that variable lives; compose interpolates from the process environment, and the `:?` guard
+fails loudly instead of letting Docker invent an empty directory.
+
+`infra/generated/` is **gitignored**, so the compose artifact does not travel by `git pull` — it
+must be re-rendered on the host. Re-rendering also bumps `DEPLOYED_GIT_SHA` on all six evaluators,
+so a full `candidatectl apply` would recreate the whole fleet; only `spx_candidate_feed` was
+recreated here, by naming the single service.
+
+Verified: feed on inode `20422`, digest `c9845b385e8b`, identical to host and to the three trading
+containers; refresh token now `94dae53a535a`, the maintained lineage; `RestartCount=0`, zero errors,
+`candidate_market_data_client_initialized`. All six evaluators still running at `RestartCount=0`
+with zero errors. No butterfly or gateway alert is firing.
+
+**Not proven, and deliberately so:** the feed makes no Schwab call while the market is closed, so an
+authenticated call from the new document was not observed. `/ready` returns
+`503 snapshot_unavailable` because the restart reset its sequence, which is expected of any restart
+on a Saturday and is not a regression. The credential itself is proven — the 21:00 keepalive fetched
+a quote with `94dae53a535a` at status 200. **Confirm the feed publishes a snapshot at Monday's open.**
+
+Residual: the feed reads the document only at first use, so it will still not see a re-authorized
+refresh token until it is restarted. Restarting it after the 2026-08-14 re-authorization is now
+sufficient, where before no restart would have helped.
