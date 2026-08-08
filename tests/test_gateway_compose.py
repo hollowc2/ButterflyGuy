@@ -112,10 +112,33 @@ def test_staging_package_does_not_change_default_compose() -> None:
     # Originally recorded from origin/main 6179f2e as
     # 87a41005a7f6c8c0b2aac860b6f301d52b422d8a3e873c1415b6f7ed747975b5, before the
     # isolated package was added. Re-pinned at 5055991 ("Stop the legacy SPX candidate
-    # container from auto-restarting"), the only commit to touch this file since: it
-    # changes app_spx_candidate's restart policy from unless-stopped to "no" and adds a
-    # comment, and introduces no gateway service, profile, mount, or environment entry.
-    # The gateway package still contributes nothing to the default Compose file.
+    # container from auto-restarting"): it changes app_spx_candidate's restart policy
+    # from unless-stopped to "no" and adds a comment, and introduces no gateway service,
+    # profile, mount, or environment entry. Re-pinned again for B3, which repoints the
+    # four token binds at SCHWAB_GATEWAY_TOKEN_DIR -- a shared variable, not a gateway
+    # service, profile, or port. The gateway still contributes no service here.
     assert hashlib.sha256(default_compose).hexdigest() == (
-        "e006fa07f86e962c04231dc47a9a3830d8c28c5075c5c20536354c1dc6d14afc"
+        "605a88e886495ef30ea3dab016b8cbbcdfc6d6aa3eb71cf70481e2e89cf560e3"
     )
+
+
+def test_default_compose_token_binds_require_the_shared_token_directory() -> None:
+    """All four trading services bind the token document from one required variable.
+
+    A bind whose source path does not exist does not fail -- Docker creates an empty
+    directory -- so the variable carries no default and every service must use it.
+    """
+    compose = yaml.safe_load(Path("infra/docker-compose.yml").read_text())
+    directory = "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}"
+
+    binds = {
+        name: [v for v in service["volumes"] if v.endswith("/app/tokens.json")
+               or v.endswith("/app/tokens.json:ro")]
+        for name, service in compose["services"].items()
+    }
+    assert binds == {
+        "app_spx": [f"{directory}/tokens.json:/app/tokens.json"],
+        "app_spx_candidate": [f"{directory}/tokens.json:/app/tokens.json:ro"],
+        "app_ndx": [f"{directory}/tokens.json:/app/tokens.json"],
+        "app_xsp": [f"{directory}/tokens.json:/app/tokens.json"],
+    }
