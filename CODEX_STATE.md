@@ -601,7 +601,12 @@ their just-captured baselines and were running and unpaused. Temporary host-side
 were removed. This proves no configuration change during the window, not accepted-fingerprint or
 process-uniqueness completion.
 
-## Live Finding — SPX is on a divergent orphaned token document (2026-08-06, unresolved)
+## Live Finding — SPX is on a divergent orphaned token document (2026-08-06, RETIRED 2026-08-08)
+
+Retired by the Window A re-authorization on `2026-08-08`. All three containers now resolve
+`/app/tokens.json` to host inode `1067463`. See "Window A Executed" below. The analysis that follows
+is retained as the record of the finding.
+
 
 Found by bounded read-only inspection while planning the Option A token-directory move. No
 mutation was made and no token value was read; the comparison is by inode, mtime, SHA-256 prefix,
@@ -962,3 +967,80 @@ The four `graphify-out/` artifacts were taken from the branch. The discarded mai
 regeneration was a strict subset apart from nodes for `.claude/settings.local.json`,
 `Fable_refactor/fly_Spec.html`, and the then-uncommitted `infra/` edits; those edits had been
 uncommitted since 2026-07-28 and are now recorded separately in `5055991`.
+
+## Window A Executed — token re-authorized (2026-08-08)
+
+Window A of `docs/runbooks/token-reauthorization-and-gateway-enablement.md` ran to completion on
+Helios with the market closed (2026-08-07 16:15 EDT, past the cash close). Window B was not touched:
+no checkout update, no token relocation, no consumer keys, no gateway preflight, no gateway bring-up.
+
+**Result.** The refresh token was replaced. `refresh_token_sha12` moved from `c5f05cc3fe64` to
+`94dae53a535a`. The new document's `creation_timestamp` is `2026-08-07T21:49:55Z`, so the seven-day
+deadline is now **`2026-08-14T21:49:55Z`**, and the keepalive's `WARN_BEFORE` will begin alerting
+eight hours ahead of that. Host and Helios clocks were confirmed within 2 seconds of each other, so
+the age figure is not skew.
+
+**A7 verification, by inode and digest.** All three services came back on the exact image IDs
+recorded in A0 — spx `faa85d748358`, ndx `ca2ca79ca2c6`, xsp `cc58c70ea998` — each `running` with
+`RestartCount=0`. No container was recreated; `docker start` was used throughout and no Compose
+command was issued. The host document is inode `1067463`, mode `600`, uid/gid `1001`, a regular
+non-symlink file, and **all three containers resolve `/app/tokens.json` to that same inode**. All
+four documents agree on `refresh_token_sha12=94dae53a535a` and `access_token_sha12=f0baf4fe1531`
+with `age_days=0.1020`. The 30-second settle window returned `errors_30s=0` for each service. The
+crontab was restored from its snapshot to 31 lines with exactly 2 keepalive entries.
+
+**SPX divergence retired.** The orphaned inode `1112240` is gone; the stop/start re-resolved the bind
+as predicted, at no extra cost. This closes the 2026-08-06 live finding above.
+
+### Correction 1 — A3 as written cannot work on Helios
+
+The runbook instructs running `tools/auth_init.py` on Helios. **Helios is headless**, and the flow is
+browser-based, so it cannot complete there. The established operator procedure is to mint the token
+on `zeus`, which has a browser, and `scp` it to `helios:/opt/butterflyguy/tokens.json`.
+
+This was verified safe rather than assumed: `tools/auth_init.py` is byte-identical on both hosts
+(`sha256` prefix `7ad6ce468168`), and all six long string literals — where the API key and app secret
+are hardcoded — match by digest, so both hosts drive the same OAuth app and a zeus-minted token is
+valid on Helios. No credential value was read, printed, or compared other than by digest.
+
+Two consequences for the procedure. The runbook's warning that `auth_init.py` writes `tokens.json`
+relative to the working directory still applies, but to the **zeus** checkout. And `scp` lands the
+file at mode `644`, not `600`, so the A4 `chmod 600` is not merely a contingency for `easy_client` —
+it is required on every run of this path. It was applied this window.
+
+### Correction 2 — `easy_client` silently no-ops the re-authorization
+
+`easy_client` takes `max_token_age=561600.0` seconds — **6.5 days**. If a `tokens.json` younger than
+that is present in the working directory, it loads that document and skips the login flow entirely,
+while `auth_init.py` still prints `tokens.json created successfully`.
+
+The first A3 attempt hit this. The token was 5.04 days old, under the threshold, so nothing happened:
+same inode `1067464`, same `refresh_token_sha12=c5f05cc3fe64`, same access token, and an `age_days`
+that had only grown with elapsed time. The runbook's stated remedy — "re-run A3" — cannot break the
+loop, because every re-run fails identically until the document crosses 6.5 days, which for this
+credential would have been roughly twelve hours before hard expiry.
+
+The fix, chosen by the operator, is to **park the existing document before running the flow** so
+`easy_client` finds nothing and is forced to authorize:
+
+```
+mv tokens.json tokens.json.pre-reauth   # on the minting host, and on Helios
+```
+
+Both hosts needed this, not just Helios; zeus carried its own 5.05-day document of the same lineage.
+Parking also supplies the rollback the runbook says Window A lacks: the old credential stays valid
+until its own expiry, so an aborted flow costs nothing. Both parked documents were deleted once A7
+verified, since a completed authorization retires the old refresh token and leaves it worthless.
+
+Two standing rules follow. **Never treat "the script said success" as evidence** — verify that
+`refresh_token_sha12` actually changed and that `age_days` is near zero. And on zeus the parked file
+is **not** covered by `.gitignore` (only `tokens.json` is), so it must be kept outside the working
+tree; it was moved out rather than left in the repo root. The same gap exists on Helios, where the
+repo root is also the token directory — one more argument for the Window B relocation.
+
+### Deviations from expectation, otherwise none
+
+`docker stop --timeout 30` returned exit code `137` for all three services, meaning none completed
+SIGTERM handling inside the 30-second grace and all were killed. Harmless here — a stop is not a
+recreation, and images and restart counts were untouched — but the trading services appear to lack a
+prompt shutdown handler. Not investigated; out of scope for this window.
