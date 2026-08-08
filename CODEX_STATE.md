@@ -1044,3 +1044,124 @@ repo root is also the token directory — one more argument for the Window B rel
 SIGTERM handling inside the 30-second grace and all were killed. Harmless here — a stop is not a
 recreation, and images and restart counts were untouched — but the trading services appear to lack a
 prompt shutdown handler. Not investigated; out of scope for this window.
+
+## Window B Executed — gateway enabled, exercised, and rolled back (2026-08-08)
+
+Window B of `docs/runbooks/token-reauthorization-and-gateway-enablement.md` ran to completion on
+Helios with the market closed (2026-08-07 21:51 EDT). B7 was not touched: no consumer is wired to
+the gateway, `SCHWAB_GATEWAY_SHADOW_READS` was not enabled, `GET /v1/history` was not exercised, and
+no account or order operation was issued. The gateway is **down** at the end of the session.
+
+**Precondition re-verified** before anything else. All three services `running` on the Window A
+image IDs with `RestartCount=0`, all resolving `/app/tokens.json` to host inode `1067463`, all four
+documents agreeing on `refresh_token_sha12=94dae53a535a`, crontab at 31 lines / 2 keepalive entries.
+Nothing had moved.
+
+### B3 was not ready — the runbook asserted code that did not exist
+
+B3 claims the token-path changes "arrive with B2". They did not. On the branch at `fd9bc97`,
+`tools/schwab_token_keepalive.py` still hardcoded `ROOT / "tokens.json"` and `tools/auth_init.py`
+still hardcoded the cwd-relative literal; neither referenced `SCHWAB_TOKEN_PATH`, which only `src/`
+honoured. The code was written this session, offline and reviewed, before anything reached the host:
+
+- `3f0e9c0` — `.gitignore` now covers `tokens.json.pre-reauth`, closing the Window A footgun.
+- `3c36c03` — both tools honour `SCHWAB_TOKEN_PATH`, process environment over `.env`, defaulting to
+  today's location. A relative value stays relative to the same base each script used before.
+- `f4585fd` — all **four** trading binds, not three, resolve through `SCHWAB_GATEWAY_TOKEN_DIR`,
+  the variable `docker-compose.gateway.yml` already required, so the two files cannot disagree.
+  `app_spx_candidate` is not running but its bind moved with the others. The variable carries **no
+  default**: a bind whose source does not exist creates an empty directory rather than failing, so
+  refusing to render is the only loud failure available.
+- `e49a17f` — see the third finding below.
+
+Baseline was 952 passed / 1 skipped, **not** the 941 recorded earlier; that figure was stale. After
+the change: 959 passed, 1 skipped, ruff clean.
+
+### Finding — the containers were reading the host's token path
+
+Not in the runbook, and it would have broken all three trading services on recreation. The four
+services inherit `SCHWAB_TOKEN_PATH` from `../.env`, where it is the relative `tokens.json`; it
+resolves correctly inside the container only because the workdir happens to be `/app`. B3 has to
+repoint that same `.env` value at the moved host document so the host keepalive and `auth_init` can
+find it — which would have handed the containers a host path they do not have, and
+`core/config.py:235` would have taken it. Each service now pins `SCHWAB_TOKEN_PATH: /app/tokens.json`
+in its own `environment:` block, which wins over `env_file`. Host and container paths are now
+independent.
+
+### B1 — operator chose push-and-pull, with the framing corrected
+
+The runbook frames B1 as if the gateway code were on `main`. It was not: 25 commits past local
+`main`, which was itself 49 past `origin/main`, and nothing had ever been pushed. Helios's
+`de84d91` was confirmed a clean ancestor of the branch tip — 89 commits behind, zero divergence.
+The operator chose to push the branch and check it out on the live host. `origin/main` was not
+moved. The archive alternative was presented but is weaker than the runbook implies: the gateway
+builds from `context: ..`, and it imports `butterfly_guy.data.providers` (changed) and
+`butterfly_guy.gateway_client.*` (new) while `pyproject.toml` also changed, so a partial extraction
+onto an 89-commit-old tree would build a hybrid image. The honest archive was all 78 changed files.
+
+**B2 preserved the evidence.** A collision pre-check confirmed zero overlap between the 78 incoming
+paths and the 35 untracked artifacts before the checkout. Afterwards `git status` reports
+**untracked=0** — not deletion: the branch's `.gitignore` now covers the evidence globs, so the 282
+ignored entries include all of them plus `.tokens.json.lock`. The hazard is now structural rather
+than procedural. The two tracked modifications survived unstaged. No destructive git command was
+used on either host.
+
+### B3 executed and verified by inode and digest
+
+Token directory `/opt/butterflyguy-tokens`, mode `0700`, uid/gid `1001`, created without sudo —
+`/opt` is operator-writable. The document moved by rename on the same filesystem, so **inode
+`1067463` and mode `600` were preserved**. `.env` now names the absolute new path;
+`infra/.env` (gitignored, and the directory Compose reads for interpolation) carries
+`SCHWAB_GATEWAY_TOKEN_DIR=/opt/butterflyguy-tokens`.
+
+Recreation was safe to do with `up -d`: the tags `infra-app_spx` / `infra-app_ndx` / `infra-app_xsp`
+were confirmed to resolve to exactly `faa85d748358` / `ca2ca79ca2c6` / `cc58c70ea998`, so no rebuild
+occurred and the recorded images were retained. The `com.docker.compose.project.config_files` label
+on `app_spx` still referenced `/var/tmp/butterfly-schwab-credential-proof-rollback.yml`; that file
+no longer exists and its extra tmpfs was not applied, so the label was stale history only.
+
+After recreation: all three `running` on the same image IDs, `RestartCount=0`, all three resolving
+`/app/tokens.json` to host inode `1067463`, all four documents agreeing on
+`refresh_token_sha12=94dae53a535a`, `errors_30s=0` each. The keepalive was then run manually against
+the new location and returned `OK: token refreshed, SPX quote fetched (status 200)` — the code
+change proven end to end on the host, not merely in tests. Cron was never touched: 31 lines, 2
+entries throughout.
+
+### B4/B5/B6
+
+**B4.** `butterfly-guy` only; the operator declined `equity-scanner` and `afterhours-lab` since
+neither will be wired. `secrets/` created mode `0700` (and only then matched by the `secrets/`
+gitignore rule, which is directory-only and cannot match a path that does not yet exist), keys file
+mode `0600`, validated by the gateway's own loader. The plaintext was redirected under `umask 077`
+to `/opt/butterflyguy-tokens/gateway-keys-plaintext.out` so it never entered an agent context; it
+was read into a shell variable for B6 and never echoed. **This file still exists and holds a
+recoverable plaintext key — distribute it and delete it.** That is a deliberate, flagged departure
+from the command's print-once design.
+
+**B5.** `gateway-live` renders clean. The token mount now renders as `/opt/butterflyguy-tokens` on
+both sides, **not** the checkout root — this is exactly what B3 existed to achieve. 8011 free,
+8010 still held by `halt_scanner` and unused by the live profile.
+
+**B6.** Image built from the updated checkout. Sequenced deliberately around the hourly keepalive
+rather than pausing cron — the build touches no token, and the up/quote/down cycle ran inside the
+02:12–03:00 UTC gap, honouring `--confirm-single-token-writer` with no crontab mutation to restore.
+`/ready` returned **200** with `status=ready`, `token_state=ready`. One authenticated
+`GET /v1/quotes?symbols=$SPX` returned **200** with a single quote carrying a last price; bid and
+ask were null, expected for an index with the market closed. The same request without the header
+returned **401**. Torn down in the same session: container removed, project network removed, 8011
+unbound, zero gateway containers remaining.
+
+**Post-teardown state.** Three trading services `running` on `faa85d748358` / `ca2ca79ca2c6` /
+`cc58c70ea998`, `RestartCount=0`, all on inode `1067463`; host document mode `600` uid/gid `1001`;
+`refresh_token_sha12=94dae53a535a` unchanged with expiry still `2026-08-14T21:49:55Z`; cron 31 lines
+/ 2 entries; Helios on `e49a17f` with only the two universe files modified; `errors_60s=0` each.
+
+### Follow-ups, none blocking
+
+- Distribute and delete `/opt/butterflyguy-tokens/gateway-keys-plaintext.out`.
+- `/opt/butterflyguy-tokens/.env.b3-backup` (mode `600`) is the pre-B3 `.env`; delete once settled.
+  It was moved out of the checkout because `.env.b3-backup` is not gitignored — the same class of
+  footgun as `tokens.json.pre-reauth`.
+- Running any trading Compose command now requires `SCHWAB_GATEWAY_TOKEN_DIR`. It is in
+  `infra/.env` on Helios, so day-to-day commands are unaffected, but an operator running Compose
+  from a different project directory will get a loud refusal rather than an empty-directory mount.
