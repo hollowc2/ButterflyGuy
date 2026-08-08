@@ -1774,3 +1774,56 @@ Suite after: **973 passed, 1 skipped** (was 970), `ruff` clean.
 **Not deployed.** This is a code change, so it needs an image rebuild and container recreation, not
 a restart — that is outside the standing authorization and was not done. The three trading apps on
 Helios are still running the pre-change images listed above.
+
+### Window F addendum 2 — the C1 lock change deployed (2026-08-08)
+
+Deployed on operator instruction, in the same closed-market window as the re-authorization.
+
+Preconditions re-checked immediately before: zero open trades, Saturday 22:39 UTC. Images rebuilt
+with `docker compose --profile ndx --profile xsp build app_spx app_ndx app_xsp`, and the change was
+confirmed *inside each built image* before anything was recreated — `client_from_access_functions`
+present in all three. Recreation named the three services explicitly, so `app_spx_candidate`, the
+legacy rollback service, was untouched and is still `exited` from 2026-07-23.
+
+New images `ed73ab7b7c20` / `d5b60ca954a3` / `17935e7c09aa` (were `faa85d748358` / `ca2ca79ca2c6` /
+`cc58c70ea998`). All five token consumers and the host agree on inode `20446`, digest `046a27e34047`,
+mode 600. All `running`, `RestartCount=0`.
+
+Proven on the production path: all three logged `schwab_client_initialized`, which only emits after
+`get_account_numbers()` returns 200 and the configured account matches, so the **locked read path
+authenticated against Schwab for real**. The SPX log shows the underlying `POST /v1/oauth/token 200`
+and `GET /accountNumbers 200`. Zero errors and zero `schwab_token_persist_failed` across all three.
+
+Note for future verification: a `docker logs --since` grep run immediately after `up -d` returns
+zero, because initialization takes ~4s. That is a race in the check, not a failure in the service.
+
+**A write through the new path has not yet been observed.** `schwab_client_initialized` proves the
+locked *read*; the locked *write* fires only on an access-token refresh, roughly every 30 minutes of
+running, and was not waited for. The unit tests cover it against a real `flock`; production has not
+exercised it yet.
+
+### The exit-137 finding, correctly diagnosed (2026-08-08)
+
+Recorded across earlier windows as the trading services lacking "a prompt SIGTERM handler". That is
+directionally right and mechanically wrong, and the difference determines the fix.
+
+Measured inside `butterfly_spx_app`: `/proc/1/comm` is `python` — the app is **PID 1** — and
+`SigCgt: 0000000100000002` catches only SIGINT (2) and CPython's internal signal 33. SIGTERM is bit
+15, mask `0x4000`, and appears in neither `SigCgt` nor `SigIgn`. The kernel does not deliver a
+default-action signal to PID 1, so **SIGTERM is silently discarded**, Docker waits out the full
+timeout, and SIGKILL produces exit 137. Nothing is slow; the signal never arrives.
+
+`HostConfig.Init` is unset and no service in `infra/docker-compose.yml` sets `init:`.
+
+Two fixes, and they are not equivalent:
+
+- `init: true` per service puts tini at PID 1, so Python is no longer PID 1 and SIGTERM's *default*
+  action applies. One line per service, no application code. Death is prompt but abrupt: the
+  existing `finally` in `run_live.py` never runs, so the DB pool is not closed and readiness is not
+  set. Note this edits `infra/docker-compose.yml`, whose SHA-256 is pinned in
+  `test_gateway_compose.py` — the pin and its comment must be updated in the same change.
+- An explicit handler in `main()` that requests cancellation of the TaskGroup, letting the existing
+  `finally` (`set_readiness("shutting_down")`, `schwab.close()`, `db.close()`) run. This is the real
+  fix. It is fiddlier than it looks: the loops are infinite tasks inside an `asyncio.TaskGroup`, and
+  a cancellation path has to unwind them without the `except* Exception` handler reporting the
+  shutdown as `task_group_error`.
