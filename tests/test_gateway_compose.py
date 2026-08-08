@@ -190,3 +190,19 @@ def test_default_compose_binds_the_token_directory_never_the_document() -> None:
             assert "tokens.json" not in volume, (
                 f"{name} binds the token document; bind the directory instead"
             )
+
+
+def test_live_configs_leave_token_path_to_the_environment() -> None:
+    """A token_path in YAML silently beats the deployment's SCHWAB_TOKEN_PATH.
+
+    config.py applies the environment variable with setdefault, so a value here wins.
+    These three configs each pinned the relative "tokens.json", which only resolved
+    because the old bind mount placed a document at /app alongside the working
+    directory. Once the bind became a directory the containers crash-looped on a
+    relative path that no longer existed.
+    """
+    for name in ("config.yaml", "config_ndx.yaml", "config_xsp.yaml"):
+        config = yaml.safe_load(Path("configs", name).read_text(encoding="utf-8"))
+        assert "token_path" not in config["schwab"], (
+            f"configs/{name} pins token_path; leave it to SCHWAB_TOKEN_PATH"
+        )
