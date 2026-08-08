@@ -1514,3 +1514,81 @@ Still inert with respect to trading — nothing constructs `ShadowComparingMarke
 `run_live.py`. These counters only produce data once C3 wires it and
 `SCHWAB_GATEWAY_SHADOW_READS` is on. No alert rule was added for mismatch rates: with shadow off
 there is no baseline to threshold against, and that is better chosen from real data during C3.
+
+## Window E — C3 declined, and a live token-mount defect found and fixed (2026-08-08)
+
+C3 was **not** wired. The operator declined shadow reads for now, so `run_live.py:743` is unchanged,
+`SCHWAB_GATEWAY_SHADOW_READS` is unset in all three trading containers, and no gateway key was
+re-issued — the plaintext key still does not exist on either host, and nothing consumes one.
+
+Two of the brief's C3 claims were re-derived and both **hold**: the comparator adds no gateway
+latency (`shadow.py:200` and the chain path both spawn the comparison and `return await
+direct_task`), and the client timeout is 5.0s (`client.py:54`) against a 60s collector cycle.
+
+### The finding — the always-on gateway had orphaned all three trading containers
+
+Window D recorded all three trading services resolving `/app/tokens.json` to host inode `1067463`.
+That was **true of the containers and false of the host** by the time it was written; the check
+compared the containers to each other, not to the host document.
+
+- Trading services bound the token **document**, so Docker pinned the inode resolved at container
+  start.
+- The gateway binds the **directory** and persists with `os.replace` (`token_manager.py:233`), which
+  swaps in a new inode.
+- The gateway's first refresh after going always-on logged `refresh_succeeded` at `17:26:10.940`;
+  the host document's mtime is `17:26:10.940081866`. Exact match, single cause.
+
+Result: host at inode `20422`, all three containers stranded on `1067463` holding the 17:00
+keepalive result. Nothing broke that day — the refresh token was byte-identical on both sides
+(`94dae53a535a`) and valid to 2026-08-14T21:49:55Z — but the containers had permanently stopped
+seeing keepalive writes and would never have received the re-authorized refresh token.
+
+Related, and still open: the trading containers bound only the document, so they could not see
+`.tokens.json.lock` at all. **The three trading apps have never participated in the C1 shared
+lock** — C1 covers the gateway and the keepalive only.
+
+### Fixed by binding the directory, and by a second defect that fix exposed
+
+`089cdc8` moves all four services in `infra/docker-compose.yml` to a directory bind, mirroring
+`docker-compose.gateway.yml`, which had already documented this exact hazard.
+
+Recreating the three containers then crash-looped them on `FileNotFoundError: 'tokens.json'` — a
+**relative** path. Root cause, and a correction to a standing "established fact": `config.py:236`
+applies `SCHWAB_TOKEN_PATH` with `setdefault`, and all three live configs pinned
+`schwab.token_path: "tokens.json"`, so **the compose environment pin had never had any effect**. It
+worked only because the relative path resolved against working directory `/app`, where the old
+document bind sat. `99049fa` drops `token_path` from the three live configs; the `"tokens.json"`
+default still applies when nothing sets the variable, so local runs are unchanged.
+
+### Verified, by inode and digest and by an actual atomic replace
+
+- Host and all three containers agree: inode `20422`, digest `c9845b385e8b`.
+- The digest moved twice during the window (`7df738c08e66` → `c9845b385e8b`) and **all three
+  containers followed it**, which the orphaned mount could not have done.
+- Direct proof of the mount semantics: a scratch file in the token directory was atomically
+  replaced; the container followed inode `12602` → `20114` and read the new content. Under a
+  document bind it would have stayed on `12602`. Scratch file removed.
+- The 21:00 keepalive fired `status 200` against the recreated containers, 144.8h remaining.
+- All three on the original Window A images (`faa85d748358` / `ca2ca79ca2c6` / `cc58c70ea998`),
+  `RestartCount=0`, zero error lines since restart, collectors at `market_closed_waiting`.
+- Gateway `running`/`healthy`, `up{job="schwab_gateway"} == 1`, `SchwabGatewayDown` inactive.
+
+Suite **970 passed, 1 skipped**, ruff clean. Two regression tests added: one asserting the compose
+never binds the token document, one asserting the live configs leave `token_path` to the environment.
+
+### Still open
+
+- **C3 itself.** Declined this window, not rejected. When it happens the key goes in `infra/.env`
+  on Helios — that was decided here even though it was not needed.
+- **The trading apps do not take the C1 lock.** They now share the directory, so the lock file is
+  finally reachable; nothing yet acquires it. They write in place, unlocked, while the gateway
+  replaces atomically.
+- **The candidate fleet has the same defect, pre-existing and untouched.**
+  `butterfly_spx_candidate_feed` binds `/opt/butterflyguy/tokens.json`, a path that **no longer
+  exists on the host**; the container holds an orphaned inode `1112240` from 2026-08-07 19:52. It
+  is generated from `candidate_fleet/registry.py:172`, a separate stack on a separate token
+  document, and was deliberately left alone.
+- The trades table is `butterfly_trades`, not `trades` — CLAUDE.md and several briefs say
+  otherwise. `public.trades` in the same database is an unrelated crypto table.
+- `infra/docker-compose.yml` is pinned by SHA in `test_gateway_compose.py`; it was re-pinned to
+  `5e7804fe…`. Any edit to that file must update it.
