@@ -1442,3 +1442,45 @@ against the `2026-08-14T21:49:55Z` expiry.
 - `issue_gateway_keys.py` still has no append mode: adding a second consumer rotates
   `butterfly-guy`'s key. Fix when the second consumer is actually wired.
 - Reboot survival is unproven by test, only by policy.
+
+### Window D addendum — the authenticated quote, and two corrections it forced
+
+The deferred authenticated read was completed in-window after all, by re-issuing the key. Both
+live surfaces returned **200**:
+
+- `GET /v1/quotes?symbols=$SPX` → `200`, `quotes: list[1]`
+- `GET /v1/spot?symbol=$SPX` → `200`, `price` present and positive, `symbol` `$SPX`,
+  `source` populated, `stale=true` with two `data_quality_flags` and null `event_timestamp` /
+  `age_seconds`. **2026-08-08 is a Saturday**, so a stale flag on a closed market is correct
+  behaviour, not a defect — the gateway declines to claim freshness it cannot evidence.
+
+**Correction 1 — the auth header is `X-Internal-API-Key` (`auth.py:134`), not `X-Api-Key`.** The
+Window D table above records "401 on missing key / 401 on a bogus key" as evidence the auth
+middleware was live. Both probes used the wrong header name, so both were really the same *missing
+header* test. Unauthenticated `/v1/` requests are genuinely refused, but the bad-key path was never
+exercised as claimed. What does now stand as proof is the `401 → 404 → 400 → 200` progression on the
+re-issued key: 401 (no valid header) → 404 (auth passed, wrong path) → 400 (right path, wrong query
+param) → 200. Authentication is proven by the transition off 401, not by an assertion.
+
+**Correction 2 — the route and parameter names.** The surfaces are `/v1/quotes`, `/v1/spot` and
+`/v1/chain` (`api.py:415-417`), not `/v1/quote`; `/v1/quotes` takes `symbols` (plural,
+`api.py:155`) while `/v1/spot` takes `symbol` (`api.py:169`).
+
+**The key was rotated.** The original was unrecoverable — `issue_gateway_keys.py` prints it exactly
+once and stores only its SHA-256 — because it was deleted earlier in this window before this check
+had been run. Re-issued for `butterfly-guy` with stdout redirected to a mode-`600` file so the value
+never entered the assistant's context. The new document is byte-identical to the old except the
+digest (same single client, `market_data:read`, `protected`); old document backed up at
+`secrets/schwab-gateway-keys.json.bak-20260808T172233Z`. The gateway required an explicit
+`docker restart` to pick it up: `docker compose up -d` reported `Running` and did **not** recreate,
+because the compose config was unchanged and only the bind-mounted file's contents differed. New
+in-container digest prefix `efa156ac5c16`.
+
+All plaintext key material was then destroyed on operator instruction and verified absent:
+`.issue.out`, `.issue.err`, `.gwkey`, `gwkeys.json`, plus the quote response bodies. **No plaintext
+gateway key exists on either host.** `gateway-keys-issue.err` remains at 0 bytes.
+
+**Consequence for C3:** wiring a real consumer will require issuing a key again, which rotates
+`butterfly-guy`'s. That is free while nothing consumes the gateway, and the procedure is now
+recorded above. Do the issuance and the first authenticated call in the same step, and do not delete
+the plaintext until the call has returned 200.
