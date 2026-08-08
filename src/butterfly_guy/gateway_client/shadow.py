@@ -14,6 +14,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from butterfly_guy.core.logging import get_logger
+from butterfly_guy.core.metrics import (
+    gateway_shadow_comparisons,
+    gateway_shadow_discrepancies,
+)
 from butterfly_guy.data.providers import CollectorMarketDataProvider
 from butterfly_guy.gateway_client.chain_metadata import extract_chain_metadata
 from butterfly_guy.gateway_client.client import (
@@ -169,6 +173,10 @@ class ShadowComparingMarketDataProvider:
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
 
+    def _observe(self, operation: str, result: str) -> None:
+        """Count a comparison that ran to a conclusion, agreement included."""
+        gateway_shadow_comparisons.labels(operation=operation, result=result).inc()
+
     def _record(self, operation: str, code: str, fields: tuple[str, ...] = ()) -> None:
         discrepancy = ShadowDiscrepancy(
             operation=operation,
@@ -177,6 +185,12 @@ class ShadowComparingMarketDataProvider:
             fields=fields,
         )
         self.recorder.record(discrepancy)
+        self._observe(operation, "discrepancy")
+        gateway_shadow_discrepancies.labels(
+            operation=operation,
+            code=discrepancy.code,
+            classification=discrepancy.classification,
+        ).inc()
         log.warning(
             "gateway_shadow_discrepancy",
             operation=discrepancy.operation,
@@ -211,9 +225,11 @@ class ShadowComparingMarketDataProvider:
             direct_price = await direct_task
         except Exception:
             # The direct failure is the caller's problem; nothing to shadow.
+            self._observe("spot", "direct_unavailable")
             return
         observed = response.spot
         if _numbers_agree(direct_price, observed.price, self._price_tolerance):
+            self._observe("spot", "agree")
             return
         self._record(
             "spot",
@@ -252,6 +268,7 @@ class ShadowComparingMarketDataProvider:
             payload = await direct_task
         except Exception:
             # The direct failure is the caller's problem; nothing to shadow.
+            self._observe("chain", "direct_unavailable")
             return
         try:
             direct_fields = extract_chain_metadata(payload, expiration)
@@ -271,6 +288,7 @@ class ShadowComparingMarketDataProvider:
             if getattr(direct_fields, field) != getattr(observed, field):
                 differing.append(field)
         if not differing:
+            self._observe("chain", "agree")
             return
         self._record(
             "chain",

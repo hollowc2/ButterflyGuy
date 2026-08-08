@@ -89,6 +89,21 @@ schwab_api_errors = Counter(
     "butterfly_schwab_api_errors_total", "Total Schwab API errors", ["endpoint"]
 )
 
+# Gateway shadow reads — observation only; the direct read is always what callers get.
+# ``result`` is agree | discrepancy | direct_unavailable, so agreements are visible and
+# not just failures. The discrepancy ``fields`` tuple is deliberately not a label: it is
+# unbounded in shape and stays in the logs.
+gateway_shadow_comparisons = Counter(
+    "butterfly_gateway_shadow_comparisons_total",
+    "Completed gateway shadow comparisons",
+    ["operation", "result"],
+)
+gateway_shadow_discrepancies = Counter(
+    "butterfly_gateway_shadow_discrepancies_total",
+    "Gateway shadow discrepancies by diagnostic code",
+    ["operation", "code", "classification"],
+)
+
 
 _server_start_time: float | None = None
 _server_underlying: str = "unknown"

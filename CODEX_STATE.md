@@ -1484,3 +1484,33 @@ gateway key exists on either host.** `gateway-keys-issue.err` remains at 0 bytes
 `butterfly-guy`'s. That is free while nothing consumes the gateway, and the procedure is now
 recorded above. Do the issuance and the first authenticated call in the same step, and do not delete
 the plaintext until the call has returned 200.
+
+### Gateway client metrics — closed (2026-08-08)
+
+The "shadow results are readable only from logs" gap is closed. `core/metrics.py` gains two
+counters, and `shadow.py` reports through them:
+
+- `butterfly_gateway_shadow_comparisons_total{operation,result}` — `result` is
+  `agree | discrepancy | direct_unavailable`.
+- `butterfly_gateway_shadow_discrepancies_total{operation,code,classification}` — the existing
+  fixed diagnostic code space, now exported rather than only logged.
+
+The important half is `agree`. Both comparison paths previously returned early on agreement without
+recording anything, so the only observable signal was failure — a mismatch *rate* had no
+denominator, and a comparator silently doing nothing looked identical to one finding no problems.
+
+`direct_unavailable` is deliberately a separate result rather than a discrepancy: when the direct
+read raises there is nothing to compare, and counting that against the gateway would be wrong.
+
+The discrepancy `fields` tuple is **not** a label — it is unbounded in shape and stays in the logs.
+Label cardinality is bounded at 2 operations × 11 codes × 4 classifications.
+
+Six tests added (**968 passed, 1 skipped**, ruff clean), covering: agreements counted, a discrepancy
+counting once as a comparison and once by code, a gateway error under its own code, a failing direct
+read counted separately, a disabled shadow touching no counter at all, and every declared code being
+a legal label set.
+
+Still inert with respect to trading — nothing constructs `ShadowComparingMarketDataProvider` from
+`run_live.py`. These counters only produce data once C3 wires it and
+`SCHWAB_GATEWAY_SHADOW_READS` is on. No alert rule was added for mismatch rates: with shadow off
+there is no baseline to threshold against, and that is better chosen from real data during C3.

@@ -10,6 +10,10 @@ import pytest
 from aiohttp.test_utils import TestServer
 from pydantic import ValidationError
 
+from butterfly_guy.core.metrics import (
+    gateway_shadow_comparisons,
+    gateway_shadow_discrepancies,
+)
 from butterfly_guy.gateway_client import shadow as shadow_module
 from butterfly_guy.gateway_client.client import (
     GatewayAuthenticationError,
@@ -601,3 +605,125 @@ async def test_shadow_comparison_against_the_real_in_process_gateway_agrees() ->
     assert spot == DIRECT_SPOT
     assert chain is CHAIN_PAYLOAD
     assert provider.recorder.total() == 0
+
+
+def _comparisons(operation: str, result: str) -> float:
+    """Current value of one comparison counter; the child is created at zero if absent."""
+    return gateway_shadow_comparisons.labels(
+        operation=operation, result=result
+    )._value.get()
+
+
+def _discrepancies(operation: str, code: str, classification: str) -> float:
+    return gateway_shadow_discrepancies.labels(
+        operation=operation, code=code, classification=classification
+    )._value.get()
+
+
+class FailingDirectProvider(DirectProvider):
+    """A direct provider whose reads raise, to exercise the direct_unavailable path."""
+
+    async def get_spot_price(self, symbol: str = "$SPX") -> float:
+        raise RuntimeError("direct spot unavailable")
+
+    async def get_option_chain(self, symbol: str, expiration: dt.date) -> dict:
+        raise RuntimeError("direct chain unavailable")
+
+
+@pytest.mark.asyncio
+async def test_agreements_are_counted_and_not_only_failures() -> None:
+    """An agreement must be observable; otherwise the ratio has no denominator."""
+    before_spot = _comparisons("spot", "agree")
+    before_chain = _comparisons("chain", "agree")
+    direct = DirectProvider()
+    gateway = RecordingGateway(
+        spot_result=spot_response(DIRECT_SPOT), chain_result=chain_response()
+    )
+    provider = ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
+
+    await provider.get_spot_price("$SPX")
+    await provider.get_option_chain("SPX", EXPIRATION)
+    await provider.wait_for_shadow_reads()
+
+    assert _comparisons("spot", "agree") == before_spot + 1
+    assert _comparisons("chain", "agree") == before_chain + 1
+    assert provider.recorder.total() == 0
+
+
+@pytest.mark.asyncio
+async def test_a_discrepancy_counts_once_as_a_comparison_and_once_by_code() -> None:
+    before_comparisons = _comparisons("spot", "discrepancy")
+    before_coded = _discrepancies("spot", "gateway_value_mismatch", "parsing")
+    direct = DirectProvider()
+    gateway = RecordingGateway(spot_result=spot_response(1.0))
+    provider = ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
+
+    assert await provider.get_spot_price("$SPX") == DIRECT_SPOT
+    await provider.wait_for_shadow_reads()
+
+    assert _comparisons("spot", "discrepancy") == before_comparisons + 1
+    assert _discrepancies("spot", "gateway_value_mismatch", "parsing") == before_coded + 1
+
+
+@pytest.mark.asyncio
+async def test_a_gateway_error_is_counted_under_its_own_code() -> None:
+    before = _discrepancies("chain", "gateway_timeout", "timing")
+    direct = DirectProvider()
+    gateway = RecordingGateway(chain_result=GatewayTimeoutError("slow"))
+    provider = ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
+
+    assert await provider.get_option_chain("SPX", EXPIRATION) is CHAIN_PAYLOAD
+    await provider.wait_for_shadow_reads()
+
+    assert _discrepancies("chain", "gateway_timeout", "timing") == before + 1
+
+
+@pytest.mark.asyncio
+async def test_a_failing_direct_read_is_counted_separately_from_a_discrepancy() -> None:
+    """A comparison that could not run is not evidence against the gateway."""
+    before_unavailable = _comparisons("spot", "direct_unavailable")
+    before_discrepancy = _comparisons("spot", "discrepancy")
+    direct = FailingDirectProvider()
+    gateway = RecordingGateway(spot_result=spot_response(DIRECT_SPOT))
+    provider = ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
+
+    with pytest.raises(RuntimeError):
+        await provider.get_spot_price("$SPX")
+    await provider.wait_for_shadow_reads()
+
+    assert _comparisons("spot", "direct_unavailable") == before_unavailable + 1
+    assert _comparisons("spot", "discrepancy") == before_discrepancy
+    assert provider.recorder.total() == 0
+
+
+@pytest.mark.asyncio
+async def test_a_disabled_shadow_records_no_metrics_at_all() -> None:
+    """The default flag must leave the counters untouched, not merely unlogged."""
+    before = {
+        result: _comparisons("spot", result)
+        for result in ("agree", "discrepancy", "direct_unavailable")
+    }
+    direct = DirectProvider()
+    provider = ShadowComparingMarketDataProvider(direct, RecordingGateway())
+
+    assert await provider.get_spot_price("$SPX") == DIRECT_SPOT
+    await provider.wait_for_shadow_reads()
+
+    assert {
+        result: _comparisons("spot", result) for result in before
+    } == before
+
+
+def test_discrepancy_metric_labels_cover_every_declared_code() -> None:
+    """Every code the module can emit is a legal label set, with no payload fields."""
+    for code, classification in CLASSIFICATION_BY_CODE.items():
+        assert classification in SHADOW_CLASSIFICATIONS
+        for operation in ("spot", "chain"):
+            gateway_shadow_discrepancies.labels(
+                operation=operation, code=code, classification=classification
+            )
+    assert set(gateway_shadow_discrepancies._labelnames) == {
+        "operation",
+        "code",
+        "classification",
+    }
