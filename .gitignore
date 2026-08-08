@@ -3,6 +3,7 @@
 *.env
 secrets/
 tokens.json
+tokens.json.pre-reauth
 token.json
 
 # Python
