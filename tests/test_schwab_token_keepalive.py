@@ -73,6 +73,61 @@ def test_token_keepalive_reports_alertmanager_state(
     client.get_quote.assert_called_once_with("$SPX")
 
 
+@pytest.mark.parametrize(
+    "process_env,dotenv_value,expected,root_relative",
+    [
+        (None, None, "tokens.json", True),
+        (None, "secrets/tokens.json", "secrets/tokens.json", True),
+        ("/srv/tokens.json", "secrets/tokens.json", "/srv/tokens.json", False),
+    ],
+)
+def test_token_keepalive_honours_schwab_token_path(
+    monkeypatch, process_env, dotenv_value, expected, root_relative
+):
+    """SCHWAB_TOKEN_PATH overrides the default, process env winning over .env."""
+    now = 2_000_000_000
+    token = json.dumps({"creation_timestamp": now})
+    original_open = open
+
+    def fake_open(path, *args, **kwargs):
+        if Path(path).name == "tokens.json":
+            return io.StringIO(token)
+        return original_open(path, *args, **kwargs)
+
+    response = MagicMock(status_code=200)
+    response.raise_for_status.return_value = None
+    client_from_token_file = MagicMock(
+        return_value=MagicMock(get_quote=MagicMock(return_value=response))
+    )
+    dotenv = {"SCHWAB_API_KEY": "key", "SCHWAB_SECRET_KEY": "secret"}
+    if dotenv_value is not None:
+        dotenv["SCHWAB_TOKEN_PATH"] = dotenv_value
+
+    monkeypatch.delenv("SCHWAB_TOKEN_PATH", raising=False)
+    if process_env is not None:
+        monkeypatch.setenv("SCHWAB_TOKEN_PATH", process_env)
+    monkeypatch.setattr("builtins.open", fake_open)
+    monkeypatch.setattr(Path, "exists", lambda self: True)
+    monkeypatch.setattr("time.time", lambda: now)
+    monkeypatch.setattr("dotenv.dotenv_values", lambda _path: dotenv)
+    monkeypatch.setattr("schwab.auth.client_from_token_file", client_from_token_file)
+    monkeypatch.setitem(
+        sys.modules,
+        "notify",
+        types.SimpleNamespace(
+            send=lambda _message: True,
+            send_alertmanager=lambda *_args, **_kwargs: True,
+        ),
+    )
+    monkeypatch.setattr(sys, "argv", ["schwab_token_keepalive.py"])
+
+    runpy.run_path("tools/schwab_token_keepalive.py", run_name="__main__")
+
+    root = Path("tools/schwab_token_keepalive.py").parent.parent
+    used = client_from_token_file.call_args.kwargs["token_path"]
+    assert used == (str(root / expected) if root_relative else expected)
+
+
 def test_token_keepalive_reports_alertmanager_failure(monkeypatch, capsys):
     now = 2_000_000_000
     token = json.dumps({"creation_timestamp": now - 7 * 24 * 3600 - 1})

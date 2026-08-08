@@ -26,7 +26,11 @@ SUNDAY_REMINDER = "--sunday-reminder" in sys.argv
 ROOT = Path(__file__).parent.parent
 env = dotenv_values(ROOT / ".env")
 
-TOKEN_PATH = ROOT / "tokens.json"
+TOKEN_PATH = Path(
+    os.getenv("SCHWAB_TOKEN_PATH") or env.get("SCHWAB_TOKEN_PATH") or "tokens.json"
+)
+if not TOKEN_PATH.is_absolute():
+    TOKEN_PATH = ROOT / TOKEN_PATH
 ALERTMANAGER_URL = os.getenv("ALERTMANAGER_URL", "http://127.0.0.1:9093")
 API_KEY = env.get("SCHWAB_API_KEY")
 SECRET_KEY = env.get("SCHWAB_SECRET_KEY")
