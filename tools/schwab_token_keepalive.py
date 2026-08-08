@@ -37,6 +37,7 @@ SECRET_KEY = env.get("SCHWAB_SECRET_KEY")
 
 REFRESH_TOKEN_TTL = 7 * 24 * 3600  # 7 days in seconds
 WARN_BEFORE = 8 * 3600              # start alerting 8 hours before expiry
+LOCK_TIMEOUT = 30.0                 # wait out a gateway write before giving up
 
 if not TOKEN_PATH.exists():
     print(f"ERROR: token file not found at {TOKEN_PATH}")
@@ -97,17 +98,30 @@ else:
     alert_result = "resolved" if alert_accepted else "failed"
     print(f"TOKEN ALERT: {alert_result}; refresh token is healthy")
 
-# Always try to refresh the access token
+# Always try to refresh the access token. The gateway writes this same document under
+# the lock below, and Schwab rotates the refresh token on every refresh, so the whole
+# read-refresh-write has to be one critical section; otherwise the two writers can each
+# spend a refresh token the other has already consumed.
 try:
     from schwab.auth import client_from_token_file
-    client = client_from_token_file(
-        token_path=str(TOKEN_PATH),
-        api_key=API_KEY,
-        app_secret=SECRET_KEY,
-        asyncio=False,
-        enforce_enums=False,
+
+    from butterfly_guy.schwab_gateway.token_manager import (
+        AtomicFileTokenStore,
+        TokenLockTimeoutError,
     )
-    resp = client.get_quote("$SPX")
+    try:
+        with AtomicFileTokenStore(TOKEN_PATH).locked(LOCK_TIMEOUT):
+            client = client_from_token_file(
+                token_path=str(TOKEN_PATH),
+                api_key=API_KEY,
+                app_secret=SECRET_KEY,
+                asyncio=False,
+                enforce_enums=False,
+            )
+            resp = client.get_quote("$SPX")
+    except TokenLockTimeoutError:
+        print(f"ERROR: token lock held by another writer after {LOCK_TIMEOUT:.0f}s")
+        sys.exit(1)
     resp.raise_for_status()
     print(
         f"OK: token refreshed, SPX quote fetched (status {resp.status_code}), "

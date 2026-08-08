@@ -3,10 +3,33 @@ import json
 import runpy
 import sys
 import types
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+
+from butterfly_guy.schwab_gateway.token_manager import (
+    AtomicFileTokenStore,
+    TokenLockTimeoutError,
+)
+
+
+@pytest.fixture(autouse=True)
+def lock_events(monkeypatch):
+    """Record lock acquire/release without touching a real lock file."""
+    events = []
+
+    @contextmanager
+    def fake_locked(self, timeout_seconds):
+        events.append(("acquire", str(self.path), timeout_seconds))
+        try:
+            yield MagicMock()
+        finally:
+            events.append(("release", str(self.path), timeout_seconds))
+
+    monkeypatch.setattr(AtomicFileTokenStore, "locked", fake_locked)
+    return events
 
 
 @pytest.mark.parametrize(
@@ -167,3 +190,78 @@ def test_token_keepalive_reports_alertmanager_failure(monkeypatch, capsys):
     assert exc.value.code == 1
     assert "TOKEN ALERT: failed" in capsys.readouterr().out
     client.get_quote.assert_called_once_with("$SPX")
+
+
+def _run_with_stub_token(monkeypatch, now=2_000_000_000):
+    """Wire up the module-level environment the keepalive script reads on import."""
+    token = json.dumps({"creation_timestamp": now})
+    original_open = open
+
+    def fake_open(path, *args, **kwargs):
+        if Path(path).name == "tokens.json":
+            return io.StringIO(token)
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", fake_open)
+    monkeypatch.setattr(Path, "exists", lambda self: True)
+    monkeypatch.setattr("time.time", lambda: now)
+    monkeypatch.setattr(
+        "dotenv.dotenv_values",
+        lambda _path: {"SCHWAB_API_KEY": "key", "SCHWAB_SECRET_KEY": "secret"},
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "notify",
+        types.SimpleNamespace(
+            send=lambda _message: True,
+            send_alertmanager=lambda *_args, **_kwargs: True,
+        ),
+    )
+    monkeypatch.setattr(sys, "argv", ["schwab_token_keepalive.py"])
+
+
+def test_token_keepalive_refreshes_inside_the_token_lock(
+    monkeypatch, lock_events
+):
+    """The refresh and the quote both happen while the gateway's lock is held.
+
+    Schwab rotates the refresh token on every refresh, so a refresh that runs outside
+    the lock can spend a credential the gateway has already replaced.
+    """
+    response = MagicMock(status_code=200)
+    response.raise_for_status.return_value = None
+
+    def refresh(**_kwargs):
+        lock_events.append(("refresh", None, None))
+        return MagicMock(get_quote=MagicMock(return_value=response))
+
+    _run_with_stub_token(monkeypatch)
+    monkeypatch.setattr("schwab.auth.client_from_token_file", refresh)
+
+    runpy.run_path("tools/schwab_token_keepalive.py", run_name="__main__")
+
+    stages = [event[0] for event in lock_events]
+    assert stages == ["acquire", "refresh", "release"]
+    assert lock_events[0][1].endswith("tokens.json")
+    assert lock_events[0][2] == 30.0
+
+
+def test_token_keepalive_exits_when_the_token_lock_is_held(monkeypatch, capsys):
+    """A busy lock fails loudly rather than writing alongside the other writer."""
+    client_from_token_file = MagicMock()
+
+    @contextmanager
+    def busy_lock(self, timeout_seconds):
+        raise TokenLockTimeoutError("timed out waiting for the token lock")
+        yield  # pragma: no cover - unreachable, keeps this a generator
+
+    _run_with_stub_token(monkeypatch)
+    monkeypatch.setattr("schwab.auth.client_from_token_file", client_from_token_file)
+    monkeypatch.setattr(AtomicFileTokenStore, "locked", busy_lock)
+
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path("tools/schwab_token_keepalive.py", run_name="__main__")
+
+    assert exc.value.code == 1
+    assert "ERROR: token lock held by another writer" in capsys.readouterr().out
+    client_from_token_file.assert_not_called()
