@@ -191,6 +191,11 @@ async def _run(args: argparse.Namespace) -> int:
 
 def main() -> int:
     load_dotenv(ROOT / ".env")
+    # The deployment variables the compose file interpolates live in infra/.env, not
+    # the application .env: the feed's token bind reads SCHWAB_GATEWAY_TOKEN_DIR from
+    # there. Compose interpolates from this process's environment, so it must be
+    # loaded before the subprocess runs. Its ":?" guard fails loudly if it is missing.
+    load_dotenv(ROOT / "infra" / ".env")
     parser = argparse.ArgumentParser(prog="candidatectl")
     parser.add_argument("--registry", default=str(DEFAULT_REGISTRY))
     subparsers = parser.add_subparsers(dest="command", required=True)

@@ -122,7 +122,11 @@ def test_approved_candidate_registry_is_activated_isolated_and_safe() -> None:
     compose = yaml.safe_load(runtime.compose)
     feed = compose["services"]["spx_candidate_feed"]
     assert "env_file" not in feed
-    assert feed["volumes"] == ["../../tokens.json:/app/tokens.json:ro"]
+    directory = "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}"
+    # The token directory, never the document: the gateway replaces the document with
+    # os.replace, and a document bind pins the inode Docker resolved at container start.
+    assert feed["volumes"] == [f"{directory}:{directory}:ro"]
+    assert feed["environment"]["SCHWAB_TOKEN_PATH"] == f"{directory}/tokens.json"
     assert set(feed["environment"]) == {
         "DATABASE_HOST",
         "DATABASE_PORT",
