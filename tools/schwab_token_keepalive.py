@@ -98,10 +98,13 @@ else:
     alert_result = "resolved" if alert_accepted else "failed"
     print(f"TOKEN ALERT: {alert_result}; refresh token is healthy")
 
-# Always try to refresh the access token. The gateway writes this same document under
-# the lock below, and Schwab rotates the refresh token on every refresh, so the whole
-# read-refresh-write has to be one critical section; otherwise the two writers can each
-# spend a refresh token the other has already consumed.
+# Always try to refresh the access token. The gateway writes this same document, so the
+# whole read-refresh-write has to be one critical section: the two writers would otherwise
+# interleave and the later write would clobber the earlier one's access token.
+#
+# Schwab does NOT rotate the refresh token on an ordinary access-token refresh -- verified
+# 2026-08-08, where the same value survived both a gateway refresh and a keepalive firing.
+# The lock is still required for the reason above; it is not guarding a consumable token.
 try:
     from schwab.auth import client_from_token_file
 

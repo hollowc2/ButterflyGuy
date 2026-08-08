@@ -1349,8 +1349,12 @@ Two further corrections to the received picture:
 - **`infra/prometheus.yml` and `infra/candidate-alerts.yml` are not the live config.** The running
   container binds `/opt/monitoring/prometheus.yml` — a plain file, not a symlink to this repo — and
   loads rules from `/opt/monitoring/prometheus-alerts/*.yml`. A rule placed beside
-  `infra/candidate-alerts.yml` would never be read. The repo's `infra/prometheus.yml` also still
-  targets the stale `app_spx:8000` service names. Pre-existing drift, left alone.
+  `infra/candidate-alerts.yml` would never be read. Pre-existing drift, left alone.
+  (Corrected 2026-08-08: this entry previously called the repo file's `app_spx:8000` targets
+  "stale". They are not — Compose registers the service name as a network alias, and `app_spx`
+  resolves on `monitoring_net` to the same address as `butterfly_spx_app`. The live config simply
+  uses container names. The repo file's real hazard is that it looks deployable and is not, which
+  is now stated in a header comment inside it.)
 
 The rule therefore lives at `infra/schwab-gateway-alerts.yml` and deploys to
 `/opt/monitoring/prometheus-alerts/schwab-gateway.yml`.
