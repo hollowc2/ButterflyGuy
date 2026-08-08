@@ -1165,3 +1165,98 @@ unbound, zero gateway containers remaining.
 - Running any trading Compose command now requires `SCHWAB_GATEWAY_TOKEN_DIR`. It is in
   `infra/.env` on Helios, so day-to-day commands are unaffected, but an operator running Compose
   from a different project directory will get a loud refusal rather than an empty-directory mount.
+
+## Window C — the two token writers resolved (2026-08-08)
+
+C1 was the gate and it is closed. The gateway is still **down**; no consumer points at it and
+`GET /v1/history`, shadow reads, and every account or order operation remain untouched.
+
+**Precondition re-verified** read-only before anything else, and nothing had moved: all three
+trading services `running` on the Window A images `faa85d748358` / `ca2ca79ca2c6` / `cc58c70ea998`
+with `RestartCount=0`, all resolving `/app/tokens.json` to host inode `1067463`, all four documents
+agreeing on `refresh_token_sha12=94dae53a535a`, crontab at 31 lines / 2 entries, zero gateway
+containers, 8011 unbound. One naming correction: the containers are `butterfly_spx_app` /
+`butterfly_ndx_app` / `butterfly_xsp_app`; `app_spx` and friends are the Compose *service* names.
+
+Refresh token life at decision time was **163.1h** against the `2026-08-14T21:49:55Z` expiry — far
+outside the last-48-hour window, so there was no reason to defer implementation.
+
+### C1 — the operator chose the shared lock
+
+The defect was sharper than "a lost write". Both writers do read → refresh → write, and Schwab
+rotates the refresh token on every refresh, so an interleave means one writer spends a credential
+the other has already consumed. `docker-compose.gateway.yml` binds the token *directory* rw at the
+same absolute path on both sides, so `/opt/butterflyguy-tokens/.tokens.json.lock` is genuinely the
+same inode for the host keepalive and the containerized gateway; `flock` works across that boundary.
+
+`b135313` — the keepalive now holds `AtomicFileTokenStore(TOKEN_PATH).locked(30.0)` across both
+`client_from_token_file` and the SPX quote, so read-refresh-write is one critical section. schwab-py
+remains the refresh implementation: what changed is *when* it may run, not *how* it refreshes. A busy
+lock exits non-zero with a bounded message rather than writing anyway. Contention makes the
+**gateway** back off into its already-handled `lock_timeout` state while the keepalive wins, which is
+the correct priority — the keepalive is what prevents silent expiry. The two writers stay
+independent: gateway down still leaves the token refreshed, and vice versa.
+
+Rejected with reasons recorded: replacing the keepalive's refresh with `AtomicTokenManager` (rewrites
+the highest-consequence script and drags an event loop into cron for a benefit the lock already
+buys); having the keepalive call the gateway (truly single-writer, but gateway-down becomes silent
+expiry — the exact failure Window A exists because of, and a Schwab fallback reinstates two writers);
+and leaving the gateway non-durable (correct and free, but it declines durability rather than
+resolving C1, and the operator wants an always-on multi-consumer service).
+
+Baseline moved 959 → **961 passed, 1 skipped**, ruff clean. `uv run pytest` still cannot spawn; use
+`uv run python -m pytest`.
+
+### Proven on the host by the production path, at zero extra token writes
+
+Delivered as B1 settled: pushed, then `git pull --ff-only` on Helios to `f5d88e5`, leaving only the
+two universe files modified. The pull landed at 03:51 UTC, *after* the 03:00 cron firing, so the
+**04:00 firing was the first production run of the locked keepalive** — no manual invocation was
+needed and none was made. It returned `OK: token refreshed, SPX quote fetched (status 200)`, wrote
+the document at `04:00:05` preserving inode `1067463` at mode `600`, and left
+`refresh_token_sha12=94dae53a535a` and the `2026-08-14T21:49:55Z` expiry unchanged. All three
+containers still resolve inode `1067463` on the same digest, `RestartCount=0`. The lock file is mode
+`600` uid `1001`.
+
+### Durability decided, monitoring still open
+
+`f5d88e5` sets `restart: unless-stopped` on `schwab_gateway_live` only; the demo profile keeps
+`restart: "no"`. This is safe **only** in combination with `b135313`: an always-on gateway overlaps
+the hourly keepalive by construction, which is exactly what Window B avoided by sequencing its whole
+up/quote/down cycle into the 02:12–03:00 UTC gap.
+
+**The gateway is not reachable by Prometheus today**, and this is unresolved. `docker-compose.gateway.yml`
+has no `networks:` section at all — it runs on its own isolated project network and publishes only to
+`127.0.0.1:8011`, while `butterfly_prometheus` is on `monitoring_net` and scrapes by container DNS
+name. The gateway does serve `/metrics` (`api.py:414`) and the auth middleware guards only `/v1/`
+paths (`auth.py:130`), so a scrape needs no key. Two routes were put to the operator: join the
+gateway to `monitoring_net` (conventional, but widens reachability from host loopback to every
+container on that network), or scrape across the host boundary via `extra_hosts:
+host.docker.internal:host-gateway` (preserves the isolation, but edits `/opt/monitoring/docker-compose.yml`,
+which is outside this repo and shared with unrelated stacks). Either adds an `up{job="schwab_gateway"} == 0`
+rule. Both need a Prometheus reload, which was outside this window's authorization.
+
+**The gateway was deliberately not started.** An always-on service with nothing watching it is how a
+silently-dead gateway happens, so bringing it up should follow the monitoring decision, not precede it.
+
+### Multi-consumer shape — confirmed sound, with two wrinkles
+
+The operator's intent is an always-on gateway with `butterfly-guy` permanent and `equity-scanner` /
+`afterhours-lab` periodic. The design already anticipates this: `KNOWN_CLIENT_IDS` (`auth.py:16`)
+allowlists all three and `EXPECTED_PRIORITY_BY_CLIENT` (`auth.py:31`) already makes `butterfly-guy`
+`protected` and the other two `background`. Declining to issue their keys in Window B remains correct.
+
+- `issue_gateway_keys.py` has **no append mode**: it refuses to overwrite (`:93`) and regenerates keys
+  for every client in the document (`:50`), so adding a second consumer later rotates
+  `butterfly-guy`'s key and forces redistribution. Fixable when the second consumer is actually wired.
+- A fourth consumer needs a one-line `auth.py` change; the allowlist is closed by design.
+- `/v1/history` is still deliberately absent, so a consumer needing bars rather than quotes has no
+  surface yet.
+
+### Still open
+
+- The monitoring route above, then whether to start the gateway.
+- C3 wiring — untouched this window, still its own decision.
+- `/opt/butterflyguy-tokens/gateway-keys-plaintext.out` (146 bytes, mode `600`) still holds a
+  recoverable plaintext consumer key; the operator has not yet confirmed distribution. Delete once
+  confirmed. `.env.b3-backup` likewise.
