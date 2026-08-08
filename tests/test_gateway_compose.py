@@ -136,8 +136,14 @@ def test_staging_package_does_not_change_default_compose() -> None:
     # four token binds at SCHWAB_GATEWAY_TOKEN_DIR -- a shared variable, not a gateway
     # service, profile, or port, and pins each service's in-container SCHWAB_TOKEN_PATH.
     # The gateway still contributes no service here.
+    #
+    # Re-pinned in Window E: the four token binds move from the document to the token
+    # *directory*, and each service's SCHWAB_TOKEN_PATH moves to the host-absolute path
+    # inside it. The gateway persists the token with os.replace, which swaps in a new
+    # inode, and the three live trading containers had silently detached from every
+    # write it made. Still no gateway service, profile, or port in this file.
     assert hashlib.sha256(default_compose).hexdigest() == (
-        "5957840e7fb0a7d15d6c1a85c627cb260d2a7d9e53d713945542fab1872f141d"
+        "5e7804fee1802c4d835e570b0b868697827049e50f44070009f578710491a341"
     )
 
 
@@ -150,21 +156,37 @@ def test_default_compose_token_binds_require_the_shared_token_directory() -> Non
     compose = yaml.safe_load(Path("infra/docker-compose.yml").read_text())
     directory = "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}"
 
+    # The variable carries its own ":?" default-guard, so the bind cannot be split on ":".
     binds = {
-        name: [v for v in service["volumes"] if v.endswith("/app/tokens.json")
-               or v.endswith("/app/tokens.json:ro")]
+        name: [v for v in service["volumes"] if v.startswith(f"{directory}:")]
         for name, service in compose["services"].items()
     }
     assert binds == {
-        "app_spx": [f"{directory}/tokens.json:/app/tokens.json"],
-        "app_spx_candidate": [f"{directory}/tokens.json:/app/tokens.json:ro"],
-        "app_ndx": [f"{directory}/tokens.json:/app/tokens.json"],
-        "app_xsp": [f"{directory}/tokens.json:/app/tokens.json"],
+        "app_spx": [f"{directory}:{directory}"],
+        "app_spx_candidate": [f"{directory}:{directory}:ro"],
+        "app_ndx": [f"{directory}:{directory}"],
+        "app_xsp": [f"{directory}:{directory}"],
     }
 
-    # The host token path in ../.env names a host directory the container does not
-    # have; every service must override it with its own mount target.
+    # Every service must set SCHWAB_TOKEN_PATH from the same required variable as its
+    # bind, never inherit it from ../.env.
     assert all(
-        service["environment"]["SCHWAB_TOKEN_PATH"] == "/app/tokens.json"
+        service["environment"]["SCHWAB_TOKEN_PATH"] == f"{directory}/tokens.json"
         for service in compose["services"].values()
     )
+
+
+def test_default_compose_binds_the_token_directory_never_the_document() -> None:
+    """The gateway replaces the token document atomically, swapping in a new inode.
+
+    A document-level bind mount pins the inode Docker resolved at container start, so
+    every later gateway write -- including the re-authorized refresh token -- becomes
+    invisible to the container. Only a directory bind follows the replacement.
+    """
+    compose = yaml.safe_load(Path("infra/docker-compose.yml").read_text())
+
+    for name, service in compose["services"].items():
+        for volume in service["volumes"]:
+            assert "tokens.json" not in volume, (
+                f"{name} binds the token document; bind the directory instead"
+            )
