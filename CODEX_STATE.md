@@ -1260,3 +1260,40 @@ allowlists all three and `EXPECTED_PRIORITY_BY_CLIENT` (`auth.py:31`) already ma
 - `/opt/butterflyguy-tokens/gateway-keys-plaintext.out` (146 bytes, mode `600`) still holds a
   recoverable plaintext consumer key; the operator has not yet confirmed distribution. Delete once
   confirmed. `.env.b3-backup` likewise.
+
+### C3 plan produced, and a stale design point corrected
+
+`docs/architecture/schwab-gateway-c3-shadow-wiring-plan.md` — plan only, no code. Re-deriving from
+`shadow.py` rather than trusting the prose caught two errors that both this file's "Next Exact
+Action" (lines ~723-726) and the Window C brief carry:
+
+- **The latency claim is wrong.** Both say the comparator awaits the gateway read after the direct
+  read returns, adding gateway latency to every collector cycle. It does not: `get_spot_price`
+  (`shadow.py:188`) and `get_option_chain` (`shadow.py:224`) spawn the comparison via
+  `_spawn_background` (`:142`, docstring "Run a shadow comparison off the caller's critical path")
+  and `return await direct_task`. True of some earlier revision; the prose was never updated. The
+  real costs are a doubled outbound request count on shadowed calls and background tasks that
+  outlive the call, bounded by the client's 5.0s timeout (`client.py:54`) against a 60s cycle.
+- **The no-shadow-surface set is larger than stated.** Not just `get_daily_bars`: `get_intraday_bars`
+  (`:281`), `get_intraday_bars_for_day` (`:286`) and `get_daily_bars` (`:299`) are all pass-throughs.
+  Shadow covers two of the collector's four call sites. The chain comparison is also metadata-only,
+  not strike-by-strike.
+
+**A blocker C3 shares with the monitoring question:** `docker-compose.gateway.yml` has no `networks:`
+section, so the trading containers cannot reach the gateway either. Joining `monitoring_net` solves
+Prometheus *and* the future consumers in one change but widens reachability; the host-boundary
+`extra_hosts` route preserves isolation but must then be applied to Prometheus and all three trading
+services. This should be decided once with C3 in view, not separately. There are also **no Prometheus
+metrics anywhere in `gateway_client/`**, so a shadow run's results are currently readable only from
+logs.
+
+### Housekeeping
+
+`/opt/butterflyguy-tokens/.env.b3-backup` deleted on operator instruction, after confirming it was a
+distinct inode from the live `/opt/butterflyguy/.env` (1059921 vs 1111276) and that the live file was
+intact at 1547 bytes with all 21 variables including `SCHWAB_TOKEN_PATH`. The 25-byte size delta is
+exactly the `/opt/butterflyguy-tokens/` prefix B3 added, corroborating the backup as the pre-B3 copy.
+No file contents were read.
+
+`/opt/butterflyguy-tokens/gateway-keys-plaintext.out` **still exists** — distribution was never
+confirmed, so it was deliberately left in place.
