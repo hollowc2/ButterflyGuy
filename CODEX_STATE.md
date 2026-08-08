@@ -1852,3 +1852,27 @@ onto a trading day and it would stay there.
 The real fix for the recurring cost is out of scope here and unexamined: whether the gateway can
 hold the sole credential and serve the trading apps, so that one re-authorization does not require
 restarting five containers. That is the question C3 and the eventual cutover exist to answer.
+
+### Window F addendum 3 — the locked write is proven in production (2026-08-08)
+
+Addendum 2 recorded the locked *write* as unobserved. It was observed shortly afterward, at
+23:21 UTC, and the evidence is conclusive by elimination.
+
+The host document moved from inode `20446` to **`12602`**, digest `80a525dfea9a`. An inode change is
+an `os.replace`. The keepalive cannot produce one — it persists through
+`client_from_token_file`, whose writer truncates in place and keeps the inode. The gateway logged
+**zero** `refresh_succeeded` in the surrounding 45 minutes. Each of the three trading apps logged
+exactly one `POST /v1/oauth/token`, at construction, and every one of those fires authlib's
+`update_token` into the new `_write_token`. The replace therefore came from the trading apps' new
+path — the first atomic, locked token write they have ever performed.
+
+It happened under genuine contention: three apps constructing within the same second, plus the 23:00
+keepalive taking the same lock. `schwab_token_persist_failed` is **zero** across all three, so no
+writer timed out at the 10s bound. All five consumers and the host still agree on one inode and one
+digest.
+
+The 23:00 keepalive also succeeded, reporting **167.1h** remaining — the first hourly run against the
+new credential, on the production path.
+
+This closes the C1 gap end to end: decided in Window C, found unimplemented for the trading apps in
+Window F, fixed, deployed, and now exercised under real contention rather than only in tests.
