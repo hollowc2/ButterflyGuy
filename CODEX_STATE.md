@@ -721,9 +721,12 @@ real in-process gateway, but nothing constructs it. Wiring it into `run_live.py`
 `SCHWAB_GATEWAY_SHADOW_READS` would make gateway code reachable from a live trading entry point for
 the first time and needs its own approval. It is also blocked in practice: with no deployed gateway
 there is nothing for the flag to point at, so wiring should follow a deployment host, not precede
-it. Two design points to settle at wiring time: the comparator awaits the gateway read after the
-direct read returns, adding gateway latency to each collector cycle; and `GET /v1/history` is
-deliberately absent, so `get_daily_bars` (`data/collector.py:117`) has no shadow surface.
+it. Two design points to settle at wiring time — **both as originally written here were wrong, and
+are corrected in `docs/architecture/schwab-gateway-c3-shadow-wiring-plan.md`**: the comparator does
+*not* add gateway latency, because it spawns the comparison off the critical path
+(`shadow.py:142`) and returns the direct read; and the missing shadow surface is larger than
+`get_daily_bars` — `get_intraday_bars`, `get_intraday_bars_for_day` and `get_daily_bars` are all
+pass-throughs, so shadow covers two of the collector's four call sites.
 
 The deployment host that wiring waits on is now written up for the operator in
 `docs/architecture/schwab-gateway-deployment-options.md`. It evaluates four candidates — Helios
@@ -1297,3 +1300,145 @@ No file contents were read.
 
 `/opt/butterflyguy-tokens/gateway-keys-plaintext.out` **still exists** — distribution was never
 confirmed, so it was deliberately left in place.
+
+## Window D — the gateway made reachable, started, and watched (2026-08-08)
+
+D1 and D2 are both closed. The gateway is **up, always-on, scraped by Prometheus, and covered by a
+firing-proven alert**. `GET /v1/history`, shadow reads, and every account and order operation remain
+untouched; C3 is still unwired and still its own decision.
+
+### Preconditions re-verified, and one record corrected
+
+Nothing had moved: three services `running` on `faa85d748358` / `ca2ca79ca2c6` / `cc58c70ea998`,
+`RestartCount=0`, all resolving `/app/tokens.json` to inode `1067463`, all four digests
+`94dae53a535a`, crontab 31 lines / 2 entries, zero gateway containers, 8011 unbound (8010 still
+`halt_scanner`).
+
+**The C1 soak passed.** The window spanned 04:00–17:00 UTC, so the locked keepalive ran thirteen
+consecutive hourly firings, every one `OK: token refreshed, SPX quote fetched (status 200)`, with
+the "expires in" figure stepping down exactly one hour per line (161.8h → 149.8h) and the token
+mtime advancing hourly on preserved inode `1067463`. This is the multi-hour evidence Window C could
+not have.
+
+**The recorded test baseline was wrong.** `c2ebad1` was **960 passed, 1 failed, 1 skipped**, not the
+961/0 recorded at the end of Window C. `f5d88e5` changed the live service to `restart:
+unless-stopped` and left `tests/test_gateway_compose.py:39` asserting `"no"`. Window C reported a
+green suite it did not have. Fixed in `0d2bed3`; the suite is now **962 passed, 1 skipped**, ruff
+clean.
+
+### D1 — the operator chose monitoring_net, and the alternative turned out not to work
+
+`0d2bed3` joins `schwab_gateway_live` (only) to the external `monitoring_net`. Prometheus scrapes
+`butterfly_schwab_gateway_live:8011`, and the C3 consumers get the same route — one change for both,
+which is why the two were decided together. The `127.0.0.1:8011` publish stays for host debugging
+and is not the path any consumer uses. The demo service is untouched on the project default network.
+
+**The host-boundary route could not have worked as briefed.** `host.docker.internal:host-gateway`
+resolves to the docker0 bridge IP `172.17.0.1`, while the gateway publishes to `127.0.0.1:8011` —
+loopback-only, unreachable from any container netns. Making it work would have required unbinding
+loopback first (`0.0.0.0:8011`, or a cross-bridge `172.17.0.1:8011`), trading container-network
+exposure for host-network exposure: **wider than what it was meant to preserve**. Window C
+recommended it on a premise that does not hold.
+
+Two further corrections to the received picture:
+
+- **The blast radius is smaller than recorded.** `monitoring_net` carries 16 containers: the
+  butterfly stack itself (3 apps, 6 candidate evaluators, feed, timescaledb, grafana, prometheus,
+  alertmanager) plus `turtlequant-grafana-exporter` and `helios_node_exporter`. `pdfbillr` and
+  `halt_scanner` are on their own project networks and are **not** on it.
+- **`infra/prometheus.yml` and `infra/candidate-alerts.yml` are not the live config.** The running
+  container binds `/opt/monitoring/prometheus.yml` — a plain file, not a symlink to this repo — and
+  loads rules from `/opt/monitoring/prometheus-alerts/*.yml`. A rule placed beside
+  `infra/candidate-alerts.yml` would never be read. The repo's `infra/prometheus.yml` also still
+  targets the stale `app_spx:8000` service names. Pre-existing drift, left alone.
+
+The rule therefore lives at `infra/schwab-gateway-alerts.yml` and deploys to
+`/opt/monitoring/prometheus-alerts/schwab-gateway.yml`.
+
+### Applied to /opt/monitoring with approval, by reload not recreation
+
+Backup `prometheus.yml.bak-20260808T162316Z` taken first. The rule went in as a **new file**,
+touching nothing shared; the scrape job was appended to the shared `prometheus.yml`. `promtool check
+config` passed on all six rule files, then `POST /-/reload` — `--web.enable-lifecycle` is set, so
+**the shared Prometheus container was never recreated**. Rollback is restoring the backup and
+reloading again.
+
+### The alert path was proven end to end, for free
+
+Because the gateway was still down when the scrape job landed, the alert could be tested **without
+ever disturbing a running gateway**. Observed in sequence: target registered `down` →
+`SchwabGatewayDown` `pending` → `firing` → present in Alertmanager as `active` at `severity=critical`
+→ back to `inactive` once the gateway came up and `up{job="schwab_gateway"}` went to 1. The whole
+lifecycle, on the real Alertmanager, not asserted from the rule file.
+
+### D2 — the gateway is up, and durability was proven by an actual crash
+
+Image rebuilt (the checkout had moved), started under `--profile gateway-live`. `status=running`,
+`health=healthy`, attached to `monitoring_net`, and resolving the token document to host inode
+`1067463` from inside the container.
+
+| Check | Result |
+|---|---|
+| `/ready`, `/health`, `/metrics` on host loopback | `200`, `200`, `200` |
+| `/v1/quote?symbol=$SPX` with no key / a bogus key | `401`, `401` — auth middleware live |
+| `GET /metrics` from inside `butterfly_prometheus` by DNS name | `HTTP/1.1 200 OK` — D1's actual goal |
+| Prometheus target | `butterfly_schwab_gateway_live:8011` `up`, `up = 1` |
+
+**A method correction on restart-survival.** `docker kill` did **not** restart the container
+(`status=exited`, `RestartCount=0`) — Docker records `docker kill` as a *manual* stop exactly like
+`docker stop`, so `unless-stopped` correctly declines. That is a bad test, not a broken policy. The
+real test is killing the container's main process from the host, outside Docker's API: after
+`kill -9` on the container PID, it came back on its own to `status=running`, `health=healthy`,
+`RestartCount=1`, `/ready` 200, **with no manual start issued**. Crash survival is proven. *Reboot*
+survival follows from the same policy but was **not** tested — rebooting Helios would have disturbed
+the trading services for no proportionate gain.
+
+**One thing Window B did that this window could not repeat: the authenticated `$SPX` quote.** The
+operator confirmed the consumer key had been distributed and approved deleting
+`/opt/butterflyguy-tokens/gateway-keys-plaintext.out`, which I did *before* running the quote — a
+sequencing mistake on my part. The key is recoverable only from the operator's own copy;
+`secrets/schwab-gateway-keys.json` holds SHA-256 digests by design, and re-issuing would rotate
+`butterfly-guy`'s key and force redistribution, which is not worth it for a re-verification. What
+was verified instead is that the auth surface is live (401 on missing and on bogus key) and that the
+gateway reaches the token document on the right inode. Window B already proved the authenticated
+quote against this same image and token document. **Run one authenticated quote at the start of the
+next window**, using the operator's copy of the key.
+
+### C1 proven under genuine contention — the thing Window C could not test
+
+The 17:00 UTC firing was the first keepalive run **with an always-on gateway holding the same token
+document**, which is what C1 exists for. Window C could only prove the lock in isolation. Proven on
+the production path, at zero extra token writes, per the standing preference:
+
+- `OK: token refreshed, SPX quote fetched (status 200), refresh token expires in 148.8h`
+- Token written `17:00:04`, inode `1067463` preserved, mode `600`, digest still `94dae53a535a`
+- Gateway `running` / `healthy` / `RestartCount=1` throughout, still resolving inode `1067463`
+- **Zero** `lock_timeout`, error, or exception lines in the gateway log across the firing
+
+The shared lock does what it was designed to do. Refresh token life at window close: **148.8h**
+against the `2026-08-14T21:49:55Z` expiry.
+
+### Final state
+
+- Gateway **UP** and left up, on operator approval: `restart: unless-stopped`, `monitoring_net`,
+  scraped, alerted, crash-survival proven.
+- All three trading services `running`, `RestartCount=0`, inode `1067463`, digest `94dae53a535a` —
+  untouched throughout. Crontab still 31 lines / 2 entries; the keepalive was never modified or
+  sequenced around.
+- All Prometheus targets healthy except one pre-existing `nodes` target, which was already firing
+  `HostDown` in Alertmanager before this window's changes.
+- `/opt/butterflyguy-tokens/gateway-keys-plaintext.out` **deleted** on operator confirmation that
+  the key had been distributed (was inode `12602`, mode `600`, 146 bytes). `gateway-keys-issue.err`
+  remains at **0 bytes** — empty, nothing to leak, left in place.
+
+### Still open
+
+- **C3 wiring** — plan exists (`docs/architecture/schwab-gateway-c3-shadow-wiring-plan.md`), code
+  does not. The reachability blocker it shared with monitoring is now gone: the trading containers
+  can reach `butterfly_schwab_gateway_live:8011`. Still its own decision and its own window.
+- One authenticated `$SPX` quote, deferred to the next window for the reason above.
+- **No Prometheus metrics anywhere in `gateway_client/`** — a shadow run's results are still
+  readable only from logs. Worth closing before or with C3, now that a scrape path exists.
+- `issue_gateway_keys.py` still has no append mode: adding a second consumer rotates
+  `butterfly-guy`'s key. Fix when the second consumer is actually wired.
+- Reboot survival is unproven by test, only by policy.
