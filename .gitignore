@@ -1,6 +1,10 @@
 # Environment & secrets
 .env
 *.env
+# Parked and backup copies of credential files: .env.b3-backup, .env.local, and the
+# like. The example file is the one variant that belongs in the repository.
+.env.*
+!.env.example
 secrets/
 tokens.json
 tokens.json.pre-reauth
