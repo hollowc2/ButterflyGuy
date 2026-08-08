@@ -36,7 +36,9 @@ def test_gateway_live_service_is_isolated_and_read_only() -> None:
     assert service["profiles"] == ["gateway-live"]
     assert service["container_name"] == "butterfly_schwab_gateway_live"
     assert service["ports"] == ["127.0.0.1:8011:8011"]
-    assert service["restart"] == "no"
+    # Always-on: it survives a crash and a reboot. Safe only because both token
+    # writers now take the same lock (tools/schwab_token_keepalive.py).
+    assert service["restart"] == "unless-stopped"
 
     # The same hardening the demo service carries.
     assert service["read_only"] is True
@@ -51,6 +53,22 @@ def test_gateway_live_service_is_isolated_and_read_only() -> None:
         "--confirm-single-token-writer",
     ]
     assert service["environment"]["SCHWAB_GATEWAY_ORDER_WRITES_ENABLED"] == "false"
+
+
+def test_only_the_live_gateway_joins_the_shared_monitoring_network() -> None:
+    """Reachability is the live service's alone, and the network is never created here.
+
+    A 127.0.0.1 publish is loopback-only, so no container can reach the gateway
+    through it; monitoring_net is what gives Prometheus and the C3 consumers a route.
+    It must be declared external -- this project must attach to the existing network,
+    never define one that unrelated stacks already depend on.
+    """
+    compose = yaml.safe_load(Path("infra/docker-compose.gateway.yml").read_text())
+
+    assert compose["networks"] == {"monitoring_net": {"external": True}}
+    assert compose["services"]["schwab_gateway_live"]["networks"] == ["monitoring_net"]
+    # The demo service stays on the project default network, unreachable from it.
+    assert "networks" not in compose["services"]["schwab_gateway_foundation"]
 
 
 def test_gateway_live_service_mounts_the_token_directory_not_the_document() -> None:

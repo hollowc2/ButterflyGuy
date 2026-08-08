@@ -102,3 +102,14 @@ services:
       start_period: 10s
     ports:
       - "127.0.0.1:8011:8011"
+    # Joined to the shared monitoring network so butterfly_prometheus can scrape
+    # /metrics by container DNS name, and so the future C3 shadow consumers in the
+    # trading containers can reach /v1/ at the same address. A 127.0.0.1 publish is
+    # loopback-only and no container can reach it, so the port above stays for host
+    # debugging and is not the path any consumer uses.
+    networks:
+      - monitoring_net
+
+networks:
+  monitoring_net:
+    external: true
