@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import os
+import signal
 from unittest.mock import AsyncMock, Mock, call
 
 import pytest
@@ -28,6 +30,7 @@ from butterfly_guy.scripts.run_live import (
     _reconcile_broker_state,
     broker_reconciler_loop,
     entry_loop,
+    install_shutdown_handler,
 )
 from butterfly_guy.services.position_service import SettlementEvidenceError
 
@@ -576,3 +579,55 @@ def test_live_config_allows_spx_live_when_explicitly_confirmed(monkeypatch):
     )
 
     _assert_live_config_supported(config)
+
+
+@pytest.mark.asyncio
+async def test_sigterm_cancels_supervised_loops_and_task_group_exits_cleanly():
+    """SIGTERM must unwind the TaskGroup without reporting a shutdown as an error.
+
+    The app is PID 1 in its container, so an uncaught SIGTERM is discarded and
+    Docker escalates to SIGKILL (exit 137). Cancelling the children lets the
+    group exit normally, which is what lets main()'s finally block close the pool.
+    """
+    running = asyncio.Event()
+    cleanup_ran = False
+
+    async def forever() -> None:
+        running.set()
+        while True:
+            await asyncio.sleep(3600)
+
+    try:
+        async with asyncio.TaskGroup() as tg:
+            supervised = [
+                tg.create_task(forever(), name="loop-a"),
+                tg.create_task(forever(), name="loop-b"),
+            ]
+            install_shutdown_handler(supervised)
+            await running.wait()
+            os.kill(os.getpid(), signal.SIGTERM)
+    finally:
+        cleanup_ran = True
+        asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
+
+    # Reaching here at all means the group raised no ExceptionGroup.
+    assert cleanup_ran
+    assert all(task.cancelled() for task in supervised)
+
+
+@pytest.mark.asyncio
+async def test_shutdown_handler_tolerates_already_finished_tasks():
+    async def done_immediately() -> None:
+        return None
+
+    task = asyncio.create_task(done_immediately())
+    await task
+
+    try:
+        install_shutdown_handler([task])
+        os.kill(os.getpid(), signal.SIGTERM)
+        await asyncio.sleep(0)
+    finally:
+        asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
+
+    assert not task.cancelled()

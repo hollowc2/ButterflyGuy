@@ -7,6 +7,7 @@ import asyncio
 import datetime as dt
 import json
 import os
+import signal
 from typing import Any
 
 from dotenv import dotenv_values
@@ -706,6 +707,26 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         log.info("daily_risk_reset", date=str(today))
 
 
+def install_shutdown_handler(tasks: list[asyncio.Task[Any]]) -> None:
+    """Cancel the supervised loops on SIGTERM so main()'s cleanup block runs.
+
+    The app runs as PID 1 in its container, and the kernel does not deliver a
+    default-action signal to PID 1. Without this handler SIGTERM is discarded
+    outright and Docker escalates to SIGKILL, which is the exit 137 on shutdown.
+
+    Cancelling the children rather than the parent keeps the shutdown clean:
+    asyncio.TaskGroup ignores a child that was cancelled from outside, so the
+    group exits normally and the caller's finally block closes the pool.
+    """
+
+    def _on_sigterm() -> None:
+        log.info("shutdown_signal_received", signal="SIGTERM", tasks=len(tasks))
+        for task in tasks:
+            task.cancel()
+
+    asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, _on_sigterm)
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/config.yaml", help="Path to config YAML file")
@@ -971,36 +992,48 @@ async def main() -> None:
         butterfly_candidates_found.labels(underlying=underlying).set(last_scan_count)
 
     set_readiness(None)
+    supervised: list[asyncio.Task[Any]] = []
     try:
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(collector.run_loop(), name="collector")
-            tg.create_task(
-                entry_loop(
-                    trade_service,
-                    position_service,
-                    recovered_trade,
-                    recovered_candidate,
-                    recovered_peak,
-                    broker_gate,
-                    critical_notifier,
-                ),
-                name="entry_loop",
+            supervised.append(tg.create_task(collector.run_loop(), name="collector"))
+            supervised.append(
+                tg.create_task(
+                    entry_loop(
+                        trade_service,
+                        position_service,
+                        recovered_trade,
+                        recovered_candidate,
+                        recovered_peak,
+                        broker_gate,
+                        critical_notifier,
+                    ),
+                    name="entry_loop",
+                )
             )
             if not config.execution.paper_trading:
-                tg.create_task(
-                    broker_reconciler_loop(
-                        schwab,
-                        underlying,
-                        trade_q,
-                        intent_q,
-                        broker_gate,
-                        critical_notifier=critical_notifier,
-                    ),
-                    name="broker_reconciler",
+                supervised.append(
+                    tg.create_task(
+                        broker_reconciler_loop(
+                            schwab,
+                            underlying,
+                            trade_q,
+                            intent_q,
+                            broker_gate,
+                            critical_notifier=critical_notifier,
+                        ),
+                        name="broker_reconciler",
+                    )
                 )
-            tg.create_task(daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset")
+            supervised.append(
+                tg.create_task(
+                    daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset"
+                )
+            )
             if notifier:
-                tg.create_task(eod_chart_loop(position_service), name="eod_charts")
+                supervised.append(
+                    tg.create_task(eod_chart_loop(position_service), name="eod_charts")
+                )
+            install_shutdown_handler(supervised)
     except* Exception as eg:
         for exc in eg.exceptions:
             log.error("task_group_error", error=str(exc))
