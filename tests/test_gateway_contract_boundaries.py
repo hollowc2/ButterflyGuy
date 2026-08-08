@@ -251,6 +251,12 @@ def test_no_service_or_entry_point_imports_the_shadow_harness_or_gateway_client(
     """The Phase 3 surfaces stay unwired: nothing outside the gateway packages imports them."""
     gateway_packages = ("butterfly_guy/gateway_client/", "butterfly_guy/schwab_gateway/")
     gateway_modules = ("butterfly_guy.gateway_client", "butterfly_guy.schwab_gateway")
+    # token_manager is not a Phase 3 surface. It is the shared token-persistence primitive
+    # behind the C1 lock, already used by the gateway and the hourly keepalive, and any
+    # process that writes the token document has to go through it or risk a torn write. It
+    # reads and writes one JSON file and reaches no market-data path, so importing it wires
+    # nothing to the gateway. Everything else in these packages stays restricted.
+    shared_token_store = "butterfly_guy.schwab_gateway.token_manager"
     # The only permitted importers are the standalone gateway entry points, none of which is
     # reachable from run_live.py, run_collector.py, or any Compose default profile.
     # issue_gateway_keys.py is an operator CLI that reads the auth module's fixed identity
@@ -275,7 +281,10 @@ def test_no_service_or_entry_point_imports_the_shadow_harness_or_gateway_client(
                 names = [alias.name for alias in node.names]
             else:
                 continue
-            if any(name.startswith(gateway_modules) for name in names):
+            if any(
+                name.startswith(gateway_modules) and not name.startswith(shared_token_store)
+                for name in names
+            ):
                 importers.add(relative)
             if any(name.startswith("butterfly_guy.gateway_client.shadow") for name in names):
                 shadow_importers.add(relative)

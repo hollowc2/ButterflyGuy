@@ -18,6 +18,12 @@ log = get_logger(__name__)
 MAX_RETRIES = 3
 RETRY_BACKOFF = [1, 2, 4]
 
+# The gateway and the keepalive both write this same document under a shared lock.
+# schwab-py's default file writer truncates in place and takes no lock, so a concurrent
+# gateway os.replace could leave a torn document on disk. Persist through the same
+# AtomicFileTokenStore instead. Kept short: this blocks the event loop while held.
+TOKEN_LOCK_TIMEOUT = 10.0
+
 # Maps strategy underlying → Schwab API symbol for spot price quotes
 SCHWAB_SPOT_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX", "XSP": "$XSP"}
 # Maps strategy underlying → Schwab API symbol for options chain requests
@@ -31,15 +37,36 @@ class SchwabClientWrapper:
         self.settings = settings
         self._client: Any = None
         self._account_hash: str | None = None
+        self._token_store: Any = None
+
+    def _read_token(self) -> object:
+        with self._token_store.locked(TOKEN_LOCK_TIMEOUT) as transaction:
+            return transaction.read()
+
+    def _write_token(self, token: Any, *_args: Any, **_kwargs: Any) -> None:
+        from butterfly_guy.schwab_gateway.token_manager import TokenManagerError
+
+        try:
+            with self._token_store.locked(TOKEN_LOCK_TIMEOUT) as transaction:
+                transaction.write(token)
+        except TokenManagerError:
+            # The refreshed access token is already live in memory and the keepalive
+            # rewrites this document hourly, so a failed persist is recoverable. Losing
+            # the trading loop to a transient lock conflict would not be.
+            log.error("schwab_token_persist_failed")
 
     async def initialize(self) -> None:
         """Authenticate and resolve account hash."""
-        from schwab.auth import client_from_token_file
+        from schwab.auth import client_from_access_functions
 
-        self._client = client_from_token_file(
-            token_path=self.settings.token_path,
+        from butterfly_guy.schwab_gateway.token_manager import AtomicFileTokenStore
+
+        self._token_store = AtomicFileTokenStore(self.settings.token_path)
+        self._client = client_from_access_functions(
             api_key=self.settings.api_key,
             app_secret=self.settings.secret_key,
+            token_read_func=self._read_token,
+            token_write_func=self._write_token,
             asyncio=True,
             enforce_enums=False,
         )

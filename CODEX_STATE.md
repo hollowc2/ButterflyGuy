@@ -1725,3 +1725,52 @@ as disclosed. The secret key was not printed.
 The restarts took the full 30s SIGTERM timeout each before SIGKILL, confirming the open exit-137
 finding: the trading services still have no prompt SIGTERM handler. Harmless with the market closed
 and no position open; it is the reason a weekday-evening re-auth would have been worse.
+
+### Window F addendum — the trading apps now take the C1 lock (2026-08-08)
+
+The gap recorded in the Window F brief as "a real gap and a reasonable next piece of work" was
+closed on operator instruction, after the re-authorization.
+
+The gap was worse than "unlocked". schwab-py's default persister, `__make_update_token_func`
+(`schwab/auth.py:30-36`), is `open(token_path, 'w')` followed by `json.dump` — a **truncating
+in-place write**, with no lock, no atomicity, no fsync, and no mode enforcement. All three trading
+apps used it, via `client_from_token_file`. The benign failure is two writers clobbering each
+other's access token. The malign one is a reader — the gateway, the keepalive, or a restarting
+container — seeing a **truncated document**, because the file spends a real interval empty.
+
+`schwab_client.py` now builds its client with `client_from_access_functions` and persists through
+`AtomicFileTokenStore`, the same primitive and the same `.tokens.json.lock` the gateway
+(`token_manager.py:295`) and the keepalive already use. Reads take the lock too. The pattern
+matches the candidate feed's, which already used the accessor API for its own reasons.
+
+A failed persist is logged as `schwab_token_persist_failed` and swallowed rather than raised: the
+refreshed access token is already live in memory and the keepalive rewrites the document hourly, so
+a lost write is recoverable, while killing the live trading loop over a transient lock conflict is
+not. The lock timeout is 10s, deliberately short — it is held on the event loop.
+
+**What this does not fix.** The app's read-refresh-write is still not one critical section, the way
+the keepalive's is (`schwab_token_keepalive.py:116`). authlib performs the refresh internally and
+only hands back the result, so only the write is guarded. Two writers can therefore still overwrite
+each other's *access* token. That is benign — both are valid until their own expiry, each holder
+keeps its own copy in memory, and Schwab does not rotate the refresh token on an ordinary refresh.
+Torn writes were the real defect and they are gone.
+
+Three tests added, against a real token file and a real `flock` rather than mocks: the read goes
+through the store; the write lands on a **new inode** at mode 600, which is the direct proof it is
+`os.replace` and not truncation; and a write blocked by a competing lock holder logs and returns
+instead of raising.
+
+**One boundary was deliberately narrowed.** `test_no_service_or_entry_point_imports_the_shadow_
+harness_or_gateway_client` forbade any import from `butterfly_guy.schwab_gateway` outside three
+standalone entry points. `token_manager` is not a Phase 3 surface — it is the shared persistence
+primitive, it reaches no market-data path, and the keepalive already depends on it — so it is now
+excluded from that rule by name, with the reasoning in the test. The alternative was moving the
+module to a neutral package, which is 20 references across 17 files and is not a surgical change.
+Everything else in both gateway packages stays restricted, and the shadow-harness assertion is
+untouched.
+
+Suite after: **973 passed, 1 skipped** (was 970), `ruff` clean.
+
+**Not deployed.** This is a code change, so it needs an image rebuild and container recreation, not
+a restart — that is outside the standing authorization and was not done. The three trading apps on
+Helios are still running the pre-change images listed above.
