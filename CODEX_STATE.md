@@ -2100,3 +2100,30 @@ The Monday snapshot check (2026-08-10 open), now owed a fourth time. The 2026-08
 held by the operator. The mistimed `--sunday-reminder` cron. C3 wiring and the gateway key re-issue.
 `issue_gateway_keys.py` append mode. Gateway reboot survival, still proven by policy not by test.
 The credential exposure from Windows E and F, still left to the operator.
+
+### Window H addendum — a keepalive write observed live (2026-08-09 01:00 UTC)
+
+The hourly keepalive fired during the session and was caught in the act, which converts two
+previously *asserted* facts into *observed* ones.
+
+Before (00:12 UTC): inode `12602`, digest `98a5d4608f22`.
+After (01:05 UTC): inode **`12602` unchanged**, digest **`e66fb6642ef4`**, still 787 bytes.
+
+- **The keepalive truncates in place.** The digest moved while the inode did not. This is the first
+  direct observation of the Window G correction, which until now rested on reading
+  `client_from_token_file` rather than on watching it. **A stable inode is not evidence of a stalled
+  keepalive; a stable digest would be.** Window G could not show this because no refresh occurred
+  during it.
+- **`creation_timestamp` survives a keepalive refresh.** Still `2026-08-08T22:05:28Z`, expiry still
+  `2026-08-15T22:05:28Z`, after a write that demonstrably changed the document. The deadline
+  derivation `creation_timestamp + 7d` is therefore load-bearing-safe: an ordinary refresh does not
+  push the deadline out. Previously this was inferred only from the keepalive log's remaining-hours
+  decreasing 167.1 → 166.1 → 165.1 h.
+
+Host and all five consumers re-verified in agreement on the new digest, host-against-container. All
+five `running`, `RestartCount=0`. The directory bind propagates an in-place rewrite to every
+consumer's view immediately — as it must, since it is the same inode.
+
+Note the asymmetry this exposes: consumers see the new *bytes* instantly but continue to use the
+token they parsed at startup, because schwab-py holds it in memory. Visibility was never the problem;
+re-reading is. See `docs/architecture/reducing-the-weekly-reauth-cost.md`.
