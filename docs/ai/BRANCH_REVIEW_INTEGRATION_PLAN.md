@@ -53,17 +53,21 @@ origin/main  6179f2e
 These SHAs define the initial review boundaries even if development continues.
 New commits will be reviewed as a separate delta from the last accepted SHA.
 
-Handoff update: while the frozen review was running, the active branch advanced
-from `7110158` to `0ad454b` with three commits:
+Handoff update: the active branch later advanced through `c05a6d1` with the
+following post-freeze token/reload/shutdown delta:
 
 ```text
 e05f837  Persist the Schwab token through the shared C1 lock
-3da0cc1  Record the C1 deployment and correct the exit-137 diagnosis
-0ad454b  Correct the Window F framing: the deadline recurs weekly
+e5860fd  Catch SIGTERM so the trading apps shut down instead of being killed
+34aca5f  Make the token-expiry warnings fire before the deadline, not after it
+b03d08b  Answer the reload question: swapping the Schwab client mid-session is safe
+9fbd9f6  Pick up a re-authorized Schwab token without restarting the container
+15418e0  Record the token reload as built and not deployed
+c05a6d1  docs: add branch review integration plan
 ```
 
-Those commits were not inspected by the frozen review. The next review boundary is
-`7110158..0ad454b`. A commit title alone does not close B-H3 or any other finding.
+This delta was reviewed read-only as `7110158..c05a6d1`. It improves B-H3 but does
+not close it; the finding dispositions and follow-up work are recorded below.
 
 ## Initial Verification Baseline
 
@@ -186,7 +190,7 @@ Preferred stacked review:
 - [x] Complete delegated Unit B runtime review.
 - [x] Complete delegated integration/operations review.
 - [x] Validate and consolidate all subagent findings.
-- [ ] Review the post-freeze delta `7110158..0ad454b` and update affected findings.
+- [x] Review the post-freeze delta `7110158..c05a6d1` and update affected findings.
 - [ ] Resolve or disposition accepted findings.
 - [ ] Refresh Graphify and complete final local verification.
 - [ ] Obtain approval and create the stacked draft PRs.
@@ -209,7 +213,7 @@ Use this table for concise state; detailed evidence may be added below it.
 | 2026-08-08 | Review | Primary validation | Complete | No critical finding; consolidated high/medium/low findings below were checked against committed code and reproductions. |
 | 2026-08-08 | Review | Unit A gate | Blocked | Four validated high findings remain open; Unit A must not merge yet. |
 | 2026-08-08 | Review | Unit B gate | Blocked | Runtime, token-writer, reauthorization, CI, and operational high findings remain open; Unit B must not merge or be activated yet. |
-| 2026-08-08 | Handoff | Active branch advanced | Open | Current tip is `0ad454b`; review through `7110158` remains frozen and the three-commit delta is pending. |
+| 2026-08-08 | Delta | `7110158..c05a6d1` review | Complete | Ruff passed; 983 tests passed; DB smoke skipped without `CI_DATABASE_URL`. B-H3 is partially mitigated, not closed. |
 
 ## Consolidated Validated Findings
 
@@ -226,8 +230,10 @@ blockers. Similar findings from multiple workstreams were deduplicated.
 | A-H4 | A | `credential_proof_fingerprint.py:4228-4250,4330-4369` | Public restore accepts pre-mutation failed states and can pause otherwise healthy services when no baseline exists. | Persist an explicit mutation/quiescence flag and make pre-mutation restore a verified no-op. |
 | B-H1 | B | `token_manager.py:433-456`; `token_adapter.py:74-105`; `api.py:242-253` | OAuth/client authentication failures are collapsed without moving token health out of `READY`, leaving `/ready` falsely green and preventing recovery. | Classify bounded authentication failures and transition token health while preserving `READY` for ordinary transport/5xx failures. |
 | B-H2 | B | `live_provider.py:128-130`; `api.py:321-338`; `admission.py:45-57` | Timing out `asyncio.to_thread()` releases admission while the real synchronous Schwab work continues, allowing unbounded residual work and priority inversion. | Use a bounded priority-aware worker queue and hold capacity until the underlying operation ends. |
-| B-H3 | B/C | `data/schwab_client.py:35-45`; `gateway_client/shadow.py:202-254` | Direct SDK clients do not share the gateway/keepalive token lock; concurrent shadow/direct refresh can corrupt or overwrite shared token state. | Do not activate shadow mode until every persistent writer shares one lock/atomic path or the gateway is the sole writer. |
+| B-H3 | B/C | `data/schwab_client.py`; `gateway_client/shadow.py:202-254`; candidate token client | **Partially mitigated:** the primary `SchwabClientWrapper` now uses `AtomicFileTokenStore`, but `auth_init.py` remains an unlocked production writer and the candidate feed has no coordinated reload lifecycle. | Do not activate shadow mode until every persistent writer shares one lock/atomic path or the gateway is the sole writer. |
 | B-H4 | B/C | `tools/auth_init.py:7-16`; token reauthorization runbook | Reauthorization targets the shared production document without the shared lock, can race live consumers, and can report an existing-token no-op as success. | Mint to staging, validate, then atomically install under the shared lock; point reminders only to the safe runbook. |
+| D-H1 | Delta | `data/schwab_client.py:46-60`; `token_manager.py:269-305` | The direct async client invokes a synchronous polling file lock that can block the event loop for up to 10 seconds under gateway/keepalive contention, delaying collector, position, and exit work. | Move compatible token/client work off the event loop or use a short bounded fail-closed policy; prove loop responsiveness under lock contention. |
+| D-H2 | Delta | `scripts/run_live.py:713-731`; `data/schwab_client.py:140-158` | A newly detected reauthorization whose replacement client fails validation is merely logged; the entry loop remains eligible for new trades. | Gate new entries/non-ready state after failed detected-token reload while preserving exits/reconciliation until recovery succeeds. |
 | C-H1 | B/C | `config_spx_candidate.yaml:1-3`; `core/config.py:230-237`; default Compose candidate service | The documented legacy rollback service pins relative `tokens.json`, overriding its absolute mounted token path and making rollback authentication fail. | Remove the YAML pin, cover every Compose `run_live` config, and decide/test read-only token persistence semantics. |
 | C-H2 | B/C | `.github/workflows/deploy.yml:17-23`; required variables in `infra/docker-compose.yml` | Clean-runner validation now fails because Compose requires `SCHWAB_GATEWAY_TOKEN_DIR`, but CI creates an empty environment and supplies none. | Supply a safe dummy absolute validation path and render both affected Compose projects/profiles. |
 | C-H3 | All | `.github/workflows/database-smoke.yml`; `.github/workflows/deploy.yml`; GitHub settings | PRs run only one DB smoke test; full tests/Ruff/Compose run only after a main push, and `main` is unprotected. | Add a PR quality workflow, then require it and DB smoke with branch protection before integration. |
@@ -247,6 +253,8 @@ blockers. Similar findings from multiple workstreams were deduplicated.
 | C-M1 | B/C | `schwab-gateway-alerts.yml`; gateway `/metrics` and `/ready` | Monitoring alerts on process loss but not sustained non-ready/token degradation. |
 | C-M2 | B/C | `infra/prometheus.yml`; gateway alert/runbook assets | Gateway monitoring deployment depends on untracked/manual live edits and is not reproducible from the repository. |
 | C-M3 | B/C | `.env.example`, `README.md`, `docs/live-runbook.md` | Required `SCHWAB_GATEWAY_TOKEN_DIR` setup is missing from normal developer/operator instructions. |
+| D-M1 | Delta | `data/schwab_client.py:149-150` | A failed candidate-client validation leaves the newly created async session open; repeated reload failures can accumulate sessions. |
+| D-M2 | Delta | `candidate_fleet/schwab_market_data.py:28-48` | Candidate feed caches the token and has no reauthorization reload. Its raw file read can race the keepalive's in-place writer, and it can retain obsolete credentials until restart. |
 
 ### Low — cleanup
 
@@ -263,8 +271,8 @@ blockers. Similar findings from multiple workstreams were deduplicated.
    address A-M1 through A-M3 and verify Unit A independently at its own head.
 3. **Rebase the review boundary by ancestry, not history rewriting:** make Unit B
    contain the accepted Unit A remediation tip by merging Unit A into Unit B.
-4. **Unit B token/runtime:** fix B-H1, B-H2, B-H3, and B-H4 before any shadow or
-   gateway-consumer activation.
+4. **Unit B token/runtime:** fix B-H1, B-H2, B-H3, B-H4, D-H1, and D-H2 before
+   any shadow or gateway-consumer activation.
 5. **Unit B integration/operations:** fix C-H1 through C-H5, then resolve or
    explicitly defer the medium findings.
 6. **Final evidence:** run focused tests, full tests, Ruff, safe Compose renders,
