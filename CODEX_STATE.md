@@ -2236,3 +2236,42 @@ produced the claim filtered on the reminder flag and `WARN_BEFORE` and so missed
 the case now uses 25h, and 20h/24h cases were added to pin the new inclusive boundary. Caught by the
 full suite, not by the targeted run — the reason the standing constraint says to re-derive the whole
 baseline.
+
+### Window H correction — the restart arithmetic was wrong, and the gateway never needed restarting
+
+Found 2026-08-09 while checking when the reload could first be exercised. Two errors, both in claims
+this window itself made, and one of them inherited from Window F.
+
+**1. The gateway holds no token between requests, so it does not need a restart at all.**
+`LockedSchwabClientAdapter.execute` (`token_adapter.py:64`) constructs a client, runs **one**
+operation, and discards it, entirely inside a single locked token transaction. `live_provider.py`
+documents this as deliberate and load-bearing — "one transaction per call". Every gateway read
+therefore re-reads the document under the C1 lock.
+
+The Window F instruction to restart the gateway **first**, because "it holds the old refresh token in
+memory and would have written it back over the new document", is **false**. It has been repeated in
+every brief since and is baked into the 2026-08-15 checklist, now corrected. Restarting the gateway
+is harmless and mildly reassuring, but it is not required and nothing needs sequencing around it.
+
+**2. The reload covers three of five consumers, not five.** There are three separate token paths:
+
+| Consumer | Token lifetime | Restart on re-auth |
+|---|---|---|
+| gateway | fresh client per request, under the lock | **never needed** |
+| spx / ndx / xsp apps | `client_from_access_functions` once at startup | yes → **no**, once the reload deploys |
+| candidate feed | read once at first use, cached in memory, never written back (`candidate_fleet/schwab_market_data.py:29`) | **yes**, not covered |
+
+So the baseline was **4**, not 5, and the reload takes it to **1**, not 0. "5 → 0" as recorded in the
+Window H part 2 section above is wrong. The feed is now the only consumer forcing a weekly restart,
+which makes extending the reload to it — or cutting it over to the gateway — the deciding step for
+reaching zero. The feed version is the cheaper of the two: it resolves no account hash, so there is
+nothing to verify before swapping.
+
+Neither error was caught by tests, because both are facts about *other* services' construction
+patterns that no test in this repo asserts.
+
+**3. Deploy the reload before the re-authorization, not after.** Window H's own guidance — "re-auth
+first and verify fully, then rebuild" — delays the reload's first real exercise by a week for no
+gain. Deploying first makes the 2026-08-15 re-auth itself the test: the rebuild restarts the apps
+anyway, and if the reload does not fire the fallback is to restart them by hand, which is exactly the
+existing procedure. Low risk, high information. The checklist now carries this as step 0.

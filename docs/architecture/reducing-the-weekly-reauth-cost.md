@@ -11,17 +11,33 @@ an ordinary refresh does not reset it, so re-authorizing early buys only the dif
 old expiry and seven days from the new one — hours, not weeks. **The deadline recurs weekly and
 always will.**
 
-The cost per occurrence is: a human at a browser on zeus, an `scp`, a locked move, and **five
-container restarts** — gateway, three trading apps, candidate feed — which must happen on a
-non-trading day, which is why the Saturday cadence exists and why losing it matters.
+The cost per occurrence is: a human at a browser on zeus, an `scp`, a locked move, and **four
+container restarts** — three trading apps and the candidate feed — which must happen on a
+non-trading day, which is why the Saturday cadence exists and why losing it matters. (Earlier drafts
+said five, counting the gateway; see the correction below.)
 
-The human-at-a-browser part is imposed by Schwab and is not attackable here. **The five restarts
+The human-at-a-browser part is imposed by Schwab and is not attackable here. **The four restarts
 are.** That is the whole of what follows.
 
 ## Why the restarts happen — the actual mechanism
 
 Not because containers cannot *see* the new document. All five bind the token *directory*, so a new
-inode is visible immediately. They restart because none of them ever **re-reads** it.
+inode is visible immediately. They restart because they never **re-read** it — and not all of them
+have that problem.
+
+**Correction (2026-08-09): the baseline is four restarts, not five.** There are three distinct token
+paths, and only two of them cache:
+
+| Consumer | How it holds the token | Restart on re-auth? |
+|---|---|---|
+| gateway | **fresh client per request**, built inside the token lock and discarded (`LockedSchwabClientAdapter.execute`) | **No** |
+| three trading apps | `client_from_access_functions` once at startup, cached for the process lifetime | Yes |
+| candidate feed | read once at first use, cached in memory, never written back (`candidate_fleet/schwab_market_data.py:29`) | Yes |
+
+The gateway was never part of this problem. The claim that it "holds the old refresh token in memory
+and would write it back over the new document" — the stated reason for restarting it first — is
+false, and the per-request construction that makes it false is documented in `live_provider.py` as
+deliberate and load-bearing.
 
 `SchwabClientWrapper.initialize()` (`schwab_client.py:58`) calls schwab-py's
 `client_from_access_functions`, passing `self._read_token` as `token_read_func`. In schwab-py's
@@ -64,12 +80,17 @@ load-bearing — it is what keeps a network-exposed service incapable of moving 
 
 Consequence: **a full market-data cutover does not remove any trading app's need for its own Schwab
 credential.** Every app still calls `get_account_numbers()` at startup and `place_order()` during the
-session. The restart count goes from **5 to 4**, not from 5 to 1 — only the candidate feed, which is
-market-data-only, could genuinely drop its credential.
+session. Against the corrected baseline of four, the restart count goes from **4 to 3** — only the
+candidate feed, which is market-data-only, could genuinely drop its credential.
 
-Four restarts instead of five, in exchange for a cutover of the entire live market-data path, is a
-poor trade. **The gateway cutover should be justified on its own merits — blast-radius reduction,
-one place to rate-limit, one place to audit — and not sold as the fix for the weekly re-auth cost.**
+Three restarts instead of four, in exchange for a cutover of the entire live market-data path, is a
+poor trade *on this axis*. **The gateway cutover should be justified on its own merits — blast-radius
+reduction, one place to rate-limit, one place to audit — and not sold as the fix for the weekly
+re-auth cost.**
+
+But note where the two approaches meet: the feed is the one consumer the reload does **not** cover
+and the one the gateway *would* free. They are complementary, not competing — see the arithmetic
+below.
 
 ## The alternative worth costing first
 
@@ -89,9 +110,26 @@ Shape of the change, as a question to cost — not a design:
 - Old and new clients must not be in flight simultaneously; the swap needs to be safe against a
   request mid-cycle.
 
-If it works, the weekly cost drops to **zero restarts** and the Saturday constraint weakens
-considerably — the re-auth stops requiring a closed market, because nothing is being torn down.
-That, not the gateway cutover, is what actually attacks this deadline.
+**Built 2026-08-09 as `reload_if_reauthorized` (`schwab_client.py:123`), covering the three trading
+apps only.** It does not cover the candidate feed, which builds its own client in
+`candidate_fleet/schwab_market_data.py` and would need the same treatment — or the gateway cutover —
+to stop needing a weekly restart.
+
+The corrected arithmetic, end to end:
+
+| State | Restarts per re-auth |
+|---|---|
+| Baseline (gateway never needed one) | **4** — three apps + feed |
+| Reload deployed to the trading apps | **1** — feed only |
+| …plus the feed reading through the gateway, or given the same reload | **0** |
+
+At zero the Saturday constraint weakens considerably: the re-auth stops requiring a closed market,
+because nothing is being torn down. Note that even then a human still runs the browser OAuth flow
+every seven days — Schwab's refresh-token life is not negotiable, and **no amount of this work makes
+the re-authorization itself go away.** What it removes is the restart choreography around it.
+
+Extending the reload to the feed is the obvious next increment and is smaller than it was for the
+apps: the feed resolves no account hash, so there is nothing to verify before swapping.
 
 Scope is roughly one method plus one supervised task in one file, against a cutover touching the
 whole live data path.
@@ -124,9 +162,12 @@ whole live data path.
 2. **Would the operator accept a re-auth with the market open?** If yes, zero-restart reload is worth
    real money — it removes the Saturday constraint entirely. If no, it only removes the restarts and
    the weekday constraint stays.
-3. **Does the candidate feed matter enough to cut over separately?** It is the one consumer that
-   could genuinely become credential-free under the gateway, and it is also the one whose auth has
-   never been observed on a real call. Cutting it over would answer both at once.
+3. **Does the candidate feed matter enough to cut over separately?** **Now the deciding question for
+   getting to zero**, since the reload covers the apps and the feed is the only consumer left needing
+   a weekly restart. It is also the one consumer that could genuinely become credential-free under
+   the gateway, and the one whose auth has never been observed on a real call. Either give it the
+   same reload — cheaper, since it resolves no account hash — or cut it over to the gateway, which
+   answers both questions at once.
 4. **What is the failure mode of a bad reload?** A restart that fails to authenticate is loud and
    crashes the app. A reload that fails silently could leave an app running on a dead credential
    until its next refresh. Needs an explicit failure path — probably "log, alert, keep the old
@@ -140,7 +181,7 @@ whole live data path.
 **Build the reload.** Question 1 — the one that decided it — is answered: the swap is safe and needs
 no reference-counting, and the only hazard is closing the old session too eagerly, which is
 avoidable. The reload path dominates the gateway cutover on this axis by a wide margin: less code,
-less risk, no policy change, and it takes the restart count to zero rather than to four.
+less risk, no policy change, and it takes the restart count to one rather than to three.
 
 Remaining questions 2–5 shape the design but none of them can invalidate it. Question 4 (silent
 reload failure) is the one that must be got right, and the answer is already clear in outline: log,

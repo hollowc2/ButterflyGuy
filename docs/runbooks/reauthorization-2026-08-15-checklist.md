@@ -32,6 +32,38 @@ restarts five containers on a trading day.
 - [ ] Baseline green: `uv run python -m pytest` → 975 passed, 1 skipped; `uv run ruff check .` clean.
       Use `python -m pytest`; `uv run pytest` cannot spawn on this machine.
 
+## Step 0 (optional) — deploy the token reload *before* re-authorizing
+
+Only if the operator has decided to ship it. Skipping this changes nothing else in the checklist.
+
+`token_reload_loop` makes the three trading apps pick up a re-authorized token on their own, within
+`TOKEN_RELOAD_INTERVAL` (300 s), with no restart. Deploying it **before** the re-auth rather than
+after means this Saturday's re-auth is its first real test, instead of waiting a week for
+2026-08-22 — and the rebuild restarts the apps anyway, so the restart is not an extra cost.
+
+The fallback if it does not work is to restart the three apps by hand, which is exactly step 4 —
+the current, known-good procedure. That makes deploying first low-risk and high-information.
+
+```bash
+ssh helios 'cd /opt/butterflyguy && git pull --ff-only'
+ssh helios 'cd /opt/butterflyguy/infra && docker compose --profile ndx --profile xsp \
+  build app_spx app_ndx app_xsp'
+ssh helios 'cd /opt/butterflyguy/infra && docker compose --profile ndx --profile xsp \
+  up -d --no-deps app_spx app_ndx app_xsp'
+```
+
+- [ ] No position open and market closed (already checked above).
+- [ ] Three apps rebuilt and recreated **by explicit service name**.
+- [ ] All three back to `running`, `RestartCount=0`, and logging `schwab_client_initialized`.
+- [ ] Note the new image IDs — the Window G images were `5912986ea455` / `a71eacd32eb2` /
+      `a092423a6257`.
+
+Then continue to step 1. After step 3, **watch for `schwab_token_reloaded` in the app logs within
+5 minutes instead of restarting them** — that is the whole point. If it does not appear, fall back to
+step 4 and record that the reload did not fire.
+
+**The candidate feed is not covered by the reload** and still needs its step-4 restart either way.
+
 ## Step 1 — mint the token on zeus, in a real terminal
 
 Helios is headless; the browser flow runs on zeus. zeus and Helios carry identical app credentials
@@ -96,27 +128,32 @@ ssh helios 'cd /opt/butterflyguy-tokens && flock -w 30 .tokens.json.lock \
 - [ ] Moved. Note the **new inode** and confirm the digest still matches step 1.
 - [ ] Mode `600`, uid/gid `1001`, ~787 bytes.
 
-## Step 4 — restart all five consumers, **gateway first**
+## Step 4 — restart the consumers that actually cache the token
 
-A directory bind lets a container *see* a new inode; it does not make it *re-read* one.
-`SchwabClientWrapper.initialize()` calls `client_from_token_file` exactly once at startup, and
-schwab-py then holds the token in memory and only ever writes back. **All five consumers need
-restarting, not just the feed.**
+A directory bind lets a container *see* a new inode; it does not make it *re-read* one. But the three
+token paths differ, and earlier versions of this runbook got the list wrong:
 
-**The gateway must go first.** It holds the old refresh token in memory and will write it back over
-your new document on its next refresh if it is still running.
+| Consumer | How it holds the token | Restart? |
+|---|---|---|
+| `butterfly_schwab_gateway_live` | **fresh client per request**, constructed inside the token lock and discarded | **No** |
+| `butterfly_spx_app` / `_ndx_` / `_xsp_` | `client_from_access_functions` once at startup, cached in memory | **Yes** |
+| `butterfly_spx_candidate_feed` | read once at first use, cached in memory, never written back | **Yes** |
+
+**The gateway does not need restarting, and the old "gateway must go first" rule rested on a false
+premise.** `LockedSchwabClientAdapter.execute` constructs a client, runs one operation, and discards
+it, all inside a single locked token transaction — its own module docstring calls this "deliberate
+and load-bearing". The gateway therefore holds no token between requests and cannot write a stale
+one back over your new document. Restarting it anyway is harmless, but it is belt-and-braces, not a
+requirement, and nothing needs to be sequenced around it.
 
 ```bash
-ssh helios 'docker restart butterfly_schwab_gateway_live'
-# wait for healthy before continuing
-ssh helios 'docker inspect -f "{{.State.Health.Status}}" butterfly_schwab_gateway_live'
 ssh helios 'docker restart butterfly_spx_app butterfly_ndx_app butterfly_xsp_app'
 ssh helios 'docker restart butterfly_spx_candidate_feed'
 ```
 
-- [ ] Gateway restarted first and reached `healthy`.
 - [ ] Three trading apps restarted.
 - [ ] Candidate feed restarted.
+- [ ] Gateway left alone (or restarted for reassurance — either is fine).
 
 Thanks to the Window G SIGTERM fix these are now clean sub-2-second exit-0 shutdowns rather than
 10-second SIGKILLs. **That is a convenience, not a licence to skip the verification below.**
