@@ -1876,3 +1876,120 @@ new credential, on the production path.
 
 This closes the C1 gap end to end: decided in Window C, found unimplemented for the trading apps in
 Window F, fixed, deployed, and now exercised under real contention rather than only in tests.
+
+## Window G — SIGTERM handled, exit 137 eliminated (2026-08-08)
+
+Executed 2026-08-08, one commit `e5860fd`, pushed and pulled to Helios. Window G reviewed the Window
+G brief against the code, implemented and deployed the SIGTERM fix, and proved it in production on
+all three trading apps. The re-authorization was **not** performed — it is not due until
+2026-08-15.
+
+### The fix
+
+`install_shutdown_handler` (`run_live.py:710`) is installed at the end of the TaskGroup body and
+cancels the supervised child tasks on SIGTERM. Child cancellation, not parent cancellation, is the
+load-bearing choice: `asyncio.TaskGroup._on_task_done` returns early for a child cancelled from
+outside, so no error is recorded, the group exits normally, and the existing `finally` runs.
+Cancelling the parent would also work but raises `CancelledError` out of `asyncio.run` and would
+need an `uncancel()` to exit zero.
+
+Chosen over `init: true`, which kills promptly but skips the `finally` entirely — leaving the DB pool
+open and readiness unset — and which would have edited `infra/docker-compose.yml`. **The compose
+SHA-256 pin in `test_gateway_compose.py` is unchanged**, still `5e7804fe…`; this fix needed no
+compose edit at all.
+
+The brief's stated hazard — `except* Exception` reporting a normal shutdown as `task_group_error` —
+does not arise, and not for the reason given. `CancelledError` is a `BaseException` and would not be
+caught by `except* Exception` anyway; more to the point, under child cancellation the group raises
+nothing, so that handler is never reached. Confirmed by zero `task_group_error` across all three apps
+through six shutdowns.
+
+### Proven in production, not only in tests
+
+Preconditions cleared first: ET Saturday 20:00, market closed; `butterfly_trades` held 224 rows, all
+`CLOSED`, zero `OPEN`.
+
+Rebuilt all three images, recreated the three trading services **by explicit name** so Compose would
+not start the legacy `app_spx_candidate` (confirmed still `Exited (137) 11 days ago`, untouched).
+Then each app was stopped and started to measure the real shutdown:
+
+| container | stop duration | exit code |
+|---|---|---|
+| `butterfly_xsp_app` | 0.75 s | **0** |
+| `butterfly_spx_app` | 1.36 s | **0** |
+| `butterfly_ndx_app` | 1.78 s | **0** |
+
+Previously every one of these was 10 s of grace followed by SIGKILL and exit 137. The XSP log shows
+the whole chain: `shutdown_signal_received` → `schwab_client_closed` → `database_pool_closed`. Those
+last two are exactly what `init: true` would have skipped.
+
+All three then logged `schwab_client_initialized`, which only emits after a real authenticated
+`get_account_numbers()` 200. `schwab_token_persist_failed` is **zero** across all three.
+`RestartCount=0` on all five consumers.
+
+### What today did *not* prove
+
+The locked write path was **not** re-exercised. All three apps logged **zero** `oauth/token` POSTs at
+construction — the access token was still valid, so authlib had nothing to refresh and nothing to
+persist. The host document accordingly stayed on inode `12602`, digest `98a5d4608f22`, unchanged
+across the entire deployment. The locked write remains proven by Window F addendum 3 and by the three
+lock tests; it was not re-proven today.
+
+Note this corrects a Window F expectation: the brief predicted the inode would move because "the
+keepalive writes hourly and every atomic replace mints a new inode." The keepalive writes **in
+place** and keeps the inode. Only a trading-app persist mints a new one, and only when a refresh
+actually occurs. A stable inode across hours is normal, not evidence of a stalled keepalive.
+
+### End state — verified host-versus-container, 2026-08-09 00:15 UTC
+
+- All five token consumers **and the host** agree: inode `12602`, digest `98a5d4608f22`, mode `600`,
+  uid `1001`, 787 bytes.
+- Gateway `running` / `healthy` on `monitoring_net`; `up{job="schwab_gateway"} == 1`;
+  `SchwabGatewayDown`, `ButterflyGuySchwabApiErrors`, `CandidateFeedSchwab429` all **inactive**.
+- Cron 31 lines, 2 keepalive entries. Last keepalive 00:00:18Z: "OK: token refreshed, SPX quote
+  fetched (status 200), refresh token expires in 166.1h."
+- Baseline `uv run python -m pytest` is now **975 passed, 1 skipped, 0 failed** (973 before Window G
+  added two shutdown tests). `uv run ruff check .` clean.
+
+### The deadline
+
+Re-derived from `creation_timestamp + 7d`: created 2026-08-08T22:05:28Z Sat, **expires
+2026-08-15T22:05:28Z Sat**, 166.0 h remaining — agreeing with the keepalive's independently reported
+166.1 h.
+
+The Saturday cadence holds, but the safe window is **one day wide**, not a week. 2026-08-15 is the
+only Saturday before expiry, and the re-auth must land before 22:05 UTC that day. A slip puts the
+next expiry on a Sunday and it stays there. Corollary the Window F record does not state: each
+Saturday's re-auth must be no *later* in the day than the current expiry's time of day, so doing it
+early in the day banks permanent slack while doing it late spends it.
+
+### Corrections to the Window G brief
+
+- **`client_from_token_file` is not called at `run_live.py:742`.** It is not in `run_live.py` at all;
+  Window F's own change removed it. `run_live.py:741` builds `SchwabClientWrapper`, and
+  `schwab_client.py:65` uses `client_from_access_functions`. The *mechanism* claim survives — the
+  token is still read once at startup and held in memory, so a directory bind still does not force a
+  re-read — but the citation is dead. `client_from_token_file` does survive in
+  `tools/schwab_token_keepalive.py:117` and `backtest/schwab_loader.py:50`.
+- **"C3 — the code still does not exist" is wrong.** `gateway_client/shadow.py` is 318 lines with
+  `ShadowComparingMarketDataProvider` and `ShadowDiscrepancyRecorder`, fully covered by
+  `tests/test_gateway_shadow_reads.py`, and `GatewayClientSettings` (`gateway_client/config.py:11`)
+  already carries the `gateway_url` / `gateway_api_key` surface. What does not exist is the **wiring**
+  — nothing outside tests imports it and `run_live.py:743` still builds a bare
+  `DirectSchwabMarketDataProvider`. C3 is a wiring-and-key task, not an implementation task. The plan
+  doc is precise about this; the brief compressed it wrongly.
+- `issue_gateway_keys.py` refuses to overwrite at **`:94`**, not `:93`, and lives at
+  `src/butterfly_guy/scripts/`, not `tools/`. The `:50` citation is exact.
+- **There are two keepalive logs and one is a decoy.** `/opt/butterflyguy/data/keepalive.log` is
+  abandoned, mtime **2026-04-20**. The live log is `/opt/butterflyguy/keepalive.log`. Reading the
+  stale one would suggest the keepalive died in April.
+- The repo has a second untracked file the brief does not mention,
+  `docs/ai/BRANCH_REVIEW_INTEGRATION_PLAN.md`, alongside `Fable_refactor/fly_Spec.html`. Both left
+  alone.
+
+### Still open after Window G
+
+The Monday snapshot check is **deferred a third time** — it is gated on the 2026-08-10 open and
+Window G ran on a Saturday. Nothing about the feed's Schwab authentication was learned today; it has
+still never been observed on a real call. C3 wiring, the weekly re-auth cost, and the
+`issue_gateway_keys.py` append mode are untouched.
