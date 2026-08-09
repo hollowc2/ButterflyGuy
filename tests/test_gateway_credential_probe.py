@@ -133,6 +133,32 @@ def test_probe_normalizes_malformed_response_without_exposing_data(tmp_path: Pat
 
     assert str(exc.value) == "Schwab gateway credential probe failed"
     assert "unexpected" not in str(exc.value)
+    assert exc.value.reason == "quote_failed"
+
+
+def test_probe_reports_client_construction_separately_from_the_quote(tmp_path: Path) -> None:
+    """Construction and operation must stay distinguishable; both prove a token read."""
+    token_path = tmp_path / "synthetic-token.json"
+    write_token(token_path)
+
+    def failing_factory(*_args, **_kwargs):
+        raise RuntimeError("sensitive-construction-detail")
+
+    with pytest.raises(GatewayCredentialProbeError) as exc:
+        run_gateway_credential_probe(settings(token_path), failing_factory)
+
+    assert exc.value.reason == "client_construction_failed"
+    assert "sensitive-construction-detail" not in str(exc.value)
+
+
+def test_probe_reports_a_token_fault_distinctly(tmp_path: Path) -> None:
+    missing_token = tmp_path / "absent-token.json"
+
+    with pytest.raises(GatewayCredentialProbeError) as exc:
+        run_gateway_credential_probe(settings(missing_token), FakeFactory(FakeClient()))
+
+    assert exc.value.reason == "token_invalid"
+    assert str(missing_token) not in str(exc.value)
 
 
 def test_probe_settings_require_absolute_path_and_redact_inputs(tmp_path: Path) -> None:
@@ -155,10 +181,53 @@ def test_probe_command_refuses_to_load_settings_without_all_confirmations() -> N
         probe_command.main([])
 
 
+CONFIRMATIONS = [
+    "--authorize-real-credential-read",
+    "--confirm-single-token-writer",
+    "--confirm-no-deployment",
+]
+
+
+def run_probe_command(capsys: pytest.CaptureFixture) -> tuple[int | None, str, str]:
+    with pytest.raises(SystemExit) as exc:
+        probe_command.main(CONFIRMATIONS)
+    captured = capsys.readouterr()
+    return exc.value.code, captured.out, captured.err
+
+
+def install_fake_sdk(monkeypatch: pytest.MonkeyPatch, factory: object) -> None:
+    fake_schwab = ModuleType("schwab")
+    fake_auth = ModuleType("schwab.auth")
+    fake_auth.client_from_access_functions = factory
+    fake_schwab.auth = fake_auth
+    monkeypatch.setitem(sys.modules, "schwab", fake_schwab)
+    monkeypatch.setitem(sys.modules, "schwab.auth", fake_auth)
+
+
+def install_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    settings_type=lambda: object(),
+    run_probe=None,
+) -> None:
+    monkeypatch.setattr(
+        probe_command,
+        "_load_runtime_dependencies",
+        lambda: (
+            MagicMock(),
+            settings_type,
+            run_probe if run_probe is not None else MagicMock(return_value=object()),
+            GatewayCredentialProbeError,
+        ),
+    )
+
+
 def test_probe_command_bounds_runtime_import_failure(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
+    """An import fault proves no token read occurred, and must say so on stdout only."""
+
     def fail_runtime_import():
         raise ImportError("sensitive-runtime-import-detail")
 
@@ -168,20 +237,11 @@ def test_probe_command_bounds_runtime_import_failure(
         fail_runtime_import,
     )
 
-    with pytest.raises(SystemExit) as exc:
-        probe_command.main(
-            [
-                "--authorize-real-credential-read",
-                "--confirm-single-token-writer",
-                "--confirm-no-deployment",
-            ]
-        )
+    code, out, err = run_probe_command(capsys)
 
-    captured = capsys.readouterr()
-    assert exc.value.code == 1
-    assert captured.out == ""
-    assert captured.err == "Schwab gateway credential proof failed\n"
-    assert "sensitive-runtime-import-detail" not in captured.err
+    assert code == 1
+    assert out == '{"code":"probe_import_failed","status":"error"}\n'
+    assert err == ""
 
 
 def test_probe_command_bounds_configuration_failure(
@@ -192,52 +252,110 @@ def test_probe_command_bounds_configuration_failure(
     monkeypatch.setenv("SCHWAB_SECRET_KEY", "sensitive-app-secret")
     monkeypatch.setenv("SCHWAB_TOKEN_PATH", "sensitive/relative-token-path")
 
-    with pytest.raises(SystemExit) as exc:
-        probe_command.main(
-            [
-                "--authorize-real-credential-read",
-                "--confirm-single-token-writer",
-                "--confirm-no-deployment",
-            ]
-        )
+    code, out, err = run_probe_command(capsys)
 
-    captured = capsys.readouterr()
-    assert exc.value.code == 1
-    assert captured.out == ""
-    assert captured.err == "Schwab gateway credential proof failed\n"
-    assert "sensitive" not in captured.err
-    assert "token-path" not in captured.err
+    assert code == 1
+    assert out == '{"code":"probe_settings_invalid","status":"error"}\n'
+    assert err == ""
+    assert "sensitive" not in out
+    assert "token-path" not in out
+
+
+def test_probe_command_bounds_sdk_import_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A missing SDK is the last stage that proves no token read occurred."""
+    install_dependencies(monkeypatch)
+    fake_schwab = ModuleType("schwab")
+    monkeypatch.setitem(sys.modules, "schwab", fake_schwab)
+    monkeypatch.setitem(sys.modules, "schwab.auth", None)
+
+    code, out, err = run_probe_command(capsys)
+
+    assert code == 1
+    assert out == '{"code":"probe_sdk_import_failed","status":"error"}\n'
+    assert err == ""
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected_code"),
+    [
+        ("token_invalid", "probe_token_invalid"),
+        ("client_construction_failed", "probe_client_construction_failed"),
+        ("quote_failed", "probe_quote_failed"),
+        ("state_invalid", "probe_state_invalid"),
+    ],
+)
+def test_probe_command_maps_each_probe_reason_to_its_code(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    reason: str,
+    expected_code: str,
+) -> None:
+    """Each of these proves a token read was reached, so each needs its own code."""
+
+    def fail(*_args, **_kwargs):
+        raise GatewayCredentialProbeError(reason)
+
+    install_dependencies(monkeypatch, run_probe=fail)
+    install_fake_sdk(monkeypatch, object())
+
+    code, out, err = run_probe_command(capsys)
+
+    assert code == 1
+    assert out == '{"code":"%s","status":"error"}\n' % expected_code
+    assert err == ""
+
+
+def test_probe_command_bounds_an_unexpected_probe_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("sensitive-unexpected-detail")
+
+    install_dependencies(monkeypatch, run_probe=fail)
+    install_fake_sdk(monkeypatch, object())
+
+    code, out, err = run_probe_command(capsys)
+
+    assert code == 1
+    assert out == '{"code":"probe_state_invalid","status":"error"}\n'
+    assert err == ""
 
 
 def test_probe_command_bounds_result_serialization_failure(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
-    fake_schwab = ModuleType("schwab")
-    fake_auth = ModuleType("schwab.auth")
-    fake_auth.client_from_access_functions = object()
-    fake_schwab.auth = fake_auth
-    monkeypatch.setattr(
-        probe_command,
-        "_load_runtime_dependencies",
-        lambda: (MagicMock(), object, MagicMock(return_value=object())),
+    install_dependencies(monkeypatch)
+    install_fake_sdk(monkeypatch, object())
+
+    code, out, err = run_probe_command(capsys)
+
+    assert code == 1
+    assert out == '{"code":"probe_state_invalid","status":"error"}\n'
+    assert err == ""
+
+
+def test_probe_command_failure_codes_are_a_closed_set() -> None:
+    """No code may be derived from an exception message or a token state value."""
+    assert probe_command.PROBE_FAILURE_CODES == {
+        "probe_import_failed",
+        "probe_settings_invalid",
+        "probe_sdk_import_failed",
+        "probe_token_invalid",
+        "probe_client_construction_failed",
+        "probe_quote_failed",
+        "probe_state_invalid",
+    }
+    assert set(probe_command.PROBE_NO_TOKEN_READ_CODES).isdisjoint(
+        probe_command.PROBE_TOKEN_READ_CODES
     )
-    monkeypatch.setitem(sys.modules, "schwab", fake_schwab)
-    monkeypatch.setitem(sys.modules, "schwab.auth", fake_auth)
-
-    with pytest.raises(SystemExit) as exc:
-        probe_command.main(
-            [
-                "--authorize-real-credential-read",
-                "--confirm-single-token-writer",
-                "--confirm-no-deployment",
-            ]
-        )
-
-    captured = capsys.readouterr()
-    assert exc.value.code == 1
-    assert captured.out == ""
-    assert captured.err == "Schwab gateway credential proof failed\n"
+    assert set(probe_command._REASON_CODES.values()) == set(
+        probe_command.PROBE_TOKEN_READ_CODES
+    )
 
 
 def test_probe_command_emits_only_bounded_success_json(
@@ -261,7 +379,12 @@ def test_probe_command_emits_only_bounded_success_json(
     monkeypatch.setattr(
         probe_command,
         "_load_runtime_dependencies",
-        lambda: (setup_logging, lambda: fake_settings, run_probe),
+        lambda: (
+            setup_logging,
+            lambda: fake_settings,
+            run_probe,
+            GatewayCredentialProbeError,
+        ),
     )
     monkeypatch.setitem(sys.modules, "schwab", fake_schwab)
     monkeypatch.setitem(sys.modules, "schwab.auth", fake_auth)

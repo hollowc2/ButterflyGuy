@@ -5,14 +5,29 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Protocol
 
-from butterfly_guy.data.providers import EquityQuoteProvider
-from butterfly_guy.gateway_client.models import QuoteV1
+from butterfly_guy.data.providers import (
+    EquityQuoteProvider,
+    OptionChainProvider,
+    SpotPriceProvider,
+)
+from butterfly_guy.gateway_client.chain_metadata import extract_chain_metadata
+from butterfly_guy.gateway_client.models import ChainMetadataV1, QuoteV1, SpotV1
 
 UTC = dt.timezone.utc
 
 
 class QuoteUpstream(Protocol):
     async def get_quotes(self, symbols: tuple[str, ...]) -> tuple[QuoteV1, ...]: ...
+
+
+class SpotUpstream(Protocol):
+    async def get_spot(self, symbol: str) -> SpotV1: ...
+
+
+class ChainMetadataUpstream(Protocol):
+    async def get_chain_metadata(
+        self, symbol: str, expiration: dt.date
+    ) -> ChainMetadataV1: ...
 
 
 class UpstreamUnavailableError(RuntimeError):
@@ -112,6 +127,120 @@ def normalize_schwab_quote(
         age_seconds=age_seconds,
         data_quality_flags=tuple(flags),
     )
+
+
+def normalize_schwab_spot(
+    symbol: str,
+    price: float | None,
+    *,
+    received_at: dt.datetime,
+) -> SpotV1:
+    """Wrap a direct spot read.
+
+    ``SpotPriceProvider.get_spot_price`` returns a bare float, so no upstream event time
+    survives the direct adapter. Staleness is therefore reported the same way the quote
+    normalizer reports an absent event time: unknown age means stale.
+    """
+    flags: list[str] = []
+    if price is None:
+        flags.append("missing_price")
+    flags.append("missing_event_timestamp")
+    flags.append("stale")
+    return SpotV1(
+        symbol=symbol,
+        price=price,
+        event_timestamp=None,
+        gateway_received_at=received_at,
+        source="schwab_rest_spot",
+        stale=True,
+        age_seconds=None,
+        data_quality_flags=tuple(flags),
+    )
+
+
+def normalize_schwab_chain_metadata(
+    symbol: str,
+    payload: dict[str, Any],
+    expiration: dt.date,
+    *,
+    received_at: dt.datetime,
+    stale_after_seconds: float,
+) -> ChainMetadataV1:
+    fields = extract_chain_metadata(payload, expiration)
+    age_seconds = (
+        max(0.0, (received_at - fields.event_timestamp).total_seconds())
+        if fields.event_timestamp is not None
+        else None
+    )
+    stale = age_seconds is None or age_seconds > stale_after_seconds
+    flags = fields.data_quality_flags + (("stale",) if stale else ())
+    return ChainMetadataV1(
+        symbol=symbol,
+        expiration=expiration,
+        underlying_price=fields.underlying_price,
+        call_contract_count=fields.call_contract_count,
+        put_contract_count=fields.put_contract_count,
+        strike_count=fields.strike_count,
+        event_timestamp=fields.event_timestamp,
+        gateway_received_at=received_at,
+        source="schwab_rest_chain",
+        stale=stale,
+        age_seconds=age_seconds,
+        data_quality_flags=flags,
+    )
+
+
+class DirectSchwabSpotUpstream:
+    """Normalize a spot read from the direct adapter inside the gateway boundary."""
+
+    def __init__(self, provider: SpotPriceProvider) -> None:
+        self._provider = provider
+
+    async def get_spot(self, symbol: str) -> SpotV1:
+        try:
+            price = await self._provider.get_spot_price(symbol)
+        except ValueError as exc:
+            # Raised by spot-price extraction/parsing (e.g. ``extract_spot_price`` on a
+            # malformed Schwab payload), not by the fetch itself.
+            raise UpstreamMalformedError("Schwab spot response was invalid") from exc
+        except Exception as exc:
+            raise UpstreamUnavailableError("Schwab spot request failed") from exc
+        try:
+            value = float(price)
+        except (TypeError, ValueError) as exc:
+            raise UpstreamMalformedError("Schwab spot response was not numeric") from exc
+        return normalize_schwab_spot(symbol, value, received_at=dt.datetime.now(UTC))
+
+
+class DirectSchwabChainMetadataUpstream:
+    """Summarize a chain read from the direct adapter; contract rows never leave here."""
+
+    def __init__(
+        self,
+        provider: OptionChainProvider,
+        *,
+        stale_after_seconds: float = 90.0,
+    ) -> None:
+        self._provider = provider
+        self._stale_after_seconds = stale_after_seconds
+
+    async def get_chain_metadata(
+        self, symbol: str, expiration: dt.date
+    ) -> ChainMetadataV1:
+        try:
+            payload = await self._provider.get_option_chain(symbol, expiration)
+        except Exception as exc:
+            raise UpstreamUnavailableError("Schwab option chain request failed") from exc
+        try:
+            return normalize_schwab_chain_metadata(
+                symbol,
+                payload,
+                expiration,
+                received_at=dt.datetime.now(UTC),
+                stale_after_seconds=self._stale_after_seconds,
+            )
+        except ValueError as exc:
+            raise UpstreamMalformedError("Schwab option chain response was invalid") from exc
 
 
 class DirectSchwabQuoteUpstream:

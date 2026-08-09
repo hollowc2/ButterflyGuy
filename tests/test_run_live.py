@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import os
+import signal
 from unittest.mock import AsyncMock, Mock, call
 
 import pytest
@@ -28,6 +30,8 @@ from butterfly_guy.scripts.run_live import (
     _reconcile_broker_state,
     broker_reconciler_loop,
     entry_loop,
+    install_shutdown_handler,
+    token_reload_loop,
 )
 from butterfly_guy.services.position_service import SettlementEvidenceError
 
@@ -576,3 +580,123 @@ def test_live_config_allows_spx_live_when_explicitly_confirmed(monkeypatch):
     )
 
     _assert_live_config_supported(config)
+
+
+@pytest.mark.asyncio
+async def test_sigterm_cancels_supervised_loops_and_task_group_exits_cleanly():
+    """SIGTERM must unwind the TaskGroup without reporting a shutdown as an error.
+
+    The app is PID 1 in its container, so an uncaught SIGTERM is discarded and
+    Docker escalates to SIGKILL (exit 137). Cancelling the children lets the
+    group exit normally, which is what lets main()'s finally block close the pool.
+    """
+    running = asyncio.Event()
+    cleanup_ran = False
+
+    async def forever() -> None:
+        running.set()
+        while True:
+            await asyncio.sleep(3600)
+
+    try:
+        async with asyncio.TaskGroup() as tg:
+            supervised = [
+                tg.create_task(forever(), name="loop-a"),
+                tg.create_task(forever(), name="loop-b"),
+            ]
+            install_shutdown_handler(supervised)
+            await running.wait()
+            os.kill(os.getpid(), signal.SIGTERM)
+    finally:
+        cleanup_ran = True
+        asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
+
+    # Reaching here at all means the group raised no ExceptionGroup.
+    assert cleanup_ran
+    assert all(task.cancelled() for task in supervised)
+
+
+@pytest.mark.asyncio
+async def test_shutdown_handler_tolerates_already_finished_tasks():
+    async def done_immediately() -> None:
+        return None
+
+    task = asyncio.create_task(done_immediately())
+    await task
+
+    try:
+        install_shutdown_handler([task])
+        os.kill(os.getpid(), signal.SIGTERM)
+        await asyncio.sleep(0)
+    finally:
+        asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
+
+    assert not task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_token_reload_loop_survives_a_failed_reload(monkeypatch):
+    """A reload failure must not take the trading loop down with it.
+
+    The old client still holds a working access token, so the correct response to a
+    bad document is to log and try again -- not to fault the TaskGroup.
+    """
+    outcomes = [RuntimeError("bad document"), True]
+    calls: list[str] = []
+
+    async def reload_if_reauthorized():
+        outcome = outcomes[len(calls)]
+        calls.append("called")
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    schwab = Mock(reload_if_reauthorized=reload_if_reauthorized)
+    token_reload_gate = BrokerStateGate()
+    errors = Mock()
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.log.error", errors)
+
+    task = asyncio.create_task(token_reload_loop(schwab, token_reload_gate, interval=0))
+    while len(calls) < 2:
+        await asyncio.sleep(0)
+    task.cancel()
+
+    assert len(calls) == 2, "loop stopped after the failure instead of retrying"
+    errors.assert_called_once()
+    assert errors.call_args.args[0] == "schwab_token_reload_failed"
+    assert not token_reload_gate.unsafe
+
+
+@pytest.mark.asyncio
+async def test_failed_token_reload_blocks_new_entries(monkeypatch):
+    async def reload_if_reauthorized():
+        raise RuntimeError("candidate token rejected")
+
+    token_reload_gate = BrokerStateGate()
+    reload_task = asyncio.create_task(
+        token_reload_loop(
+            Mock(reload_if_reauthorized=reload_if_reauthorized),
+            token_reload_gate,
+            interval=0,
+        )
+    )
+    while not token_reload_gate.unsafe:
+        await asyncio.sleep(0)
+    reload_task.cancel()
+
+    trade_service = Mock(attempt_entry=AsyncMock())
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    async def stop_after_blocked_entry(_):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "sleep", stop_after_blocked_entry)
+    with pytest.raises(asyncio.CancelledError):
+        await entry_loop(
+            trade_service,
+            Mock(),
+            token_reload_gate=token_reload_gate,
+        )
+
+    trade_service.attempt_entry.assert_not_awaited()
+    set_readiness(None)

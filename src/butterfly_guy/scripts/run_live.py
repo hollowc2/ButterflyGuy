@@ -7,6 +7,7 @@ import asyncio
 import datetime as dt
 import json
 import os
+import signal
 from typing import Any
 
 from dotenv import dotenv_values
@@ -89,6 +90,9 @@ log = get_logger("run_live")
 LIVE_ACCOUNT_ALLOCATION = 20_000.0
 LIVE_MAX_DAILY_LOSS = {"SPX": 500.0, "XSP": 50.0}
 ENTRY_LOOP_ERROR_THRESHOLD = 3
+# How often to check whether the token document has been re-authorized. Re-auth is a
+# weekly event, so this only has to be short enough to make the change quick to verify.
+TOKEN_RELOAD_INTERVAL = 300.0
 
 
 def _matches_underlying(symbol: str, underlying: str) -> bool:
@@ -558,6 +562,7 @@ async def entry_loop(
     recovered_candidate: ButterflyCandidate | None = None,
     recovered_peak: float | None = None,
     broker_gate: BrokerStateGate | None = None,
+    token_reload_gate: BrokerStateGate | None = None,
     critical_notifier: AlertmanagerNotifier | None = None,
 ) -> None:
     """Periodically attempt entries during the entry window."""
@@ -613,6 +618,10 @@ async def entry_loop(
         if active_trade is None:
             if broker_gate is not None and broker_gate.unsafe:
                 log.error("entry_blocked_broker_state_unsafe", reason=broker_gate.reason)
+                await asyncio.sleep(15)
+                continue
+            if token_reload_gate is not None and token_reload_gate.unsafe:
+                log.error("entry_blocked_token_reload_unsafe", reason=token_reload_gate.reason)
                 await asyncio.sleep(15)
                 continue
             try:
@@ -704,6 +713,55 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         trades_active.labels(underlying=underlying).set(0)
         daily_pnl.labels(underlying=underlying).set(0)
         log.info("daily_risk_reset", date=str(today))
+
+
+async def token_reload_loop(
+    schwab: SchwabClientWrapper,
+    token_reload_gate: BrokerStateGate,
+    interval: float = TOKEN_RELOAD_INTERVAL,
+) -> None:
+    """Pick up a re-authorized Schwab token without restarting the container.
+
+    schwab-py reads the token document exactly once, when the client is built, so a
+    re-authorization is invisible to a running process. That is the only reason a
+    re-auth has meant restarting every token consumer.
+
+    A failed reload must never take the trading loop down: exits and reconciliation
+    can continue through the old client. New entries are blocked until the candidate
+    token validates, because its authorization state is no longer trustworthy.
+    """
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            if await schwab.reload_if_reauthorized():
+                if token_reload_gate.unsafe:
+                    token_reload_gate.clear()
+                    clear_readiness("schwab_token_reload_unsafe")
+                log.info("schwab_token_reload_applied")
+        except Exception as e:
+            token_reload_gate.set_unsafe(str(e))
+            set_readiness("schwab_token_reload_unsafe")
+            log.error("schwab_token_reload_failed", error=str(e))
+
+
+def install_shutdown_handler(tasks: list[asyncio.Task[Any]]) -> None:
+    """Cancel the supervised loops on SIGTERM so main()'s cleanup block runs.
+
+    The app runs as PID 1 in its container, and the kernel does not deliver a
+    default-action signal to PID 1. Without this handler SIGTERM is discarded
+    outright and Docker escalates to SIGKILL, which is the exit 137 on shutdown.
+
+    Cancelling the children rather than the parent keeps the shutdown clean:
+    asyncio.TaskGroup ignores a child that was cancelled from outside, so the
+    group exits normally and the caller's finally block closes the pool.
+    """
+
+    def _on_sigterm() -> None:
+        log.info("shutdown_signal_received", signal="SIGTERM", tasks=len(tasks))
+        for task in tasks:
+            task.cancel()
+
+    asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, _on_sigterm)
 
 
 async def main() -> None:
@@ -954,6 +1012,7 @@ async def main() -> None:
 
     daily_pnl.labels(underlying=underlying).set(realized_pnl)
     broker_gate = BrokerStateGate()
+    token_reload_gate = BrokerStateGate()
 
     # Seed candidates_found from the most recent scan today
     last_scan_count = await db.pool.fetchval(
@@ -971,36 +1030,54 @@ async def main() -> None:
         butterfly_candidates_found.labels(underlying=underlying).set(last_scan_count)
 
     set_readiness(None)
+    supervised: list[asyncio.Task[Any]] = []
     try:
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(collector.run_loop(), name="collector")
-            tg.create_task(
-                entry_loop(
-                    trade_service,
-                    position_service,
-                    recovered_trade,
-                    recovered_candidate,
-                    recovered_peak,
-                    broker_gate,
-                    critical_notifier,
-                ),
-                name="entry_loop",
+            supervised.append(tg.create_task(collector.run_loop(), name="collector"))
+            supervised.append(
+                tg.create_task(
+                    entry_loop(
+                        trade_service,
+                        position_service,
+                        recovered_trade,
+                        recovered_candidate,
+                        recovered_peak,
+                        broker_gate,
+                        token_reload_gate,
+                        critical_notifier,
+                    ),
+                    name="entry_loop",
+                )
             )
             if not config.execution.paper_trading:
-                tg.create_task(
-                    broker_reconciler_loop(
-                        schwab,
-                        underlying,
-                        trade_q,
-                        intent_q,
-                        broker_gate,
-                        critical_notifier=critical_notifier,
-                    ),
-                    name="broker_reconciler",
+                supervised.append(
+                    tg.create_task(
+                        broker_reconciler_loop(
+                            schwab,
+                            underlying,
+                            trade_q,
+                            intent_q,
+                            broker_gate,
+                            critical_notifier=critical_notifier,
+                        ),
+                        name="broker_reconciler",
+                    )
                 )
-            tg.create_task(daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset")
+            supervised.append(
+                tg.create_task(
+                    daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset"
+                )
+            )
+            supervised.append(
+                tg.create_task(
+                    token_reload_loop(schwab, token_reload_gate), name="token_reload"
+                )
+            )
             if notifier:
-                tg.create_task(eod_chart_loop(position_service), name="eod_charts")
+                supervised.append(
+                    tg.create_task(eod_chart_loop(position_service), name="eod_charts")
+                )
+            install_shutdown_handler(supervised)
     except* Exception as eg:
         for exc in eg.exceptions:
             log.error("task_group_error", error=str(exc))

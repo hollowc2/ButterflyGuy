@@ -5,7 +5,12 @@ import datetime as dt
 import pytest
 from pydantic import ValidationError
 
-from butterfly_guy.schwab_gateway.upstream import normalize_schwab_quote
+from butterfly_guy.gateway_client.models import ChainMetadataV1
+from butterfly_guy.schwab_gateway.upstream import (
+    normalize_schwab_chain_metadata,
+    normalize_schwab_quote,
+    normalize_schwab_spot,
+)
 
 
 def test_quote_normalization_preserves_missing_fields_and_staleness() -> None:
@@ -65,3 +70,64 @@ def test_quote_contract_rejects_naive_timestamps() -> None:
             received_at=dt.datetime(2026, 8, 3, 21, 0),
             stale_after_seconds=15,
         )
+
+
+def test_chain_metadata_contract_rejects_naive_timestamps() -> None:
+    with pytest.raises(ValidationError, match="timezone-aware"):
+        normalize_schwab_chain_metadata(
+            "SPX",
+            {"callExpDateMap": {}},
+            dt.date(2026, 8, 6),
+            received_at=dt.datetime(2026, 8, 6, 21, 0),
+            stale_after_seconds=90,
+        )
+
+
+def test_spot_contract_rejects_naive_timestamps() -> None:
+    with pytest.raises(ValidationError, match="timezone-aware"):
+        normalize_schwab_spot("$SPX", 5000.0, received_at=dt.datetime(2026, 8, 6, 21, 0))
+
+
+def test_chain_metadata_contract_rejects_negative_counts_and_ages() -> None:
+    received_at = dt.datetime(2026, 8, 6, 21, 0, tzinfo=dt.timezone.utc)
+    base = {
+        "symbol": "SPX",
+        "expiration": dt.date(2026, 8, 6),
+        "call_contract_count": 1,
+        "put_contract_count": 1,
+        "strike_count": 1,
+        "gateway_received_at": received_at,
+        "source": "test",
+        "stale": False,
+    }
+
+    with pytest.raises(ValidationError, match="nonnegative"):
+        ChainMetadataV1(**{**base, "strike_count": -1})
+    with pytest.raises(ValidationError, match="nonnegative"):
+        ChainMetadataV1(**{**base, "age_seconds": -1.0})
+    with pytest.raises(ValidationError):
+        ChainMetadataV1(**{**base, "unexpected_field": 1})
+
+
+def test_chain_metadata_normalization_marks_an_old_quote_time_stale() -> None:
+    received_at = dt.datetime(2026, 8, 6, 21, 0, tzinfo=dt.timezone.utc)
+    stale_time = int((received_at - dt.timedelta(seconds=600)).timestamp() * 1000)
+    metadata = normalize_schwab_chain_metadata(
+        "SPX",
+        {
+            "underlying": {"quoteTime": stale_time},
+            "callExpDateMap": {"2026-08-06:0": {"5000.0": [{"bid": 1.0}]}},
+        },
+        dt.date(2026, 8, 6),
+        received_at=received_at,
+        stale_after_seconds=90,
+    )
+
+    assert metadata.age_seconds == 600
+    assert metadata.stale is True
+    assert metadata.put_contract_count == 0
+    assert metadata.data_quality_flags == (
+        "missing_underlying_price",
+        "missing_put_contracts",
+        "stale",
+    )

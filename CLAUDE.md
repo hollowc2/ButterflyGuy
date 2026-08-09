@@ -84,7 +84,7 @@ Polls mark price every 2 seconds. Exit triggers:
 | `option_chain_snapshots` | Raw chain data, hypertable on `snapshot_time` |
 | `spot_prices` | SPX/VIX spot, hypertable on `ts` |
 | `daily_bars` | Daily OHLCV for SPX/VIX, used by regime classifier |
-| `trades` | Full trade lifecycle: entry/exit prices, strikes, PnL, peak_value, status |
+| `butterfly_trades` | Full trade lifecycle: entry/exit prices, strikes, PnL, peak_value, status. Note: `trades` in the same database is an unrelated crypto table |
 | `butterfly_candidates` | All scanned candidates at each entry scan |
 | `decision_log` | JSONB event log for every significant system action |
 | `daily_risk_state` | Per-underlying daily trade count, realized PnL, halted flag |

@@ -169,7 +169,16 @@ def render_runtime(
                 "--port",
                 "8099",
             ],
-            "volumes": ["../../tokens.json:/app/tokens.json:ro"],
+            # The token *directory*, read-only, from the same required variable the
+            # trading stack uses. The old "../../tokens.json" bind named a path that
+            # B3 stopped maintaining, so the feed held an orphaned inode carrying a
+            # stale, separate credential lineage. Read-only is deliberate: the feed
+            # refreshes its access token in memory and must never write the shared
+            # document, so it needs neither the lock nor a writable mount.
+            "volumes": [
+                "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}:"
+                "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}:ro"
+            ],
             "environment": {
                 "DATABASE_HOST": "timescaledb",
                 "DATABASE_PORT": "5432",
@@ -178,7 +187,10 @@ def render_runtime(
                 "DATABASE_PASSWORD": "${DATABASE_PASSWORD}",
                 "SCHWAB_API_KEY": "${SCHWAB_API_KEY}",
                 "SCHWAB_SECRET_KEY": "${SCHWAB_SECRET_KEY}",
-                "SCHWAB_TOKEN_PATH": "tokens.json",
+                "SCHWAB_TOKEN_PATH": (
+                    "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}"
+                    "/tokens.json"
+                ),
             },
             "read_only": True,
             "mem_limit": "384m",

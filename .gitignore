@@ -1,8 +1,13 @@
 # Environment & secrets
 .env
 *.env
+# Parked and backup copies of credential files: .env.b3-backup, .env.local, and the
+# like. The example file is the one variant that belongs in the repository.
+.env.*
+!.env.example
 secrets/
 tokens.json
+tokens.json.pre-reauth
 token.json
 
 # Python
@@ -67,3 +72,14 @@ graphify-out/20??-??-??/
 
 # Local research output (intentionally untracked)
 /reports/
+
+# Credential-proof and runtime-baseline evidence (mode 0600, retained on the host).
+# These are deliberately kept on Helios and must never be committed; a stray `git add -A`
+# there would otherwise capture them along with the token advisory lock.
+.credential-proof-state-*.json
+.credential-proof-evidence-*.json
+.baseline-candidate-evidence-*.json
+.runtime-baseline-evidence-*.json
+*.json.lock
+.tokens.json.lock
+/evidence/

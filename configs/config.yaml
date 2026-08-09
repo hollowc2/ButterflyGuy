@@ -1,5 +1,7 @@
 schwab:
-  token_path: "tokens.json"
+  # token_path is deliberately unset: config.py applies SCHWAB_TOKEN_PATH with
+  # setdefault, so a value here would silently win over the deployment's env var
+  # and pin the token to a path relative to the working directory.
   max_token_age: 518400  # 6 days in seconds
 
 strategy:

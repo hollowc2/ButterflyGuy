@@ -10,13 +10,14 @@ from aiohttp.test_utils import TestServer
 from butterfly_guy.gateway_client.client import (
     GatewayAuthorizationError,
     GatewayMarketDataClient,
-    GatewayUnavailableError,
+    GatewayTimeoutError,
 )
 from butterfly_guy.gateway_client.models import QuoteV1
 from butterfly_guy.schwab_gateway.api import create_app
 from butterfly_guy.schwab_gateway.auth import (
     InternalKeyAuthenticator,
     InternalPrincipal,
+    PriorityClass,
     hash_api_key,
 )
 from butterfly_guy.schwab_gateway.token_manager import (
@@ -48,13 +49,14 @@ class FakeQuoteUpstream:
         )
 
 
-def authenticator(*, capability: str = "market_data:read") -> InternalKeyAuthenticator:
+def authenticator(*, capability: str | None = "market_data:read") -> InternalKeyAuthenticator:
     return InternalKeyAuthenticator(
         (
             InternalPrincipal(
                 client_id="butterfly-guy",
                 key_sha256=hash_api_key("valid-key"),
-                capabilities=frozenset({capability}),
+                capabilities=frozenset({capability} if capability else set()),
+                priority_class=PriorityClass.PROTECTED,
             ),
         )
     )
@@ -76,7 +78,13 @@ class FakeTokenReadinessProvider:
 @pytest.mark.asyncio
 async def test_client_to_http_gateway_to_fake_upstream_contract() -> None:
     upstream = FakeQuoteUpstream()
-    server = TestServer(create_app(upstream, authenticator()))
+    server = TestServer(
+        create_app(
+            upstream,
+            authenticator(),
+            token_readiness_provider=FakeTokenReadinessProvider(TokenManagerState.READY),
+        )
+    )
     await server.start_server()
     try:
         client = GatewayMarketDataClient(str(server.make_url("/")), "valid-key")
@@ -93,7 +101,7 @@ async def test_client_to_http_gateway_to_fake_upstream_contract() -> None:
 
 @pytest.mark.asyncio
 async def test_gateway_authentication_authorization_and_health_contracts() -> None:
-    server = TestServer(create_app(FakeQuoteUpstream(), authenticator(capability="history:read")))
+    server = TestServer(create_app(FakeQuoteUpstream(), authenticator(capability=None)))
     await server.start_server()
     try:
         async with httpx.AsyncClient(base_url=str(server.make_url("/"))) as http:
@@ -271,12 +279,17 @@ async def test_gateway_surfaces_upstream_timeout() -> None:
             return ()
 
     server = TestServer(
-        create_app(SlowUpstream(), authenticator(), upstream_timeout_seconds=0.001)
+        create_app(
+            SlowUpstream(),
+            authenticator(),
+            upstream_timeout_seconds=0.001,
+            token_readiness_provider=FakeTokenReadinessProvider(TokenManagerState.READY),
+        )
     )
     await server.start_server()
     try:
         client = GatewayMarketDataClient(str(server.make_url("/")), "valid-key")
-        with pytest.raises(GatewayUnavailableError):
+        with pytest.raises(GatewayTimeoutError):
             await client.get_quotes(["AAPL"])
         await client.close()
     finally:

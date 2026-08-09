@@ -1,5 +1,5 @@
 schwab:
-  token_path: "tokens.json"
+  # token_path is deliberately unset: see configs/config.yaml.
   max_token_age: 518400  # 6 days in seconds
 
 strategy:
