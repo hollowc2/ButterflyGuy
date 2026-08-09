@@ -237,6 +237,7 @@ async def test_failed_reload_keeps_the_working_client(monkeypatch):
     # The marker must not advance past the document it failed on, or the next check
     # would see no change and the app would stay on the old credential forever.
     assert schwab._creation_timestamp == 1000
+    broken.close_async_session.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -562,6 +562,7 @@ async def entry_loop(
     recovered_candidate: ButterflyCandidate | None = None,
     recovered_peak: float | None = None,
     broker_gate: BrokerStateGate | None = None,
+    token_reload_gate: BrokerStateGate | None = None,
     critical_notifier: AlertmanagerNotifier | None = None,
 ) -> None:
     """Periodically attempt entries during the entry window."""
@@ -617,6 +618,10 @@ async def entry_loop(
         if active_trade is None:
             if broker_gate is not None and broker_gate.unsafe:
                 log.error("entry_blocked_broker_state_unsafe", reason=broker_gate.reason)
+                await asyncio.sleep(15)
+                continue
+            if token_reload_gate is not None and token_reload_gate.unsafe:
+                log.error("entry_blocked_token_reload_unsafe", reason=token_reload_gate.reason)
                 await asyncio.sleep(15)
                 continue
             try:
@@ -711,7 +716,9 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
 
 
 async def token_reload_loop(
-    schwab: SchwabClientWrapper, interval: float = TOKEN_RELOAD_INTERVAL
+    schwab: SchwabClientWrapper,
+    token_reload_gate: BrokerStateGate,
+    interval: float = TOKEN_RELOAD_INTERVAL,
 ) -> None:
     """Pick up a re-authorized Schwab token without restarting the container.
 
@@ -719,15 +726,21 @@ async def token_reload_loop(
     re-authorization is invisible to a running process. That is the only reason a
     re-auth has meant restarting every token consumer.
 
-    A failed reload must never take the trading loop down: the old client is still
-    holding a working access token, so the right response is to log and try again.
+    A failed reload must never take the trading loop down: exits and reconciliation
+    can continue through the old client. New entries are blocked until the candidate
+    token validates, because its authorization state is no longer trustworthy.
     """
     while True:
         await asyncio.sleep(interval)
         try:
             if await schwab.reload_if_reauthorized():
+                if token_reload_gate.unsafe:
+                    token_reload_gate.clear()
+                    clear_readiness("schwab_token_reload_unsafe")
                 log.info("schwab_token_reload_applied")
         except Exception as e:
+            token_reload_gate.set_unsafe(str(e))
+            set_readiness("schwab_token_reload_unsafe")
             log.error("schwab_token_reload_failed", error=str(e))
 
 
@@ -999,6 +1012,7 @@ async def main() -> None:
 
     daily_pnl.labels(underlying=underlying).set(realized_pnl)
     broker_gate = BrokerStateGate()
+    token_reload_gate = BrokerStateGate()
 
     # Seed candidates_found from the most recent scan today
     last_scan_count = await db.pool.fetchval(
@@ -1029,6 +1043,7 @@ async def main() -> None:
                         recovered_candidate,
                         recovered_peak,
                         broker_gate,
+                        token_reload_gate,
                         critical_notifier,
                     ),
                     name="entry_loop",
@@ -1053,7 +1068,11 @@ async def main() -> None:
                     daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset"
                 )
             )
-            supervised.append(tg.create_task(token_reload_loop(schwab), name="token_reload"))
+            supervised.append(
+                tg.create_task(
+                    token_reload_loop(schwab, token_reload_gate), name="token_reload"
+                )
+            )
             if notifier:
                 supervised.append(
                     tg.create_task(eod_chart_loop(position_service), name="eod_charts")

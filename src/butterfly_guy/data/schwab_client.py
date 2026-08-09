@@ -147,7 +147,14 @@ class SchwabClientWrapper:
             return False
 
         candidate = self._build_client()
-        account_hash = await self._resolve_account_hash(candidate)
+        try:
+            account_hash = await self._resolve_account_hash(candidate)
+        except Exception:
+            try:
+                await candidate.close_async_session()
+            except Exception as exc:
+                log.warning("schwab_candidate_session_close_failed", error=str(exc))
+            raise
 
         await self._close_retired_client()
         self._retired_client = self._client
