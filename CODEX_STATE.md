@@ -2127,3 +2127,66 @@ consumer's view immediately — as it must, since it is the same inode.
 Note the asymmetry this exposes: consumers see the new *bytes* instantly but continue to use the
 token they parsed at startup, because schwab-py holds it in memory. Visibility was never the problem;
 re-reading is. See `docs/architecture/reducing-the-weekly-reauth-cost.md`.
+
+## Window H part 2 — the expiry warnings fixed, and the reload question answered (2026-08-09)
+
+Operator instruction: address items 1–3 of the Window H summary. Item 2 was a finding already
+recorded and needed no action. Items 1 and 3 follow.
+
+### Item 1 — the warnings now fire before the deadline (deployed)
+
+Commit `34aca5f`, pulled to Helios, crontab updated in place.
+
+Two independent defects, both leaving the Saturday deadline effectively unwarned:
+
+- `--sunday-reminder` at `50 1 * * 1` = Monday 01:50 UTC, **27.7 h after** the Saturday 22:05 UTC
+  expiry. It could never prompt a re-auth in time.
+- `WARN_BEFORE = 8 * 3600` opened the alert window at 07:05 PDT **on the morning the token died**,
+  which is also the morning the re-auth has to happen — no slack at all.
+
+Both stemmed from the pre-Window-F design, when the intent was a Sunday-evening re-auth before
+Monday's open. The Saturday cadence made that obsolete and nothing was re-timed.
+
+Now: reminder `0 14 * * 5` (Fri 07:00 PDT, **32.1 h** lead) and `WARN_BEFORE = 24 * 3600` (window
+opens Fri 15:05 PDT, **24.0 h** lead).
+
+**The reminder moved to Friday, not to Saturday morning, deliberately.** As slack is banked by
+re-authorizing earlier each Saturday, the deadline drifts *earlier in the day*, so a fixed
+Saturday-morning reminder would eventually become too late again — the same class of bug being
+fixed. A Friday reminder keeps 24 h+ of lead regardless of where in Saturday the deadline sits.
+
+`--sunday-reminder` is still accepted as an alias of `--weekly-reminder`, so a host whose crontab
+lagged the pull would keep sending reminders rather than silently sending none.
+
+Verified: threshold behaviour exercised at 30 h / 20 h / 6 h remaining → `healthy` / `sent` / `sent`
+(under the old 8 h, 20 h would have been silent); both flag spellings drive the reminder; crontab
+still **31 lines / 2 keepalive entries** with the reminder on line 3; and the hourly job re-run on
+the production path exits `0` — "OK: token refreshed, SPX quote fetched (status 200), refresh token
+expires in 164.1h".
+
+**Not proven: the Telegram transport for the reminder itself.** The hourly alert path uses
+`send_alertmanager`; `notify()` is used *only* by the reminder, so its delivery has never been
+observed either before or after this change. Firing it would send a real message to the operator's
+phone and was not done unprompted. Backup of the previous crontab at
+`/opt/butterflyguy/crontab.backup-2026-08-09`.
+
+### Item 3 — the deciding question is answered: the swap is safe
+
+`docs/architecture/reducing-the-weekly-reauth-cost.md` updated. Still **not built**.
+
+Every one of the 26 client call sites in `schwab_client.py` resolves the bound method **eagerly**
+and passes it into `_retry` — `self._retry(self.client.get_option_chain, ...)` evaluates
+`self.client.get_option_chain` before `_retry` is awaited. An in-flight call therefore holds its own
+reference to the client it started on and completes against that object, whose access token is still
+valid in memory. **Rebinding `self._client` cannot disturb a request in flight, and no
+reference-counting is needed.**
+
+The hazard is not the swap but `close()` (`:401`), which calls `close_async_session()` and *would*
+break in-flight requests. The reload must not close the old session immediately — either leave it to
+GC (one orphaned session per weekly reload) or close after a delay exceeding the worst-case
+`MAX_RETRIES`/`RETRY_BACKOFF` chain.
+
+So the cheap option is genuinely cheap, and the recommendation is now to build it. The failure mode
+to get right is a *silent* reload failure: log, alert, keep the old client, retry — never leave an
+app running on a credential it believes is fresh. Deployment recreates trading containers, so the
+natural moment is alongside the 2026-08-15 re-authorization — the last one it would not help with.

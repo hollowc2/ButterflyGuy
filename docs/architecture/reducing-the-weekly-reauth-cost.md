@@ -98,10 +98,29 @@ whole live data path.
 
 ## The questions to answer before building either
 
-1. **Does a mid-session client swap have a safe point?** The collector runs a 60 s cycle and the
-   position monitor polls every 2 s. Is there a moment where no request is in flight, or does the
-   swap need reference-counting? *This is the question that decides whether the cheap option is
-   actually cheap.*
+1. ~~**Does a mid-session client swap have a safe point?**~~ **Answered — yes, and it needs no
+   reference-counting.** Every call site in `schwab_client.py` resolves the bound method *eagerly*
+   and hands it to `_retry`:
+
+   ```python
+   resp = await self._retry(self.client.get_option_chain, symbol, ...)
+   ```
+
+   `self.client.get_option_chain` is evaluated **before** `_retry` is awaited, so an in-flight call
+   holds its own reference to the client object it started on. All 26 call sites follow this shape
+   (`place_order` at `:168` awaits `self.client.place_order(...)` directly, which resolves eagerly
+   for the same reason). Rebinding `self._client` therefore cannot disturb a request already in
+   flight: it finishes against the old client, which still has a valid access token in memory, and
+   only *subsequent* calls pick up the new one.
+
+   **The one real hazard is `close()`, not the swap.** `close()` (`:401`) calls
+   `close_async_session()`, which would break in-flight requests on the old client. So the reload
+   must not close the old session immediately. Options, cheapest first: leave it to GC (one orphaned
+   httpx session per reload, i.e. one per week — untidy but bounded); or close it after a delay
+   exceeding the worst-case retry chain (`MAX_RETRIES` with `RETRY_BACKOFF`, tens of seconds).
+   Reference-counting is available but looks like more machinery than a weekly event justifies.
+
+   *This was the question that decided whether the cheap option is actually cheap. It is.*
 2. **Would the operator accept a re-auth with the market open?** If yes, zero-restart reload is worth
    real money — it removes the Saturday constraint entirely. If no, it only removes the restarts and
    the weekday constraint stays.
@@ -118,9 +137,18 @@ whole live data path.
 
 ## Recommendation
 
-**Cost question 1 before anything else.** If a safe swap point exists, the reload path dominates the
-gateway cutover on this axis by a wide margin: less code, less risk, no policy change, and it takes
-the restart count to zero rather than to four.
+**Build the reload.** Question 1 — the one that decided it — is answered: the swap is safe and needs
+no reference-counting, and the only hazard is closing the old session too eagerly, which is
+avoidable. The reload path dominates the gateway cutover on this axis by a wide margin: less code,
+less risk, no policy change, and it takes the restart count to zero rather than to four.
+
+Remaining questions 2–5 shape the design but none of them can invalidate it. Question 4 (silent
+reload failure) is the one that must be got right, and the answer is already clear in outline: log,
+alert, keep the old client, retry — never leave an app running on a credential it thinks is fresh.
+
+Not yet built. Deployment would in any case require recreating the trading containers, which is an
+operator decision and wants a closed market — so the natural moment to ship it is alongside the
+2026-08-15 re-authorization, which is the last one it would not help with.
 
 Keep C3 and the gateway cutover on their own justification. They are worth doing for blast radius
 and auditability. They are not the answer to the weekly deadline, and Window H's reading of the
