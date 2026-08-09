@@ -37,7 +37,12 @@ def lock_events(monkeypatch):
     [
         (-1, False, "TOKEN ALERT: sent; refresh token expired"),
         (4 * 3600, False, "TOKEN ALERT: sent; refresh token expires in 4.0h"),
-        (24 * 3600, True, "TOKEN ALERT: resolved; refresh token is healthy"),
+        # WARN_BEFORE is 24h and the comparison is inclusive, so 24h alerts and 25h
+        # does not. The old 8h window opened on the morning the token died; the whole
+        # point of widening it is that the Friday before is already alerting.
+        (20 * 3600, False, "TOKEN ALERT: sent; refresh token expires in 20.0h"),
+        (24 * 3600, False, "TOKEN ALERT: sent; refresh token expires in 24.0h"),
+        (25 * 3600, True, "TOKEN ALERT: resolved; refresh token is healthy"),
     ],
 )
 def test_token_keepalive_reports_alertmanager_state(

@@ -38,6 +38,10 @@ class SchwabClientWrapper:
         self._client: Any = None
         self._account_hash: str | None = None
         self._token_store: Any = None
+        self._creation_timestamp: Any = None
+        # The client displaced by the most recent reload. Held rather than closed so
+        # that requests still in flight against it can finish; see reload_if_reauthorized.
+        self._retired_client: Any = None
 
     def _read_token(self) -> object:
         with self._token_store.locked(TOKEN_LOCK_TIMEOUT) as transaction:
@@ -55,14 +59,10 @@ class SchwabClientWrapper:
             # the trading loop to a transient lock conflict would not be.
             log.error("schwab_token_persist_failed")
 
-    async def initialize(self) -> None:
-        """Authenticate and resolve account hash."""
+    def _build_client(self) -> Any:
         from schwab.auth import client_from_access_functions
 
-        from butterfly_guy.schwab_gateway.token_manager import AtomicFileTokenStore
-
-        self._token_store = AtomicFileTokenStore(self.settings.token_path)
-        self._client = client_from_access_functions(
+        return client_from_access_functions(
             api_key=self.settings.api_key,
             app_secret=self.settings.secret_key,
             token_read_func=self._read_token,
@@ -71,8 +71,22 @@ class SchwabClientWrapper:
             enforce_enums=False,
         )
 
-        # Resolve account hash
-        resp = await self._client.get_account_numbers()
+    def _read_creation_timestamp(self) -> Any:
+        """Read the document's re-authorization marker.
+
+        `creation_timestamp` changes only when the token is re-authorized: schwab-py
+        preserves it across ordinary access-token refreshes, verified by watching a
+        keepalive rewrite the document in place on 2026-08-09. It is also not a
+        credential, so it can be compared and logged freely -- unlike the refresh
+        token, which would work equally well as a marker but must never be read.
+        """
+        document = self._read_token()
+        if isinstance(document, dict):
+            return document.get("creation_timestamp")
+        return None
+
+    async def _resolve_account_hash(self, client: Any) -> str:
+        resp = await client.get_account_numbers()
         if resp.status_code != httpx.codes.OK:
             raise RuntimeError(f"Failed to get account numbers: {resp.status_code}")
 
@@ -85,13 +99,72 @@ class SchwabClientWrapper:
 
         for acct in accounts:
             if acct.get("accountNumber") == target_id:
-                self._account_hash = acct["hashValue"]
-                break
+                return str(acct["hashValue"])
 
-        if not self._account_hash:
-            raise RuntimeError("Configured SCHWAB_ACCOUNT_ID was not found in Schwab account list")
+        raise RuntimeError("Configured SCHWAB_ACCOUNT_ID was not found in Schwab account list")
 
+    async def initialize(self) -> None:
+        """Authenticate and resolve account hash."""
+        from butterfly_guy.schwab_gateway.token_manager import AtomicFileTokenStore
+
+        self._token_store = AtomicFileTokenStore(self.settings.token_path)
+        self._client = self._build_client()
+        # The reload marker is an optimisation, not a credential requirement: a client
+        # that authenticates must start even if the marker cannot be read. An unknown
+        # marker is adopted on the first reload check rather than forcing a rebuild.
+        try:
+            self._creation_timestamp = self._read_creation_timestamp()
+        except Exception as exc:
+            log.warning("schwab_token_marker_unreadable", error=str(exc))
+            self._creation_timestamp = None
+        self._account_hash = await self._resolve_account_hash(self._client)
         log.info("schwab_client_initialized")
+
+    async def reload_if_reauthorized(self) -> bool:
+        """Rebuild the client if the token document has been re-authorized.
+
+        schwab-py reads the token exactly once, when the client is constructed
+        (`client_from_access_functions` calls `token_read_func()` and hands the result
+        to the session), and then holds it in memory for the process lifetime. It
+        never re-reads the document. That single read is the only thing a container
+        restart accomplishes, and it is why a re-authorization has required restarting
+        every token consumer.
+
+        The new client is proven against Schwab *before* it is installed, so a bad
+        document leaves the process on its working client rather than silently
+        breaking it. The displaced client is not closed here: call sites resolve
+        `self.client.<method>` eagerly, so a request already in flight completes
+        against the object it started on, and closing that session underneath it
+        would abort it. It is closed at the next reload or at `close()`.
+        """
+        creation = self._read_creation_timestamp()
+        if creation is None or creation == self._creation_timestamp:
+            return False
+        if self._creation_timestamp is None:
+            # Marker unreadable at startup. Adopt it now rather than treating the first
+            # successful read as a re-authorization and rebuilding a working client.
+            self._creation_timestamp = creation
+            return False
+
+        candidate = self._build_client()
+        account_hash = await self._resolve_account_hash(candidate)
+
+        await self._close_retired_client()
+        self._retired_client = self._client
+        self._client = candidate
+        self._account_hash = account_hash
+        self._creation_timestamp = creation
+        log.info("schwab_token_reloaded")
+        return True
+
+    async def _close_retired_client(self) -> None:
+        if self._retired_client is None:
+            return
+        retired, self._retired_client = self._retired_client, None
+        try:
+            await retired.close_async_session()
+        except Exception as exc:  # a stale session is not worth failing a reload over
+            log.warning("schwab_retired_session_close_failed", error=str(exc))
 
     @property
     def client(self) -> Any:
@@ -400,6 +473,7 @@ class SchwabClientWrapper:
 
     async def close(self) -> None:
         """Close the client session."""
+        await self._close_retired_client()
         if self._client is not None:
             await self._client.close_async_session()
             self._client = None

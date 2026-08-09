@@ -631,3 +631,36 @@ async def test_shutdown_handler_tolerates_already_finished_tasks():
         asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
 
     assert not task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_token_reload_loop_survives_a_failed_reload(monkeypatch):
+    """A reload failure must not take the trading loop down with it.
+
+    The old client still holds a working access token, so the correct response to a
+    bad document is to log and try again -- not to fault the TaskGroup.
+    """
+    from butterfly_guy.scripts.run_live import token_reload_loop
+
+    outcomes = [RuntimeError("bad document"), True]
+    calls: list[str] = []
+
+    async def reload_if_reauthorized():
+        outcome = outcomes[len(calls)]
+        calls.append("called")
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    schwab = Mock(reload_if_reauthorized=reload_if_reauthorized)
+    errors = Mock()
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.log.error", errors)
+
+    task = asyncio.create_task(token_reload_loop(schwab, interval=0))
+    while len(calls) < 2:
+        await asyncio.sleep(0)
+    task.cancel()
+
+    assert len(calls) == 2, "loop stopped after the failure instead of retrying"
+    errors.assert_called_once()
+    assert errors.call_args.args[0] == "schwab_token_reload_failed"

@@ -90,6 +90,9 @@ log = get_logger("run_live")
 LIVE_ACCOUNT_ALLOCATION = 20_000.0
 LIVE_MAX_DAILY_LOSS = {"SPX": 500.0, "XSP": 50.0}
 ENTRY_LOOP_ERROR_THRESHOLD = 3
+# How often to check whether the token document has been re-authorized. Re-auth is a
+# weekly event, so this only has to be short enough to make the change quick to verify.
+TOKEN_RELOAD_INTERVAL = 300.0
 
 
 def _matches_underlying(symbol: str, underlying: str) -> bool:
@@ -707,6 +710,27 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         log.info("daily_risk_reset", date=str(today))
 
 
+async def token_reload_loop(
+    schwab: SchwabClientWrapper, interval: float = TOKEN_RELOAD_INTERVAL
+) -> None:
+    """Pick up a re-authorized Schwab token without restarting the container.
+
+    schwab-py reads the token document exactly once, when the client is built, so a
+    re-authorization is invisible to a running process. That is the only reason a
+    re-auth has meant restarting every token consumer.
+
+    A failed reload must never take the trading loop down: the old client is still
+    holding a working access token, so the right response is to log and try again.
+    """
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            if await schwab.reload_if_reauthorized():
+                log.info("schwab_token_reload_applied")
+        except Exception as e:
+            log.error("schwab_token_reload_failed", error=str(e))
+
+
 def install_shutdown_handler(tasks: list[asyncio.Task[Any]]) -> None:
     """Cancel the supervised loops on SIGTERM so main()'s cleanup block runs.
 
@@ -1029,6 +1053,7 @@ async def main() -> None:
                     daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset"
                 )
             )
+            supervised.append(tg.create_task(token_reload_loop(schwab), name="token_reload"))
             if notifier:
                 supervised.append(
                     tg.create_task(eod_chart_loop(position_service), name="eod_charts")

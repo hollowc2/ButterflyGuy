@@ -166,3 +166,110 @@ async def test_token_write_contends_for_the_shared_lock(monkeypatch, tmp_path):
 
     log_error.assert_called_once_with("schwab_token_persist_failed")
     assert json.loads(token_path.read_text()) == _token_document("first")
+
+
+def _reload_harness(monkeypatch, *, clients):
+    """Wire a wrapper whose _build_client hands out `clients` in order."""
+    handed_out = []
+
+    def factory(**_kwargs):
+        client = clients[len(handed_out)]
+        handed_out.append(client)
+        return client
+
+    monkeypatch.setattr("schwab.auth.client_from_access_functions", MagicMock(side_effect=factory))
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    return schwab, handed_out
+
+
+def _account_client(hash_value="HASH", status=200):
+    response = MagicMock(status_code=status)
+    response.json.return_value = [{"accountNumber": "123", "hashValue": hash_value}]
+    return MagicMock(
+        get_account_numbers=AsyncMock(return_value=response),
+        close_async_session=AsyncMock(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_reload_is_a_noop_while_creation_timestamp_is_unchanged(monkeypatch):
+    """An ordinary hourly refresh rewrites the document but must not rebuild the client."""
+    schwab, handed_out = _reload_harness(monkeypatch, clients=[_account_client()])
+    monkeypatch.setattr(SchwabClientWrapper, "_read_creation_timestamp", lambda _self: 1000)
+    await schwab.initialize()
+    first = schwab.client
+
+    assert await schwab.reload_if_reauthorized() is False
+    assert schwab.client is first
+    assert len(handed_out) == 1
+
+
+@pytest.mark.asyncio
+async def test_reload_swaps_the_client_when_the_token_is_reauthorized(monkeypatch):
+    old, new = _account_client("OLD"), _account_client("NEW")
+    schwab, _ = _reload_harness(monkeypatch, clients=[old, new])
+    stamps = iter([1000, 2000])
+    monkeypatch.setattr(SchwabClientWrapper, "_read_creation_timestamp", lambda _self: next(stamps))
+    await schwab.initialize()
+    assert schwab.client is old
+
+    assert await schwab.reload_if_reauthorized() is True
+    assert schwab.client is new
+    assert schwab.account_hash == "NEW"
+    # The displaced client must NOT be closed: a request may still be in flight on it.
+    old.close_async_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_failed_reload_keeps_the_working_client(monkeypatch):
+    """A bad document must leave the process on the credential that still works."""
+    old, broken = _account_client("OLD"), _account_client(status=401)
+    schwab, _ = _reload_harness(monkeypatch, clients=[old, broken])
+    stamps = iter([1000, 2000])
+    monkeypatch.setattr(SchwabClientWrapper, "_read_creation_timestamp", lambda _self: next(stamps))
+    await schwab.initialize()
+
+    with pytest.raises(RuntimeError, match="Failed to get account numbers: 401"):
+        await schwab.reload_if_reauthorized()
+
+    assert schwab.client is old
+    assert schwab.account_hash == "OLD"
+    # The marker must not advance past the document it failed on, or the next check
+    # would see no change and the app would stay on the old credential forever.
+    assert schwab._creation_timestamp == 1000
+
+
+@pytest.mark.asyncio
+async def test_close_releases_both_the_live_and_retired_sessions(monkeypatch):
+    old, new = _account_client("OLD"), _account_client("NEW")
+    schwab, _ = _reload_harness(monkeypatch, clients=[old, new])
+    stamps = iter([1000, 2000])
+    monkeypatch.setattr(SchwabClientWrapper, "_read_creation_timestamp", lambda _self: next(stamps))
+    await schwab.initialize()
+    await schwab.reload_if_reauthorized()
+
+    await schwab.close()
+
+    old.close_async_session.assert_awaited_once()
+    new.close_async_session.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unreadable_marker_is_adopted_rather_than_forcing_a_rebuild(monkeypatch):
+    """initialize() tolerates an unreadable marker; the first check must not rebuild."""
+    schwab, handed_out = _reload_harness(monkeypatch, clients=[_account_client()])
+    reads = iter([RuntimeError("unreadable"), 1000, 1000])
+
+    def read(_self):
+        value = next(reads)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    monkeypatch.setattr(SchwabClientWrapper, "_read_creation_timestamp", read)
+    await schwab.initialize()
+    assert schwab._creation_timestamp is None
+
+    assert await schwab.reload_if_reauthorized() is False
+    assert schwab._creation_timestamp == 1000
+    assert len(handed_out) == 1
