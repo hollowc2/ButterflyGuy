@@ -18,7 +18,8 @@ jobs:
         run: |
           uv run pytest -q
           touch .env
-          docker compose -f infra/docker-compose.yml config >/dev/null
+          SCHWAB_GATEWAY_TOKEN_DIR=/tmp/butterflyguy-ci-token \
+            docker compose -f infra/docker-compose.yml config >/dev/null
           uv run ruff check .
 
       - name: Check runtime is flat
