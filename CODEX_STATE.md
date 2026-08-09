@@ -2190,3 +2190,49 @@ So the cheap option is genuinely cheap, and the recommendation is now to build i
 to get right is a *silent* reload failure: log, alert, keep the old client, retry — never leave an
 app running on a credential it believes is fresh. Deployment recreates trading containers, so the
 natural moment is alongside the 2026-08-15 re-authorization — the last one it would not help with.
+
+### Item 3 built — the token reload (2026-08-09, NOT deployed)
+
+Commit `9fbd9f6`. Baseline moves **975 → 983 passed, 1 skipped**; `ruff` clean.
+
+`SchwabClientWrapper.reload_if_reauthorized()` rebuilds the client when the document's
+`creation_timestamp` moves, and `token_reload_loop` (`run_live.py`) polls it every
+`TOKEN_RELOAD_INTERVAL = 300s` as a sixth supervised task.
+
+Design decisions worth keeping:
+
+- **`creation_timestamp` is the change marker, not the refresh token.** It moves only on
+  re-authorization — schwab-py preserves it across ordinary refreshes, which the Window H addendum
+  observed directly — so the hourly keepalive rewrite does not trigger a rebuild. It is also not a
+  credential, so it can be read and compared without touching a secret value.
+- **Verify before installing.** The candidate client resolves the account hash against Schwab
+  *before* it replaces the live one. A bad document therefore leaves the process on the credential
+  that still works, which is the silent-failure mode the scoping doc flagged as the one to get right.
+- **The displaced client is not closed immediately.** Closing it would abort requests in flight
+  against it. It is held as `_retired_client` and released at the next reload or at `close()`.
+- **The marker does not advance on a failed reload**, or the retry would be skipped forever. Tested.
+- **An unreadable marker at startup does not fail startup** and is adopted on the first check rather
+  than being mistaken for a re-authorization. The marker is an optimisation, not a credential
+  requirement.
+- **A failed reload never faults the TaskGroup** — logged as `schwab_token_reload_failed` and
+  retried, because the old client is still holding a working access token.
+
+Six new tests: reload is a no-op on an unchanged marker; swaps on a changed one without closing the
+old session; keeps the working client and the old marker when the new document fails to
+authenticate; `close()` releases both sessions; an unreadable marker is adopted; and the loop
+survives a failed reload and retries.
+
+**Unproven and honest about it:** this has never run against a real re-authorization. It is covered
+by tests only. The first genuine exercise would be the 2026-08-15 re-auth, and it is **not deployed**
+— no container was recreated, and deploying it requires recreating the three trading apps, which is
+an operator decision wanting a closed market.
+
+### Correction to Window H part 1
+
+"No tests cover this script", written of `tools/schwab_token_keepalive.py` while fixing the reminder
+timing, was **wrong** — `tests/test_schwab_token_keepalive.py` exists and covers it. The grep that
+produced the claim filtered on the reminder flag and `WARN_BEFORE` and so missed the file. The
+`WARN_BEFORE` 8h → 24h change duly broke a parametrized case that used 24h as its "healthy" example;
+the case now uses 25h, and 20h/24h cases were added to pin the new inclusive boundary. Caught by the
+full suite, not by the targeted run — the reason the standing constraint says to re-derive the whole
+baseline.
