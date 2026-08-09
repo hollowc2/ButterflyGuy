@@ -1993,3 +1993,110 @@ The Monday snapshot check is **deferred a third time** — it is gated on the 20
 Window G ran on a Saturday. Nothing about the feed's Schwab authentication was learned today; it has
 still never been observed on a real call. C3 wiring, the weekly re-auth cost, and the
 `issue_gateway_keys.py` append mode are untouched.
+
+## Window H — verification held; the deadline reminder is mistimed (2026-08-08)
+
+Executed 2026-08-08 17:12 PDT / 2026-08-09 00:12 UTC, a Saturday evening. Read-only on Helios
+throughout. No container was restarted, no re-authorization was performed, and no code changed.
+
+### The deadline, re-derived from the document
+
+`creation_timestamp` **2026-08-08T22:05:28Z** (Sat) + 7d = expiry **2026-08-15T22:05:28Z** (Sat),
+**165.88 h remaining**. The keepalive independently reported 166.1 h at 00:00:17 UTC — agreement
+within 0.1 h, exactly as the brief claimed.
+
+A 2-hour-old `creation_timestamp` looked alarming and is not. Window F re-authorized at
+2026-08-08T22:05:28Z, six days early, and Window G ran later the same evening; the brief for
+Window H was written at 00:15 UTC. The consecutive keepalive entries decrease 167.1 h → 166.1 h,
+which also confirms the keepalive does **not** reset `creation_timestamp` — so `creation_timestamp
++ 7d` remains the authority.
+
+**The re-auth was not performed and was not due.** Per the brief, re-authorizing early buys hours,
+not a week. The operator holds the 2026-08-15 execution.
+
+### The deadline in local time — stated because the brief did not
+
+Expiry 22:05 UTC is **15:05 PDT**. The safe window on 2026-08-15 is Saturday **morning to midday**
+local, not Saturday evening. This session ran at 17:12 PDT; the equivalent moment next Saturday
+would already be two hours past expiry.
+
+### Finding — the weekly reminder fires after the deadline it protects
+
+The `--sunday-reminder` cron is `50 1 * * 1` = **Monday 01:50 UTC**, which is **27.7 hours after**
+the Saturday 22:05 UTC expiry. It can never prompt a re-authorization in time. It was presumably set
+in local-time thinking — Monday 01:50 UTC is Sunday 18:50 PDT — but the deadline is Saturday
+afternoon local, so Sunday evening is still too late.
+
+The only automated warning that lands before expiry is the hourly keepalive's `WARN_BEFORE = 8 *
+3600` window (`schwab_token_keepalive.py:39`), opening at **2026-08-15T14:05Z / 07:05 PDT** — 8
+hours of margin, and it fights the "re-authorize early in the day" corollary, since acting when it
+fires means acting almost immediately.
+
+Not changed: the keepalive cron requires an explicit operator decision. Recorded for that decision.
+The brief's end-state check "cron 31 lines / 2 keepalive entries" passes and is not sufficient —
+it counts the entries without checking their timing.
+
+### Tasks 3–6 — all green, verified host-against-container
+
+- **Shutdown fix held.** `task_group_error` **0** on all three trading apps; all `RestartCount=0`,
+  status `running`, last exit code `0`. No container has exited 137 since Window G.
+- **Locked write healthy.** `schwab_token_persist_failed` **0** on all three trading apps.
+- **One inode, one digest, six ways.** Host `/opt/butterflyguy-tokens/tokens.json` at inode
+  **12602**, digest **`98a5d4608f22`**, 787 bytes, mode 600, uid/gid 1001 — and all five consumers
+  agree with the host. Unchanged from Window G, which is expected: only a trading-app persist
+  following a real refresh calls `os.replace`, and no refresh occurred.
+- **End state.** Gateway `running`/`healthy` on `monitoring_net`; `up{job="schwab_gateway"} == 1`
+  with instance `butterfly_schwab_gateway_live:8011`; no Schwab or candidate alert firing; cron 31
+  lines / 2 keepalive entries; keepalive succeeding hourly.
+- **No open trades.** `butterfly_trades` 224 rows, all `CLOSED`. Market closed (Saturday).
+- **Baseline re-derived, not trusted:** `uv run python -m pytest` → **975 passed, 1 skipped**;
+  `uv run ruff check .` clean. Helios on `7401dea`, same branch, only the two
+  `configs/universes/` files modified as expected.
+
+### Task 2 — the Monday check is deferred a fourth time
+
+This window ran on a Saturday evening with the market closed. `/ready` returned
+`503 snapshot_unavailable`, which is expected of a closed market and is **not** a fault, and
+`docker logs butterfly_spx_candidate_feed | grep -c api.schwabapi.com` is **0 all-time** — the feed
+has never made a Schwab call in this container's life.
+
+**Nothing was learned about the feed's authentication.** It has still never been observed on a real
+call. The check is owed at or after the 2026-08-10 open (09:30 ET / 13:30 UTC).
+
+### Deliverables
+
+- `docs/runbooks/reauthorization-2026-08-15-checklist.md` — operator-executed checklist for the
+  2026-08-15 re-auth, per operator decision that they run it. Window F's sequence with the local-time
+  deadline, the gateway-first ordering, the terminal-not-`!` warning, host-vs-container verification,
+  and the mistimed-reminder workaround folded in.
+- `docs/architecture/reducing-the-weekly-reauth-cost.md` — the open item the operator chose. Scoping
+  question only; nothing built, no decision taken.
+
+### Corrections to the Window H brief
+
+- **`run_live.py:743` has drifted.** The bare `DirectSchwabMarketDataProvider` is constructed at
+  **`run_live.py:764`**; `:763` is `await schwab.initialize()`. Line 743 is `start_metrics_server`.
+  The brief asserted this anchor "is still exact" — it is not. (The Window G record above carries the
+  same stale `:743`.)
+- **The brief's premise for the gateway cutover is incomplete.** "If the gateway held the sole
+  credential and the trading apps read through it, one re-authorization would not require restarting
+  five containers." The gateway serves three read routes, all market data. The trading apps also call
+  `get_account_numbers` at startup and `place_order` / `get_order_status` / `cancel_order` during the
+  session, and account and order operations are forbidden on the gateway by standing policy. So a
+  full market-data cutover takes the restart count from **5 to 4**, not to 1 — only the candidate
+  feed could become credential-free. Detail in the scoping doc.
+- **The restarts exist for one narrow reason, and it is cheaper to attack directly.** schwab-py's
+  `client_from_access_functions` calls `token_read_func()` **exactly once** at construction
+  (verified in the installed `schwab/auth.py`), then holds the token in the `AsyncOAuth2Client`
+  session for the process lifetime. The restart's only useful effect is re-running that one read.
+  `_read_token` is already pluggable and already takes the C1 lock, so a `reload()` that re-runs
+  `client_from_access_functions` and swaps `self._client` would take the weekly cost to **zero**
+  restarts. Scoped, not built; the deciding question is whether a mid-session client swap has a safe
+  point against the 60 s collector cycle and the 2 s position poll.
+
+### Still open after Window H
+
+The Monday snapshot check (2026-08-10 open), now owed a fourth time. The 2026-08-15 re-authorization,
+held by the operator. The mistimed `--sunday-reminder` cron. C3 wiring and the gateway key re-issue.
+`issue_gateway_keys.py` append mode. Gateway reboot survival, still proven by policy not by test.
+The credential exposure from Windows E and F, still left to the operator.
