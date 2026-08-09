@@ -1,12 +1,17 @@
 """Keep the Schwab OAuth token alive and alert before refresh token expiry.
 
 Schwab refresh tokens have a hard 7-day expiry from issue date.
-This script raises one centrally deduplicated alert starting 8 hours before expiry.
-Also sends a weekly Sunday evening reminder to re-auth before the new week.
+This script raises one centrally deduplicated alert starting 24 hours before expiry.
+Also sends a weekly reminder the day before, so the re-auth can be planned.
 
-Cron: run hourly plus a dedicated Sunday 6:50 PM PDT reminder.
+The re-auth cadence is Saturday: each new expiry is exactly 7 days after the moment of
+re-authorization, so re-authorizing on a Saturday keeps every future deadline on a
+Saturday. The reminder therefore fires Friday, and the alert window has to be wide
+enough to open before that Saturday morning.
+
+Cron: run hourly plus a dedicated Friday 07:00 PDT reminder.
   0 * * * * /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
-  50 1 * * 1 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py --sunday-reminder >> /opt/butterflyguy/keepalive.log 2>&1
+  0 14 * * 5 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py --weekly-reminder >> /opt/butterflyguy/keepalive.log 2>&1
 """
 
 import json
@@ -21,7 +26,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from notify import send as notify
 from notify import send_alertmanager
 
-SUNDAY_REMINDER = "--sunday-reminder" in sys.argv
+# "--sunday-reminder" is the pre-2026-08-09 spelling, still accepted so that a host whose
+# crontab has not been updated yet keeps sending reminders instead of silently sending none.
+WEEKLY_REMINDER = "--weekly-reminder" in sys.argv or "--sunday-reminder" in sys.argv
 
 ROOT = Path(__file__).parent.parent
 env = dotenv_values(ROOT / ".env")
@@ -36,7 +43,9 @@ API_KEY = env.get("SCHWAB_API_KEY")
 SECRET_KEY = env.get("SCHWAB_SECRET_KEY")
 
 REFRESH_TOKEN_TTL = 7 * 24 * 3600  # 7 days in seconds
-WARN_BEFORE = 8 * 3600              # start alerting 8 hours before expiry
+# 24h, not 8h: at 8h the window opened at 07:05 PDT on the Saturday the token died, which
+# is the same morning the re-auth has to happen. A day of warning covers the Friday too.
+WARN_BEFORE = 24 * 3600             # start alerting 24 hours before expiry
 LOCK_TIMEOUT = 30.0                 # wait out a gateway write before giving up
 
 if not TOKEN_PATH.exists():
@@ -58,13 +67,18 @@ seconds_remaining = expiry_ts - now
 hours_remaining = seconds_remaining / 3600
 
 
-if SUNDAY_REMINDER:
+if WEEKLY_REMINDER:
+    expiry_utc = time.strftime("%a %Y-%m-%d %H:%MZ", time.gmtime(expiry_ts))
     notify(
-        "📅 Weekly reminder: re-auth Schwab before market open tomorrow.\n"
-        f"Refresh token expires in {hours_remaining:.1f}h.\n"
-        "cd /opt/butterflyguy && .venv/bin/python tools/auth_init.py",
+        "📅 Weekly reminder: re-authorize Schwab tomorrow (Saturday), early in the day.\n"
+        f"Refresh token expires {expiry_utc}, in {hours_remaining:.1f}h.\n"
+        "Run auth_init.py in a real terminal on zeus, not through an agent session.\n"
+        "Checklist: docs/runbooks/ (reauthorization-*-checklist.md)",
     )
-    print(f"SUNDAY REMINDER: sent, refresh token expires in {hours_remaining:.1f}h")
+    print(
+        f"WEEKLY REMINDER: sent, refresh token expires {expiry_utc} "
+        f"({hours_remaining:.1f}h)"
+    )
 
 if seconds_remaining <= 0:
     alert_accepted = send_alertmanager(

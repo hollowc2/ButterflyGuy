@@ -163,9 +163,20 @@ authentication against the new document will be unobserved until the next market
 - [ ] Next deadline: **seven days from the moment of re-authorization** — write down the exact UTC
       timestamp, and confirm it is a Saturday.
 
-## Known defect to work around
+## Your automated warnings for this deadline
 
-The `--sunday-reminder` cron (`50 1 * * 1`) fires **Monday 01:50 UTC, 27.7 hours after the Saturday
-expiry**. It cannot prompt a re-auth in time and must not be relied on. Your only automated warning
-is the hourly keepalive's 8-hour window opening at 07:05 PDT that morning. Set your own calendar
-reminder. Changing the cron requires an explicit operator decision and was not made in Window H.
+Fixed in Window H — the reminder used to fire **after** the deadline it protected. Current schedule
+for the 2026-08-15 expiry:
+
+| When | What | Lead |
+|---|---|---|
+| Fri 2026-08-14 07:00 PDT | weekly reminder (Telegram), `0 14 * * 5` | 32.1 h |
+| Fri 2026-08-14 15:05 PDT | keepalive alert window opens, `WARN_BEFORE = 24h` | 24.0 h |
+| **Sat 2026-08-15 15:05 PDT** | **expiry** | — |
+
+The reminder fires **Friday**, not Saturday, deliberately: as you bank slack by re-authorizing
+earlier each Saturday, the deadline drifts earlier in the day, and a Saturday-morning reminder would
+eventually be too late again. A Friday reminder keeps 24 h+ of lead regardless.
+
+Belt and braces: set your own calendar reminder too. This is the only deadline in the system where
+missing it costs a weekday outage.
