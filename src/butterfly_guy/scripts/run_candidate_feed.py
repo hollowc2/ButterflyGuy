@@ -17,8 +17,26 @@ from butterfly_guy.candidate_fleet.feed import (
 )
 from butterfly_guy.candidate_fleet.schwab_market_data import ReadOnlySchwabMarketDataClient
 from butterfly_guy.core.config import DatabaseSettings, SchwabSettings
-from butterfly_guy.core.logging import setup_logging
+from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.db.connection import DatabasePool
+
+log = get_logger(__name__)
+TOKEN_RELOAD_INTERVAL = 300.0
+
+
+async def token_reload_loop(
+    schwab: ReadOnlySchwabMarketDataClient,
+    *,
+    interval: float = TOKEN_RELOAD_INTERVAL,
+) -> None:
+    """Pick up a re-authorized token while retaining a working client on failure."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            if await schwab.reload_if_reauthorized():
+                log.info("candidate_token_reload_applied")
+        except Exception as exc:
+            log.error("candidate_token_reload_failed", reason=type(exc).__name__)
 
 
 async def main() -> None:
@@ -57,10 +75,15 @@ async def main() -> None:
     site = web.TCPSite(runner, "0.0.0.0", args.port)
     await site.start()
     collector = asyncio.create_task(feed.run(), name="candidate_feed_collector")
+    token_reloader = asyncio.create_task(
+        token_reload_loop(schwab), name="candidate_token_reload"
+    )
     try:
         await asyncio.Event().wait()
     finally:
         collector.cancel()
+        token_reloader.cancel()
+        await asyncio.gather(collector, token_reloader, return_exceptions=True)
         await runner.cleanup()
         await schwab.close()
         await db.close()

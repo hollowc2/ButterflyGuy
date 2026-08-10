@@ -2324,3 +2324,54 @@ contention; this is the first observation of it in ordinary operation, on the po
 The candidate feed has still made **zero** Schwab calls in its container's lifetime and its
 authentication has still never been observed. It was not rebuilt and not restarted. The 2026-08-10
 open remains the test.
+
+## Candidate-feed authentication proven (2026-08-10)
+
+The repeatedly deferred market-open check is complete. At `2026-08-10T09:11 PDT`, the running
+`butterfly_spx_candidate_feed` returned:
+
+```text
+200 {"status": "ready", "reason": null}
+schwab_calls_30m=151
+schwab_calls_alltime=1409
+auth_error_scan:
+```
+
+This proves that the candidate feed authenticated against the current shared token, reached Schwab,
+and built a ready snapshot. The empty bounded error scan found no `error`, `denied`, `401`, or `403`
+markers in the preceding 30 minutes. No container, service, configuration, credential, or deployment
+state was changed; `candidatectl apply` was not run.
+
+This closes the 2026-08-10 check recorded above. It does not pre-prove the token that will be minted
+at the 2026-08-15 re-authorization: until the candidate feed's new hot-reload path is deployed and
+proven, that feed still requires its one explicit restart after the locked token move and a new
+authentication check at the next market open. The three trading apps' deployed reload remains
+scheduled for its first production exercise during that re-authorization.
+
+## Candidate-feed hot reload built locally (2026-08-10, NOT deployed)
+
+The next offline slice adds the candidate feed's separate hot-reload path. The running Helios feed
+is unchanged and still requires the one restart in the 2026-08-15 checklist until a separate live
+deployment is explicitly approved and verified.
+
+- `AtomicFileTokenStore.read_locked()` opens the already-created `.tokens.json.lock` read-only and
+  takes a shared flock. It coordinates with every exclusive C1 writer while preserving the feed's
+  read-only directory mount; it cannot create the lock file or write the token document.
+- `ReadOnlySchwabMarketDataClient` now records `creation_timestamp`, checks it every five minutes,
+  builds a replacement client only when that re-authorization marker changes, and proves the new
+  credential with one bounded read-only `$SPX` quote before installing it.
+- A failed marker read, lock acquisition, client build, or validation leaves the working client and
+  old marker intact. The loop logs a bounded `candidate_token_reload_failed` event and retries; it
+  does not stop collection or make the feed a persistent token writer.
+- Live and retired clients have isolated in-memory token callbacks, so a late refresh from an
+  in-flight request on the displaced client cannot overwrite the replacement client's memory.
+  The displaced session is retained for in-flight work and closed at the next successful reload or
+  normal shutdown.
+- The feed runner supervises the reload loop alongside collection and cancels both during cleanup.
+
+Focused verification is **26 passed** across the candidate market-data and token-manager suites,
+and the broader candidate/runtime selection is **40 passed**, with focused Ruff checks clean. The
+full repository gate is **993 passed, 1 skipped, 2 pre-existing warnings**; full Ruff and
+`git diff --check` are clean. `graphify update .` refreshed the checked-in graph to include the new
+shared-lock reader, reload lifecycle, and tests. No Docker, Helios, credential, token, or Schwab
+action was performed by the code work.

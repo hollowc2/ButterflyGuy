@@ -9,7 +9,7 @@ cleanly; this is that sequence with the Window G and Window H findings folded in
 |---|---|
 | Current refresh token created | `2026-08-08T22:05:28Z` (Sat) |
 | **Hard expiry** | **`2026-08-15T22:05:28Z` (Sat) = 15:05 PDT** |
-| Keepalive starts alerting | `2026-08-15T14:05Z` = **07:05 PDT**, only 8 h of margin |
+| Keepalive starts alerting | `2026-08-14T22:05Z` = **Fri 15:05 PDT**, 24 h of margin |
 
 **Finish before 15:05 PDT / 22:05 UTC.** This is a Saturday *morning-to-midday* task in local time,
 not an evening one. 2026-08-15 is the only Saturday before expiry.
@@ -21,7 +21,7 @@ accumulates in one direction, so buy it early.
 
 **Do not slip to Sunday.** The cadence is self-perpetuating: a Sunday re-auth makes every future
 expiry a Sunday, and it stays there. Losing the Saturday property means every future re-auth
-restarts five containers on a trading day.
+restarts the candidate feed on a trading day until its separate hot-reload path is deployed.
 
 ## Before you start
 
@@ -29,7 +29,7 @@ restarts five containers on a trading day.
       (At Window H close: 224 rows, all `CLOSED`.)
 - [ ] Market closed (Saturday — automatic).
 - [ ] All five token consumers `running`, `RestartCount=0`.
-- [ ] Baseline green: `uv run python -m pytest` → 975 passed, 1 skipped; `uv run ruff check .` clean.
+- [ ] Baseline green: `uv run python -m pytest` and `uv run ruff check .` both pass.
       Use `python -m pytest`; `uv run pytest` cannot spawn on this machine.
 
 ## Step 0 — already done, nothing to do
@@ -40,6 +40,10 @@ The token reload was **deployed 2026-08-09T21:59:16Z**, on images `9a7fcf6f0704`
 This makes 2026-08-15 the reload's **first real test**: after step 3 the three trading apps should
 pick up the new token on their own, within `TOKEN_RELOAD_INTERVAL` (300 s), with no restart. See
 step 4.
+
+The candidate-feed hot reload was built locally on 2026-08-10 but is **not deployed**. Unless a
+separate approved deployment is completed and verified before this checklist runs, the feed still
+requires the explicit restart in step 4. Do not infer live capability from repository code.
 
 ## Step 1 — mint the token on zeus, in a real terminal
 

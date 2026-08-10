@@ -198,3 +198,16 @@ route surface is that they were never going to be.
 ## Status
 
 Nothing built. No decision taken. No code changed.
+
+## Candidate-feed reload follow-up (2026-08-10)
+
+Supersedes the candidate-feed portion of the status above. The feed reload is now **built and tested
+locally but not deployed**. It watches the same `creation_timestamp` marker every five minutes,
+validates a replacement credential with one read-only `$SPX` quote before swapping, retains the
+working client on every failure, and retries. Its shared-lock reader opens the existing C1 lock file
+read-only, so the candidate container keeps its read-only token-directory mount and never becomes a
+persistent token writer.
+
+The live restart count remains **one** until that code is separately deployed and proven. Once it is
+deployed and survives a real re-authorization, the expected restart count becomes **zero**; the
+manual browser OAuth flow and seven-day deadline remain unchanged.

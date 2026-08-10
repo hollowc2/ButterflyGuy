@@ -174,7 +174,9 @@ def render_runtime(
             # B3 stopped maintaining, so the feed held an orphaned inode carrying a
             # stale, separate credential lineage. Read-only is deliberate: the feed
             # refreshes its access token in memory and must never write the shared
-            # document, so it needs neither the lock nor a writable mount.
+            # document. Its hot-reload reader opens the already-created lock file
+            # read-only and takes a shared flock, so coordination does not require a
+            # writable mount or give the feed credential-persistence capability.
             "volumes": [
                 "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}:"
                 "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}:ro"

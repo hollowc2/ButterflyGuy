@@ -95,6 +95,63 @@ def test_load_validates_and_returns_a_defensive_copy(tmp_path: Path) -> None:
     assert token_manager.health().reason == "token_loaded"
 
 
+def test_read_locked_uses_the_existing_lock_without_write_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "tokens.json"
+    write_token(path, token_document())
+    store = AtomicFileTokenStore(path)
+    with store.locked(1.0):
+        pass
+
+    real_open = os.open
+    lock_path = tmp_path / ".tokens.json.lock"
+    observed_flags: list[int] = []
+
+    def observe_open(target, flags, *args):
+        if Path(target) == lock_path:
+            observed_flags.append(flags)
+        return real_open(target, flags, *args)
+
+    monkeypatch.setattr(os, "open", observe_open)
+    with store.read_locked(1.0) as transaction:
+        assert transaction.read() == token_document()
+
+    assert len(observed_flags) == 1
+    assert observed_flags[0] & os.O_ACCMODE == os.O_RDONLY
+    assert observed_flags[0] & os.O_CREAT == 0
+
+
+def test_read_locked_refuses_to_create_a_missing_lock_file(tmp_path: Path) -> None:
+    path = tmp_path / "tokens.json"
+    write_token(path, token_document())
+    store = AtomicFileTokenStore(path)
+    lock_path = tmp_path / ".tokens.json.lock"
+
+    with pytest.raises(TokenPersistenceError, match="opened read-only"):
+        with store.read_locked(0):
+            pass
+
+    assert not lock_path.exists()
+
+
+def test_read_locked_times_out_behind_an_exclusive_writer(tmp_path: Path) -> None:
+    path = tmp_path / "tokens.json"
+    write_token(path, token_document())
+    store = AtomicFileTokenStore(path)
+
+    def read() -> object:
+        with store.read_locked(0.01) as transaction:
+            return transaction.read()
+
+    with store.locked(1.0):
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            blocked = executor.submit(read)
+            with pytest.raises(TokenLockTimeoutError):
+                blocked.result(timeout=1)
+
+
 @pytest.mark.parametrize(
     ("setup", "error", "state"),
     [
