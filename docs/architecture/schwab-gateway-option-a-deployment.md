@@ -8,11 +8,11 @@
 > retained as deployment history; statements that the gateway is undeployed or unproven are
 > superseded by this note and the later records in `CODEX_STATE.md`.
 >
-> A distinct `SchwabGatewayNotReady` alert is prepared locally in
+> A distinct `SchwabGatewayNotReady` alert is installed in
 > `infra/schwab-gateway-alerts.yml`. It requires a successful scrape plus two sustained minutes
 > without `schwab_gateway_token_state{state="ready"} == 1`, keeping it separate from process-down
-> and longer than the 30-second recovery interval. This alert is **not deployed** by this document
-> update.
+> and longer than the 30-second recovery interval. It was deployed and Prometheus was hot-reloaded
+> on 2026-08-10.
 
 Scope: bring up the read-only Schwab gateway as an isolated container on Helios, serving
 real market data through the locked token manager. The operator selected Option A from

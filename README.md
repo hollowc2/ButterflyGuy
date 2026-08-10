@@ -211,8 +211,8 @@ proven. It exposes bounded quote, spot, and option-chain reads; history, account
 remain absent.
 
 The trading applications still use direct Schwab access as the authoritative path, and no deployed
-consumer depends on the gateway. The local code contains a default-off, XSP-only shadow canary for
-the next migration stage; deploying or enabling it remains a separate operator decision. See
+consumer depends on the gateway. XSP contains the deployed shadow canary, but its flag defaults off
+and remains disabled; enabling it for a market-session observation is a separate operator decision. See
 `docs/architecture/schwab-gateway-migration.md` and `infra/docker-compose.gateway.yml` for the
 design and rollout boundaries.
 

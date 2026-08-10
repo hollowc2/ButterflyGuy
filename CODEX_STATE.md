@@ -13,9 +13,9 @@ remain as an execution history, not as current instructions.
 - The read-only Schwab gateway is deployed on Helios, running and monitored. Readiness, an
   authenticated Schwab quote, Prometheus scraping, alerting, and crash-restart recovery have been
   proven. It still exposes no account or order surface.
-- Direct Schwab access remains authoritative for the trading applications. C3 shadow wiring is now
-  implemented locally as a default-off XSP-only canary, but it is not deployed or enabled. The
-  scoped consumer-key rotation and live canary remain separate operator-approved actions.
+- Direct Schwab access remains authoritative for the trading applications. C3 shadow wiring is
+  deployed to XSP as a default-off canary; it is not enabled. The scoped internal consumer key is
+  installed and authenticated, so only the market-session enablement/observation gate remains.
 - The early full re-authorization on `2026-08-10` proved zero-restart token reload for SPX, NDX,
   XSP, and the candidate feed. The installed token was created at `2026-08-10T20:23:30Z` and
   expires at `2026-08-17T20:23:30Z` (Monday `13:23:30 PDT`).
@@ -2510,3 +2510,30 @@ This closes the production-proof block for both reload implementations. No resta
 used. The new token's Monday expiry is deliberately temporary: perform the full flow again on
 **Saturday 2026-08-15**, preferably in the morning, to restore a Saturday seven-day cadence. Do not
 defer that reset to Sunday.
+
+## C3 default-off deployment and gateway hardening (2026-08-10)
+
+Reviewed release `eb8cabe` was pushed to `main` and fast-forwarded on Helios after a full local gate
+of **1008 passed, 1 skipped**, full Ruff, both Compose renders, Prometheus rule validation, and a
+refreshed graph. Pre-deploy database and broker checks found zero open trades, option positions,
+active/unknown orders, or nonterminal intents for SPX/NDX/XSP. Exact rollback images were retained as
+`butterfly_gateway_foundation-schwab_gateway_live:rollback-20260810-22baff94` and
+`infra-app_xsp:rollback-20260810-172beb61`.
+
+The internal `butterfly-guy` gateway key was rotated without printing or staging its plaintext. Its
+digest-only document and `infra/.env` are mode `0600`; `infra/.env` was corrected from `0664` before
+the key was written. The gateway was force-recreated on image `6eb9f560effa`, now receives only its
+required Schwab app key/secret/token path, and has no account, database, or notification secrets in
+its environment. A bounded authenticated `$SPX` spot read returned 200 in 583.64 ms.
+
+XSP was force-recreated on image `801ff60cddb1` with `access_mode=direct`, the gateway URL/key
+present, and `shadow_reads=false`. It returned `/ready` 200 with one process, zero restarts, zero
+warning/error events, zero shadow-enabled events, and zero shadow metric samples. SPX, NDX, the
+candidate feed, and all six evaluators were untouched and remained running with zero restarts.
+
+`SchwabGatewayDown` and `SchwabGatewayNotReady` are both loaded after a successful Prometheus hot
+reload; `up{job="schwab_gateway"}=1` and neither alert is firing. Gateway and XSP logs stayed clean,
+all five token consumers agreed with the host document on inode/digest, and the repeated database
+and broker gates remained flat. The only remaining C3 action is a separately approved market-open
+XSP shadow session; direct data remains authoritative until then and after it unless a later cutover
+is explicitly approved.

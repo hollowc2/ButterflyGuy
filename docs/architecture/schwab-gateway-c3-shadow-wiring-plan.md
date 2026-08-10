@@ -1,8 +1,8 @@
 # C3 — wiring shadow reads into `run_live.py`
 
-Status: **implemented locally, default-off, not deployed.** The code and Compose wiring are
-reviewable without changing any running service. Enabling the XSP canary remains a separate,
-explicit deployment decision.
+Status: **deployed default-off on 2026-08-10, not enabled.** The code, XSP-only Compose wiring,
+scoped consumer key, and monitoring are installed. Enabling the XSP canary for a market session
+remains a separate, explicit decision.
 
 C3 makes gateway code reachable from a live trading entry point for the first time. Everything
 before it (the gateway image, the token manager, the comparator) is inert with respect to trading:
@@ -99,17 +99,14 @@ gateway container.
 
 ## Prerequisites, in order
 
-1. Review and deploy the local code/Compose changes; deployment is not part of this implementation.
-2. Rotate/reissue the scoped `butterfly-guy` consumer key. The live keys document contains its
-   digest, but the corresponding plaintext key was intentionally destroyed and cannot be
-   recovered. Atomically install the newly rendered digest document, recreate the gateway so it
-   reloads the document, and complete an authenticated read proof before retaining the new
-   plaintext key only in operator-owned `infra/.env` as `SCHWAB_GATEWAY_API_KEY`. Never commit or
-   print it. Append-safe issuance protects future second consumers; it cannot recover this key.
-3. Keep `SCHWAB_API_KEY` and `SCHWAB_SECRET_KEY` in the root application `.env`; do not duplicate
-   them into `infra/.env`. Render and deploy the gateway Compose file with both inputs, in this
-   order, so the root file supplies app credentials and `infra/.env` supplies gateway deployment
-   values:
+1. Deployment completed at release `eb8cabe`; keep its rollback images until the canary is reviewed.
+2. **Completed:** the scoped `butterfly-guy` consumer key was rotated, installed atomically, and
+   authenticated without printing or staging its plaintext. The new value exists only in the
+   operator-owned `infra/.env`; append-safe issuance protects future second consumers.
+3. **Completed:** `SCHWAB_API_KEY` and `SCHWAB_SECRET_KEY` remain in the root application `.env`
+   rather than being duplicated into `infra/.env`. Render and deploy the gateway Compose file with
+   both inputs, in this order, so the root file supplies app credentials and `infra/.env` supplies
+   gateway deployment values:
 
    ```bash
    docker compose --env-file .env --env-file infra/.env \
@@ -117,8 +114,8 @@ gateway container.
    ```
 
    A successful exit proves interpolation without printing or capturing credential values.
-4. Leave `SCHWAB_GATEWAY_SHADOW_READS_XSP=false` through deployment validation. Turn it on only for
-   the approved XSP market-session canary.
+4. **Remaining operator gate:** `SCHWAB_GATEWAY_SHADOW_READS_XSP=false` passed deployment
+   validation. Turn it on only for the approved XSP market-session canary.
 
 `GatewayClientSettings` (`gateway_client/config.py`) already refuses `shadow_reads` without both a
 URL and a key (`:40`), and refuses `shadow_reads` together with `access_mode="gateway"` (`:48`) since
