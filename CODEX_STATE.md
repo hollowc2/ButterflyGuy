@@ -2275,3 +2275,52 @@ first and verify fully, then rebuild" — delays the reload's first real exercis
 gain. Deploying first makes the 2026-08-15 re-auth itself the test: the rebuild restarts the apps
 anyway, and if the reload does not fire the fallback is to restart them by hand, which is exactly the
 existing procedure. Low risk, high information. The checklist now carries this as step 0.
+
+## The token reload is DEPLOYED (2026-08-09T21:59:16Z)
+
+Supersedes "Item 3 built — the token reload (2026-08-09, NOT deployed)" above. The operator asked for
+a merge and a deploy; the branch was merged to `main` via PRs #13 and #14 and the three trading apps
+were rebuilt and recreated. **Every earlier statement in this file that the reload is not deployed is
+now false.**
+
+Conditions were correct: Sunday, market closed, `butterfly_trades` flat at 224 rows all `CLOSED`.
+
+- Trading apps recreated `2026-08-09T21:59:16Z` on new images **`9a7fcf6f0704`** (spx) /
+  **`4d3f578c8cfd`** (ndx) / **`efc7c0e0c590`** (xsp). The Window G values `5912986ea455` /
+  `a71eacd32eb2` / `a092423a6257` are stale.
+- **Gateway (`22baff9404c3`) and candidate feed (`97201c17e372`) were NOT rebuilt** — still their
+  2026-08-08 containers. The CD deploy step only names `app_spx app_ndx app_xsp`.
+- `token_reload_loop` confirmed present in the running SPX image, so the deployed code is the merged
+  code, including the operator's `56e483d` hardening.
+
+Post-deploy state, verified: all three `/ready` 200; `up == 1` for all three plus the gateway; **zero
+errors and zero warnings** in any app since the deploy; `schwab_client_initialized` once per app,
+which is a real authenticated Schwab call against the live document; `schwab_token_reloaded` **0**
+and `schwab_token_reload_failed` **0**, which is correct — no re-authorization has happened since the
+deploy, so the marker has not moved and there is nothing to reload.
+
+### The C1 write proved itself in production, on the new code
+
+The token document's inode moved **`12602` → `776`** after the deploy, digest `85d607826a0d`, still
+787 bytes, mode 600, uid/gid 1001, schema and `creation_timestamp` intact, and all five consumers
+agreeing with the host. Only a trading-app persist calls `os.replace`; the keepalive truncates in
+place. So a newly deployed app refreshed its access token and wrote it through the shared C1 lock
+atomically, with **zero `schwab_token_persist_failed`**. Window F proved that path under synthetic
+contention; this is the first observation of it in ordinary operation, on the post-merge code.
+
+### What this changes about 2026-08-15
+
+- **Checklist step 0 is done.** Do not rebuild; the reload is already live.
+- **The three trading apps should need no restart.** After the locked move, watch for
+  `schwab_token_reloaded` in their logs within `TOKEN_RELOAD_INTERVAL` (300 s). That is the test.
+- **The candidate feed still needs its restart** — it is not covered by the reload.
+- **The gateway needs none**, per the 2026-08-09 correction.
+- **Expected restarts on 2026-08-15: one, the feed.** Down from the four this work started with.
+- If `schwab_token_reloaded` does not appear, fall back to restarting the three apps by hand, which
+  is the pre-existing procedure, and record that the reload did not fire.
+
+### Unchanged by any of this
+
+The candidate feed has still made **zero** Schwab calls in its container's lifetime and its
+authentication has still never been observed. It was not rebuilt and not restarted. The 2026-08-10
+open remains the test.
