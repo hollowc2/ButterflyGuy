@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import runpy
 import sys
 import types
 from unittest.mock import patch
@@ -12,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from butterfly_guy.notify import send_alertmanager as _send_alertmanager
 from butterfly_guy.services.notifier import AlertmanagerNotifier, DiscordNotifier
 
 EASTERN = ZoneInfo("America/New_York")
@@ -29,7 +29,6 @@ EASTERN = ZoneInfo("America/New_York")
 def test_alertmanager_payload_has_stable_redacted_fingerprint(
     monkeypatch, condition, alertname
 ):
-    namespace = runpy.run_path("tools/notify.py")
     requests = []
 
     class Response:
@@ -49,7 +48,7 @@ def test_alertmanager_payload_has_stable_redacted_fingerprint(
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
 
     for resolved in (False, False, True):
-        assert namespace["send_alertmanager"](
+        assert _send_alertmanager(
             "http://alertmanager:9093",
             condition,
             "xsp",
@@ -91,7 +90,7 @@ async def test_alertmanager_failed_resolution_retries_until_accepted(
 
     monkeypatch.setitem(
         sys.modules,
-        "notify",
+        "butterfly_guy.notify",
         types.SimpleNamespace(send_alertmanager=send_alertmanager),
     )
 
@@ -122,7 +121,7 @@ async def test_alertmanager_new_firing_cancels_stale_pending_resolution(monkeypa
 
     monkeypatch.setitem(
         sys.modules,
-        "notify",
+        "butterfly_guy.notify",
         types.SimpleNamespace(send_alertmanager=send_alertmanager),
     )
 

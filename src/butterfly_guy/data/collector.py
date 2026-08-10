@@ -7,8 +7,6 @@ import datetime as dt
 import json
 from typing import Any
 
-from notify import send as notify
-
 from butterfly_guy.backtest.chain_cache import save_snapshot
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
@@ -25,6 +23,7 @@ from butterfly_guy.core.time_utils import (
 from butterfly_guy.data.providers import CollectorMarketDataProvider
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS
 from butterfly_guy.db.queries import ChainQueries, DailyBarQueries, SpotQueries
+from butterfly_guy.notify import send as notify
 
 log = get_logger(__name__)
 

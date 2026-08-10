@@ -79,7 +79,7 @@ def test_token_keepalive_reports_alertmanager_state(
     )
     monkeypatch.setitem(
         sys.modules,
-        "notify",
+        "butterfly_guy.notify",
         types.SimpleNamespace(
             send=lambda _message: True,
             send_alertmanager=send_alertmanager,
@@ -141,7 +141,7 @@ def test_token_keepalive_honours_schwab_token_path(
     monkeypatch.setattr("schwab.auth.client_from_token_file", client_from_token_file)
     monkeypatch.setitem(
         sys.modules,
-        "notify",
+        "butterfly_guy.notify",
         types.SimpleNamespace(
             send=lambda _message: True,
             send_alertmanager=lambda *_args, **_kwargs: True,
@@ -181,7 +181,7 @@ def test_token_keepalive_reports_alertmanager_failure(monkeypatch, capsys):
     )
     monkeypatch.setitem(
         sys.modules,
-        "notify",
+        "butterfly_guy.notify",
         types.SimpleNamespace(
             send=lambda _message: True,
             send_alertmanager=lambda *_args, **_kwargs: False,
@@ -216,7 +216,7 @@ def _run_with_stub_token(monkeypatch, now=2_000_000_000):
     )
     monkeypatch.setitem(
         sys.modules,
-        "notify",
+        "butterfly_guy.notify",
         types.SimpleNamespace(
             send=lambda _message: True,
             send_alertmanager=lambda *_args, **_kwargs: True,

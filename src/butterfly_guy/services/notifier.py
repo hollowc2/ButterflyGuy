@@ -23,7 +23,7 @@ class AlertmanagerNotifier:
         self._pending_resolutions: set[str] = set()
 
     async def notify_critical(self, condition: str) -> bool:
-        from notify import send_alertmanager
+        from butterfly_guy.notify import send_alertmanager
 
         self._pending_resolutions.discard(condition)
         sent = await asyncio.to_thread(
@@ -41,7 +41,7 @@ class AlertmanagerNotifier:
         return sent
 
     async def resolve_critical(self, condition: str) -> bool:
-        from notify import send_alertmanager
+        from butterfly_guy.notify import send_alertmanager
 
         resolved = await asyncio.to_thread(
             send_alertmanager,
@@ -322,7 +322,7 @@ class TelegramNotifier:
             "reset, or adjust risk manually."
         )
         try:
-            from notify import send as send_telegram
+            from butterfly_guy.notify import send as send_telegram
         except ModuleNotFoundError:
             log.warning("telegram_notify_unavailable")
             return

@@ -22,9 +22,8 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-sys.path.insert(0, str(Path(__file__).parent))
-from notify import send as notify
-from notify import send_alertmanager
+from butterfly_guy.notify import send as notify
+from butterfly_guy.notify import send_alertmanager
 
 # "--sunday-reminder" is the pre-2026-08-09 spelling, still accepted so that a host whose
 # crontab has not been updated yet keeps sending reminders instead of silently sending none.

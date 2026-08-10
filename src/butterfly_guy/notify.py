@@ -1,7 +1,7 @@
 """Lightweight Telegram and ButterflyGuy Alertmanager helpers.
 
 Usage:
-    from notify import send
+    from butterfly_guy.notify import send
     send("Something went wrong")
 
 Requires env vars:
