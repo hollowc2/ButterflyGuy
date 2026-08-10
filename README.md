@@ -37,8 +37,18 @@ runtime.
 | `src/butterfly_guy/risk/` | Daily loss limits, trade caps, and buying-power guards |
 | `src/butterfly_guy/data/` | Schwab client, chain collection, and DB-facing data models |
 | `src/butterfly_guy/backtest/` | DB replay and simulation engine |
+| `src/butterfly_guy/candidate_fleet/` | Shared-feed paper candidate evaluators (see below) |
+| `src/butterfly_guy/core/` | Config loading, logging, and shared settings |
+| `src/butterfly_guy/db/` | TimescaleDB connection pool, migrations, and queries |
+| `src/butterfly_guy/quant_engine/` | Black-Scholes pricer and IV/skew modeling |
+| `src/butterfly_guy/services/` | Trade and position service orchestration, notifications |
+| `src/butterfly_guy/reports/` | Report and dashboard generation |
+| `src/butterfly_guy/equity_scan/` | Personal equity-research scanner (not part of the butterfly strategy) |
+| `src/butterfly_guy/schwab_gateway/` | In-progress shared Schwab OAuth/REST gateway (see below) |
+| `src/butterfly_guy/gateway_client/` | Client for consuming the Schwab gateway |
 | `configs/` | SPX, NDX, and XSP configuration files |
 | `infra/` | Docker compose and observability wiring |
+| `docs/architecture/`, `docs/runbooks/` | Design notes, migration plans, and operational runbooks |
 | `tests/` | Focused test coverage |
 
 ## Architecture at a glance
@@ -75,7 +85,11 @@ That orchestration is what lives in `run_live.py`.
 
 Default runtime settings are paper-trading oriented. Live trading requires the explicit live-trading guard to be enabled.
 
-Secrets and runtime credentials live in `.env` and `tokens.json`. Do not commit those values.
+Secrets and runtime credentials live in `.env` and `tokens.json`. Do not commit those values. Copy `.env.example` to `.env` to start.
+
+## Live-money readiness gate
+
+This repo is not cleared for live-money automation until `todo.md` is complete. Before any restart, deploy, or live pilot, check the current gate in `todo.md` and follow `docs/live-runbook.md`, which requires zero `OPEN` trades in the database, no working/unknown Schwab orders, and broker/DB reconciliation.
 
 ## Typical workflow
 
@@ -177,6 +191,16 @@ legacy `app_spx_candidate` Compose profile remains stopped and available for
 one rollback cycle; it must not run concurrently with the fleet-native
 `best-rr` evaluator because both use the preserved BEST_RR database.
 
+## Schwab gateway (in progress)
+
+`src/butterfly_guy/schwab_gateway/` and `src/butterfly_guy/gateway_client/` are an in-progress
+migration toward a single shared Schwab OAuth/REST gateway process, so SPX, NDX, XSP, and the
+candidate fleet stop each holding a direct SDK client and token file. As of this writing the live
+path described in `docs/architecture/current-schwab-integration.md` still uses one app identity
+and one host token file per process; the gateway is not yet the production path. See
+`docs/architecture/schwab-gateway-migration.md` and `infra/docker-compose.gateway.yml` for the
+current design and rollout plan.
+
 ### 4) Run the live orchestrator directly
 
 The live runner starts collection, entry logic, and position monitoring together.
@@ -251,6 +275,7 @@ The same script also supports `--asset NDX` and `--asset XSP`, but those should 
 - Backtests should be run against the same config family as the asset you are comparing.
 - Docker is the normal way to run the app services.
 - TimescaleDB is the historical source of truth for replay and parity work.
+- Live-money automation is gated by `todo.md`; check it before any restart, deploy, or live pilot.
 
 ## If you are changing the code
 
