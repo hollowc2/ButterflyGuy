@@ -510,8 +510,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1786326053.7698307,
-    "ast_hash": "9e022b42d3eb2599646f0d2be36ac8ee",
+    "mtime": 1786396738.9801235,
+    "ast_hash": "d58f89640696979c9e5809b95c6574c3",
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_morning_scan.py": {
@@ -895,8 +895,8 @@
     "semantic_hash": ""
   },
   "tests/test_run_live.py": {
-    "mtime": 1786326054.3628197,
-    "ast_hash": "04437f04290576c2fc7b593552aa5ab7",
+    "mtime": 1786396833.2283936,
+    "ast_hash": "f4c9ecbc96c4a281ee668d724db85f04",
     "semantic_hash": ""
   },
   "tests/test_run_migrations.py": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1786330583.239022,
-    "ast_hash": "4582052c232faabb0440e4842e3fd907",
+    "mtime": 1786397131.8999112,
+    "ast_hash": "6951aa766ff34bbf4b70e653e31c4e05",
     "semantic_hash": ""
   },
   "configs/candidates.yaml": {
@@ -1140,8 +1140,8 @@
     "semantic_hash": ""
   },
   "docs/live-runbook.md": {
-    "mtime": 1784824037.0951147,
-    "ast_hash": "a7bbd45f829db83cb2d2ed5a409f3586",
+    "mtime": 1786395636.1702614,
+    "ast_hash": "267dc1293b47ad87fca97abb6b7d2350",
     "semantic_hash": ""
   },
   "docs/research/strategy-discovery-journal.md": {
@@ -1160,8 +1160,8 @@
     "semantic_hash": ""
   },
   "infra/docker-compose.yml": {
-    "mtime": 1786326052.956846,
-    "ast_hash": "b49a5c46ff58b3cac432e1772a7fbea4",
+    "mtime": 1786396587.1659102,
+    "ast_hash": "e44edc389606f4ff08ad5a7d19ef98ae",
     "semantic_hash": ""
   },
   "infra/grafana/provisioning/dashboards/dashboards.yml": {
@@ -1265,8 +1265,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/schwab_gateway/auth.py": {
-    "mtime": 1786060832.2905853,
-    "ast_hash": "3aa9e51fb820cd6feec7ab0a1ef1f27e",
+    "mtime": 1786396560.6193976,
+    "ast_hash": "89b02ada1d54fa77e33ca11eb69f33b6",
     "semantic_hash": ""
   },
   "src/butterfly_guy/schwab_gateway/config.py": {
@@ -1300,8 +1300,8 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_auth.py": {
-    "mtime": 1786060832.8715765,
-    "ast_hash": "120f91c5799aa5a6e88d63952e80be9c",
+    "mtime": 1786396522.764091,
+    "ast_hash": "9bacb2a51c9e258e545853645139f088",
     "semantic_hash": ""
   },
   "tests/test_gateway_config.py": {
@@ -1325,8 +1325,8 @@
     "semantic_hash": ""
   },
   "CODEX_STATE.md": {
-    "mtime": 1786381035.2996507,
-    "ast_hash": "79212753168cb777c0febc68c4c29655",
+    "mtime": 1786397131.7319143,
+    "ast_hash": "08af872c359a818b96ba895a36c10c9a",
     "semantic_hash": ""
   },
   "docs/architecture/current-schwab-integration.md": {
@@ -1355,8 +1355,8 @@
     "semantic_hash": ""
   },
   "infra/docker-compose.gateway.yml": {
-    "mtime": 1786326052.9118469,
-    "ast_hash": "0b63c57acf126d54eda4f07424ee3c86",
+    "mtime": 1786396587.3019078,
+    "ast_hash": "76513df118df5b01416926e0a0b1ab6e",
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-foundation-smoke.md": {
@@ -1370,8 +1370,8 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_compose.py": {
-    "mtime": 1786326054.0478256,
-    "ast_hash": "cc8ca89f5769fa0a8bd64675668f009a",
+    "mtime": 1786396799.3940146,
+    "ast_hash": "c1146a63122e55b04548809fdcdeb663",
     "semantic_hash": ""
   },
   "tests/test_gateway_token_manager.py": {
@@ -1425,13 +1425,13 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_contract_boundaries.py": {
-    "mtime": 1786326054.1378238,
-    "ast_hash": "c24dc0b75e849664323ebb93a8efc44f",
+    "mtime": 1786396780.1603677,
+    "ast_hash": "fa570bbab88e39d63f8a1db933e785c7",
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-multi-consumer.md": {
-    "mtime": 1786060831.2996001,
-    "ast_hash": "16247767a07aa395ee9a3edf9cb3b0b3",
+    "mtime": 1786395382.8418314,
+    "ast_hash": "36ae0ac425f8428cf4a79cc27d8df052",
     "semantic_hash": ""
   },
   "docs/runbooks/schwab-gateway-after-hours-credential-proof.md": {
@@ -1480,8 +1480,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/issue_gateway_keys.py": {
-    "mtime": 1786326053.7238317,
-    "ast_hash": "4ca592f1229959c3a972cedaa256d5b5",
+    "mtime": 1786396522.6190937,
+    "ast_hash": "031707f7a981517f2459e5a5fda64e48",
     "semantic_hash": ""
   },
   "tests/test_auth_init.py": {
@@ -1500,8 +1500,8 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_issue_keys.py": {
-    "mtime": 1786326054.1718233,
-    "ast_hash": "42dd0e5276458c810617a6119619b9ff",
+    "mtime": 1786396522.9030886,
+    "ast_hash": "ecb991e9aa2c24dc1a79cfac8255a3b0",
     "semantic_hash": ""
   },
   "tests/test_gateway_live_provider.py": {
@@ -1525,13 +1525,13 @@
     "semantic_hash": ""
   },
   "docs/architecture/reducing-the-weekly-reauth-cost.md": {
-    "mtime": 1786381035.071655,
-    "ast_hash": "937f1b89e4f34a2adbb32db1141cba75",
+    "mtime": 1786393973.4979954,
+    "ast_hash": "83e40b3c0b7bf2aa65903bafc52d4d80",
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-c3-shadow-wiring-plan.md": {
-    "mtime": 1786326052.6878512,
-    "ast_hash": "e471ac3a14015977b94711de2445f34d",
+    "mtime": 1786397004.6162477,
+    "ast_hash": "a0f0dba1f751390fa72adf6947f602b8",
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-deployment-options.md": {
@@ -1540,23 +1540,23 @@
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-option-a-deployment.md": {
-    "mtime": 1786326052.798849,
-    "ast_hash": "41ff35450d0478b0a4df873f4f4656df",
+    "mtime": 1786397131.5529177,
+    "ast_hash": "962dd1381515ccfb0c932c9695151cef",
     "semantic_hash": ""
   },
   "docs/runbooks/reauthorization-2026-08-15-checklist.md": {
-    "mtime": 1786381034.81866,
-    "ast_hash": "1c86f02b7bc28a66c92b51a2f4c20919",
+    "mtime": 1786395383.019828,
+    "ast_hash": "15a8ee0073447dc8e793781e0e318ae7",
     "semantic_hash": ""
   },
   "docs/runbooks/token-reauthorization-and-gateway-enablement.md": {
-    "mtime": 1786326052.8668478,
-    "ast_hash": "61cee41cd95789d2ac6cd02db89fc8e7",
+    "mtime": 1786395328.1848116,
+    "ast_hash": "96b1e9d95cd7e7174e7b310e2e1e6b62",
     "semantic_hash": ""
   },
   "infra/schwab-gateway-alerts.yml": {
-    "mtime": 1786326053.0348446,
-    "ast_hash": "82400ec493c1d8a13876a97a73d44eb0",
+    "mtime": 1786395635.6682706,
+    "ast_hash": "1e4b7ecb36560bbecd533f5ae432329d",
     "semantic_hash": ""
   },
   "src/butterfly_guy/notify.py": {
