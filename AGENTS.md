@@ -1,6 +1,8 @@
 # AGENTS.md
 
-Repository instructions for Cursor, Codex, and other coding agents working in this tree.
+Repository instructions for all coding agents working in this tree. This is the
+authoritative agent-instruction file; keep operational guidance here rather than
+duplicating it in tool-specific instruction files.
 
 ## Project Context
 
@@ -11,7 +13,7 @@ This code can affect live trading behavior. Treat strategy, execution, risk, tok
 ## First Reads
 
 - `README.md` is the user-facing overview and has the current research/backtest commands.
-- `CLAUDE.md` contains a detailed architecture map and historical agent guidance. Use it as supporting context, but follow this `AGENTS.md` first.
+- `CLAUDE.md` is a compatibility pointer for Claude Code; it delegates to this file.
 - Cursor project rules in `.cursor/rules/` point here and to `CLAUDE.md`.
 - Main source lives under `src/butterfly_guy/`.
 - Runtime configs live under `configs/`.
@@ -80,12 +82,12 @@ Useful container names:
 - `butterfly_ndx_app`
 - `butterfly_xsp_app`
 
-## Architecture Map
+## Architecture Navigation
 
 - `core/`: config loading, logging, metrics, time utilities.
 - `data/`: Schwab API client, option chain collection, schemas.
 - `db/`: asyncpg pool, migrations, SQL queries.
-- `strategy/`: butterfly construction/selection, direction filters, VIX anchoring, regime classification.
+- `strategy/`: butterfly construction/selection, direction filters, VIX anchoring, and regime classification.
 - `execution/`: order construction and price ladder retry logic.
 - `position/`: mark polling, profit state machine, exit signals.
 - `risk/`: daily trade count, loss limits, halt logic, account/buying-power guards.
@@ -101,9 +103,12 @@ Useful container names:
 - `configs/config_xsp.yaml`: XSP-specific config.
 - `.env` and `tokens.json` are local/runtime secrets. Do not print, commit, rewrite, or summarize their secret values.
 - Paper fills are intended to use mark price `(bid + ask) / 2`, matching the project convention.
+- Treat the checked-in runtime configuration and source code as the authority for active strategy parameters, schedules, limits, and infrastructure details. Do not duplicate volatile values in agent instructions.
 
 ## Working Rules
 
+- Establish the requested outcome before coding. State material assumptions and trade-offs; ask only when an unresolved choice would materially change the result or introduce risk.
+- Prefer the smallest clear implementation that satisfies the request. Do not add speculative features, abstractions, configuration, or handling for impossible scenarios.
 - Make surgical changes. Touch only files needed for the request.
 - Do not refactor adjacent code or reformat unrelated files.
 - Prefer existing project patterns over new abstractions.
@@ -113,6 +118,8 @@ Useful container names:
 - Do not change trading limits, paper/live mode, account guards, order routing, or token handling unless the user directly asks.
 - If a command may place orders, call Schwab write APIs, or alter live services, state the risk before running it.
 - Never use destructive git commands unless the user explicitly asks.
+
+For multi-step changes, state a brief plan with a concrete verification step. Remove imports, variables, or code made unused by your own change, but leave pre-existing unrelated cleanup alone.
 
 ## Verification Expectations
 
