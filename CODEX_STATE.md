@@ -2459,3 +2459,37 @@ The early marker-change test is now safe to perform. Mint into `/tmp/tokens.new.
 move it under C1, then require all three `schwab_token_reloaded` events and the feed's
 `candidate_market_data_token_reloaded` within six minutes. Re-authorize again on Saturday—not
 Sunday—to restore the Saturday expiry/fallback cadence.
+
+## Early full re-authorization proves zero-restart reload (2026-08-10)
+
+The operator completed the browser flow in a real zeus terminal. The scratch document was a regular
+787-byte file with the exact expected envelope, `creation_timestamp`
+`2026-08-10T20:23:30Z`, derived expiry `2026-08-17T20:23:30Z`, and digest prefix
+`b5e99b7e93cd`. Its initial mode `0644` was corrected to `0600` before transfer. The byte-identical
+Helios staging file was schema-checked without printing credential values.
+
+At `2026-08-10T20:27:22Z`, with zero open trades and every consumer running at restart count 0, the
+incoming file was moved into place under `flock -w 30 .tokens.json.lock`. Installed state: inode
+`776`, mode `0600`, owner `1001:1001`, digest `b5e99b7e93cd`, and the new marker above.
+
+The first real marker-change exercise passed end to end:
+
+- candidate feed: `candidate_market_data_token_reloaded=1`, failure count 0; its mandatory
+  read-only `$SPX` validation produced the one Schwab call after the move;
+- SPX/NDX/XSP: `schwab_token_reloaded=1` on each, failure count 0;
+- stale-write guard: `schwab_token_stale_persist_rejected=0`; no old callback raced this exercise,
+  while the deployed regression test remains the proof that such a callback is rejected;
+- every app/feed warning/error count 0, every consumer restart count 0, and all three trading
+  `/ready` endpoints 200;
+- host, gateway, three apps, and feed all saw the same inode `776` and digest `b5e99b7e93cd`;
+- open trades remained zero and no `.tokens.json.incoming` file remained on Helios.
+
+The feed's ordinary `/ready` was 503 `snapshot_stale` after the cash close, with
+`candidate_feed_market_open=0` and snapshot age about 32.6 minutes. That is a market-data freshness
+state, not an auth result; the successful reload event can only occur after its explicit Schwab
+validation quote returns 200.
+
+This closes the production-proof block for both reload implementations. No restart fallback was
+used. The new token's Monday expiry is deliberately temporary: perform the full flow again on
+**Saturday 2026-08-15**, preferably in the morning, to restore a Saturday seven-day cadence. Do not
+defer that reset to Sunday.

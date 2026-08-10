@@ -58,6 +58,12 @@ An optional early production proof may use this same checklist before 2026-08-15
 the full flow again on **Saturday 2026-08-15** to restore the Saturday cadence; do not move the
 cadence to Sunday. Record both marker changes independently.
 
+**Early proof completed 2026-08-10:** all three apps and the candidate feed reloaded exactly once,
+all failure counts were zero, all consumers agreed with the host document, and no container
+restarted. The temporary token expires Monday 2026-08-17 at 13:23:30 PDT. This checklist is still
+owed on Saturday—not because the current token is near expiry, but to move the recurring deadline
+off Monday and back onto Saturday.
+
 ## Step 1 — mint the token on zeus, in a real terminal
 
 Helios is headless; the browser flow runs on zeus. zeus and Helios carry identical app credentials

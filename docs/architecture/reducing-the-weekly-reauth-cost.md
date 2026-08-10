@@ -231,3 +231,16 @@ authorization lineage after the operator installed the new document. Commit `4ae
 race at `SchwabClientWrapper._write_token`. Under the same exclusive lock, a write with an older
 valid `creation_timestamp` is rejected; an equal marker follows the ordinary atomic refresh path.
 The guard was deployed to SPX/NDX/XSP on release `4b70686` after the final XSP position settled.
+
+### Production marker-change proof (2026-08-10)
+
+The operator performed an early full OAuth re-authorization and installed the new document under
+C1 while every consumer remained running. Within the independent five-minute polling windows,
+SPX/NDX/XSP each logged one `schwab_token_reloaded`, and the feed logged one
+`candidate_market_data_token_reloaded` after its validation quote. All reload-failure counts were
+zero, every consumer retained restart count 0, and host plus all five consumers agreed on the new
+inode and digest. The zero-restart design is therefore production-proven rather than fake-proven.
+
+No stale callback happened during this particular window (`schwab_token_stale_persist_rejected=0`),
+so the monotonic rejection branch remains regression-proven rather than live-trigger-proven. That is
+the correct quiet-path result, not a missing reload proof.
