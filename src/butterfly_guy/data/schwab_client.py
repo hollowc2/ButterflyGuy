@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import math
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -30,6 +32,16 @@ SCHWAB_SPOT_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX", "XSP": "$XS
 SCHWAB_CHAIN_SYMBOLS: dict[str, str] = {"SPX": "$SPX", "NDX": "$NDX", "XSP": "$XSP"}
 
 
+def _creation_timestamp(document: object) -> float | None:
+    if not isinstance(document, Mapping):
+        return None
+    value = document.get("creation_timestamp")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    timestamp = float(value)
+    return timestamp if math.isfinite(timestamp) and timestamp > 0 else None
+
+
 class SchwabClientWrapper:
     """Async wrapper around schwab-py with retry and metrics."""
 
@@ -52,6 +64,20 @@ class SchwabClientWrapper:
 
         try:
             with self._token_store.locked(TOKEN_LOCK_TIMEOUT) as transaction:
+                current_creation = _creation_timestamp(transaction.read())
+                incoming_creation = _creation_timestamp(token)
+                if (
+                    current_creation is not None
+                    and incoming_creation is not None
+                    and incoming_creation < current_creation
+                ):
+                    # A client built before a manual re-authorization can finish an
+                    # access-token refresh before the five-minute reload notices the
+                    # new document. The lock prevents a torn write, but only this
+                    # monotonic marker check prevents that old client from atomically
+                    # restoring its obsolete refresh-token lineage.
+                    log.warning("schwab_token_stale_persist_rejected")
+                    return
                 transaction.write(token)
         except TokenManagerError:
             # The refreshed access token is already live in memory and the keepalive
@@ -80,10 +106,7 @@ class SchwabClientWrapper:
         credential, so it can be compared and logged freely -- unlike the refresh
         token, which would work equally well as a marker but must never be read.
         """
-        document = self._read_token()
-        if isinstance(document, dict):
-            return document.get("creation_timestamp")
-        return None
+        return _creation_timestamp(self._read_token())
 
     async def _resolve_account_hash(self, client: Any) -> str:
         resp = await client.get_account_numbers()

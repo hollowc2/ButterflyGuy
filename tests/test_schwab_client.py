@@ -146,6 +146,31 @@ async def test_token_write_replaces_atomically_and_stays_private(monkeypatch, tm
 
 
 @pytest.mark.asyncio
+async def test_token_write_rejects_an_older_reauthorization_lineage(monkeypatch, tmp_path):
+    token_path = tmp_path / "tokens.json"
+    original = _token_document("original")
+    token_path.write_text(json.dumps(original))
+    token_path.chmod(0o600)
+
+    captured = await _accessors(monkeypatch, token_path)
+    reauthorized = _token_document("reauthorized")
+    reauthorized["creation_timestamp"] += 100
+    token_path.write_text(json.dumps(reauthorized))
+    token_path.chmod(0o600)
+    reauthorized_inode = token_path.stat().st_ino
+    log_warning = MagicMock()
+    monkeypatch.setattr("butterfly_guy.data.schwab_client.log.warning", log_warning)
+
+    # This callback belongs to the client constructed from `original`. Its access
+    # token may refresh before the reload loop notices the re-authorized document.
+    captured["write"](_token_document("late-old-refresh"))
+
+    assert json.loads(token_path.read_text()) == reauthorized
+    assert token_path.stat().st_ino == reauthorized_inode
+    log_warning.assert_called_once_with("schwab_token_stale_persist_rejected")
+
+
+@pytest.mark.asyncio
 async def test_token_write_contends_for_the_shared_lock(monkeypatch, tmp_path):
     token_path = tmp_path / "tokens.json"
     token_path.write_text(json.dumps(_token_document("first")))
