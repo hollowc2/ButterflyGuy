@@ -32,37 +32,14 @@ restarts five containers on a trading day.
 - [ ] Baseline green: `uv run python -m pytest` → 975 passed, 1 skipped; `uv run ruff check .` clean.
       Use `python -m pytest`; `uv run pytest` cannot spawn on this machine.
 
-## Step 0 (optional) — deploy the token reload *before* re-authorizing
+## Step 0 — already done, nothing to do
 
-Only if the operator has decided to ship it. Skipping this changes nothing else in the checklist.
+The token reload was **deployed 2026-08-09T21:59:16Z**, on images `9a7fcf6f0704` (spx) /
+`4d3f578c8cfd` (ndx) / `efc7c0e0c590` (xsp). Do not rebuild.
 
-`token_reload_loop` makes the three trading apps pick up a re-authorized token on their own, within
-`TOKEN_RELOAD_INTERVAL` (300 s), with no restart. Deploying it **before** the re-auth rather than
-after means this Saturday's re-auth is its first real test, instead of waiting a week for
-2026-08-22 — and the rebuild restarts the apps anyway, so the restart is not an extra cost.
-
-The fallback if it does not work is to restart the three apps by hand, which is exactly step 4 —
-the current, known-good procedure. That makes deploying first low-risk and high-information.
-
-```bash
-ssh helios 'cd /opt/butterflyguy && git pull --ff-only'
-ssh helios 'cd /opt/butterflyguy/infra && docker compose --profile ndx --profile xsp \
-  build app_spx app_ndx app_xsp'
-ssh helios 'cd /opt/butterflyguy/infra && docker compose --profile ndx --profile xsp \
-  up -d --no-deps app_spx app_ndx app_xsp'
-```
-
-- [ ] No position open and market closed (already checked above).
-- [ ] Three apps rebuilt and recreated **by explicit service name**.
-- [ ] All three back to `running`, `RestartCount=0`, and logging `schwab_client_initialized`.
-- [ ] Note the new image IDs — the Window G images were `5912986ea455` / `a71eacd32eb2` /
-      `a092423a6257`.
-
-Then continue to step 1. After step 3, **watch for `schwab_token_reloaded` in the app logs within
-5 minutes instead of restarting them** — that is the whole point. If it does not appear, fall back to
-step 4 and record that the reload did not fire.
-
-**The candidate feed is not covered by the reload** and still needs its step-4 restart either way.
+This makes 2026-08-15 the reload's **first real test**: after step 3 the three trading apps should
+pick up the new token on their own, within `TOKEN_RELOAD_INTERVAL` (300 s), with no restart. See
+step 4.
 
 ## Step 1 — mint the token on zeus, in a real terminal
 
@@ -136,8 +113,27 @@ token paths differ, and earlier versions of this runbook got the list wrong:
 | Consumer | How it holds the token | Restart? |
 |---|---|---|
 | `butterfly_schwab_gateway_live` | **fresh client per request**, constructed inside the token lock and discarded | **No** |
-| `butterfly_spx_app` / `_ndx_` / `_xsp_` | `client_from_access_functions` once at startup, cached in memory | **Yes** |
+| `butterfly_spx_app` / `_ndx_` / `_xsp_` | cached at startup — **but the reload now picks up a new one by itself** | **No, if the reload fires** |
 | `butterfly_spx_candidate_feed` | read once at first use, cached in memory, never written back | **Yes** |
+
+**Expected restarts this time: one — the feed.** Down from the four this work started with.
+
+### First, watch the reload do its job
+
+Within 5 minutes of the step-3 move, all three apps should log `schwab_token_reloaded`:
+
+```bash
+ssh helios 'for c in butterfly_spx_app butterfly_ndx_app butterfly_xsp_app; do
+  printf "%-22s reloaded=%s failed=%s\n" $c \
+    $(docker logs --since 10m $c 2>&1 | grep -c schwab_token_reloaded) \
+    $(docker logs --since 10m $c 2>&1 | grep -c schwab_token_reload_failed); done'
+```
+
+- [ ] `reloaded=1` on all three, `failed=0`. **This is the first production test of the reload —
+      record the result either way.**
+- [ ] If `reloaded=0` after 6+ minutes, or `failed` is non-zero: **fall back** to
+      `docker restart butterfly_spx_app butterfly_ndx_app butterfly_xsp_app`, which is the
+      pre-existing procedure, and record loudly that the reload did not fire.
 
 **The gateway does not need restarting, and the old "gateway must go first" rule rested on a false
 premise.** `LockedSchwabClientAdapter.execute` constructs a client, runs one operation, and discards
@@ -146,13 +142,14 @@ and load-bearing". The gateway therefore holds no token between requests and can
 one back over your new document. Restarting it anyway is harmless, but it is belt-and-braces, not a
 requirement, and nothing needs to be sequenced around it.
 
+### Then restart the feed — the only one that still needs it
+
 ```bash
-ssh helios 'docker restart butterfly_spx_app butterfly_ndx_app butterfly_xsp_app'
 ssh helios 'docker restart butterfly_spx_candidate_feed'
 ```
 
-- [ ] Three trading apps restarted.
 - [ ] Candidate feed restarted.
+- [ ] Three trading apps **not** restarted (unless the reload failed to fire, above).
 - [ ] Gateway left alone (or restarted for reassurance — either is fine).
 
 Thanks to the Window G SIGTERM fix these are now clean sub-2-second exit-0 shutdowns rather than
