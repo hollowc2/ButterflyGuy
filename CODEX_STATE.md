@@ -2412,3 +2412,50 @@ implementations. Expected restarts are **zero**. Watch the three trading apps fo
 `schwab_token_reloaded` and the feed for `candidate_market_data_token_reloaded`; restart only a
 consumer whose reload fails or does not appear after six minutes. The feed's validation quote means
 a successful reload proves its new credential even while Saturday snapshot collection is closed.
+
+## Stale-lineage persistence guard deployed (2026-08-10T20:00:48Z)
+
+An early re-authorization was proposed to exercise both hot-reload paths before 2026-08-15, followed
+by a second re-authorization on Saturday to restore the Saturday cadence. Review found one race that
+the shared lock alone did not close: during the five-minute marker-detection window, a trading app's
+old in-memory client could finish an access-token refresh and atomically persist its older
+`creation_timestamp` lineage over the newly authorized document. `flock` prevented torn bytes but
+did not provide semantic monotonicity.
+
+Commit `4aefb37` adds the guard at the only persistent stale-writer boundary,
+`SchwabClientWrapper._write_token`. Under the existing exclusive C1 lock it reads the current disk
+marker and refuses an incoming document whose valid `creation_timestamp` is older, logging the
+bounded `schwab_token_stale_persist_rejected` event. Same-lineage hourly/access refreshes retain the
+existing atomic persistence path. The candidate feed remains a read-only persistent consumer and
+needs no equivalent disk guard. A focused reproduction proves that a late old callback leaves the
+newer document and inode unchanged.
+
+Verification: focused token/reload suites **40 passed**; full repository **994 passed, 1 skipped, 2
+pre-existing warnings**; full Ruff and `git diff --check` clean. Required graphify outputs were
+refreshed in `4b70686`. That release also contains the independently committed `8d71471` notify
+module relocation; it was reviewed and is covered by the same full gate.
+
+Live deployment waited on one real `XSP|OPEN` position. No running container was touched while it
+was open. The cash-settlement path closed the row at `2026-08-10T20:00:23Z`; a second pre-deploy
+query returned zero open trades. Only `app_spx`, `app_ndx`, and `app_xsp` were then force-recreated
+with `--no-deps` at `2026-08-10T20:00:48Z`:
+
+- SPX image `377ae0b55f3bf7a6656103ebbb3b79175deaaa9adb2e3b0bafb5db0eebb55aa6`;
+- NDX image `8f90a18e54a054f1c997e5ed75ba43e1f10cc429a7555b868bedb3379245bc77`;
+- XSP image `172beb61abfc2336a3b27050d47e90ce03719614e9a6dab61b1f77bebdfdc1ff`.
+
+Post-deploy: all three `/ready` 200, one process each, exit/restart count 0, exactly one
+`schwab_client_initialized` each, zero warning/error-level events, the running source contains the
+guard, and the shared token-directory mounts remain writable as required for the three persistent
+writers. Open trades remained zero. Gateway start/image, candidate-feed start/image, and all seven
+candidate containers were unchanged.
+
+Exact rollback tags are `infra-app_spx:rollback-20260810-9a7fcf6f`,
+`infra-app_ndx:rollback-20260810-4d3f578c`, and
+`infra-app_xsp:rollback-20260810-efc7c0e0`. Exact release tags are the corresponding
+`infra-app_{spx,ndx,xsp}:release-4b70686` tags.
+
+The early marker-change test is now safe to perform. Mint into `/tmp/tokens.new.json`, stage and
+move it under C1, then require all three `schwab_token_reloaded` events and the feed's
+`candidate_market_data_token_reloaded` within six minutes. Re-authorize again on Saturday—not
+Sunday—to restore the Saturday expiry/fallback cadence.

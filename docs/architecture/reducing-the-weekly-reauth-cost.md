@@ -222,3 +222,12 @@ remains fake-proven only until the 2026-08-15 re-authorization.
 Expected restarts are now **zero**, with an explicit feed restart retained as the fallback if
 `candidate_market_data_token_reloaded` does not appear within six minutes or
 `candidate_token_reload_failed` is non-zero.
+
+### Stale-writer follow-up (2026-08-10)
+
+The reload swap was safe, but the shared file lock alone left a semantic race before the swap: an
+old trading-app client could complete an access-token refresh and atomically persist its older
+authorization lineage after the operator installed the new document. Commit `4aefb37` closes that
+race at `SchwabClientWrapper._write_token`. Under the same exclusive lock, a write with an older
+valid `creation_timestamp` is rejected; an equal marker follows the ordinary atomic refresh path.
+The guard was deployed to SPX/NDX/XSP on release `4b70686` after the final XSP position settled.

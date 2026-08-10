@@ -47,6 +47,17 @@ The candidate-feed hot reload was **deployed 2026-08-10T16:54:27Z** on image
 read-only, and post-deploy `/ready` and authenticated Schwab calls passed. Do not rebuild it before
 this checklist. The 2026-08-15 re-authorization is its first real marker-change test.
 
+The trading-app stale-lineage guard was **deployed 2026-08-10T20:00:48Z** on release `4b70686`.
+While holding C1, an old in-memory app now refuses to persist a token document whose
+`creation_timestamp` is older than the document already on disk. This closes the five-minute race
+between the locked move below and the reload poll: the lock prevents torn writes, and the marker
+guard prevents an atomic rollback to the previous authorization lineage. All three apps were ready,
+uniquely running, and flat after deployment.
+
+An optional early production proof may use this same checklist before 2026-08-15. If it does, run
+the full flow again on **Saturday 2026-08-15** to restore the Saturday cadence; do not move the
+cadence to Sunday. Record both marker changes independently.
+
 ## Step 1 — mint the token on zeus, in a real terminal
 
 Helios is headless; the browser flow runs on zeus. zeus and Helios carry identical app credentials
