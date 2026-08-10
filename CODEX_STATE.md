@@ -2375,3 +2375,40 @@ full repository gate is **993 passed, 1 skipped, 2 pre-existing warnings**; full
 `git diff --check` are clean. `graphify update .` refreshed the checked-in graph to include the new
 shared-lock reader, reload lifecycle, and tests. No Docker, Helios, credential, token, or Schwab
 action was performed by the code work.
+
+## Candidate-feed hot reload deployed (2026-08-10T16:54:27Z)
+
+The local slice was committed as `789d8c3`, its exact-release graph as `e40ee7f`, pushed to `main`,
+and deployed to Helios while the market was open under explicit operator approval. Deployment was
+safe to attempt during the session because all six candidate databases had zero open trades, the
+feed was ready, and the targeted command named only `spx_candidate_feed` with `--no-deps`.
+`candidatectl apply` was never run, and none of the six evaluators was recreated.
+
+Rollback baseline: remote release `ace76fd`, running image
+`97201c17e372fd282f65f1080cfb97aa393e6ebe512e52f9a0b6c0df2890df89`, one feed process,
+`/ready` 200, no recent auth/error markers, and exact rollback tag
+`generated-spx_candidate_feed:rollback-20260810-97201c17`.
+
+The first recreation used `infra/.env` only. Compose correctly found the token-directory setting but
+defaulted the root `.env` database/API variables to blank; the new container failed database
+authentication and entered a restart loop. Validation caught it immediately. The exact old image
+was retagged and force-recreated with both existing env files, restoring `/ready` 200, restart count
+0, one process, and zero recent errors before any further attempt. No evaluator was affected.
+
+The corrected deployment used both `.env` and `infra/.env` and installed image
+`f9df84dca695a2514483046c9a73fa967033aca4f3df67e13eeafaf336f97274`. Post-deploy proof:
+
+- status `running`, exit code 0, restart count 0, exactly one process;
+- token-directory mount still `rw=false`, with the existing mode-`0600` shared lock visible;
+- `/ready` returned 200 with `status=ready`, and five Schwab log calls appeared after startup;
+- the running image exposes `reload_if_reauthorized` with a 300-second interval;
+- `candidate_feed_sequence=2`, snapshot age 37.4 seconds, and market-open gauge 1;
+- no `error`, `denied`, `401`, `403`, or traceback markers after the corrected start;
+- all six evaluators remained on their 11-day-old containers and all six databases remained flat;
+- exact release and rollback tags resolve to the new and old image IDs respectively.
+
+The 2026-08-15 re-authorization is now the first production marker-change test for both reload
+implementations. Expected restarts are **zero**. Watch the three trading apps for
+`schwab_token_reloaded` and the feed for `candidate_market_data_token_reloaded`; restart only a
+consumer whose reload fails or does not appear after six minutes. The feed's validation quote means
+a successful reload proves its new credential even while Saturday snapshot collection is closed.

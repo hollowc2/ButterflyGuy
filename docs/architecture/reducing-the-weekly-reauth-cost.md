@@ -211,3 +211,14 @@ persistent token writer.
 The live restart count remains **one** until that code is separately deployed and proven. Once it is
 deployed and survives a real re-authorization, the expected restart count becomes **zero**; the
 manual browser OAuth flow and seven-day deadline remain unchanged.
+
+### Deployment addendum (2026-08-10)
+
+The candidate reload is now **deployed** on Helios image `f9df84dca695`. The feed stayed on a
+read-only token-directory mount, initialized through the shared read lock, returned `/ready` 200,
+and resumed authenticated snapshots without recreating any evaluator. Its marker-change behavior
+remains fake-proven only until the 2026-08-15 re-authorization.
+
+Expected restarts are now **zero**, with an explicit feed restart retained as the fallback if
+`candidate_market_data_token_reloaded` does not appear within six minutes or
+`candidate_token_reload_failed` is non-zero.

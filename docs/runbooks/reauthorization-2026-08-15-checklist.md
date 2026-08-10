@@ -20,8 +20,9 @@ re-authorizing at 14:30 PDT spends it and leaves 30 minutes of margin next week.
 accumulates in one direction, so buy it early.
 
 **Do not slip to Sunday.** The cadence is self-perpetuating: a Sunday re-auth makes every future
-expiry a Sunday, and it stays there. Losing the Saturday property means every future re-auth
-restarts the candidate feed on a trading day until its separate hot-reload path is deployed.
+expiry a Sunday, and it stays there. The reloads remove the planned restarts, but losing the
+Saturday property still moves interactive credential maintenance and its fallback path into a
+trading day.
 
 ## Before you start
 
@@ -41,9 +42,10 @@ This makes 2026-08-15 the reload's **first real test**: after step 3 the three t
 pick up the new token on their own, within `TOKEN_RELOAD_INTERVAL` (300 s), with no restart. See
 step 4.
 
-The candidate-feed hot reload was built locally on 2026-08-10 but is **not deployed**. Unless a
-separate approved deployment is completed and verified before this checklist runs, the feed still
-requires the explicit restart in step 4. Do not infer live capability from repository code.
+The candidate-feed hot reload was **deployed 2026-08-10T16:54:27Z** on image
+`f9df84dca695`. Its running image contains the five-minute reload loop, the token directory remains
+read-only, and post-deploy `/ready` and authenticated Schwab calls passed. Do not rebuild it before
+this checklist. The 2026-08-15 re-authorization is its first real marker-change test.
 
 ## Step 1 — mint the token on zeus, in a real terminal
 
@@ -109,7 +111,7 @@ ssh helios 'cd /opt/butterflyguy-tokens && flock -w 30 .tokens.json.lock \
 - [ ] Moved. Note the **new inode** and confirm the digest still matches step 1.
 - [ ] Mode `600`, uid/gid `1001`, ~787 bytes.
 
-## Step 4 — restart the consumers that actually cache the token
+## Step 4 — watch every cached consumer reload; restart only on failure
 
 A directory bind lets a container *see* a new inode; it does not make it *re-read* one. But the three
 token paths differ, and earlier versions of this runbook got the list wrong:
@@ -118,9 +120,9 @@ token paths differ, and earlier versions of this runbook got the list wrong:
 |---|---|---|
 | `butterfly_schwab_gateway_live` | **fresh client per request**, constructed inside the token lock and discarded | **No** |
 | `butterfly_spx_app` / `_ndx_` / `_xsp_` | cached at startup — **but the reload now picks up a new one by itself** | **No, if the reload fires** |
-| `butterfly_spx_candidate_feed` | read once at first use, cached in memory, never written back | **Yes** |
+| `butterfly_spx_candidate_feed` | cached in memory, with a five-minute marker watcher and read-only quote validation before swap | **No, if the reload fires** |
 
-**Expected restarts this time: one — the feed.** Down from the four this work started with.
+**Expected restarts this time: zero.** Down from the four this work started with.
 
 ### First, watch the reload do its job
 
@@ -139,6 +141,20 @@ ssh helios 'for c in butterfly_spx_app butterfly_ndx_app butterfly_xsp_app; do
       `docker restart butterfly_spx_app butterfly_ndx_app butterfly_xsp_app`, which is the
       pre-existing procedure, and record loudly that the reload did not fire.
 
+The candidate feed should log `candidate_market_data_token_reloaded` after its one read-only `$SPX`
+validation quote:
+
+```bash
+ssh helios 'printf "reloaded=%s failed=%s\n" \
+  $(docker logs --since 10m butterfly_spx_candidate_feed 2>&1 | grep -c candidate_market_data_token_reloaded) \
+  $(docker logs --since 10m butterfly_spx_candidate_feed 2>&1 | grep -c candidate_token_reload_failed)'
+```
+
+- [ ] `reloaded=1`, `failed=0`. This both proves the swap and proves the new credential reached
+      Schwab; the feed validates before installing the replacement client.
+- [ ] If `reloaded=0` after 6+ minutes, or `failed` is non-zero, fall back to
+      `docker restart butterfly_spx_candidate_feed` and record that the reload did not fire.
+
 **The gateway does not need restarting, and the old "gateway must go first" rule rested on a false
 premise.** `LockedSchwabClientAdapter.execute` constructs a client, runs one operation, and discards
 it, all inside a single locked token transaction — its own module docstring calls this "deliberate
@@ -146,15 +162,11 @@ and load-bearing". The gateway therefore holds no token between requests and can
 one back over your new document. Restarting it anyway is harmless, but it is belt-and-braces, not a
 requirement, and nothing needs to be sequenced around it.
 
-### Then restart the feed — the only one that still needs it
+### Expected result: no containers restarted
 
-```bash
-ssh helios 'docker restart butterfly_spx_candidate_feed'
-```
-
-- [ ] Candidate feed restarted.
-- [ ] Three trading apps **not** restarted (unless the reload failed to fire, above).
-- [ ] Gateway left alone (or restarted for reassurance — either is fine).
+- [ ] Candidate feed **not** restarted unless its reload failed.
+- [ ] Three trading apps **not** restarted unless their reloads failed.
+- [ ] Gateway left alone; it never caches a client between requests.
 
 Thanks to the Window G SIGTERM fix these are now clean sub-2-second exit-0 shutdowns rather than
 10-second SIGKILLs. **That is a convenience, not a licence to skip the verification below.**
@@ -180,20 +192,23 @@ done'
 - [ ] Gateway `healthy`, on `monitoring_net`, `up{job="schwab_gateway"} == 1`, `SchwabGatewayDown`
       inactive.
 - [ ] `schwab_token_persist_failed` and `task_group_error` absent from all three trading apps.
-- [ ] All three apps exited `0` on the restart, not `137`.
+- [ ] Any fallback restart exited `0`, not `137`; otherwise no restart occurred.
 
 **Proof on the production path:** all three trading apps resolve account hashes on startup, which is
 a real authenticated Schwab call. Zero errors there means the credential is proven for the trading
 path, not merely mounted.
 
-## Step 6 — what Saturday cannot prove
+## Step 6 — Saturday can now prove the feed credential
 
-The candidate feed makes no Schwab call while the market is closed. `/ready` returning
-`503 snapshot_unavailable` on a Saturday is **expected and is not a fault**. The feed's
-authentication against the new document will be unobserved until the next market open.
+Normal snapshot collection makes no Schwab call while the market is closed, and `/ready` returning
+`503 snapshot_unavailable` on a Saturday is still **expected and is not a fault**. The deployed
+reload is different: a changed `creation_timestamp` deliberately triggers one read-only `$SPX`
+quote before the new client is installed.
 
-- [ ] Note that the feed's auth is unproven, and carry the Monday check forward. Do not record it as
-      passed.
+- [ ] `candidate_market_data_token_reloaded=1` proves the new feed credential on Saturday; no Monday
+      authentication check is owed.
+- [ ] If the reload did not succeed, record feed authentication as unproven and carry the market-open
+      check forward after the fallback restart.
 
 ## Step 7 — record
 
