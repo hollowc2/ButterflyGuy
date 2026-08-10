@@ -1,18 +1,22 @@
 # C3 — wiring shadow reads into `run_live.py`
 
-Status: **plan only, nothing implemented.** Written during Window C at the operator's request.
-C3 remains its own decision and probably its own window.
+Status: **implemented locally, default-off, not deployed.** The code and Compose wiring are
+reviewable without changing any running service. Enabling the XSP canary remains a separate,
+explicit deployment decision.
 
-C3 would make gateway code reachable from a live trading entry point for the first time. Everything
+C3 makes gateway code reachable from a live trading entry point for the first time. Everything
 before it (the gateway image, the token manager, the comparator) is inert with respect to trading:
-nothing in `run_live.py` constructs a gateway client today.
+the default path in `run_live.py` constructs no gateway client.
 
 ## The wiring point
 
-`src/butterfly_guy/scripts/run_live.py:743`:
+`src/butterfly_guy/scripts/run_live.py` now calls `_build_collector_market_data` after initializing
+the existing Schwab client. With the default settings it returns the same
+`DirectSchwabMarketDataProvider` and constructs no gateway HTTP client. With
+`SCHWAB_GATEWAY_SHADOW_READS=true`, it returns:
 
 ```python
-market_data = DirectSchwabMarketDataProvider(schwab)
+ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
 ```
 
 Every collector read goes through this object. `ShadowComparingMarketDataProvider`
@@ -76,62 +80,66 @@ Note also that the chain comparison is on *extracted metadata* (`underlying_pric
 fields, `shadow.py:262-272`), not a strike-by-strike diff. A gateway that returned a plausible chain
 with wrong individual strikes would compare clean.
 
-## The blocker C3 shares with monitoring: the gateway is unreachable
+## Reachability and observability are resolved
 
-`infra/docker-compose.gateway.yml` has **no `networks:` section**. The gateway runs on its own
-isolated Compose project network and publishes only to `127.0.0.1:8011` on the host. The trading
-containers are on `monitoring_net`. **They cannot reach the gateway**, exactly as Prometheus cannot.
+The live gateway and trading services share the external `monitoring_net`. XSP reaches the gateway
+by container DNS at `http://butterfly_schwab_gateway_live:8011`; the loopback publish remains for
+host-only diagnostics. Prometheus counters for comparisons and discrepancies already exist, so a
+canary can be evaluated without scraping logs for every result.
 
-This is the same decision as the Window C monitoring question and should be settled once, for both:
+Only `app_xsp` receives gateway client settings. Compose maps
+`SCHWAB_GATEWAY_SHADOW_READS_XSP` to the process setting
+`SCHWAB_GATEWAY_SHADOW_READS`, defaulting to `false`, and pins `SCHWAB_ACCESS_MODE=direct`.
+Putting the URL and scoped consumer key in `infra/.env` therefore cannot enable SPX or NDX.
 
-- **Join the gateway to `monitoring_net`** — then Prometheus scrapes it *and* the trading containers
-  reach it at `butterfly_schwab_gateway_live:8011`. One change solves both. Cost: reachability
-  widens from host loopback to every container on `monitoring_net` (turtlequant, pdfbillr,
-  halt_scanner, grafana, node_exporter). `/v1/` still requires a key (`auth.py:130`); what opens up
-  is unauthenticated `/health`, `/ready`, `/metrics` plus the auth surface itself.
-- **Host-boundary access** — `extra_hosts: host.docker.internal:host-gateway` on the consumers, each
-  reaching `http://host.docker.internal:8011`. Preserves the gateway's isolation. Cost: applied to
-  Prometheus (in `/opt/monitoring/docker-compose.yml`, outside this repo) *and* to all three trading
-  services.
-
-**This materially affects the Window C monitoring choice.** The isolation-preserving option is
-cheaper when only Prometheus needs access; joining `monitoring_net` gets relatively better once
-trading consumers need it too. Worth deciding with C3 in view rather than separately.
+As a separate least-privilege correction, the live gateway no longer imports the whole application
+`../.env`. Compose passes only the required `SCHWAB_API_KEY` and `SCHWAB_SECRET_KEY` credentials,
+with required-value guards. Account, database, and notification secrets are not admitted to the
+gateway container.
 
 ## Prerequisites, in order
 
-1. The gateway is deployed and durably running (Window C left it **down** pending the monitoring
-   decision). Shadow reads against a gateway that is not up produce only `gateway_unavailable`
-   discrepancies — noise, not signal.
-2. Network reachability resolved per above.
-3. A `butterfly-guy` consumer key issued and distributed into the three trading services as
-   `SCHWAB_GATEWAY_API_KEY`. Note `issue_gateway_keys.py` has no append mode (`:93`, `:50`), so if
-   `equity-scanner` is ever added the `butterfly-guy` key rotates and must be redistributed.
-4. `SCHWAB_GATEWAY_URL` set per the reachability decision.
+1. Review and deploy the local code/Compose changes; deployment is not part of this implementation.
+2. Rotate/reissue the scoped `butterfly-guy` consumer key. The live keys document contains its
+   digest, but the corresponding plaintext key was intentionally destroyed and cannot be
+   recovered. Atomically install the newly rendered digest document, recreate the gateway so it
+   reloads the document, and complete an authenticated read proof before retaining the new
+   plaintext key only in operator-owned `infra/.env` as `SCHWAB_GATEWAY_API_KEY`. Never commit or
+   print it. Append-safe issuance protects future second consumers; it cannot recover this key.
+3. Keep `SCHWAB_API_KEY` and `SCHWAB_SECRET_KEY` in the root application `.env`; do not duplicate
+   them into `infra/.env`. Render and deploy the gateway Compose file with both inputs, in this
+   order, so the root file supplies app credentials and `infra/.env` supplies gateway deployment
+   values:
+
+   ```bash
+   docker compose --env-file .env --env-file infra/.env \
+     -f infra/docker-compose.gateway.yml --profile gateway-live config >/dev/null
+   ```
+
+   A successful exit proves interpolation without printing or capturing credential values.
+4. Leave `SCHWAB_GATEWAY_SHADOW_READS_XSP=false` through deployment validation. Turn it on only for
+   the approved XSP market-session canary.
 
 `GatewayClientSettings` (`gateway_client/config.py`) already refuses `shadow_reads` without both a
 URL and a key (`:40`), and refuses `shadow_reads` together with `access_mode="gateway"` (`:48`) since
 comparing the gateway against itself is meaningless. Those guards are in place and need no work.
 
-## Proposed steps
+## Implemented steps and remaining operator gate
 
-1. **Construct the client and wrapper in `run_live.py`.** Load `GatewayClientSettings`; when
+1. **Construct the client and wrapper in `run_live.py` — implemented.** Load `GatewayClientSettings`; when
    `shadow_reads` is off (the default), wrap nothing and leave `DirectSchwabMarketDataProvider` in
    place unchanged — the no-flag path must be byte-for-byte the behaviour it is today.
    *Verify:* a test asserting that with no gateway env set, `run_live` builds the direct provider and
    constructs no gateway client at all.
-2. **Wrap when enabled.** `ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)`.
+2. **Wrap when enabled — implemented.** `ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)`.
    *Verify:* a test that the wrapper returns the direct value even when the gateway raises, for each
    of the four collector call sites.
-3. **Expose the discrepancy counts.** `ShadowDiscrepancyRecorder` is in-memory and `_record`
-   (`shadow.py:172`) only logs `gateway_shadow_discrepancy`. There are **no Prometheus metrics in
-   `gateway_client/` at all** (verified: no `Counter`/`Gauge` anywhere in the package). Without a
-   metric, a shadow run's results can only be read out of logs. Adding one counter keyed by
-   operation and code is the smallest thing that makes C3 answerable.
-   *Verify:* metric increments on a forced mismatch.
-4. **Decide shutdown behaviour** — whether `run_live` awaits `wait_for_shadow_reads` on graceful
-   exit.
-5. **Enable on one service first**, XSP rather than SPX or NDX, for one session, market open.
+3. **Expose discrepancy counts — implemented.** Prometheus counters cover comparison results and
+   discrepancies by operation/code/classification.
+4. **Graceful shutdown — implemented.** `run_live` awaits tracked comparisons, then closes the
+   gateway HTTP client before closing the direct Schwab client and database pool.
+5. **Enable on one service first — operator gate.** XSP is the only wired canary. Enable it for one
+   approved session while the market is open.
    *Verify:* discrepancy counts by code; `gateway_unavailable` should be zero if the deployment is
    sound, and a non-zero `gateway_stale_value` or `gateway_value_mismatch` count is the actual
    finding C3 exists to produce.

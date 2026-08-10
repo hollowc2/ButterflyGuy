@@ -54,6 +54,22 @@ def test_gateway_live_service_is_isolated_and_read_only() -> None:
     ]
     assert service["environment"]["SCHWAB_GATEWAY_ORDER_WRITES_ENABLED"] == "false"
 
+    # Least privilege: the gateway gets only its two required app credentials, not
+    # account, database, or notification secrets from the application env file.
+    assert "env_file" not in service
+    assert service["environment"]["SCHWAB_API_KEY"] == (
+        "${SCHWAB_API_KEY:?set the Schwab application key}"
+    )
+    assert service["environment"]["SCHWAB_SECRET_KEY"] == (
+        "${SCHWAB_SECRET_KEY:?set the Schwab application secret}"
+    )
+    assert not {
+        "SCHWAB_ACCOUNT_ID",
+        "DATABASE_PASSWORD",
+        "DISCORD_WEBHOOK_URL",
+        "TELEGRAM_BOT_TOKEN",
+    } & service["environment"].keys()
+
 
 def test_only_the_live_gateway_joins_the_shared_monitoring_network() -> None:
     """Reachability is the live service's alone, and the network is never created here.
@@ -69,6 +85,27 @@ def test_only_the_live_gateway_joins_the_shared_monitoring_network() -> None:
     assert compose["services"]["schwab_gateway_live"]["networks"] == ["monitoring_net"]
     # The demo service stays on the project default network, unreachable from it.
     assert "networks" not in compose["services"]["schwab_gateway_foundation"]
+
+
+def test_gateway_alerts_separate_process_down_from_sustained_not_ready() -> None:
+    payload = yaml.safe_load(Path("infra/schwab-gateway-alerts.yml").read_text())
+    rules = {rule["alert"]: rule for group in payload["groups"] for rule in group["rules"]}
+
+    assert set(rules) == {"SchwabGatewayDown", "SchwabGatewayNotReady"}
+
+    down = rules["SchwabGatewayDown"]
+    assert down["expr"] == 'up{job="schwab_gateway"} == 0'
+    assert down["for"] == "2m"
+    assert down["labels"]["severity"] == "critical"
+
+    not_ready = rules["SchwabGatewayNotReady"]
+    expression = " ".join(not_ready["expr"].split())
+    assert expression == (
+        '(up{job="schwab_gateway"} == 1) unless on(job, instance) '
+        '(schwab_gateway_token_state{job="schwab_gateway", state="ready"} == 1)'
+    )
+    assert not_ready["for"] == "2m"
+    assert not_ready["labels"]["severity"] == "warning"
 
 
 def test_gateway_live_service_mounts_the_token_directory_not_the_document() -> None:
@@ -142,9 +179,36 @@ def test_staging_package_does_not_change_default_compose() -> None:
     # inside it. The gateway persists the token with os.replace, which swaps in a new
     # inode, and the three live trading containers had silently detached from every
     # write it made. Still no gateway service, profile, or port in this file.
+    #
+    # Re-pinned for C3: app_xsp receives an explicitly direct, default-off shadow
+    # configuration. SPX, the legacy candidate, and NDX receive no gateway settings;
+    # this still adds no gateway service, profile, mount, or port to the trading stack.
     assert hashlib.sha256(default_compose).hexdigest() == (
-        "5e7804fee1802c4d835e570b0b868697827049e50f44070009f578710491a341"
+        "355da1bc95c64b8403ee04e564686c0bb2c57c55da13a4220f952e39994c0f59"
     )
+
+
+def test_only_xsp_receives_the_default_off_gateway_shadow_canary() -> None:
+    compose = yaml.safe_load(Path("infra/docker-compose.yml").read_text())
+    services = compose["services"]
+    xsp_environment = services["app_xsp"]["environment"]
+
+    assert xsp_environment["SCHWAB_ACCESS_MODE"] == "direct"
+    assert xsp_environment["SCHWAB_GATEWAY_URL"] == (
+        "${SCHWAB_GATEWAY_URL:-http://butterfly_schwab_gateway_live:8011}"
+    )
+    assert xsp_environment["SCHWAB_GATEWAY_API_KEY"] == (
+        "${SCHWAB_GATEWAY_API_KEY:-}"
+    )
+    assert xsp_environment["SCHWAB_GATEWAY_SHADOW_READS"] == (
+        "${SCHWAB_GATEWAY_SHADOW_READS_XSP:-false}"
+    )
+
+    for service_name in ("app_spx", "app_spx_candidate", "app_ndx"):
+        environment = services[service_name]["environment"]
+        assert "SCHWAB_GATEWAY_URL" not in environment
+        assert "SCHWAB_GATEWAY_API_KEY" not in environment
+        assert "SCHWAB_GATEWAY_SHADOW_READS" not in environment
 
 
 def test_default_compose_token_binds_require_the_shared_token_directory() -> None:
@@ -174,6 +238,16 @@ def test_default_compose_token_binds_require_the_shared_token_directory() -> Non
         service["environment"]["SCHWAB_TOKEN_PATH"] == f"{directory}/tokens.json"
         for service in compose["services"].values()
     )
+
+
+def test_environment_example_names_the_required_compose_token_directory() -> None:
+    example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert (
+        "SCHWAB_GATEWAY_TOKEN_DIR=/absolute/path/to/schwab-token-directory"
+        in example
+    )
+    assert "SCHWAB_GATEWAY_SHADOW_READS_XSP=false" in example
 
 
 def test_default_compose_binds_the_token_directory_never_the_document() -> None:

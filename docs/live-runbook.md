@@ -4,13 +4,18 @@ This repo is not cleared for live-money automation until `todo.md` is complete.
 
 ## Startup
 
-1. Confirm only one service is enabled for live-money mode. NDX stays paper/research;
+1. Confirm `SCHWAB_GATEWAY_TOKEN_DIR` is present in the Compose interpolation environment
+   (normally `infra/.env`) and resolves to the dedicated absolute host directory containing
+   `tokens.json`. It must name the directory, not the document or repository root. Do not print
+   token or credential values. The variable is required for the trading stack even when the
+   separate gateway profile is not being started.
+2. Confirm only one service is enabled for live-money mode. NDX stays paper/research;
    XSP is allowed only for the supervised one-contract canary below.
-2. Run `uv run pytest -q` and `uv run ruff check .`.
-3. Run `docker compose -f infra/docker-compose.yml config >/dev/null`.
-4. Check the SPX service health: `curl --fail http://127.0.0.1:8000/health`.
-5. Confirm there are no OPEN DB trades unless the broker shows the same SPX legs.
-6. Confirm there are no same-day unknown working SPX opening or closing orders.
+3. Run `uv run pytest -q` and `uv run ruff check .`.
+4. Run `docker compose -f infra/docker-compose.yml config >/dev/null`.
+5. Check the SPX service health: `curl --fail http://127.0.0.1:8000/health`.
+6. Confirm there are no OPEN DB trades unless the broker shows the same SPX legs.
+7. Confirm there are no same-day unknown working SPX opening or closing orders.
    Bot-owned working orders must have a matching `broker_order_intents` row.
 
 ## XSP Canary

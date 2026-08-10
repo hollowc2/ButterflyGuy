@@ -61,11 +61,11 @@ services:
       - --serve-live
       - --authorize-real-credential-read
       - --confirm-single-token-writer
-    # SCHWAB_API_KEY and SCHWAB_SECRET_KEY are inherited from the environment file and
-    # are never named on the command line.
-    env_file:
-      - ../.env
     environment:
+      # Admit only the two credentials the read-only upstream needs. In particular,
+      # do not import the application .env with account, DB, and notification secrets.
+      SCHWAB_API_KEY: "${SCHWAB_API_KEY:?set the Schwab application key}"
+      SCHWAB_SECRET_KEY: "${SCHWAB_SECRET_KEY:?set the Schwab application secret}"
       SCHWAB_GATEWAY_BIND_HOST: 0.0.0.0
       SCHWAB_GATEWAY_PORT: 8011
       SCHWAB_GATEWAY_INTERNAL_KEYS_PATH: /run/secrets/schwab-gateway-keys.json

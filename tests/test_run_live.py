@@ -16,16 +16,21 @@ from butterfly_guy.core.config import (
     StrategySettings,
 )
 from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
+from butterfly_guy.data.providers import DirectSchwabMarketDataProvider
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
     TerminalOrderError,
 )
+from butterfly_guy.gateway_client.config import GatewayClientSettings
+from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.scripts.run_live import (
     BrokerStateGate,
     _assert_broker_state_matches_db,
     _assert_live_config_supported,
     _broker_option_positions,
+    _build_collector_market_data,
+    _close_runtime_resources,
     _order_symbols,
     _reconcile_broker_state,
     broker_reconciler_loop,
@@ -44,6 +49,105 @@ OPEN_TRADE = {
     "upper_symbol": UPPER,
     "quantity": 1,
 }
+
+
+def test_collector_market_data_defaults_to_direct_without_a_gateway_client(
+    monkeypatch,
+):
+    for name in (
+        "SCHWAB_ACCESS_MODE",
+        "SCHWAB_GATEWAY_URL",
+        "SCHWAB_GATEWAY_API_KEY",
+        "SCHWAB_GATEWAY_SHADOW_READS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    gateway_constructor = Mock()
+    monkeypatch.setattr(
+        "butterfly_guy.scripts.run_live.GatewayMarketDataClient",
+        gateway_constructor,
+    )
+
+    provider, shadow, gateway = _build_collector_market_data(Mock())
+
+    assert isinstance(provider, DirectSchwabMarketDataProvider)
+    assert shadow is None
+    assert gateway is None
+    gateway_constructor.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_collector_market_data_shadow_is_opt_in_and_direct_authoritative(
+    monkeypatch,
+):
+    schwab = Mock(get_spot_price=AsyncMock(return_value=6123.45))
+    gateway = Mock(get_spot=AsyncMock(side_effect=RuntimeError("gateway unavailable")))
+    gateway_constructor = Mock(return_value=gateway)
+    monkeypatch.setattr(
+        "butterfly_guy.scripts.run_live.GatewayMarketDataClient",
+        gateway_constructor,
+    )
+    settings = GatewayClientSettings(
+        SCHWAB_ACCESS_MODE="direct",
+        SCHWAB_GATEWAY_SHADOW_READS="true",
+        SCHWAB_GATEWAY_URL="http://gateway:8011",
+        SCHWAB_GATEWAY_API_KEY="internal-key",
+    )
+
+    provider, shadow, configured_gateway = _build_collector_market_data(
+        schwab, settings
+    )
+
+    assert isinstance(provider, ShadowComparingMarketDataProvider)
+    assert shadow is provider
+    assert configured_gateway is gateway
+    assert await provider.get_spot_price("$XSP") == 6123.45
+    await provider.wait_for_shadow_reads()
+    schwab.get_spot_price.assert_awaited_once_with("$XSP")
+    gateway.get_spot.assert_awaited_once_with("$XSP")
+
+
+def test_run_live_rejects_gateway_cutover_mode():
+    settings = GatewayClientSettings(
+        SCHWAB_ACCESS_MODE="gateway",
+        SCHWAB_GATEWAY_URL="http://gateway:8011",
+        SCHWAB_GATEWAY_API_KEY="internal-key",
+    )
+
+    with pytest.raises(RuntimeError, match="does not support SCHWAB_ACCESS_MODE=gateway"):
+        _build_collector_market_data(Mock(), settings)
+
+
+@pytest.mark.asyncio
+async def test_runtime_cleanup_drains_shadow_before_closing_clients_and_db():
+    events: list[str] = []
+
+    shadow = Mock(
+        wait_for_shadow_reads=AsyncMock(side_effect=lambda: events.append("shadow"))
+    )
+    gateway = Mock(close=AsyncMock(side_effect=lambda: events.append("gateway")))
+    schwab = Mock(close=AsyncMock(side_effect=lambda: events.append("schwab")))
+    db = Mock(close=AsyncMock(side_effect=lambda: events.append("db")))
+
+    await _close_runtime_resources(shadow, gateway, schwab, db)
+
+    assert events == ["shadow", "gateway", "schwab", "db"]
+
+
+@pytest.mark.asyncio
+async def test_runtime_cleanup_closes_every_resource_when_shadow_drain_fails():
+    shadow = Mock(
+        wait_for_shadow_reads=AsyncMock(side_effect=RuntimeError("drain failed"))
+    )
+    gateway = Mock(close=AsyncMock())
+    schwab = Mock(close=AsyncMock())
+    db = Mock(close=AsyncMock())
+
+    with pytest.raises(RuntimeError, match="drain failed"):
+        await _close_runtime_resources(shadow, gateway, schwab, db)
+
+    gateway.close.assert_awaited_once_with()
+    schwab.close.assert_awaited_once_with()
+    db.close.assert_awaited_once_with()
 
 
 def _synthetic_position(symbol, *, long=0, short=0):

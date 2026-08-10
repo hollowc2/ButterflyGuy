@@ -154,6 +154,13 @@ services:
       LIVE_ACCOUNT_ALLOCATION: "20000"
       LIVE_MAX_ACCOUNT_DAILY_LOSS: "50"
       LIVE_XSP_CANARY: "false"
+      # C3 is an XSP-only canary. The URL, key, and canary flag are Compose
+      # interpolation values from infra/.env; they are not inherited by SPX/NDX.
+      # Direct remains authoritative even when the shadow flag is enabled.
+      SCHWAB_ACCESS_MODE: "direct"
+      SCHWAB_GATEWAY_URL: "${SCHWAB_GATEWAY_URL:-http://butterfly_schwab_gateway_live:8011}"
+      SCHWAB_GATEWAY_API_KEY: "${SCHWAB_GATEWAY_API_KEY:-}"
+      SCHWAB_GATEWAY_SHADOW_READS: "${SCHWAB_GATEWAY_SHADOW_READS_XSP:-false}"
     read_only: true
     tmpfs:
       - /tmp

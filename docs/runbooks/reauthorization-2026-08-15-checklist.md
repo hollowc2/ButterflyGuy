@@ -3,21 +3,22 @@
 Operator-executed. Derived from the Window F execution (2026-08-08 21:56–22:15 UTC), which ran
 cleanly; this is that sequence with the Window G and Window H findings folded in.
 
-## The deadline, and why the time of day matters
+## The cadence reset, and why the time of day matters
 
 | | |
 |---|---|
-| Current refresh token created | `2026-08-08T22:05:28Z` (Sat) |
-| **Hard expiry** | **`2026-08-15T22:05:28Z` (Sat) = 15:05 PDT** |
-| Keepalive starts alerting | `2026-08-14T22:05Z` = **Fri 15:05 PDT**, 24 h of margin |
+| Current refresh token created | `2026-08-10T20:23:30Z` (Mon) |
+| **Current hard expiry** | **`2026-08-17T20:23:30Z` (Mon) = 13:23:30 PDT** |
+| Keepalive alert if not reset | `2026-08-16T20:23:30Z` = **Sun 13:23:30 PDT**, 24 h of margin |
 
-**Finish before 15:05 PDT / 22:05 UTC.** This is a Saturday *morning-to-midday* task in local time,
-not an evening one. 2026-08-15 is the only Saturday before expiry.
+**Saturday is no longer the hard deadline.** The early full re-authorization on Monday created
+more than two days of safety beyond this checklist. Run this on Saturday morning to move the
+recurring seven-day expiry back off Monday and onto Saturday.
 
-**Go earlier in the day than 15:05 PDT, not later.** Each new expiry is exactly seven days after the
-moment you re-authorize. Re-authorizing at 09:00 PDT banks permanent slack in the weekly cadence;
-re-authorizing at 14:30 PDT spends it and leaves 30 minutes of margin next week. The slack only ever
-accumulates in one direction, so buy it early.
+**Go early in the day.** Each new expiry is exactly seven days after the moment you re-authorize.
+Re-authorizing at 09:00 PDT establishes a 09:00 Saturday deadline next week; re-authorizing at
+14:30 PDT establishes a 14:30 deadline. Morning leaves more same-day recovery time if a future
+authorization needs troubleshooting.
 
 **Do not slip to Sunday.** The cadence is self-perpetuating: a Sunday re-auth makes every future
 expiry a Sunday, and it stays there. The reloads remove the planned restarts, but losing the
@@ -38,14 +39,15 @@ trading day.
 The token reload was **deployed 2026-08-09T21:59:16Z**, on images `9a7fcf6f0704` (spx) /
 `4d3f578c8cfd` (ndx) / `efc7c0e0c590` (xsp). Do not rebuild.
 
-This makes 2026-08-15 the reload's **first real test**: after step 3 the three trading apps should
-pick up the new token on their own, within `TOKEN_RELOAD_INTERVAL` (300 s), with no restart. See
-step 4.
+The `2026-08-10` early re-authorization already proved this reload in production. After step 3 the
+three trading apps should again pick up the new token on their own, within
+`TOKEN_RELOAD_INTERVAL` (300 s), with no restart. See step 4.
 
 The candidate-feed hot reload was **deployed 2026-08-10T16:54:27Z** on image
 `f9df84dca695`. Its running image contains the five-minute reload loop, the token directory remains
 read-only, and post-deploy `/ready` and authenticated Schwab calls passed. Do not rebuild it before
-this checklist. The 2026-08-15 re-authorization is its first real marker-change test.
+this checklist. Its first real marker-change test passed during the `2026-08-10` early
+re-authorization.
 
 The trading-app stale-lineage guard was **deployed 2026-08-10T20:00:48Z** on release `4b70686`.
 While holding C1, an old in-memory app now refuses to persist a token document whose
@@ -53,10 +55,6 @@ While holding C1, an old in-memory app now refuses to persist a token document w
 between the locked move below and the reload poll: the lock prevents torn writes, and the marker
 guard prevents an atomic rollback to the previous authorization lineage. All three apps were ready,
 uniquely running, and flat after deployment.
-
-An optional early production proof may use this same checklist before 2026-08-15. If it does, run
-the full flow again on **Saturday 2026-08-15** to restore the Saturday cadence; do not move the
-cadence to Sunday. Record both marker changes independently.
 
 **Early proof completed 2026-08-10:** all three apps and the candidate feed reloaded exactly once,
 all failure counts were zero, all consumers agreed with the host document, and no container
@@ -152,8 +150,8 @@ ssh helios 'for c in butterfly_spx_app butterfly_ndx_app butterfly_xsp_app; do
     $(docker logs --since 10m $c 2>&1 | grep -c schwab_token_reload_failed); done'
 ```
 
-- [ ] `reloaded=1` on all three, `failed=0`. **This is the first production test of the reload —
-      record the result either way.**
+- [ ] `reloaded=1` on all three, `failed=0`. This repeats the production proof while resetting the
+      weekly cadence; record the result either way.
 - [ ] If `reloaded=0` after 6+ minutes, or `failed` is non-zero: **fall back** to
       `docker restart butterfly_spx_app butterfly_ndx_app butterfly_xsp_app`, which is the
       pre-existing procedure, and record loudly that the reload did not fire.
@@ -233,20 +231,20 @@ quote before the new client is installed.
 - [ ] Next deadline: **seven days from the moment of re-authorization** — write down the exact UTC
       timestamp, and confirm it is a Saturday.
 
-## Your automated warnings for this deadline
+## Automated warnings before the cadence reset
 
 Fixed in Window H — the reminder used to fire **after** the deadline it protected. Current schedule
-for the 2026-08-15 expiry:
+for the Monday token if the Saturday reset has not yet completed:
 
 | When | What | Lead |
 |---|---|---|
-| Fri 2026-08-14 07:00 PDT | weekly reminder (Telegram), `0 14 * * 5` | 32.1 h |
-| Fri 2026-08-14 15:05 PDT | keepalive alert window opens, `WARN_BEFORE = 24h` | 24.0 h |
-| **Sat 2026-08-15 15:05 PDT** | **expiry** | — |
+| Fri 2026-08-14 07:00 PDT | weekly reminder (Telegram), `0 14 * * 5` | 78 h 23 min |
+| Sun 2026-08-16 13:23:30 PDT | keepalive alert window opens, `WARN_BEFORE = 24h` | 24 h |
+| **Mon 2026-08-17 13:23:30 PDT** | **current-token expiry** | — |
 
-The reminder fires **Friday**, not Saturday, deliberately: as you bank slack by re-authorizing
-earlier each Saturday, the deadline drifts earlier in the day, and a Saturday-morning reminder would
-eventually be too late again. A Friday reminder keeps 24 h+ of lead regardless.
+After a successful Saturday re-authorization, record the exact new expiry on Saturday
+`2026-08-22`; its local time will match the re-authorization time. The weekly reminder continues to
+fire Friday so it stays ahead of the recurring Saturday deadline.
 
-Belt and braces: set your own calendar reminder too. This is the only deadline in the system where
-missing it costs a weekday outage.
+Belt and braces: set your own calendar reminder too. Missing Saturday no longer expires the token
+that day, but it leaves the deadline on Monday and gives up the intended weekend recovery window.

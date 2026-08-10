@@ -247,8 +247,8 @@ def test_strategy_risk_and_execution_layers_do_not_import_gateway_server_interna
     assert violations == []
 
 
-def test_no_service_or_entry_point_imports_the_shadow_harness_or_gateway_client() -> None:
-    """The Phase 3 surfaces stay unwired: nothing outside the gateway packages imports them."""
+def test_only_run_live_and_gateway_clis_import_gateway_client_surfaces() -> None:
+    """C3 admits one live importer; every other strategy/service boundary stays sealed."""
     gateway_packages = ("butterfly_guy/gateway_client/", "butterfly_guy/schwab_gateway/")
     gateway_modules = ("butterfly_guy.gateway_client", "butterfly_guy.schwab_gateway")
     # token_manager is not a Phase 3 surface. It is the shared token-persistence primitive
@@ -257,8 +257,9 @@ def test_no_service_or_entry_point_imports_the_shadow_harness_or_gateway_client(
     # reads and writes one JSON file and reaches no market-data path, so importing it wires
     # nothing to the gateway. Everything else in these packages stays restricted.
     shared_token_store = "butterfly_guy.schwab_gateway.token_manager"
-    # The only permitted importers are the standalone gateway entry points, none of which is
-    # reachable from run_live.py, run_collector.py, or any Compose default profile.
+    # In addition to the standalone gateway entry points, C3 deliberately admits run_live
+    # as the sole application importer. It constructs only the read-only client and shadow
+    # wrapper; account and order operations remain on SchwabClientWrapper.
     # issue_gateway_keys.py is an operator CLI that reads the auth module's fixed identity
     # vocabulary to write a keys file; it starts no server and performs no market-data read.
     standalone_entry_points = {
@@ -266,6 +267,7 @@ def test_no_service_or_entry_point_imports_the_shadow_harness_or_gateway_client(
         "butterfly_guy/scripts/probe_schwab_gateway_credentials.py",
         "butterfly_guy/scripts/issue_gateway_keys.py",
     }
+    c3_entry_point = "butterfly_guy/scripts/run_live.py"
 
     importers: set[str] = set()
     shadow_importers: set[str] = set()
@@ -289,16 +291,15 @@ def test_no_service_or_entry_point_imports_the_shadow_harness_or_gateway_client(
             if any(name.startswith("butterfly_guy.gateway_client.shadow") for name in names):
                 shadow_importers.add(relative)
 
-    assert importers == standalone_entry_points
-    assert shadow_importers == set()
+    assert importers == standalone_entry_points | {c3_entry_point}
+    assert shadow_importers == {c3_entry_point}
 
 
-def test_collector_and_live_entry_points_still_construct_only_the_direct_provider() -> None:
+def test_collector_entry_points_stay_direct_and_run_live_uses_only_client_surfaces() -> None:
     sources = {
         path: Path(path).read_text(encoding="utf-8")
         for path in (
             "src/butterfly_guy/data/collector.py",
-            "src/butterfly_guy/scripts/run_live.py",
             "src/butterfly_guy/scripts/run_collector.py",
         )
     }
@@ -306,6 +307,14 @@ def test_collector_and_live_entry_points_still_construct_only_the_direct_provide
         assert "ShadowComparingMarketDataProvider" not in source, path
         assert "GatewayMarketDataClient" not in source, path
         assert "gateway" not in source.lower(), path
+
+    live_source = Path("src/butterfly_guy/scripts/run_live.py").read_text(
+        encoding="utf-8"
+    )
+    assert "DirectSchwabMarketDataProvider" in live_source
+    assert "ShadowComparingMarketDataProvider" in live_source
+    assert "GatewayMarketDataClient" in live_source
+    assert "butterfly_guy.schwab_gateway" not in live_source
 
 
 @pytest.mark.asyncio

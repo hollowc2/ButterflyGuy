@@ -1,10 +1,19 @@
 # Schwab Gateway Multi-Consumer Foundation
 
+> **Status update — 2026-08-10:** The read-only foundation is now deployed on Helios, running and
+> monitored. Readiness, one authenticated Schwab quote, Prometheus scraping, alerting, and
+> crash-restart recovery have been proven. Direct trading access remains authoritative, and C3
+> consumer shadow wiring remained unwired at the start of the current closeout. Account and order
+> authority remain absent. The live read-only routes now include `/v1/quotes`, `/v1/spot`, and
+> `/v1/chain`; `/v1/history` remains absent. The implementation inventory below is retained for
+> design history; deployment and proof classifications written before the live window are
+> superseded by this note.
+
 ## Status and safety boundary
 
-This foundation is implemented and fake-tested locally. It is not deployed, does not contact
-Schwab, and does not change the direct-access production default. The demo runner remains
-fake-backed. The admission policy is active only in an application created by the gateway
+At the time this section was written, the foundation was implemented and fake-tested locally but
+not yet deployed. It still does not change the direct-access production default. The demo runner
+remains fake-backed. The admission policy is active only in an application created by the gateway
 foundation; it is not enforced by any current ButterflyGuy, Equity Scanner, or AfterHours Lab
 runtime.
 
@@ -87,7 +96,7 @@ Future endpoint order, without implementation in this slice:
 No history, chain, account, order, position, transaction, or streaming route exists here. No
 automatic order retry exists; order submission remains outside the gateway foundation.
 
-## Evidence classification
+## Historical evidence classification
 
 - **Implemented/fake-tested:** three identities, digest-only configuration, fixed priority
   mapping, fail-closed auth/capability behavior, readiness-gated quote admission, two bounded
@@ -98,5 +107,7 @@ automatic order retry exists; order submission remains outside the gateway found
   noexec; the earlier root-filesystem staging attempt failed safely; services were restored.
 - **Proposed/inferred:** an isolated writable-and-executable tmpfs at the staging-only application
   path removes that specific filesystem blocker. This has not been exercised on Helios.
-- **Still unproven:** real credential/token readability, real schwab-py lifecycle, one real AAPL
-  quote, broker behavior, production gateway capacity, and every deployment/cutover property.
+- **Unproven at that stage:** real credential/token readability, real schwab-py lifecycle, one real
+  AAPL quote, broker behavior, production gateway capacity, and every deployment/cutover property.
+  The status note above records the later live proof; production capacity and consumer cutover are
+  still not proven.

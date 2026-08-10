@@ -149,3 +149,134 @@ def test_each_run_issues_distinct_keys(tmp_path: Path, capsys: pytest.CaptureFix
     second = capsys.readouterr().out
 
     assert first != second
+
+
+def test_append_preserves_existing_digest_and_prints_only_new_key(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    existing = tmp_path / "existing.json"
+    original_document, original_plaintext = issuer.build_keys_document(
+        ["butterfly-guy"]
+    )
+    issuer.write_private_json(existing, original_document)
+    output = tmp_path / "appended.json"
+
+    issuer.main(
+        [
+            "--existing-input",
+            str(existing),
+            "--output",
+            str(output),
+            "--client",
+            "equity-scanner",
+        ]
+    )
+    printed = capsys.readouterr().out
+
+    original_payload = json.loads(existing.read_text(encoding="utf-8"))
+    output_payload = json.loads(output.read_text(encoding="utf-8"))
+    original_digest = original_payload["clients"][0]["key_sha256"]
+    assert output_payload["clients"][0] == original_payload["clients"][0]
+    assert output_payload["clients"][0]["key_sha256"] == original_digest
+    assert "butterfly-guy:" not in printed
+
+    new_keys = dict(re.findall(r"^(\S+): (\S+)$", printed, re.MULTILINE))
+    assert set(new_keys) == {"equity-scanner"}
+    assert "Added 1 new digest(s); wrote 2 total digest(s)" in printed
+    authenticator = InternalKeyAuthenticator.from_file(output)
+    assert (
+        authenticator.authenticate(original_plaintext["butterfly-guy"]).client_id
+        == "butterfly-guy"
+    )
+    assert (
+        authenticator.authenticate(new_keys["equity-scanner"]).client_id
+        == "equity-scanner"
+    )
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
+
+
+def test_append_rejects_client_already_in_existing_document(
+    tmp_path: Path,
+) -> None:
+    existing = tmp_path / "existing.json"
+    document, _ = issuer.build_keys_document(["butterfly-guy"])
+    issuer.write_private_json(existing, document)
+    output = tmp_path / "appended.json"
+
+    with pytest.raises(SystemExit) as exc:
+        issuer.main(
+            [
+                "--existing-input",
+                str(existing),
+                "--output",
+                str(output),
+                "--client",
+                "butterfly-guy",
+            ]
+        )
+
+    assert exc.value.code == 2
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        pytest.param(
+            lambda payload: payload["clients"][0].update(id="unknown-client"),
+            id="unknown_existing_client",
+        ),
+        pytest.param(
+            lambda payload: payload["clients"].append(dict(payload["clients"][0])),
+            id="duplicate_existing_client",
+        ),
+    ],
+)
+def test_append_rejects_existing_document_the_authenticator_rejects(
+    tmp_path: Path,
+    mutation,
+) -> None:
+    existing = tmp_path / "existing.json"
+    document, _ = issuer.build_keys_document(["butterfly-guy"])
+    mutation(document)
+    issuer.write_private_json(existing, document)
+    output = tmp_path / "appended.json"
+
+    with pytest.raises(SystemExit) as exc:
+        issuer.main(
+            [
+                "--existing-input",
+                str(existing),
+                "--output",
+                str(output),
+                "--client",
+                "equity-scanner",
+            ]
+        )
+
+    assert exc.value.code == 2
+    assert not output.exists()
+
+
+def test_append_never_overwrites_existing_output(tmp_path: Path) -> None:
+    existing = tmp_path / "existing.json"
+    document, _ = issuer.build_keys_document(["butterfly-guy"])
+    issuer.write_private_json(existing, document)
+    output = tmp_path / "appended.json"
+    output.write_text("do not clobber", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        issuer.main(
+            [
+                "--existing-input",
+                str(existing),
+                "--output",
+                str(output),
+                "--client",
+                "equity-scanner",
+            ]
+        )
+
+    assert exc.value.code == 2
+    assert output.read_text(encoding="utf-8") == "do not clobber"

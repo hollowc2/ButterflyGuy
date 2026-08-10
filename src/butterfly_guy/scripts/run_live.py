@@ -32,7 +32,10 @@ from butterfly_guy.core.time_utils import (
     session_date,
 )
 from butterfly_guy.data.collector import OptionChainCollector
-from butterfly_guy.data.providers import DirectSchwabMarketDataProvider
+from butterfly_guy.data.providers import (
+    CollectorMarketDataProvider,
+    DirectSchwabMarketDataProvider,
+)
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.db.connection import DatabasePool
@@ -66,6 +69,9 @@ from butterfly_guy.execution.order_manager import (
     parse_broker_fill,
     walk_orders,
 )
+from butterfly_guy.gateway_client.client import GatewayMarketDataClient
+from butterfly_guy.gateway_client.config import GatewayClientSettings
+from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import (
@@ -93,6 +99,68 @@ ENTRY_LOOP_ERROR_THRESHOLD = 3
 # How often to check whether the token document has been re-authorized. Re-auth is a
 # weekly event, so this only has to be short enough to make the change quick to verify.
 TOKEN_RELOAD_INTERVAL = 300.0
+
+
+def _require_direct_gateway_mode(settings: GatewayClientSettings) -> None:
+    if settings.access_mode != "direct":
+        raise RuntimeError(
+            "run_live does not support SCHWAB_ACCESS_MODE=gateway; "
+            "keep direct mode for C3 shadow reads"
+        )
+
+
+def _build_collector_market_data(
+    schwab: SchwabClientWrapper,
+    settings: GatewayClientSettings | None = None,
+) -> tuple[
+    CollectorMarketDataProvider,
+    ShadowComparingMarketDataProvider | None,
+    GatewayMarketDataClient | None,
+]:
+    """Build the collector provider while keeping direct reads authoritative.
+
+    Gateway cutover is deliberately not implemented here. When the opt-in shadow
+    flag is disabled, no gateway HTTP client is constructed at all.
+    """
+    gateway_settings = settings or GatewayClientSettings()
+    _require_direct_gateway_mode(gateway_settings)
+
+    direct = DirectSchwabMarketDataProvider(schwab)
+    if not gateway_settings.shadow_reads:
+        return direct, None, None
+
+    gateway = GatewayMarketDataClient(
+        gateway_settings.gateway_url,
+        gateway_settings.gateway_api_key.get_secret_value(),
+    )
+    shadow = ShadowComparingMarketDataProvider(
+        direct,
+        gateway,
+        shadow_reads=True,
+    )
+    log.info("gateway_shadow_reads_enabled")
+    return shadow, shadow, gateway
+
+
+async def _close_runtime_resources(
+    shadow_market_data: ShadowComparingMarketDataProvider | None,
+    gateway_client: GatewayMarketDataClient | None,
+    schwab: SchwabClientWrapper,
+    db: DatabasePool,
+) -> None:
+    """Drain shadow work and close every owned resource, even if one close fails."""
+    try:
+        if shadow_market_data is not None:
+            await shadow_market_data.wait_for_shadow_reads()
+    finally:
+        try:
+            if gateway_client is not None:
+                await gateway_client.close()
+        finally:
+            try:
+                await schwab.close()
+            finally:
+                await db.close()
 
 
 def _matches_underlying(symbol: str, underlying: str) -> bool:
@@ -772,6 +840,10 @@ async def main() -> None:
     setup_logging(config.monitoring.log_level, json_output=True)
 
     _assert_live_config_supported(config)
+    # Validate the opt-in gateway settings before opening the DB or direct Schwab
+    # client. A malformed shadow environment must not leak either resource.
+    gateway_settings = GatewayClientSettings()
+    _require_direct_gateway_mode(gateway_settings)
 
     log.info(
         "live_trading_starting",
@@ -798,7 +870,9 @@ async def main() -> None:
     # Init Schwab
     schwab = SchwabClientWrapper(config.schwab)
     await schwab.initialize()
-    market_data = DirectSchwabMarketDataProvider(schwab)
+    market_data, shadow_market_data, gateway_client = _build_collector_market_data(
+        schwab, gateway_settings
+    )
 
     # Build query objects
     chain_q = ChainQueries(db)
@@ -1085,8 +1159,12 @@ async def main() -> None:
                 await notifier.notify_error(str(exc), context="TaskGroup")
     finally:
         set_readiness("shutting_down")
-        await schwab.close()
-        await db.close()
+        await _close_runtime_resources(
+            shadow_market_data,
+            gateway_client,
+            schwab,
+            db,
+        )
 
 
 if __name__ == "__main__":

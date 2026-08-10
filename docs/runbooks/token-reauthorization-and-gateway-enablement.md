@@ -1,5 +1,14 @@
 # Runbook — token re-authorization, then gateway enablement
 
+> **Historical runbook; superseded as of 2026-08-10.** Both original windows have been completed:
+> the token path was relocated and the read-only gateway is deployed, running, monitored, and
+> authenticated against Schwab. The early full re-authorization on `2026-08-10` then proved
+> zero-restart reload for SPX, NDX, XSP, and the candidate feed. The installed token expires at
+> `2026-08-17T20:23:30Z` (Monday `13:23:30 PDT`). Use
+> `docs/runbooks/reauthorization-2026-08-15-checklist.md` for the Saturday cadence reset. C3 shadow
+> wiring remained a separate, unwired consumer change at the start of the current closeout. The
+> steps below are preserved as execution history and must not be treated as current host state.
+
 Two windows, deliberately separate. Window A is mandatory and deadline-driven. Window B is
 optional and unhurried. **Do not merge them.**
 

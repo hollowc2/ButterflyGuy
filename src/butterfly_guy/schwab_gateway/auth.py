@@ -5,10 +5,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from aiohttp import web
 
@@ -72,14 +74,8 @@ class InternalKeyAuthenticator:
         self._principals = principals
 
     @classmethod
-    def from_file(cls, path: Path) -> InternalKeyAuthenticator:
-        mode = path.stat().st_mode
-        if mode & 0o022:
-            raise ValueError("gateway keys file must not be group/world writable")
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ValueError("gateway keys file could not be read or parsed") from exc
+    def from_document(cls, payload: Any) -> InternalKeyAuthenticator:
+        """Build an authenticator from one already-parsed keys document."""
         if (
             not isinstance(payload, dict)
             or set(payload) != {"version", "clients"}
@@ -110,6 +106,32 @@ class InternalKeyAuthenticator:
         if len(principals) != len(payload["clients"]):
             raise ValueError("invalid gateway client entry")
         return cls(principals)
+
+    @classmethod
+    def load_file(
+        cls,
+        path: Path,
+    ) -> tuple[InternalKeyAuthenticator, dict[str, Any]]:
+        """Read once and return both the authenticator and exact validated document."""
+        try:
+            handle = path.open(encoding="utf-8")
+        except OSError as exc:
+            raise ValueError("gateway keys file could not be read or parsed") from exc
+        with handle:
+            mode = os.fstat(handle.fileno()).st_mode
+            if mode & 0o022:
+                raise ValueError("gateway keys file must not be group/world writable")
+            try:
+                payload = json.load(handle)
+            except (OSError, json.JSONDecodeError) as exc:
+                raise ValueError("gateway keys file could not be read or parsed") from exc
+        authenticator = cls.from_document(payload)
+        return authenticator, payload
+
+    @classmethod
+    def from_file(cls, path: Path) -> InternalKeyAuthenticator:
+        authenticator, _ = cls.load_file(path)
+        return authenticator
 
     def authenticate(self, api_key: str) -> InternalPrincipal | None:
         if not api_key:

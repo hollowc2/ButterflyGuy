@@ -29,3 +29,21 @@ groups:
             butterfly_schwab_gateway_live has not been scrapeable for 2 minutes.
             Trading is unaffected -- no consumer depends on the gateway while
             SCHWAB_ACCESS_MODE and SCHWAB_GATEWAY_SHADOW_READS are at their defaults.
+
+      - alert: SchwabGatewayNotReady
+        # Require a successful scrape so process loss remains the Down alert's concern.
+        # The 2-minute hold is deliberately longer than the 30-second token readiness
+        # recovery interval, avoiding noise from one ordinary recovery cycle.
+        expr: >-
+          (up{job="schwab_gateway"} == 1)
+          unless on(job, instance)
+          (schwab_gateway_token_state{job="schwab_gateway", state="ready"} == 1)
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Schwab gateway is running but not ready
+          description: >-
+            butterfly_schwab_gateway_live has remained scrapeable without a ready
+            token state for 2 minutes. Direct trading remains authoritative unless
+            a separately approved gateway access-mode rollout changes that boundary.

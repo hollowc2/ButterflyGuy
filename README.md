@@ -44,7 +44,7 @@ runtime.
 | `src/butterfly_guy/services/` | Trade and position service orchestration, notifications |
 | `src/butterfly_guy/reports/` | Report and dashboard generation |
 | `src/butterfly_guy/equity_scan/` | Personal equity-research scanner (not part of the butterfly strategy) |
-| `src/butterfly_guy/schwab_gateway/` | In-progress shared Schwab OAuth/REST gateway (see below) |
+| `src/butterfly_guy/schwab_gateway/` | Deployed read-only Schwab OAuth/REST gateway; consumer migration remains opt-in (see below) |
 | `src/butterfly_guy/gateway_client/` | Client for consuming the Schwab gateway |
 | `configs/` | SPX, NDX, and XSP configuration files |
 | `infra/` | Docker compose and observability wiring |
@@ -86,6 +86,18 @@ That orchestration is what lives in `run_live.py`.
 Default runtime settings are paper-trading oriented. Live trading requires the explicit live-trading guard to be enabled.
 
 Secrets and runtime credentials live in `.env` and `tokens.json`. Do not commit those values. Copy `.env.example` to `.env` to start.
+
+Docker Compose also requires `SCHWAB_GATEWAY_TOKEN_DIR` in its interpolation environment (normally
+`infra/.env`). Set it to an absolute, dedicated host directory containing `tokens.json`, not to the
+repository root and not to the token document itself:
+
+```dotenv
+SCHWAB_GATEWAY_TOKEN_DIR=/absolute/path/to/schwab-token-directory
+```
+
+The directory must be writable by the configured trading/gateway uid because token refresh uses a
+sibling lock and atomic replacement. The candidate feed receives the same directory read-only.
+Compose fails closed while the variable is unset.
 
 ## Live-money readiness gate
 
@@ -191,15 +203,18 @@ legacy `app_spx_candidate` Compose profile remains stopped and available for
 one rollback cycle; it must not run concurrently with the fleet-native
 `best-rr` evaluator because both use the preserved BEST_RR database.
 
-## Schwab gateway (in progress)
+## Schwab gateway (deployed read-only; consumer migration in progress)
 
-`src/butterfly_guy/schwab_gateway/` and `src/butterfly_guy/gateway_client/` are an in-progress
-migration toward a single shared Schwab OAuth/REST gateway process, so SPX, NDX, XSP, and the
-candidate fleet stop each holding a direct SDK client and token file. As of this writing the live
-path described in `docs/architecture/current-schwab-integration.md` still uses one app identity
-and one host token file per process; the gateway is not yet the production path. See
+`src/butterfly_guy/schwab_gateway/` is deployed on Helios as an internal read-only service. Its
+readiness, authenticated Schwab access, Prometheus scrape, alerting, and crash recovery have been
+proven. It exposes bounded quote, spot, and option-chain reads; history, account, and order surfaces
+remain absent.
+
+The trading applications still use direct Schwab access as the authoritative path, and no deployed
+consumer depends on the gateway. The local code contains a default-off, XSP-only shadow canary for
+the next migration stage; deploying or enabling it remains a separate operator decision. See
 `docs/architecture/schwab-gateway-migration.md` and `infra/docker-compose.gateway.yml` for the
-current design and rollout plan.
+design and rollout boundaries.
 
 ### 4) Run the live orchestrator directly
 

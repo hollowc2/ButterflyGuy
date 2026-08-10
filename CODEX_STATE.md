@@ -5,6 +5,23 @@
 Safely migrate Schwab ownership toward one shared, permissioned gateway without changing
 live ButterflyGuy behavior or production defaults.
 
+## Current status — 2026-08-10
+
+This section supersedes the many time-stamped intermediate status statements below; those entries
+remain as an execution history, not as current instructions.
+
+- The read-only Schwab gateway is deployed on Helios, running and monitored. Readiness, an
+  authenticated Schwab quote, Prometheus scraping, alerting, and crash-restart recovery have been
+  proven. It still exposes no account or order surface.
+- Direct Schwab access remains authoritative for the trading applications. C3 shadow wiring is now
+  implemented locally as a default-off XSP-only canary, but it is not deployed or enabled. The
+  scoped consumer-key rotation and live canary remain separate operator-approved actions.
+- The early full re-authorization on `2026-08-10` proved zero-restart token reload for SPX, NDX,
+  XSP, and the candidate feed. The installed token was created at `2026-08-10T20:23:30Z` and
+  expires at `2026-08-17T20:23:30Z` (Monday `13:23:30 PDT`).
+- The planned Saturday `2026-08-15` morning re-authorization is a cadence reset, not the first
+  production reload test and not the current token's hard deadline.
+
 ## Current Phase
 
 The fake gateway foundation, atomic token manager/adapter, readiness boundary, and standalone

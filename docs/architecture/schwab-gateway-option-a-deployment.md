@@ -1,12 +1,26 @@
 # Option A deployment runbook — Helios, containerized
 
+> **Status update — 2026-08-10:** Option A has been executed. The read-only gateway is deployed on
+> Helios, running and monitored; `/ready`, one authenticated Schwab quote, Prometheus scraping,
+> alerting, and crash-restart recovery have been proven. No account/order surface exists and direct
+> trading access remains authoritative. C3 shadow wiring remained a separate, unwired consumer
+> change at the start of the current closeout. The original plan and preflight record below are
+> retained as deployment history; statements that the gateway is undeployed or unproven are
+> superseded by this note and the later records in `CODEX_STATE.md`.
+>
+> A distinct `SchwabGatewayNotReady` alert is prepared locally in
+> `infra/schwab-gateway-alerts.yml`. It requires a successful scrape plus two sustained minutes
+> without `schwab_gateway_token_state{state="ready"} == 1`, keeping it separate from process-down
+> and longer than the 30-second recovery interval. This alert is **not deployed** by this document
+> update.
+
 Scope: bring up the read-only Schwab gateway as an isolated container on Helios, serving
 real market data through the locked token manager. The operator selected Option A from
 `docs/architecture/schwab-gateway-deployment-options.md`.
 
-**Nothing in this runbook has been executed.** It was written offline, against a host with
-no Docker daemon and no Helios access. Every step below is a step to perform in an
-approved window, not a step already taken.
+**Historical plan:** when written, nothing in this runbook had been executed. It was written
+offline, against a host with no Docker daemon and no Helios access. Every step below is a step to
+perform in an approved window, not a record of current deployment state.
 
 **Not authorized by this runbook**: wiring any consumer to the gateway, enabling
 `SCHWAB_GATEWAY_SHADOW_READS`, order or account operations, or changing anything about
@@ -50,9 +64,9 @@ authenticate. **Never commit this file.**
 
 ### 2. The token directory
 
-Set `SCHWAB_GATEWAY_TOKEN_DIR` to the host directory holding `tokens.json` — on Helios
-that is `/opt/butterflyguy`, which the credential proof established is writable by the
-same uid the containers run as (`CODEX_STATE.md:224-233`).
+Set `SCHWAB_GATEWAY_TOKEN_DIR` to the dedicated host directory holding `tokens.json` — on
+the current Helios deployment that is `/opt/butterflyguy-tokens`. It is separate from the
+source checkout and owned by the same uid the containers run as.
 
 The **directory** is bind-mounted, not the document. `AtomicTokenManager` creates its
 advisory lock and its atomic replacement as siblings of the token file, and `os.replace`
@@ -62,28 +76,25 @@ That is precisely what stopped the in-container credential proof
 
 ### 3. Credentials
 
-`SCHWAB_API_KEY` and `SCHWAB_SECRET_KEY` come from `../.env` via `env_file` and are never
-named on a command line. `SCHWAB_TOKEN_PATH` is set in the service's `environment:` block,
-which overrides any value `../.env` carries — deliberate, because `.env` points the
-trading containers at their own in-container path.
+The gateway does not inherit either environment file wholesale. Its Compose service explicitly
+maps only `SCHWAB_API_KEY` and `SCHWAB_SECRET_KEY` into the container, and both interpolations use
+required-value guards. Account, database, notification, and other application settings therefore
+remain outside the gateway environment. `SCHWAB_TOKEN_PATH` is set explicitly from the required
+`SCHWAB_GATEWAY_TOKEN_DIR` interpolation.
 
-## The single-writer problem — read before scheduling
+Pass both the root `.env` and `infra/.env` to Compose: the root file supplies the Schwab application
+credentials, while `infra/.env` supplies deployment interpolation such as the dedicated token
+directory. Do not print either file or inspect rendered Compose output; the commands below discard
+the render and never place credential values on the command line.
 
-The gateway becomes a **second writer** of the production token document. The existing
-writers are the SPX/NDX/XSP containers (`CODEX_STATE.md:320`) and the hourly keepalive
-cron. `AtomicTokenManager` takes an exclusive advisory lock, but the existing direct
-services do **not** — `CODEX_STATE.md:186-188` records that no live service path acquires
-`.tokens.json.lock`. The lock therefore protects gateway writers from each other, not from
-the direct services.
+## Shared-writer coordination — resolved
 
-Consequences to accept explicitly before starting:
-
-- a gateway token refresh and a direct-path refresh can still interleave;
-- the gateway's atomic replace is safe in itself, but it can land on top of a refresh a
-  direct service just wrote, and vice versa.
-
-The lowest-risk first window is therefore **outside market hours, with the keepalive cron
-disabled**, which is the same posture the credential proof used.
+The earlier single-writer warning is historical. The gateway, SPX/NDX/XSP clients, and hourly
+keepalive now coordinate persistent writes through the same C1 lock beside the token document.
+The candidate feed is read-only and takes the corresponding shared lock. Full reauthorization is
+minted to staging and installed under C1, and the deployed stale-lineage guard prevents an old
+in-memory client from replacing a newer authorization lineage. Follow the current reauthorization
+checklist rather than disabling writers based on the superseded procedure.
 
 ## Recorded preflight — 2026-08-06, read-only
 
@@ -169,9 +180,10 @@ containers use — so the writable-token-directory design is sound on this host.
 
 Re-run in the approved window before starting anything:
 
-1. `docker compose -f infra/docker-compose.gateway.yml --profile gateway-live config`
-   — renders and validates without creating anything. It fails loudly if
-   `SCHWAB_GATEWAY_TOKEN_DIR` is unset, because both its uses carry `:?`.
+1. `docker compose --env-file .env --env-file infra/.env -f infra/docker-compose.gateway.yml --profile gateway-live config >/dev/null`
+   — renders and validates without creating anything or printing interpolated credentials. It
+   fails loudly if `SCHWAB_GATEWAY_TOKEN_DIR`,
+   `SCHWAB_API_KEY`, or `SCHWAB_SECRET_KEY` is unset because their uses carry `:?`.
 2. Confirm TCP `127.0.0.1:8011` is unbound.
 3. Confirm `secrets/schwab-gateway-keys.json` exists at mode `0600`.
 4. Confirm the token document is a regular non-symlink file at mode `0600` in a writable
@@ -181,7 +193,8 @@ Re-run in the approved window before starting anything:
 ## Start
 
 ```
-docker compose -f infra/docker-compose.gateway.yml --profile gateway-live up -d
+docker compose --env-file .env --env-file infra/.env \
+  -f infra/docker-compose.gateway.yml --profile gateway-live up -d
 ```
 
 The explicit `-f` and the non-default profile are both required; neither gateway profile
@@ -214,7 +227,8 @@ while looking healthy at the process level.
 ## Rollback
 
 ```
-docker compose -f infra/docker-compose.gateway.yml --profile gateway-live down
+docker compose --env-file .env --env-file infra/.env \
+  -f infra/docker-compose.gateway.yml --profile gateway-live down
 ```
 
 The gateway is a separate Compose project (`name: butterfly_gateway_foundation`) with its

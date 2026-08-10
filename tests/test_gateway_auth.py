@@ -72,6 +72,28 @@ def test_authenticator_loads_versioned_file(tmp_path) -> None:
     assert authenticator.authenticate("client-key").client_id == "butterfly-guy"
 
 
+def test_load_file_returns_the_exact_document_it_validated(tmp_path) -> None:
+    path = tmp_path / "keys.json"
+    payload = {
+        "version": 1,
+        "clients": [
+            {
+                "id": "butterfly-guy",
+                "key_sha256": hash_api_key("client-key"),
+                "capabilities": ["market_data:read"],
+                "priority_class": "protected",
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    path.chmod(0o600)
+
+    authenticator, validated_payload = InternalKeyAuthenticator.load_file(path)
+
+    assert validated_payload == payload
+    assert authenticator.authenticate("client-key").client_id == "butterfly-guy"
+
+
 def test_authenticator_rejects_writable_key_file(tmp_path) -> None:
     path = tmp_path / "keys.json"
     path.write_text('{"version": 1, "clients": []}', encoding="utf-8")
