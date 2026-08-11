@@ -101,7 +101,9 @@ Compose fails closed while the variable is unset.
 
 ## Live-money readiness gate
 
-This repo is not cleared for live-money automation until `todo.md` is complete. Before any restart, deploy, or live pilot, check the current gate in `todo.md` and follow `docs/live-runbook.md`, which requires zero `OPEN` trades in the database, no working/unknown Schwab orders, and broker/DB reconciliation.
+Treat SPX, NDX, and XSP as paper-only unless the owner explicitly authorizes a supervised live
+canary. Before any restart, deploy, or live pilot, follow `docs/live-runbook.md`, which requires
+zero `OPEN` trades in the database, no working/unknown Schwab orders, and broker/DB reconciliation.
 
 ## Typical workflow
 

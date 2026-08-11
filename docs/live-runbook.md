@@ -1,6 +1,7 @@
 # Live Runbook
 
-This repo is not cleared for live-money automation until `todo.md` is complete.
+Treat SPX, NDX, and XSP as paper-only unless the owner explicitly authorizes a supervised live
+canary.
 
 ## Startup
 
