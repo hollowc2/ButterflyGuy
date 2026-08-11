@@ -124,12 +124,12 @@ Status: `IN PROGRESS`
 
 - [x] Obtain explicit approval to provision `/opt/schwab-gateway`, copy secrets, and start a
   candidate.
-- [ ] Check out `v0.1.0`; use only Schwab app credentials and gateway settings.
-- [ ] Reuse `/opt/butterflyguy-tokens` unchanged; copy digest-only keys at mode `0600` without
+- [x] Check out `v0.1.0`; use only Schwab app credentials and gateway settings.
+- [x] Reuse `/opt/butterflyguy-tokens` unchanged; copy digest-only keys at mode `0600` without
   rotation.
-- [ ] Start `schwab_gateway_candidate` on `8012`, only on `monitoring_net`; leave legacy and
+- [x] Start `schwab_gateway_candidate` on `8012`, only on `monitoring_net`; leave legacy and
   ButterflyGuy services unchanged.
-- [ ] Validate health/readiness/metrics/logs/recovery/authenticated routes and concurrent
+- [x] Validate health/readiness/metrics/logs/recovery/authenticated routes and concurrent
   old/new reads with token-lock safety.
 - [ ] Compare bounded structures/quality flags and observe one complete market session without
   readiness, authentication, persistence, or lock anomalies.
@@ -244,3 +244,5 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-11 | Phase 4 | IN PROGRESS | candidate build of `6884cc2` failed before image export | Slim image lacked Git for immutable public dependencies; no container or service changed |
 | 2026-08-11 | Phase 4 | COMPLETE | ButterflyGuy `03be00c`; candidate image `sha256:3c2e944c25cdc3a0d1dba05258a1a10fcb07b6f0e3063a524869e5950ea4c91a` | Image imports SDK/token-store `0.1.0` as unprivileged user under read-only/no-network smoke; zero candidate containers running; no deployment |
 | 2026-08-11 | Phase 5 | IN PROGRESS | explicit owner approval; standalone `v0.1.0`; legacy `e851c221` / `sha256:6eb9f...0ec8` | Approved provision/secret copy/candidate start only. Rollback: `docker stop schwab_gateway_candidate`; legacy remains running and monitoring/trading services remain unchanged |
+| 2026-08-11 | Phase 5 | IN PROGRESS | checkout `2d1da47b`; candidate image `sha256:d31e679d...5ef04`; container `edfff43e658e` | Candidate is healthy on loopback `8012` and `monitoring_net`, unprivileged/read-only; protected environment and digest-only keys are mode `0600`; rollback remains `docker stop schwab_gateway_candidate` |
+| 2026-08-11 | Phase 5 | IN PROGRESS | health/ready/metrics `200`; quote/spot/chain parity `200`; restart count `1` | Concurrent legacy/candidate structures, quality flags, and prices matched within tolerance; token inode/size/mtime stayed unchanged; genuine process crash recovered; legacy and SPX/NDX/XSP stayed unchanged. Full-market-session observation remains pending |
