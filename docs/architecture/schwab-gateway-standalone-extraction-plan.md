@@ -239,3 +239,4 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-10 | Phase 1 | COMPLETE | public `main` at `2d1da47b37ba48e3603f8d52a2fe73a55924aaf0` | Approved push completed; no secret, deploy, or runtime action |
 | 2026-08-10 | Phase 3 | COMPLETE | GitHub Actions run `31460632109`; annotated tag `v0.1.0` → `2d1da47b` | CI tests/Ruff/builds/wheel installs/Compose/Docker/boundaries passed; public tag installs resolved without credentials |
 | 2026-08-11 | Phase 4 | IN PROGRESS | lock resolves both packages to `2d1da47b`; focused `332 passed`; full `1009 passed, 1 skipped`; Ruff/build/Compose/graph pass | Direct remains authoritative; no runtime default changed; candidate image unavailable because local Docker is inactive |
+| 2026-08-11 | Phase 4 | IN PROGRESS | ButterflyGuy commit `6884cc2` | Local commit only; existing unrelated documentation edits remain unstaged; no image built or service changed |
