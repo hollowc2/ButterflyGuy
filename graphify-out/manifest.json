@@ -480,8 +480,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_backtest_db.py": {
-    "mtime": 1784824039.9870598,
-    "ast_hash": "2543239e8875b406ba27349f157c8aef",
+    "mtime": 1786414933.4455492,
+    "ast_hash": "41d0b20db7d1140187aba6e077b1815b",
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_candidate.py": {
@@ -495,8 +495,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_classifier_sweep.py": {
-    "mtime": 1784824040.0530586,
-    "ast_hash": "8b37953fba3f22d4f135a2403b73e0b7",
+    "mtime": 1786414933.2605526,
+    "ast_hash": "fcb4ef528ccb1fb70ac688bcffc46f18",
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_collector.py": {
@@ -1019,19 +1019,9 @@
     "ast_hash": "5c481195ffa8f068266f550582fb3b4c",
     "semantic_hash": ""
   },
-  "CODE_REVIEW_REPORT.md": {
-    "mtime": 1784824036.0321348,
-    "ast_hash": "7f25b006817731e03c706a88c68b0339",
-    "semantic_hash": ""
-  },
-  "CODE_REVIEW_STATE.md": {
-    "mtime": 1784824036.079134,
-    "ast_hash": "aea1edeab68699e681c8ce5bbfbb49b0",
-    "semantic_hash": ""
-  },
   "README.md": {
-    "mtime": 1786397131.8999112,
-    "ast_hash": "6951aa766ff34bbf4b70e653e31c4e05",
+    "mtime": 1786398779.9526744,
+    "ast_hash": "6505542a58dfcb06969808e3f55eff94",
     "semantic_hash": ""
   },
   "configs/candidates.yaml": {
@@ -1114,11 +1104,6 @@
     "ast_hash": "2e2d871f81571927409a068539634740",
     "semantic_hash": ""
   },
-  "data_sample.md": {
-    "mtime": 1784824036.9041183,
-    "ast_hash": "a59ca2f9372944c9c9af1dd4d9c071fd",
-    "semantic_hash": ""
-  },
   "docs/ai/REVIEW_STATE.md": {
     "mtime": 1784824036.9611173,
     "ast_hash": "b13a68ae5f5b00236c3679996e4e17ae",
@@ -1177,16 +1162,6 @@
   "infra/prometheus.yml": {
     "mtime": 1786326053.0018454,
     "ast_hash": "fb7b1d972534c52417ce4136e9d00fee",
-    "semantic_hash": ""
-  },
-  "partial-fill-test-plan.md": {
-    "mtime": 1784824038.4740884,
-    "ast_hash": "3fca3d5db8a82d7e5d3fdaeffead3b26",
-    "semantic_hash": ""
-  },
-  "todo.md": {
-    "mtime": 1784824042.2480168,
-    "ast_hash": "c011c2ca1f0ddc5b08890238a40575c5",
     "semantic_hash": ""
   },
   "data/images/butterflyguy_logo1.png": {
@@ -1325,8 +1300,8 @@
     "semantic_hash": ""
   },
   "CODEX_STATE.md": {
-    "mtime": 1786397131.7319143,
-    "ast_hash": "08af872c359a818b96ba895a36c10c9a",
+    "mtime": 1786398780.3876643,
+    "ast_hash": "7a78d658fe3ced279409a2ce28c1b5a0",
     "semantic_hash": ""
   },
   "docs/architecture/current-schwab-integration.md": {
@@ -1530,8 +1505,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-c3-shadow-wiring-plan.md": {
-    "mtime": 1786397004.6162477,
-    "ast_hash": "a0f0dba1f751390fa72adf6947f602b8",
+    "mtime": 1786398799.7882168,
+    "ast_hash": "fe4779d791134a9f52b5bac00febdfff",
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-deployment-options.md": {
@@ -1540,8 +1515,8 @@
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-option-a-deployment.md": {
-    "mtime": 1786397131.5529177,
-    "ast_hash": "962dd1381515ccfb0c932c9695151cef",
+    "mtime": 1786398780.2426677,
+    "ast_hash": "1dfa96333be81101d7144be8e528e12d",
     "semantic_hash": ""
   },
   "docs/runbooks/reauthorization-2026-08-15-checklist.md": {
@@ -1562,6 +1537,11 @@
   "src/butterfly_guy/notify.py": {
     "mtime": 1786379981.0452304,
     "ast_hash": "398466a61f1f5b4cad536602a4e38292",
+    "semantic_hash": ""
+  },
+  "data/data_sample.md": {
+    "mtime": 1786414933.6335456,
+    "ast_hash": "2796e2ac4e7171383e3b028aea87840a",
     "semantic_hash": ""
   }
 }

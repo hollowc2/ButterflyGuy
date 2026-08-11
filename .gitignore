@@ -41,8 +41,7 @@ htmlcov/
 *.swp
 *.swo
 
-# Data / outputs
-results/
+# Generated data outputs
 *.csv
 
 # Schwab day cache

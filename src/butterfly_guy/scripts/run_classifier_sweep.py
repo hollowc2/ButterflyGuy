@@ -248,8 +248,8 @@ def main() -> None:
     all_rows = ([baseline_row] if baseline_row else []) + rows
     print_table(all_rows, top_n + 1)  # +1 to always show baseline
 
-    Path("data/results").mkdir(exist_ok=True)
-    out = Path("data/results/classifier_sweep_results.csv")
+    Path("reports/results").mkdir(parents=True, exist_ok=True)
+    out = Path("reports/results/classifier_sweep_results.csv")
     with open(out, "w", newline="") as f:
         writer = csv_mod.DictWriter(f, fieldnames=all_rows[0].keys())
         writer.writeheader()

@@ -76,7 +76,7 @@ but are not consumed by ButterflyGuy code.
 | `data/{spx,ndx,xsp,vix}_1min.csv` | Optional `CsvDataLoader` research input | `ts,open,high,low,close\n2026-07-13 09:30:00,6300.00,6304.25,6298.75,6302.50` |
 | `data/schwab/YYYY-MM-DD.json` | Optional cached Schwab/yfinance backtest day | `{"date":"2026-07-13","vix":17.8,"prev_close":6294.11,"bars":[{"ts":"2026-07-13T13:30:00Z","close":6302.5}]}` |
 | `data/chains/[UNDERLYING/]YYYY-MM-DD.json` | Local option-chain backtest cache | `{"date":"2026-07-13","snapshots":{"2026-07-13T14:30:00Z":{"spot":6312.42,"quotes":[{"strike":6315.0,"type":"CALL","mark":7.25}]}}}` |
-| `data/results/*.csv` | Previously generated research results; not a runtime feed | `date,asset,wing_width,pnl\n2026-07-13,SPX,20,1.35` |
+| `reports/results/*.csv` | Previously generated research results; not a runtime feed | `date,asset,wing_width,pnl\n2026-07-13,SPX,20,1.35` |
 | `reports/**/*.json` and `reports/**/*.md` | Previously generated scan/broker/report artifacts; not a trading feed | `{"generated_at":"2026-07-13T13:00:00Z","scanned_symbols":2100}` |
 | Python clock, `zoneinfo`, and repository market-holiday rules | Runtime session, early-close, and trading-day decisions | `{"session_date":"2026-07-13","market_open_et":"09:30","market_close_et":"16:00","is_trading_day":true}` |
 | Local `/health` endpoints | `tools/health_monitor.py` only | `{"status":"ok"}` |
