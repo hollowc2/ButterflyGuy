@@ -120,9 +120,9 @@ order, paper/live, or default-access change.
 
 ## Phase 5 — Parallel Helios candidate
 
-Status: `NOT STARTED`
+Status: `IN PROGRESS`
 
-- [ ] Obtain explicit approval to provision `/opt/schwab-gateway`, copy secrets, and start a
+- [x] Obtain explicit approval to provision `/opt/schwab-gateway`, copy secrets, and start a
   candidate.
 - [ ] Check out `v0.1.0`; use only Schwab app credentials and gateway settings.
 - [ ] Reuse `/opt/butterflyguy-tokens` unchanged; copy digest-only keys at mode `0600` without
@@ -243,3 +243,4 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-11 | Phase 0 | COMPLETE | Helios `e851c221`; legacy image `sha256:6eb9f...0ec8`; broker gate `flat` | Legacy container healthy and image present; restore is `docker start butterfly_schwab_gateway_live`; no restart performed; DB has 2 OPEN rows and 0 nonterminal intents, so a later trading-service restart is not authorized |
 | 2026-08-11 | Phase 4 | IN PROGRESS | candidate build of `6884cc2` failed before image export | Slim image lacked Git for immutable public dependencies; no container or service changed |
 | 2026-08-11 | Phase 4 | COMPLETE | ButterflyGuy `03be00c`; candidate image `sha256:3c2e944c25cdc3a0d1dba05258a1a10fcb07b6f0e3063a524869e5950ea4c91a` | Image imports SDK/token-store `0.1.0` as unprivileged user under read-only/no-network smoke; zero candidate containers running; no deployment |
+| 2026-08-11 | Phase 5 | IN PROGRESS | explicit owner approval; standalone `v0.1.0`; legacy `e851c221` / `sha256:6eb9f...0ec8` | Approved provision/secret copy/candidate start only. Rollback: `docker stop schwab_gateway_candidate`; legacy remains running and monitoring/trading services remain unchanged |
