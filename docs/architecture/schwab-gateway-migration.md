@@ -1,11 +1,20 @@
 # Schwab Gateway Migration Plan
 
+> **Current status — 2026-08-10:** The Phase 2 read-only gateway is deployed, running, and
+> monitored on Helios. `/ready`, authenticated Schwab reads, Prometheus scraping, alerting, and
+> crash-restart recovery have been proven. The live routes are `/v1/quotes`, `/v1/spot`, and
+> `/v1/chain`; `/v1/history`, account, and order routes do not exist. Direct Schwab access remains
+> authoritative. XSP has an installed, default-off C3 shadow canary that always returns the direct
+> result; it has not been enabled for a market session. This document remains the migration and
+> rollback plan, not a record that the gateway is undeployed.
+
 ## Safety envelope
 
-All foundation work occurs on branch `codex/schwab-gateway-foundation` in the isolated
-worktree `/tmp/butterfly-schwab-gateway`. The original checkout contains uncommitted
-deployment/monitoring changes and is not modified. No Schwab request, Docker service action,
-database write, callback, token read, or order command is part of this work.
+The foundation work described below originally occurred on branch
+`codex/schwab-gateway-foundation` in the isolated worktree `/tmp/butterfly-schwab-gateway`.
+That isolation was a historical implementation safeguard. The deployed service is now operated
+through `infra/docker-compose.gateway.yml`; follow the deployment runbook for its current
+topology and do not treat the historical worktree language as an instruction to alter it.
 
 Production defaults remain direct. A gateway is never selected implicitly, and direct and
 gateway paths must never both submit an order.
@@ -313,20 +322,16 @@ accumulated gateway change set was reviewed and merged to local `main` on the sa
 gateway must remain disabled and outside the production stack; the completed proof authorizes
 no deployment, shadow read, or consumer cutover.
 
-The multi-consumer local foundation now fixes three identities and separates ButterflyGuy's
-protected quote capacity from the scanner/lab background pool. Authentication, capability,
-validation, and readiness precede admission; permits release on every exit path. This is wired to
-the fake foundation application and tested locally, but it is not deployed or enforced by any
-current runtime. The after-hours executable-staging override, approval runbook, rollback procedure,
-and redacted evidence template are prepared but have not been executed. See
-`schwab-gateway-multi-consumer.md` and
-`../runbooks/schwab-gateway-after-hours-credential-proof.md`.
+The multi-consumer foundation fixes three identities and separates ButterflyGuy's protected quote
+capacity from the scanner/lab background pool. Authentication, capability, validation, and
+readiness precede admission; permits release on every exit path. This policy is deployed in the
+gateway runtime. Only the XSP default-off shadow canary is wired as a consumer; scanner and
+AfterHours Lab consumer enablement remain separate work. See `schwab-gateway-multi-consumer.md`
+and `../runbooks/schwab-gateway-after-hours-credential-proof.md`.
 
-Phase 2's surfaces were complete for quotes only, which serve the equity scanner rather than the
-butterfly collector. Phase 3's offline prerequisites now exist, fake-backed and unwired:
-`GET /v1/spot` and `GET /v1/chain`, the matching `get_spot`/`get_chain_metadata` client methods, a
-shadow-comparison decorator that always returns the direct result, and the
-`SCHWAB_GATEWAY_SHADOW_READS` rollback flag named above, defaulting to false. `/v1/chain` carries
-fixed-shape metadata only; transporting contract rows is Phase 4. `GET /v1/history` is not built, so
-the collector's `get_daily_bars` read has no shadow surface yet. No consumer constructs any of this,
-and the four Phase 3 dependencies listed above are still unmet.
+Phase 2 now serves quotes, spot, and chain metadata. Phase 3's C3 prerequisites are implemented:
+the matching `get_spot`/`get_chain_metadata` client methods, a shadow-comparison decorator that
+always returns the direct result, and the default-off `SCHWAB_GATEWAY_SHADOW_READS` rollback flag.
+XSP constructs this path only when the operator enables its canary flag. `/v1/chain` carries
+fixed-shape metadata only; transporting contract rows is Phase 4. `GET /v1/history` is not built,
+so the collector's `get_daily_bars` read has no shadow surface yet.

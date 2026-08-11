@@ -203,18 +203,23 @@ legacy `app_spx_candidate` Compose profile remains stopped and available for
 one rollback cycle; it must not run concurrently with the fleet-native
 `best-rr` evaluator because both use the preserved BEST_RR database.
 
-## Schwab gateway (deployed read-only; consumer migration in progress)
+## Schwab gateway (operational read-only service)
 
-`src/butterfly_guy/schwab_gateway/` is deployed on Helios as an internal read-only service. Its
-readiness, authenticated Schwab access, Prometheus scrape, alerting, and crash recovery have been
-proven. It exposes bounded quote, spot, and option-chain reads; history, account, and order surfaces
-remain absent.
+`src/butterfly_guy/schwab_gateway/` runs on Helios as an internal read-only service. Its readiness,
+authenticated Schwab access, Prometheus scrape, alerting, and crash-restart recovery are operational.
+It exposes bounded quote, spot, and option-chain reads; history, account, and order surfaces remain
+absent.
 
-The trading applications still use direct Schwab access as the authoritative path, and no deployed
-consumer depends on the gateway. XSP contains the deployed shadow canary, but its flag defaults off
-and remains disabled; enabling it for a market-session observation is a separate operator decision. See
-`docs/architecture/schwab-gateway-migration.md` and `infra/docker-compose.gateway.yml` for the
-design and rollout boundaries.
+The trading applications still use direct Schwab access as the authoritative path. XSP is wired for
+an opt-in shadow comparison: it observes gateway spot and chain metadata reads while always returning
+the direct result. The flag defaults off and remains disabled; enabling it for a market-session
+observation is a separate operator decision. No trading decision, account operation, or order is routed
+through the gateway.
+
+For operational topology and the current rollout boundary, see
+`docs/architecture/schwab-gateway-option-a-deployment.md` and
+`docs/architecture/schwab-gateway-c3-shadow-wiring-plan.md`. The longer-term plan and rollback
+criteria are in `docs/architecture/schwab-gateway-migration.md`.
 
 ### 4) Run the live orchestrator directly
 
@@ -290,7 +295,6 @@ The same script also supports `--asset NDX` and `--asset XSP`, but those should 
 - Backtests should be run against the same config family as the asset you are comparing.
 - Docker is the normal way to run the app services.
 - TimescaleDB is the historical source of truth for replay and parity work.
-- Live-money automation is gated by `todo.md`; check it before any restart, deploy, or live pilot.
 
 ## If you are changing the code
 

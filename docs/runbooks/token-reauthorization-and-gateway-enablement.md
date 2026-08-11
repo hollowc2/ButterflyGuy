@@ -5,8 +5,9 @@
 > authenticated against Schwab. The early full re-authorization on `2026-08-10` then proved
 > zero-restart reload for SPX, NDX, XSP, and the candidate feed. The installed token expires at
 > `2026-08-17T20:23:30Z` (Monday `13:23:30 PDT`). Use
-> `docs/runbooks/reauthorization-2026-08-15-checklist.md` for the Saturday cadence reset. C3 shadow
-> wiring remained a separate, unwired consumer change at the start of the current closeout. The
+> `docs/runbooks/reauthorization-2026-08-15-checklist.md` for the Saturday cadence reset. XSP's C3
+> shadow wiring is installed but defaults off, returns direct data, and has not been enabled for a
+> market session. The
 > steps below are preserved as execution history and must not be treated as current host state.
 
 Two windows, deliberately separate. Window A is mandatory and deadline-driven. Window B is

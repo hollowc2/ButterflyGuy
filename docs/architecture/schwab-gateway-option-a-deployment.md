@@ -3,8 +3,9 @@
 > **Status update — 2026-08-10:** Option A has been executed. The read-only gateway is deployed on
 > Helios, running and monitored; `/ready`, one authenticated Schwab quote, Prometheus scraping,
 > alerting, and crash-restart recovery have been proven. No account/order surface exists and direct
-> trading access remains authoritative. C3 shadow wiring remained a separate, unwired consumer
-> change at the start of the current closeout. The original plan and preflight record below are
+> trading access remains authoritative. XSP has installed default-off C3 shadow wiring; it always
+> returns direct data and has not been enabled for a market session. The original plan and preflight
+> record below are
 > retained as deployment history; statements that the gateway is undeployed or unproven are
 > superseded by this note and the later records in `CODEX_STATE.md`.
 >

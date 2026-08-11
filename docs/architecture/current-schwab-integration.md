@@ -1,8 +1,14 @@
 # Current Schwab Integration
 
-Status: verified against commit `de84d91` on 2026-08-03. The checked-in graph report was
-built from `9edfa707`, so graph-derived navigation was confirmed against source. Statements
-labelled **Assumption** require runtime or Schwab verification.
+> **Historical baseline — 2026-08-03:** This document records the direct-only integration that
+> existed before the read-only gateway deployment. It is not a current topology reference. As of
+> 2026-08-10, the gateway runs on Helios with bounded quote, spot, and chain reads, but direct
+> Schwab access remains authoritative for every trading decision and all account/order work. XSP's
+> shadow canary is installed and default-off. For the current deployment boundary, see
+> `schwab-gateway-option-a-deployment.md` and `schwab-gateway-c3-shadow-wiring-plan.md`.
+>
+> The baseline was verified against commit `de84d91` on 2026-08-03. Statements labelled
+> **Assumption** require runtime or Schwab verification.
 
 ## Current architecture
 

@@ -2,8 +2,8 @@
 
 > **Status update — 2026-08-10:** The read-only foundation is now deployed on Helios, running and
 > monitored. Readiness, one authenticated Schwab quote, Prometheus scraping, alerting, and
-> crash-restart recovery have been proven. Direct trading access remains authoritative, and C3
-> consumer shadow wiring remained unwired at the start of the current closeout. Account and order
+> crash-restart recovery have been proven. Direct trading access remains authoritative, and XSP has
+> installed default-off C3 shadow wiring that always returns the direct result. Account and order
 > authority remain absent. The live read-only routes now include `/v1/quotes`, `/v1/spot`, and
 > `/v1/chain`; `/v1/history` remains absent. The implementation inventory below is retained for
 > design history; deployment and proof classifications written before the live window are
@@ -11,11 +11,11 @@
 
 ## Status and safety boundary
 
-At the time this section was written, the foundation was implemented and fake-tested locally but
-not yet deployed. It still does not change the direct-access production default. The demo runner
-remains fake-backed. The admission policy is active only in an application created by the gateway
-foundation; it is not enforced by any current ButterflyGuy, Equity Scanner, or AfterHours Lab
-runtime.
+The historical foundation section below predates deployment. The read-only gateway and its
+admission policy are now active in the Helios gateway runtime, while direct access remains the
+production default for trading. XSP may use the gateway only for an explicitly enabled shadow
+comparison, never as the source of a returned trading value. Equity Scanner and AfterHours Lab are
+not gateway consumers.
 
 ## Trust model
 
@@ -80,10 +80,10 @@ risk, execution, position, and service code must not import gateway server inter
 scanner and research consumers should depend only on `gateway_client` or an equally narrow
 protocol.
 
-The implemented route table is exactly `/health`, `/ready`, `/metrics`, and authenticated
-`/v1/quotes`. Existing v1 quote fields remain backward compatible. Missing bid/ask remain null,
-not zero. Timeouts, unavailability, malformed responses, authentication failures, authorization
-failures, readiness failures, and capacity rejection remain explicit and bounded.
+The implemented route table is `/health`, `/ready`, `/metrics`, and authenticated `/v1/quotes`,
+`/v1/spot`, and `/v1/chain`. Existing v1 quote fields remain backward compatible. Missing bid/ask
+remain null, not zero. Timeouts, unavailability, malformed responses, authentication failures,
+authorization failures, readiness failures, and capacity rejection remain explicit and bounded.
 
 Future endpoint order, without implementation in this slice:
 
@@ -93,8 +93,8 @@ Future endpoint order, without implementation in this slice:
 4. streaming only after measured need;
 5. account/order mediation only under separate authorization and security review.
 
-No history, chain, account, order, position, transaction, or streaming route exists here. No
-automatic order retry exists; order submission remains outside the gateway foundation.
+No history, account, order, position, transaction, or streaming route exists here. No automatic
+order retry exists; order submission remains outside the gateway foundation.
 
 ## Historical evidence classification
 
