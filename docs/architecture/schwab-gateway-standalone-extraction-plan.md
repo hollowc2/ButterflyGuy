@@ -24,7 +24,7 @@ Phase states are `NOT STARTED`, `IN PROGRESS`, `BLOCKED`, and `COMPLETE`.
 
 ## Phase 0 — Baseline and safety record
 
-Status: `IN PROGRESS`
+Status: `COMPLETE`
 
 - [x] Record the 2026-08-10 Helios baseline: checkout `/opt/butterflyguy`; branch `main`;
   commit `e851c22152878b44ea748bbf8ad86b5d7871f517`; container
@@ -37,8 +37,8 @@ Status: `IN PROGRESS`
 - [x] Run and record the focused gateway, token-store, shadow, and `run_live` baseline.
 - [x] Capture redacted golden HTTP fixtures for all current success and error contracts.
 - [x] Confirm XSP shadow mode is disabled and SPX/NDX have no gateway client configuration.
-- [ ] Confirm no open/working broker state before any later trading-service restart.
-- [ ] Record the legacy gateway restore command and verify the existing container can be
+- [x] Confirm no open/working broker state before any later trading-service restart.
+- [x] Record the legacy gateway restore command and verify the existing container can be
   restarted without rebuilding it.
 
 Acceptance: reproducible local tests, API fixtures, current deployment identifiers, and a
@@ -240,3 +240,4 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-10 | Phase 3 | COMPLETE | GitHub Actions run `31460632109`; annotated tag `v0.1.0` → `2d1da47b` | CI tests/Ruff/builds/wheel installs/Compose/Docker/boundaries passed; public tag installs resolved without credentials |
 | 2026-08-11 | Phase 4 | IN PROGRESS | lock resolves both packages to `2d1da47b`; focused `332 passed`; full `1009 passed, 1 skipped`; Ruff/build/Compose/graph pass | Direct remains authoritative; no runtime default changed; candidate image unavailable because local Docker is inactive |
 | 2026-08-11 | Phase 4 | IN PROGRESS | ButterflyGuy commit `6884cc2` | Local commit only; existing unrelated documentation edits remain unstaged; no image built or service changed |
+| 2026-08-11 | Phase 0 | COMPLETE | Helios `e851c221`; legacy image `sha256:6eb9f...0ec8`; broker gate `flat` | Legacy container healthy and image present; restore is `docker start butterfly_schwab_gateway_live`; no restart performed; DB has 2 OPEN rows and 0 nonterminal intents, so a later trading-service restart is not authorized |
