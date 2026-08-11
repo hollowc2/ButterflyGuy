@@ -11,8 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
-from butterfly_guy.schwab_gateway.token_manager import (
+from schwab_token_store import (
     AtomicFileTokenStore,
     AtomicTokenManager,
     TokenCorruptError,
@@ -220,7 +219,7 @@ def test_callback_failure_preserves_original_and_redacts_error_and_logs(
     write_token(path, original)
     fake_log = MagicMock()
     monkeypatch.setattr(
-        "butterfly_guy.schwab_gateway.token_manager.log",
+        "schwab_token_store.log",
         fake_log,
     )
     token_manager = manager(path)
@@ -267,7 +266,7 @@ def test_invalid_callback_object_cannot_leak_through_validation_error(
     write_token(path, original)
     fake_log = MagicMock()
     monkeypatch.setattr(
-        "butterfly_guy.schwab_gateway.token_manager.log",
+        "schwab_token_store.log",
         fake_log,
     )
     token_manager = manager(path)

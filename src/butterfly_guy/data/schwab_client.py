@@ -60,7 +60,7 @@ class SchwabClientWrapper:
             return transaction.read()
 
     def _write_token(self, token: Any, *_args: Any, **_kwargs: Any) -> None:
-        from butterfly_guy.schwab_gateway.token_manager import TokenManagerError
+        from schwab_token_store import TokenManagerError
 
         try:
             with self._token_store.locked(TOKEN_LOCK_TIMEOUT) as transaction:
@@ -128,7 +128,7 @@ class SchwabClientWrapper:
 
     async def initialize(self) -> None:
         """Authenticate and resolve account hash."""
-        from butterfly_guy.schwab_gateway.token_manager import AtomicFileTokenStore
+        from schwab_token_store import AtomicFileTokenStore
 
         self._token_store = AtomicFileTokenStore(self.settings.token_path)
         self._client = self._build_client()

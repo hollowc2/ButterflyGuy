@@ -13,14 +13,8 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-from butterfly_guy.core.logging import get_logger
-from butterfly_guy.core.metrics import (
-    gateway_shadow_comparisons,
-    gateway_shadow_discrepancies,
-)
-from butterfly_guy.data.providers import CollectorMarketDataProvider
-from butterfly_guy.gateway_client.chain_metadata import extract_chain_metadata
-from butterfly_guy.gateway_client.client import (
+from schwab_gateway_sdk.chain_metadata import extract_chain_metadata
+from schwab_gateway_sdk.client import (
     GatewayAuthenticationError,
     GatewayAuthorizationError,
     GatewayCapacityError,
@@ -29,6 +23,13 @@ from butterfly_guy.gateway_client.client import (
     GatewayTimeoutError,
     GatewayUnavailableError,
 )
+
+from butterfly_guy.core.logging import get_logger
+from butterfly_guy.core.metrics import (
+    gateway_shadow_comparisons,
+    gateway_shadow_discrepancies,
+)
+from butterfly_guy.data.providers import CollectorMarketDataProvider
 
 log = get_logger(__name__)
 

@@ -250,7 +250,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "schwab-gateway-sdk" },
     { name = "schwab-py" },
+    { name = "schwab-token-store" },
     { name = "scipy" },
     { name = "structlog" },
     { name = "tzdata" },
@@ -277,7 +279,9 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "schwab-gateway-sdk", git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Fsdk&tag=v0.1.0" },
     { name = "schwab-py", specifier = ">=1.4.0" },
+    { name = "schwab-token-store", git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Ftoken-store&tag=v0.1.0" },
     { name = "scipy", specifier = ">=1.14.0" },
     { name = "structlog", specifier = ">=24.0.0" },
     { name = "tzdata", specifier = ">=2025.3" },
@@ -1943,6 +1947,16 @@ wheels = [
 ]
 
 [[package]]
+name = "schwab-gateway-sdk"
+version = "0.1.0"
+source = { git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Fsdk&tag=v0.1.0#2d1da47b37ba48e3603f8d52a2fe73a55924aaf0" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+
+[[package]]
 name = "schwab-py"
 version = "1.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1961,6 +1975,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7b/48/9ba35979ce0ecf864030570e9a4408ad3966238e020f6756677dabdae198/schwab_py-1.5.1.tar.gz", hash = "sha256:6dce4bf671f0c3a74bf8486d114d3283261e125921fcc9abe9c25ff09e9116b0", size = 93794, upload-time = "2025-06-30T15:07:56.788Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/12/1fa990269b7e4d3e31f589bf5029834eda8159f70996ebad6e650696d570/schwab_py-1.5.1-py2.py3-none-any.whl", hash = "sha256:96e44f9ffaab364978d6a69db52c47d2599e451b638159f998165fa07d00515e", size = 100577, upload-time = "2025-06-30T15:07:55.462Z" },
+]
+
+[[package]]
+name = "schwab-token-store"
+version = "0.1.0"
+source = { git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Ftoken-store&tag=v0.1.0#2d1da47b37ba48e3603f8d52a2fe73a55924aaf0" }
+dependencies = [
+    { name = "prometheus-client" },
+    { name = "structlog" },
 ]
 
 [[package]]

@@ -10,18 +10,18 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-
-from butterfly_guy.schwab_gateway.token_adapter import (
-    LockedSchwabClientAdapter,
-    SchwabClientConstructionError,
-    SchwabClientOperationError,
-)
-from butterfly_guy.schwab_gateway.token_manager import (
+from schwab_token_store import (
     AtomicFileTokenStore,
     AtomicTokenManager,
     TokenCallbackScopeError,
     TokenManagerState,
     TokenRefreshError,
+)
+
+from butterfly_guy.schwab_gateway.token_adapter import (
+    LockedSchwabClientAdapter,
+    SchwabClientConstructionError,
+    SchwabClientOperationError,
 )
 
 NOW = 2_000_000_000.0

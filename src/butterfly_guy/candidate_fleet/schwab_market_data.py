@@ -30,7 +30,7 @@ class ReadOnlySchwabMarketDataClient:
         self._retired_client: Any = None
 
     async def initialize(self) -> None:
-        from butterfly_guy.schwab_gateway.token_manager import AtomicFileTokenStore
+        from schwab_token_store import AtomicFileTokenStore
 
         self._token_store = AtomicFileTokenStore(self._settings.token_path)
         self._client, self._creation_timestamp = self._build_client()

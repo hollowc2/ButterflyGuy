@@ -7,6 +7,7 @@ import signal
 from unittest.mock import AsyncMock, Mock, call
 
 import pytest
+from schwab_gateway_sdk.config import GatewayClientSettings
 
 from butterfly_guy.core.config import (
     AppConfig,
@@ -22,7 +23,6 @@ from butterfly_guy.execution.order_manager import (
     BrokerFillError,
     TerminalOrderError,
 )
-from butterfly_guy.gateway_client.config import GatewayClientSettings
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.scripts.run_live import (
     BrokerStateGate,

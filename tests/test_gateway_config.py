@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from schwab_gateway_sdk.config import GatewayClientSettings
 
-from butterfly_guy.gateway_client.config import GatewayClientSettings
 from butterfly_guy.schwab_gateway.config import GatewaySettings
 
 

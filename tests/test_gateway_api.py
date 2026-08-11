@@ -6,23 +6,23 @@ import datetime as dt
 import httpx
 import pytest
 from aiohttp.test_utils import TestServer
-
-from butterfly_guy.gateway_client.client import (
+from schwab_gateway_sdk.client import (
     GatewayAuthorizationError,
     GatewayMarketDataClient,
     GatewayTimeoutError,
 )
-from butterfly_guy.gateway_client.models import QuoteV1
+from schwab_gateway_sdk.models import QuoteV1
+from schwab_token_store import (
+    TokenManagerHealth,
+    TokenManagerState,
+)
+
 from butterfly_guy.schwab_gateway.api import create_app
 from butterfly_guy.schwab_gateway.auth import (
     InternalKeyAuthenticator,
     InternalPrincipal,
     PriorityClass,
     hash_api_key,
-)
-from butterfly_guy.schwab_gateway.token_manager import (
-    TokenManagerHealth,
-    TokenManagerState,
 )
 
 

@@ -5,13 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol, TypeVar
 
-from butterfly_guy.core.logging import get_logger
-from butterfly_guy.schwab_gateway.token_manager import (
+from schwab_token_store import (
     AtomicTokenManager,
     TokenManagerError,
     TokenReadCallback,
     TokenWriteCallback,
 )
+
+from butterfly_guy.core.logging import get_logger
 
 log = get_logger(__name__)
 

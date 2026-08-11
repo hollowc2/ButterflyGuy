@@ -7,9 +7,10 @@ import re
 import httpx
 import pytest
 from aiohttp.test_utils import TestServer
+from schwab_gateway_sdk.client import GatewayCapacityError, GatewayMarketDataClient
+from schwab_gateway_sdk.models import QuoteV1
+from schwab_token_store import TokenManagerState
 
-from butterfly_guy.gateway_client.client import GatewayCapacityError, GatewayMarketDataClient
-from butterfly_guy.gateway_client.models import QuoteV1
 from butterfly_guy.schwab_gateway import api
 from butterfly_guy.schwab_gateway.admission import (
     AdmissionController,
@@ -22,7 +23,6 @@ from butterfly_guy.schwab_gateway.auth import (
     PriorityClass,
     hash_api_key,
 )
-from butterfly_guy.schwab_gateway.token_manager import TokenManagerState
 from butterfly_guy.schwab_gateway.upstream import UpstreamUnavailableError
 
 KEYS = {

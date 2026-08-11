@@ -10,9 +10,14 @@ from contextlib import suppress
 from typing import Any
 
 from aiohttp import web
+from schwab_gateway_sdk.models import QuoteV1
+from schwab_token_store import (
+    AtomicFileTokenStore,
+    AtomicTokenManager,
+    TokenManagerState,
+)
 
 from butterfly_guy.core.logging import get_logger, setup_logging
-from butterfly_guy.gateway_client.models import QuoteV1
 from butterfly_guy.schwab_gateway.admission import AdmissionPolicy
 from butterfly_guy.schwab_gateway.api import StaticTokenReadinessProvider, create_app
 from butterfly_guy.schwab_gateway.auth import InternalKeyAuthenticator
@@ -23,11 +28,6 @@ from butterfly_guy.schwab_gateway.live_provider import (
     TokenReadinessRecovery,
 )
 from butterfly_guy.schwab_gateway.token_adapter import LockedSchwabClientAdapter
-from butterfly_guy.schwab_gateway.token_manager import (
-    AtomicFileTokenStore,
-    AtomicTokenManager,
-    TokenManagerState,
-)
 from butterfly_guy.schwab_gateway.upstream import (
     DirectSchwabChainMetadataUpstream,
     DirectSchwabQuoteUpstream,

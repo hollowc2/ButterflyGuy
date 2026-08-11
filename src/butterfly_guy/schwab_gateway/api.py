@@ -10,15 +10,19 @@ from typing import Protocol
 
 from aiohttp import web
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
-
-from butterfly_guy.core.logging import get_logger
-from butterfly_guy.gateway_client.models import (
+from schwab_gateway_sdk.models import (
     ChainMetadataResponseV1,
     GatewayHealthV1,
     GatewayReadinessV1,
     QuoteResponseV1,
     SpotResponseV1,
 )
+from schwab_token_store import (
+    TokenManagerHealth,
+    TokenManagerState,
+)
+
+from butterfly_guy.core.logging import get_logger
 from butterfly_guy.schwab_gateway.admission import (
     AdmissionCapacityError,
     AdmissionController,
@@ -30,10 +34,6 @@ from butterfly_guy.schwab_gateway.auth import (
     InternalKeyAuthenticator,
     authentication_middleware,
     require_capability,
-)
-from butterfly_guy.schwab_gateway.token_manager import (
-    TokenManagerHealth,
-    TokenManagerState,
 )
 from butterfly_guy.schwab_gateway.upstream import (
     ChainMetadataUpstream,

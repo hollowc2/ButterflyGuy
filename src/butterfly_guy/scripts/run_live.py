@@ -11,6 +11,8 @@ import signal
 from typing import Any
 
 from dotenv import dotenv_values
+from schwab_gateway_sdk.client import GatewayMarketDataClient
+from schwab_gateway_sdk.config import GatewayClientSettings
 
 from butterfly_guy.core.config import AppConfig, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
@@ -69,8 +71,6 @@ from butterfly_guy.execution.order_manager import (
     parse_broker_fill,
     walk_orders,
 )
-from butterfly_guy.gateway_client.client import GatewayMarketDataClient
-from butterfly_guy.gateway_client.config import GatewayClientSettings
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine

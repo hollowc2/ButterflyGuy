@@ -9,13 +9,7 @@ import httpx
 import pytest
 from aiohttp.test_utils import TestServer
 from pydantic import ValidationError
-
-from butterfly_guy.core.metrics import (
-    gateway_shadow_comparisons,
-    gateway_shadow_discrepancies,
-)
-from butterfly_guy.gateway_client import shadow as shadow_module
-from butterfly_guy.gateway_client.client import (
+from schwab_gateway_sdk.client import (
     GatewayAuthenticationError,
     GatewayAuthorizationError,
     GatewayCapacityError,
@@ -24,8 +18,18 @@ from butterfly_guy.gateway_client.client import (
     GatewayTimeoutError,
     GatewayUnavailableError,
 )
-from butterfly_guy.gateway_client.config import GatewayClientSettings
-from butterfly_guy.gateway_client.models import ChainMetadataResponseV1, SpotResponseV1
+from schwab_gateway_sdk.config import GatewayClientSettings
+from schwab_gateway_sdk.models import ChainMetadataResponseV1, SpotResponseV1
+from schwab_token_store import (
+    TokenManagerHealth,
+    TokenManagerState,
+)
+
+from butterfly_guy.core.metrics import (
+    gateway_shadow_comparisons,
+    gateway_shadow_discrepancies,
+)
+from butterfly_guy.gateway_client import shadow as shadow_module
 from butterfly_guy.gateway_client.shadow import (
     CHAIN_COUNT_FIELDS,
     CLASSIFICATION_BY_CODE,
@@ -38,10 +42,6 @@ from butterfly_guy.schwab_gateway.auth import (
     InternalPrincipal,
     PriorityClass,
     hash_api_key,
-)
-from butterfly_guy.schwab_gateway.token_manager import (
-    TokenManagerHealth,
-    TokenManagerState,
 )
 from butterfly_guy.schwab_gateway.upstream import (
     DirectSchwabChainMetadataUpstream,

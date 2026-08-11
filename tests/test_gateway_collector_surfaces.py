@@ -8,8 +8,7 @@ import datetime as dt
 import httpx
 import pytest
 from aiohttp.test_utils import TestServer
-
-from butterfly_guy.gateway_client.client import (
+from schwab_gateway_sdk.client import (
     GatewayAuthenticationError,
     GatewayAuthorizationError,
     GatewayCapacityError,
@@ -18,7 +17,12 @@ from butterfly_guy.gateway_client.client import (
     GatewayTimeoutError,
     GatewayUnavailableError,
 )
-from butterfly_guy.gateway_client.models import ChainMetadataV1, SpotV1
+from schwab_gateway_sdk.models import ChainMetadataV1, SpotV1
+from schwab_token_store import (
+    TokenManagerHealth,
+    TokenManagerState,
+)
+
 from butterfly_guy.schwab_gateway.admission import AdmissionPolicy
 from butterfly_guy.schwab_gateway.api import create_app
 from butterfly_guy.schwab_gateway.auth import (
@@ -26,10 +30,6 @@ from butterfly_guy.schwab_gateway.auth import (
     InternalPrincipal,
     PriorityClass,
     hash_api_key,
-)
-from butterfly_guy.schwab_gateway.token_manager import (
-    TokenManagerHealth,
-    TokenManagerState,
 )
 from butterfly_guy.schwab_gateway.upstream import (
     DirectSchwabChainMetadataUpstream,

@@ -120,8 +120,7 @@ else:
 # The lock is still required for the reason above; it is not guarding a consumable token.
 try:
     from schwab.auth import client_from_token_file
-
-    from butterfly_guy.schwab_gateway.token_manager import (
+    from schwab_token_store import (
         AtomicFileTokenStore,
         TokenLockTimeoutError,
     )

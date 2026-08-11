@@ -5,13 +5,14 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Protocol
 
+from schwab_gateway_sdk.chain_metadata import extract_chain_metadata
+from schwab_gateway_sdk.models import ChainMetadataV1, QuoteV1, SpotV1
+
 from butterfly_guy.data.providers import (
     EquityQuoteProvider,
     OptionChainProvider,
     SpotPriceProvider,
 )
-from butterfly_guy.gateway_client.chain_metadata import extract_chain_metadata
-from butterfly_guy.gateway_client.models import ChainMetadataV1, QuoteV1, SpotV1
 
 UTC = dt.timezone.utc
 

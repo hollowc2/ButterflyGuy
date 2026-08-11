@@ -5,6 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from schwab_token_store import (
+    AtomicFileTokenStore,
+    AtomicTokenManager,
+    TokenManagerError,
+    TokenManagerState,
+)
+
 from butterfly_guy.schwab_gateway.config import GatewayCredentialProbeSettings
 from butterfly_guy.schwab_gateway.token_adapter import (
     LockedSchwabClientAdapter,
@@ -12,12 +19,6 @@ from butterfly_guy.schwab_gateway.token_adapter import (
     SchwabClientConstructionError,
     SchwabClientOperationError,
     SchwabTokenAdapterError,
-)
-from butterfly_guy.schwab_gateway.token_manager import (
-    AtomicFileTokenStore,
-    AtomicTokenManager,
-    TokenManagerError,
-    TokenManagerState,
 )
 
 PROBE_SYMBOL = "AAPL"

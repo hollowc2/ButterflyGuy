@@ -38,11 +38,11 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from schwab_gateway_sdk.chain_metadata import extract_chain_metadata
 
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.collector import OptionChainCollector
-from butterfly_guy.gateway_client.chain_metadata import extract_chain_metadata
 
 EXPIRATION = dt.date(2026, 3, 10)
 OTHER_EXPIRATION = dt.date(2026, 3, 11)

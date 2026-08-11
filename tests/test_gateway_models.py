@@ -4,8 +4,8 @@ import datetime as dt
 
 import pytest
 from pydantic import ValidationError
+from schwab_gateway_sdk.models import ChainMetadataV1
 
-from butterfly_guy.gateway_client.models import ChainMetadataV1
 from butterfly_guy.schwab_gateway.upstream import (
     normalize_schwab_chain_metadata,
     normalize_schwab_quote,

@@ -13,6 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from schwab_token_store import (
+    AtomicFileTokenStore,
+    AtomicTokenManager,
+    TokenManagerState,
+    TokenMissingError,
+)
 
 from butterfly_guy.schwab_gateway.api import (
     CHAIN_UPSTREAM_KEY,
@@ -22,12 +28,6 @@ from butterfly_guy.schwab_gateway.api import (
 )
 from butterfly_guy.schwab_gateway.config import GatewaySettings
 from butterfly_guy.schwab_gateway.live_provider import TokenReadinessRecovery
-from butterfly_guy.schwab_gateway.token_manager import (
-    AtomicFileTokenStore,
-    AtomicTokenManager,
-    TokenManagerState,
-    TokenMissingError,
-)
 from butterfly_guy.schwab_gateway.upstream import (
     DirectSchwabChainMetadataUpstream,
     DirectSchwabQuoteUpstream,

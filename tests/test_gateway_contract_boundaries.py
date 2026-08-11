@@ -7,9 +7,10 @@ from pathlib import Path
 import httpx
 import pytest
 from aiohttp.test_utils import TestServer
+from schwab_gateway_sdk.client import GatewayMarketDataClient
+from schwab_gateway_sdk.models import QuoteV1
+from schwab_token_store import TokenManagerState
 
-from butterfly_guy.gateway_client.client import GatewayMarketDataClient
-from butterfly_guy.gateway_client.models import QuoteV1
 from butterfly_guy.schwab_gateway.api import StaticTokenReadinessProvider, create_app
 from butterfly_guy.schwab_gateway.auth import (
     InternalKeyAuthenticator,
@@ -17,7 +18,6 @@ from butterfly_guy.schwab_gateway.auth import (
     PriorityClass,
     hash_api_key,
 )
-from butterfly_guy.schwab_gateway.token_manager import TokenManagerState
 
 KEYS = {
     "butterfly-guy": "synthetic-butterfly-key",
@@ -315,6 +315,41 @@ def test_collector_entry_points_stay_direct_and_run_live_uses_only_client_surfac
     assert "ShadowComparingMarketDataProvider" in live_source
     assert "GatewayMarketDataClient" in live_source
     assert "butterfly_guy.schwab_gateway" not in live_source
+
+
+def test_shared_packages_replace_embedded_implementations() -> None:
+    token_consumers = (
+        "src/butterfly_guy/data/schwab_client.py",
+        "src/butterfly_guy/candidate_fleet/schwab_market_data.py",
+        "tools/schwab_token_keepalive.py",
+    )
+    for path in token_consumers:
+        source = Path(path).read_text(encoding="utf-8")
+        assert "from schwab_token_store import" in source, path
+        assert "butterfly_guy.schwab_gateway.token_manager" not in source, path
+
+    compatibility_modules = {
+        "src/butterfly_guy/schwab_gateway/token_manager.py": "schwab_token_store",
+        "src/butterfly_guy/gateway_client/client.py": "schwab_gateway_sdk.client",
+        "src/butterfly_guy/gateway_client/models.py": "schwab_gateway_sdk.models",
+        "src/butterfly_guy/gateway_client/config.py": "schwab_gateway_sdk.config",
+        "src/butterfly_guy/gateway_client/chain_metadata.py": (
+            "schwab_gateway_sdk.chain_metadata"
+        ),
+    }
+    for path, package in compatibility_modules.items():
+        source = Path(path).read_text(encoding="utf-8")
+        assert f"from {package} import *" in source, path
+        assert "class " not in source, path
+
+    shadow_source = Path("src/butterfly_guy/gateway_client/shadow.py").read_text(
+        encoding="utf-8"
+    )
+    live_source = Path("src/butterfly_guy/scripts/run_live.py").read_text(
+        encoding="utf-8"
+    )
+    assert "from schwab_gateway_sdk.client import" in shadow_source
+    assert "from schwab_gateway_sdk.client import" in live_source
 
 
 @pytest.mark.asyncio
