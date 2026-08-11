@@ -102,7 +102,7 @@ Acceptance: `v0.1.0` is reproducible, contract-compatible, and independently run
 
 ## Phase 4 — Prepare ButterflyGuy to consume shared packages
 
-Status: `IN PROGRESS`
+Status: `COMPLETE`
 
 - [x] Pin SDK and token-store Git-tag dependencies to `v0.1.0`; lock immutable SHAs.
 - [x] Migrate direct wrapper, candidate feed, keepalive, and token utilities to
@@ -113,7 +113,7 @@ Status: `IN PROGRESS`
   for reviewability.
 - [x] Prove no-shadow constructs no gateway client and direct results remain authoritative.
 - [x] Run focused/full tests, Ruff, package build, Compose render, and `graphify update .`.
-- [ ] Record the ButterflyGuy commit and candidate image IDs without deploying.
+- [x] Record the ButterflyGuy commit and candidate image IDs without deploying.
 
 Acceptance: the complete ButterflyGuy suite passes with no strategy, risk, execution, account,
 order, paper/live, or default-access change.
@@ -241,3 +241,5 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-11 | Phase 4 | IN PROGRESS | lock resolves both packages to `2d1da47b`; focused `332 passed`; full `1009 passed, 1 skipped`; Ruff/build/Compose/graph pass | Direct remains authoritative; no runtime default changed; candidate image unavailable because local Docker is inactive |
 | 2026-08-11 | Phase 4 | IN PROGRESS | ButterflyGuy commit `6884cc2` | Local commit only; existing unrelated documentation edits remain unstaged; no image built or service changed |
 | 2026-08-11 | Phase 0 | COMPLETE | Helios `e851c221`; legacy image `sha256:6eb9f...0ec8`; broker gate `flat` | Legacy container healthy and image present; restore is `docker start butterfly_schwab_gateway_live`; no restart performed; DB has 2 OPEN rows and 0 nonterminal intents, so a later trading-service restart is not authorized |
+| 2026-08-11 | Phase 4 | IN PROGRESS | candidate build of `6884cc2` failed before image export | Slim image lacked Git for immutable public dependencies; no container or service changed |
+| 2026-08-11 | Phase 4 | COMPLETE | ButterflyGuy `03be00c`; candidate image `sha256:3c2e944c25cdc3a0d1dba05258a1a10fcb07b6f0e3063a524869e5950ea4c91a` | Image imports SDK/token-store `0.1.0` as unprivileged user under read-only/no-network smoke; zero candidate containers running; no deployment |
