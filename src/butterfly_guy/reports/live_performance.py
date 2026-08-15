@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import html
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -238,6 +239,166 @@ def _pct(value: float | None) -> str:
     return f"{value:.1f}%"
 
 
+def _json_data_block(payload: dict[str, Any]) -> str:
+    """Serialise payload for a <script type="application/json"> block.
+
+    A script element's content is raw text, so HTML entities are never decoded
+    inside it and the one real hazard is a "</script" sequence in the data. JSON
+    \\uXXXX escapes for < > & remove that hazard while still round-tripping through
+    JSON.parse() unchanged, which HTML entity escaping would not.
+    """
+    encoded = json.dumps(payload)
+    return (
+        encoded.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+    )
+
+
+def _spoken_money(value: float) -> str:
+    """Signed dollars written out for a screen reader ("minus $1,336")."""
+    rounded = round(value)
+    if rounded == 0:
+        return "$0"
+    sign = "minus " if rounded < 0 else "plus "
+    return f"{sign}${abs(rounded):,}"
+
+
+def _spoken_pct(value: float) -> str:
+    return f"{value:.0f} percent"
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+# The three canvas aria-labels below are the only description a screen reader gets
+# for the charts, so they are computed from the same payload the charts draw rather
+# than written by hand — a hand-written label goes stale on the next cron run.
+
+
+def equity_chart_description(chart_data: list[dict[str, Any]]) -> str:
+    if not chart_data:
+        return "Line chart of cumulative paper profit and loss. No trades yet."
+    low = min(chart_data, key=lambda d: d["equity"])
+    high = max(chart_data, key=lambda d: d["equity"])
+    final = chart_data[-1]
+    parts = [
+        f"Line chart of cumulative paper profit and loss across all "
+        f"{_plural(len(chart_data), 'trade')}, {chart_data[0]['date']} to {final['date']}."
+    ]
+    if low is high:
+        parts.append(f"The curve ends at {_spoken_money(final['equity'])}.")
+    elif low["index"] < high["index"]:
+        parts.append(
+            f"The curve falls to a low of {_spoken_money(low['equity'])} on {low['date']}, "
+            f"then climbs to a peak of {_spoken_money(high['equity'])} on {high['date']}, "
+            f"and ends at {_spoken_money(final['equity'])}."
+        )
+    else:
+        parts.append(
+            f"The curve rises to a peak of {_spoken_money(high['equity'])} on {high['date']}, "
+            f"then falls to a low of {_spoken_money(low['equity'])} on {low['date']}, "
+            f"and ends at {_spoken_money(final['equity'])}."
+        )
+    parts.append("Every plotted trade is listed in the trade log table below.")
+    return " ".join(parts)
+
+
+def drawdown_episodes(chart_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deepest point of each unbroken run of non-zero drawdown."""
+    episodes: list[dict[str, Any]] = []
+    worst: dict[str, Any] | None = None
+    for point in chart_data:
+        if point["drawdown_pct"] > 0:
+            if worst is None or point["drawdown_pct"] > worst["drawdown_pct"]:
+                worst = point
+        elif worst is not None:
+            episodes.append(worst)
+            worst = None
+    if worst is not None:
+        episodes.append(worst)
+    return episodes
+
+
+def drawdown_chart_description(chart_data: list[dict[str, Any]]) -> str:
+    opening = (
+        "Line chart of how far cumulative paper PnL has fallen below its own running "
+        "peak, as a percentage of that peak."
+    )
+    if not chart_data:
+        return f"{opening} No trades yet."
+    parts = [opening]
+    flat_lead = 0
+    for point in chart_data:
+        if point["drawdown_pct"] > 0:
+            break
+        flat_lead += 1
+    episodes = drawdown_episodes(chart_data)
+    if episodes:
+        lead = (
+            f"It stays flat at zero for the first {_plural(flat_lead, 'trade')}, then runs "
+            if flat_lead
+            else "It runs "
+        )
+        parts.append(
+            f"{lead}through {_plural(len(episodes), 'drawdown episode')}, each ended by a "
+            "reset to zero when a new peak in cumulative PnL is set."
+        )
+        deepest = max(episodes, key=lambda d: d["drawdown_pct"])
+        parts.append(
+            f"The deepest reaches {_spoken_pct(deepest['drawdown_pct'])} "
+            f"(${deepest['drawdown_dollars']:,.0f}) on {deepest['date']}."
+        )
+    else:
+        parts.append("It never falls below its running peak.")
+    final_dd = chart_data[-1]["drawdown_pct"]
+    parts.append(
+        # Below half a percent _spoken_pct would round to "0 percent below the peak".
+        "It finishes at its peak."
+        if final_dd < 0.5
+        else f"It finishes {_spoken_pct(final_dd)} below the peak."
+    )
+    parts.append("The underlying trades are listed in the trade log table below.")
+    return " ".join(parts)
+
+
+def return_distribution_description(
+    chart_data: list[dict[str, Any]], bucket_size: int = 250
+) -> str:
+    opening = (
+        f"Bar chart counting trades by dollar PnL, in ${bucket_size}-wide buckets by default."
+    )
+    if not chart_data:
+        return f"{opening} No trades yet."
+    pnls = [d["pnl"] for d in chart_data]
+    losers = sum(1 for p in pnls if p < 0)
+    winners = sum(1 for p in pnls if p > 0)
+    # Same bucketing as buildReturnDistribution() in the page script.
+    counts: dict[int, int] = {}
+    for pnl in pnls:
+        start = math.floor(pnl / bucket_size) * bucket_size
+        counts[start] = counts.get(start, 0) + 1
+    modal_start = max(counts, key=lambda start: (counts[start], -start))
+
+    def span(start: int) -> str:
+        return f"{_spoken_money(start)} to {_spoken_money(start + bucket_size)}"
+
+    parts = [
+        opening,
+        f"Of {_plural(len(pnls), 'trade')}, {losers} lose and {winners} win.",
+        f"The tallest bar holds {_plural(counts[modal_start], 'trade')} in the single "
+        f"bucket from {span(modal_start)}.",
+    ]
+    winning_starts = sorted(start for start in counts if start >= 0)
+    if len(winning_starts) > 1:
+        parts.append(
+            f"The winners spread thinly to the right, from "
+            f"{_plural(counts[winning_starts[0]], 'trade')} in the bucket from "
+            f"{span(winning_starts[0])} out to the bucket from {span(winning_starts[-1])}."
+        )
+    parts.append("Per-trade PnL values are listed in the trade log table below.")
+    return " ".join(parts)
+
+
 def render_trade_table_rows(trades: list[TradePoint], no_trade_days: list[NoTradeDay]) -> str:
     rows: list[tuple[dt.date, str]] = []
     for trade in trades:
@@ -326,7 +487,12 @@ def render_report_html(
     date_start = trades[0].trade_date.isoformat()
     date_end = trades[-1].trade_date.isoformat()
     max_dd_pct = max((p["drawdown_pct"] for p in chart_data), default=0.0)
-    chart_json = json.dumps(chart_data)
+    equity_desc = equity_chart_description(chart_data)
+    drawdown_desc = drawdown_chart_description(chart_data)
+    distribution_desc = return_distribution_description(chart_data)
+    chart_json = _json_data_block(
+        {"trades": chart_data, "maxDdPct": round(max_dd_pct, 4)}
+    )
     cohorts: dict[str, list[TradePoint]] = {}
     for trade in trades:
         cohorts.setdefault(trade.paper_fill_model, []).append(trade)
@@ -346,21 +512,22 @@ def render_report_html(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Butterfly Guy — {html.escape(underlying)} Live Performance</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <title>Butterfly Guy — {html.escape(underlying)} Paper Performance</title>
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/fonts/inter-var-latin.woff2">
+  <link rel="stylesheet" href="/assets/fonts.css">
+  <script src="/assets/vendor/chart.umd.min.js"></script>
   <style>{_BASE_CSS}</style>
 </head>
 <body>
 <main>
+  <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
+
   <header class="hero">
     <div>
-      <h1>Butterfly Guy — {html.escape(underlying)} Live Performance</h1>
+      <h1>Butterfly Guy — {html.escape(underlying)} Paper Performance</h1>
       <div class="sub">
         <span class="badge">Paper Trading</span>
-        Entire history · {stats.trade_count} trades · {date_start} to {date_end} · Updated {html.escape(stamp)}
+        Entire history · {stats.trade_count} trades · Paper results through {date_end} · Static snapshot regenerated after each session, last built {html.escape(stamp)}
       </div>
     </div>
   </header>
@@ -380,15 +547,24 @@ def render_report_html(
 
   <h2>Equity Curve</h2>
   <section class="panel chart-panel">
-    <canvas id="equityChart" height="120"></canvas>
+    <canvas id="equityChart" height="120" role="img" aria-label="{html.escape(equity_desc)}"></canvas>
     <div class="chart-legend" aria-label="Equity curve marker legend">
       <span class="legend-item"><span class="legend-dot legend-dot-standard"></span> End of Day exit</span>
       <span class="legend-item"><span class="legend-dot legend-dot-drawdown"></span> Drawdown exit</span>
     </div>
   </section>
 
-  <h2>Portfolio Drawdown</h2>
-  <section class="panel chart-panel"><canvas id="drawdownChart" height="90"></canvas></section>
+  <h2>Drawdown from peak PnL</h2>
+  <section class="panel chart-panel">
+    <canvas id="drawdownChart" height="90" role="img" aria-label="{html.escape(drawdown_desc)}"></canvas>
+    <p class="chart-note">
+      <b id="drawdownNoteFigures"></b>
+      This is drawdown against the highest cumulative <em>paper profit</em> reached, not against
+      account capital — the equity series starts at zero and tracks PnL only. A figure here means
+      giving back that share of accumulated open gains; it does not mean losing that share of an
+      account.
+    </p>
+  </section>
 
   <h2>Return Distribution</h2>
   <section class="panel chart-panel">
@@ -400,7 +576,7 @@ def render_report_html(
       </div>
       <label class="toggle"><input type="checkbox" id="fitCurveToggle" checked> Fit curve</label>
     </div>
-    <canvas id="returnDistributionChart" height="95"></canvas>
+    <canvas id="returnDistributionChart" height="95" role="img" aria-label="{html.escape(distribution_desc)}"></canvas>
   </section>
 
   <details class="panel trade-log-panel" open>
@@ -423,13 +599,29 @@ def render_report_html(
     </table>
   </details>
 </main>
+<!-- Generator-emitted data. Kept in a non-executable application/json
+     block so the CSP hash of the script below stays stable when the
+     numbers are regenerated. CSP script-src does not apply to data
+     blocks, so this needs no hash of its own. -->
+<script type="application/json" id="chart-data">
+{chart_json}
+</script>
 <script>
-const chartData = {chart_json};
-const maxDdPct = {max_dd_pct:.4f};
+const __chartPayload = JSON.parse(
+    document.getElementById('chart-data').textContent);
+const chartData = __chartPayload.trades;
+// Emitted by the generator; retained for downstream use even though the
+// drawdown caption now derives its figures from chartData directly.
+const maxDdPct = __chartPayload.maxDdPct;
 
 const labels = chartData.map((d) => d.date);
 const equityValues = chartData.map((d) => d.equity);
 const drawdownValues = chartData.map((d) => -d.drawdown_pct);
+const maxDdIndex = drawdownValues.indexOf(Math.min(...drawdownValues));
+const maxDdPoint = chartData[maxDdIndex];
+// One marked point at the trough instead of a full-width dashed rule at the
+// extreme: the rule duplicated the curve's own minimum and pinned the axis there.
+const maxDdMarker = drawdownValues.map((v, i) => (i === maxDdIndex ? v : null));
 const returnValues = chartData.map((d) => d.pnl);
 const pointRadii = chartData.map((d) => d.is_drawdown_exit ? 6 : 3);
 const pointColors = chartData.map((d) => d.is_drawdown_exit ? '#cc5555' : '#c8922a');
@@ -542,7 +734,7 @@ const chartDefaults = {{
   }},
   scales: {{
     x: {{
-      ticks: {{ color: '#6a6460', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }},
+      ticks: {{ color: '#948d87', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }},
       grid: {{ color: 'rgba(232,226,214,0.06)' }},
     }},
   }},
@@ -583,7 +775,7 @@ new Chart(document.getElementById('equityChart'), {{
       ...chartDefaults.scales,
       y: {{
         ticks: {{
-          color: '#6a6460',
+          color: '#948d87',
           callback: (v) => `${{v >= 0 ? '+' : ''}}$${{v}}`,
         }},
         grid: {{ color: 'rgba(232,226,214,0.06)' }},
@@ -607,12 +799,14 @@ new Chart(document.getElementById('drawdownChart'), {{
         fill: true,
       }},
       {{
-        label: 'Max drawdown',
-        data: labels.map(() => -maxDdPct),
-        borderColor: 'rgba(204,85,85,0.55)',
-        borderDash: [6, 4],
-        pointRadius: 0,
-        borderWidth: 1,
+        label: 'Deepest drawdown',
+        data: maxDdMarker,
+        showLine: false,
+        borderColor: '#e8e2d6',
+        backgroundColor: '#cc5555',
+        pointRadius: 5,
+        pointHoverRadius: 5,
+        pointBorderWidth: 1.5,
         fill: false,
       }},
     ],
@@ -623,6 +817,7 @@ new Chart(document.getElementById('drawdownChart'), {{
       ...chartDefaults.plugins,
       tooltip: {{
         ...chartDefaults.plugins.tooltip,
+        filter: (item) => item.datasetIndex === 0,
         callbacks: {{
           title: (items) => items.length ? chartData[items[0].dataIndex].date : '',
           label: () => '',
@@ -635,7 +830,7 @@ new Chart(document.getElementById('drawdownChart'), {{
       y: {{
         max: 0,
         ticks: {{
-          color: '#6a6460',
+          color: '#948d87',
           callback: (v) => `${{v}}%`,
         }},
         grid: {{ color: 'rgba(232,226,214,0.06)' }},
@@ -643,6 +838,18 @@ new Chart(document.getElementById('drawdownChart'), {{
     }},
   }},
 }});
+
+// Caption for the marked trough. Derived from chartData so it stays true when the
+// page is regenerated.
+const drawdownNoteFigures = document.getElementById('drawdownNoteFigures');
+if (drawdownNoteFigures && maxDdPoint) {{
+  const money = (n) => `$${{Math.round(Math.abs(n)).toLocaleString('en-US')}}`;
+  drawdownNoteFigures.textContent = (
+    `Marked point: the deepest give-back of the run, ${{maxDdPoint.drawdown_pct.toFixed(1)}}% `
+    + `(${{money(maxDdPoint.drawdown_dollars)}}) on ${{maxDdPoint.date}}, measured from a peak of `
+    + `+${{money(maxDdPoint.peak_equity)}} in cumulative PnL.`
+  );
+}}
 
 let activeBucketSize = 250;
 let showFitCurve = true;
@@ -695,7 +902,7 @@ const returnDistributionChart = new Chart(document.getElementById('returnDistrib
       y: {{
         beginAtZero: true,
         ticks: {{
-          color: '#6a6460',
+          color: '#948d87',
           precision: 0,
         }},
         grid: {{ color: 'rgba(232,226,214,0.06)' }},
@@ -751,16 +958,48 @@ _BASE_CSS = """
   --bg: #0c0c0c;
   --text: #e8e2d6;
   --accent: #c8922a;
-  --muted: #6a6460;
+  /* --muted carries every stat label, section heading and table header, so it has
+     to clear WCAG AA for body text (4.5:1). #948d87 is 5.98:1 on --bg and 5.73:1
+     on the #121212 panels; the previous #6a6460 was only 3.36:1 / 3.22:1. */
+  --muted: #948d87;
   --border: rgba(232, 226, 214, 0.1);
   --up: #6aaa78;
-  --down: #cc5555;
+  /* #cc5555 is 4.46:1 on the #121212 panels — just under AA for the 13px table
+     cells. #d66a6a is 5.47:1. Chart strokes keep the deeper red (graphics only
+     need 3:1). */
+  --down: #d66a6a;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
 }
 body { margin: 0; }
 main { max-width: 1320px; margin: 0 auto; padding: 28px 24px 48px; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.site-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 6px 13px 6px 11px;
+  background: #121212;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.site-link:hover,
+.site-link:focus-visible {
+  color: var(--text);
+  border-color: rgba(200, 146, 42, 0.45);
+}
+.site-link span { color: var(--accent); }
 h1 { font-size: 28px; margin: 0 0 8px; font-weight: 600; }
 h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
 .sub { color: var(--muted); font-size: 14px; }
@@ -774,18 +1013,26 @@ h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 500
   font-size: 12px;
   margin-right: 8px;
 }
+/* A wrapping flex row rather than a fixed 7-column track list. Seven tiles can
+   never divide evenly into 2-6 columns, so a grid always strands the last tile at
+   partial width. With flex the tiles left on the final row grow to fill it, so the
+   row reads as deliberate at every viewport and needs no breakpoint. */
 .stats {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 22px;
 }
 .stat {
+  flex: 1 1 140px;
   background: #121212;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
 }
+/* The cohort row (the only .stats following an h2) holds two tiles; cap them so
+   they do not stretch to half the page each. */
+h2 + .stats .stat { max-width: 240px; }
 .label { color: var(--muted); font-size: 12px; }
 .value {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
@@ -937,8 +1184,18 @@ td:nth-child(15), th:nth-child(15) { text-align: left; }
 .pos { color: var(--up); font-weight: 600; }
 .neg { color: var(--down); font-weight: 600; }
 tr.muted td { color: var(--muted); }
+.chart-note {
+  margin: 12px 2px 0;
+  max-width: 80ch;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.chart-note b {
+  color: var(--text);
+  font-weight: 500;
+}
 @media (max-width: 980px) {
   main { padding: 16px; }
-  .stats { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
 }
 """

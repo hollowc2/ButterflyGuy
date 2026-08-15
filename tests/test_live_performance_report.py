@@ -132,7 +132,10 @@ def test_render_report_html_contains_sections() -> None:
         generated_at=dt.datetime(2026, 6, 6, 13, 15, tzinfo=dt.timezone.utc),
     )
     assert "Equity Curve" in html_doc
-    assert "Portfolio Drawdown" in html_doc
+    # Equity is cumulative PnL starting at zero, so this is drawdown against peak
+    # profit, not against account capital. The old "Portfolio Drawdown" heading
+    # invited the second reading, which overstates the risk considerably.
+    assert "Drawdown from peak PnL" in html_doc
     assert "Return Distribution" in html_doc
     assert "Trade Log" in html_doc
     assert "Paper Trading" in html_doc
@@ -166,7 +169,9 @@ def test_performance_report_shows_entire_history_and_fill_model_cohorts() -> Non
         generated_at=dt.datetime(2026, 7, 22, tzinfo=dt.timezone.utc),
     )
 
-    assert "Entire history · 2 trades · 2026-07-20 to 2026-07-21" in html_doc
+    # The page is a static snapshot regenerated after each session, so the meta
+    # line deliberately no longer reads as a real-time feed.
+    assert "Entire history · 2 trades · Paper results through 2026-07-21" in html_doc
     assert "<span class=\"summary-meta\">2 trades</span>" in html_doc
     assert "const chartData = " in html_doc
     assert html_doc.count('"paper_fill_model": "legacy"') == 1
@@ -211,3 +216,71 @@ def test_render_placeholder_html() -> None:
         generated_at=dt.datetime(2026, 6, 6, 13, 15, tzinfo=dt.timezone.utc),
     )
     assert "No closed trades yet" in html_doc
+
+
+def test_regenerated_data_stays_out_of_executable_script() -> None:
+    """Per-run data must stay in the non-executable JSON block.
+
+    The published page's CSP allows inline scripts by sha256 hash and does not
+    permit 'unsafe-inline'. CSP script-src does not apply to a
+    <script type="application/json"> block, so data can change freely there. If
+    it is inlined back into the executable script instead, that script's hash
+    changes on every regeneration, the browser silently refuses to run it, and
+    the page renders empty with no visible error. This pins the invariant.
+    """
+    import re
+
+    def render(pnls: list[float], start_day: int, generated_day: int) -> str:
+        trades = [
+            _trade(trade_date=dt.date(2026, 7, start_day + i), pnl_dollars=pnl)
+            for i, pnl in enumerate(pnls)
+        ]
+        return render_report_html(
+            underlying="SPX",
+            trades=trades,
+            no_trade_days=[],
+            generated_at=dt.datetime(2026, 7, generated_day, tzinfo=dt.timezone.utc),
+        )
+
+    first = render([500.0, -50.0], 20, 22)
+    second = render([-125.5, 2280.0, -75.25, 640.0], 6, 30)
+
+    pattern = re.compile(
+        r"<script(?P<attrs>(?:\s[^>]*)?)>(?P<body>.*?)</script\s*>", re.DOTALL
+    )
+
+    def executable_scripts(doc: str) -> list[str]:
+        return [
+            m.group("body")
+            for m in pattern.finditer(doc)
+            if "src=" not in m.group("attrs")
+            and "application/json" not in m.group("attrs")
+        ]
+
+    first_scripts = executable_scripts(first)
+    assert len(first_scripts) == 1, "expected exactly one executable inline script"
+
+    # Different trades, different count, different dates -- the executable
+    # script must be byte-identical regardless.
+    assert first_scripts[0] == executable_scripts(second)[0], (
+        "the executable inline script changed between runs; per-run data has "
+        "leaked into it and the deployed CSP hash will no longer match"
+    )
+
+    # The data must actually be present, in exactly one data block.
+    assert first.count('id="chart-data"') == 1
+    data_block = re.search(
+        r'<script type="application/json" id="chart-data">(.*?)</script>',
+        first,
+        re.DOTALL,
+    )
+    assert data_block is not None
+
+    # A script element's content is raw text, so the only real hazard is a
+    # "</script" sequence. These must be \uXXXX-escaped, not HTML entities --
+    # entities are never decoded inside a script element and would corrupt the
+    # data on the way through JSON.parse().
+    for char in ("<", ">", "&"):
+        assert char not in data_block.group(1), (
+            f"raw {char!r} in the JSON data block; use a \\uXXXX escape"
+        )
