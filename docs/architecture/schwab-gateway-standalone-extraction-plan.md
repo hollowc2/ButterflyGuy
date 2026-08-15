@@ -139,17 +139,17 @@ healthy and unchanged.
 
 ## Phase 6 — Standalone production cutover
 
-Status: `BLOCKED`
+Status: `COMPLETE`
 
-- [ ] Obtain explicit deployment approval and record IDs, token metadata, monitoring state,
+- [x] Obtain explicit deployment approval and record IDs, token metadata, monitoring state,
   and rollback commands.
-- [ ] Configure project `schwab_gateway`, container `schwab_gateway_live`, network alias
+- [x] Configure project `schwab_gateway`, container `schwab_gateway_live`, network alias
   `schwab-gateway`, port `8011`, and loopback-only publication.
-- [ ] Stop but preserve the legacy container; start standalone `v0.1.0`.
-- [ ] Change the Prometheus scrape target, validate, and hot-reload monitoring.
-- [ ] Validate routes, authenticated reads, metrics, alerts, logs, network, restart policy,
+- [x] Stop but preserve the legacy container; start standalone `v0.1.0`.
+- [x] Change the Prometheus scrape target, validate, and hot-reload monitoring.
+- [x] Validate routes, authenticated reads, metrics, alerts, logs, network, restart policy,
   recovery, and unchanged ButterflyGuy direct access.
-- [ ] On failure, stop standalone, restart legacy, restore monitoring, and log rollback.
+- [x] On failure, stop standalone, restart legacy, restore monitoring, and log rollback.
 
 Acceptance: standalone production is healthy and monitored; ButterflyGuy is unchanged.
 
@@ -255,3 +255,5 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-15 | Phase 6 | IN PROGRESS | config-owner retry approved; legacy `675a04e26b1c` / `sha256:6eb9f...0ec8`; standalone `11f588627c88` / `sha256:d31e679d...5ef04`; candidate authenticated quote/spot/`$SPX` chain/401 contracts passed | Fresh rollback backups: `/opt/monitoring/prometheus.yml.phase6-retry2-precutover-20260815T210203Z`, `/opt/monitoring/prometheus-alerts/schwab-gateway.yml.phase6-retry2-precutover-20260815T210203Z`. Only the one-shot container config write uses owner `1001:1001`; Prometheus remains `65534:65534`. Automatic rollback restores both inode views, legacy, monitoring, and validates the legacy target. |
 | 2026-08-15 | Phase 6 | ROLLED BACK | standalone `11f588627c88` / `sha256:d31e679d...5ef04` reached healthy monitored production; legacy restored `675a04e26b1c` / `sha256:6eb9f...0ec8` | Config-owner synchronization, promtool validation, hot reload, exact `schwab-gateway:8011` target-up, rules-loaded, and no-alert gates passed. A later production validation assertion failed without emitting its step identifier, so automatic rollback restored legacy health/readiness/metrics, both Prometheus views, and the legacy target. Candidate and SPX/NDX/XSP remained unchanged; crash recovery was not attempted. Further diagnosis requires explicit direction. |
 | 2026-08-15 | Phase 6 | BLOCKED | candidate replay: quote/spot/`$SPX` chain/401 schemas pass; token-ready metric passes; stopped-production anomaly count `0` | Root cause was the inline validator: the `ports=...` and `aliases=...` assignments lacked a newline, concatenating the alias assignment into `ports`; the port assertion—not production—triggered rollback before authenticated smoke. The runbook now requires distinct assignments and `CHECK`/`PASS` markers for every gate. Live retry requires renewed approval. |
+| 2026-08-15 | Phase 6 | IN PROGRESS | final step-labelled retry approved; legacy `675a04e26b1c` / `sha256:6eb9f...0ec8`; standalone `11f588627c88` / `sha256:d31e679d...5ef04`; candidate `edfff43e658e` healthy | Fresh rollback backups: `/opt/monitoring/prometheus.yml.phase6-final-precutover-20260815T213848Z`, `/opt/monitoring/prometheus-alerts/schwab-gateway.yml.phase6-final-precutover-20260815T213848Z`. Every gate emits `CHECK`/`PASS`; automatic rollback restores both Prometheus inode views, legacy, monitoring, and requires the legacy target up. |
+| 2026-08-15 | Phase 6 | COMPLETE | production `11f588627c88` / `sha256:d31e679d...5ef04`; healthy after controlled crash at `2026-08-15T21:42:49Z`; restart count `1`; Prometheus target `schwab-gateway:8011` up | Project `schwab_gateway`; loopback `8011`; monitoring-only alias; `1001:1001`; read-only root; no-new-privileges; all capabilities dropped. Quote/spot/`$SPX` 2026-08-17 chain returned `200`; bounded unauthenticated contract returned `401`; token-ready metric and both alert rules valid with no firing alerts; bounded anomaly count `0`. Legacy `675a04e26b1c` / `sha256:6eb9f...0ec8` is preserved stopped; candidate remains healthy; SPX/NDX/XSP IDs, images, starts, and restart counts are unchanged; direct access remains authoritative and shadow disabled. Rollback uses the final pre-cutover backups recorded above. |
