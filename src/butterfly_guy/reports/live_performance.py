@@ -484,7 +484,6 @@ def render_report_html(
     chart_data = chart_payload(trades)
     table_rows = render_trade_table_rows(trades, no_trade_days)
     stamp = generated_at.astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z")
-    date_start = trades[0].trade_date.isoformat()
     date_end = trades[-1].trade_date.isoformat()
     max_dd_pct = max((p["drawdown_pct"] for p in chart_data), default=0.0)
     equity_desc = equity_chart_description(chart_data)
