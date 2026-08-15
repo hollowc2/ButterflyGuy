@@ -120,7 +120,7 @@ order, paper/live, or default-access change.
 
 ## Phase 5 — Parallel Helios candidate
 
-Status: `IN PROGRESS`
+Status: `COMPLETE`
 
 - [x] Obtain explicit approval to provision `/opt/schwab-gateway`, copy secrets, and start a
   candidate.
@@ -131,7 +131,7 @@ Status: `IN PROGRESS`
   ButterflyGuy services unchanged.
 - [x] Validate health/readiness/metrics/logs/recovery/authenticated routes and concurrent
   old/new reads with token-lock safety.
-- [ ] Compare bounded structures/quality flags and observe one complete market session without
+- [x] Compare bounded structures/quality flags and observe one complete market session without
   readiness, authentication, persistence, or lock anomalies.
 
 Acceptance: candidate completes a market session while legacy gateway and ButterflyGuy remain
@@ -246,3 +246,4 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-11 | Phase 5 | IN PROGRESS | explicit owner approval; standalone `v0.1.0`; legacy `e851c221` / `sha256:6eb9f...0ec8` | Approved provision/secret copy/candidate start only. Rollback: `docker stop schwab_gateway_candidate`; legacy remains running and monitoring/trading services remain unchanged |
 | 2026-08-11 | Phase 5 | IN PROGRESS | checkout `2d1da47b`; candidate image `sha256:d31e679d...5ef04`; container `edfff43e658e` | Candidate is healthy on loopback `8012` and `monitoring_net`, unprivileged/read-only; protected environment and digest-only keys are mode `0600`; rollback remains `docker stop schwab_gateway_candidate` |
 | 2026-08-11 | Phase 5 | IN PROGRESS | health/ready/metrics `200`; quote/spot/chain parity `200`; restart count `1` | Concurrent legacy/candidate structures, quality flags, and prices matched within tolerance; token inode/size/mtime stayed unchanged; genuine process crash recovered; legacy and SPX/NDX/XSP stayed unchanged. Full-market-session observation remains pending |
+| 2026-08-15 | Phase 5 | COMPLETE | candidate `edfff43e658e` / `sha256:d31e679d...5ef04`; Aug 14 session `4,364` readiness checks at `200`; fresh quote/spot/chain parity `200` | Candidate ran continuously across Aug 12–14 with no restart after the deliberate recovery drill; retained full-session logs contained no readiness, lock, persistence, refresh, or recovery anomaly; an atomic shared-token refresh completed during concurrent parity reads and both gateways remained ready; legacy and SPX/NDX/XSP stayed unchanged. Rollback remains `docker stop schwab_gateway_candidate` |
