@@ -1,8 +1,10 @@
 # C3 — wiring shadow reads into `run_live.py`
 
-Status: **deployed default-off on 2026-08-10, not enabled.** The code, XSP-only Compose wiring,
-scoped consumer key, and monitoring are installed. Enabling the XSP canary for a market session
-remains a separate, explicit decision.
+Status: **deployed default-off on 2026-08-10, not enabled.** Butterfly Guy now imports the pinned
+standalone SDK directly and XSP's default URL is `http://schwab-gateway:8011`. The comparator,
+XSP-only Compose wiring, scoped consumer key, and monitoring remain installed. Enabling the XSP
+canary for a market session remains a separate, explicit decision. Embedded-server references
+below are retained as design history.
 
 C3 makes gateway code reachable from a live trading entry point for the first time. Everything
 before it (the gateway image, the token manager, the comparator) is inert with respect to trading:

@@ -5,25 +5,18 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 
-import httpx
 import pytest
-from aiohttp.test_utils import TestServer
 from pydantic import ValidationError
 from schwab_gateway_sdk.client import (
     GatewayAuthenticationError,
     GatewayAuthorizationError,
     GatewayCapacityError,
-    GatewayMarketDataClient,
     GatewayResponseError,
     GatewayTimeoutError,
     GatewayUnavailableError,
 )
 from schwab_gateway_sdk.config import GatewayClientSettings
 from schwab_gateway_sdk.models import ChainMetadataResponseV1, SpotResponseV1
-from schwab_token_store import (
-    TokenManagerHealth,
-    TokenManagerState,
-)
 
 from butterfly_guy.core.metrics import (
     gateway_shadow_comparisons,
@@ -35,17 +28,6 @@ from butterfly_guy.gateway_client.shadow import (
     CLASSIFICATION_BY_CODE,
     SHADOW_CLASSIFICATIONS,
     ShadowComparingMarketDataProvider,
-)
-from butterfly_guy.schwab_gateway.api import create_app
-from butterfly_guy.schwab_gateway.auth import (
-    InternalKeyAuthenticator,
-    InternalPrincipal,
-    PriorityClass,
-    hash_api_key,
-)
-from butterfly_guy.schwab_gateway.upstream import (
-    DirectSchwabChainMetadataUpstream,
-    DirectSchwabSpotUpstream,
 )
 
 EXPIRATION = dt.date(2026, 8, 6)
@@ -545,65 +527,6 @@ async def test_get_option_chain_returns_before_a_slow_gateway_responds() -> None
 
     await provider.wait_for_shadow_reads()
     assert gateway.finished is True
-    assert provider.recorder.total() == 0
-
-
-# --- end to end against the real in-process gateway ------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_shadow_comparison_against_the_real_in_process_gateway_agrees() -> None:
-    direct = DirectProvider()
-
-    authenticator = InternalKeyAuthenticator(
-        (
-            InternalPrincipal(
-                client_id="butterfly-guy",
-                key_sha256=hash_api_key("valid-key"),
-                capabilities=frozenset({"market_data:read"}),
-                priority_class=PriorityClass.PROTECTED,
-            ),
-        )
-    )
-
-    class Ready:
-        def health(self) -> TokenManagerHealth:
-            return TokenManagerHealth(
-                state=TokenManagerState.READY,
-                reason="fake",
-                updated_at=dt.datetime.now(dt.timezone.utc),
-            )
-
-    class Upstreams:
-        async def get_quotes(self, symbols: tuple[str, ...]) -> tuple:
-            return ()
-
-    server = TestServer(
-        create_app(
-            Upstreams(),
-            authenticator,
-            token_readiness_provider=Ready(),
-            spot_upstream=DirectSchwabSpotUpstream(direct),
-            chain_upstream=DirectSchwabChainMetadataUpstream(direct),
-        )
-    )
-    await server.start_server()
-    try:
-        async with httpx.AsyncClient(base_url=str(server.make_url("/"))) as http:
-            gateway = GatewayMarketDataClient(
-                str(server.make_url("/")), "valid-key", client=http
-            )
-            provider = ShadowComparingMarketDataProvider(
-                direct, gateway, shadow_reads=True
-            )
-            spot = await provider.get_spot_price("$SPX")
-            chain = await provider.get_option_chain("SPX", EXPIRATION)
-            await provider.wait_for_shadow_reads()
-    finally:
-        await server.close()
-
-    assert spot == DIRECT_SPOT
-    assert chain is CHAIN_PAYLOAD
     assert provider.recorder.total() == 0
 
 

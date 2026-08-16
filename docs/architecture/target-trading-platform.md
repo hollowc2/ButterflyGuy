@@ -1,12 +1,15 @@
 # Target Trading Platform
 
+> **Historical design record:** The read-only market-data gateway described here was extracted to
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). References below to an
+> embedded `butterfly_guy.schwab_gateway` implementation describe the migration path, not the
+> current repository. Account and order migration remains outside the approved scope.
+
 ## Recommendation
 
-Create one independently deployed `schwab-gateway` as the sole Schwab trust boundary.
-During migration its code lives under `src/butterfly_guy/schwab_gateway/`, with transport-
-neutral client code under `src/butterfly_guy/gateway_client/`. This keeps the existing wheel
-layout intact and permits later extraction to `TradingCore` without making strategy code
-import server internals.
+Operate the independently deployed `schwab-gateway` from its standalone repository. Butterfly Guy
+retains only its consumer-specific, default-off shadow comparator and imports transport contracts
+from the pinned standalone SDK.
 
 ```text
                                   Schwab Trader API

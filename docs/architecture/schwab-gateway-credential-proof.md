@@ -1,5 +1,9 @@
 # Schwab Gateway Credential Proof
 
+> **Historical proof record:** The credential probe/operator implementation moved to
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). The embedded Butterfly Guy
+> scripts described below were removed after standalone production proof.
+
 ## Status and scope
 
 **Incomplete; three supervised launches stopped before credential access.** This is a standalone,

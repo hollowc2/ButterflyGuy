@@ -1,13 +1,11 @@
 # Option A deployment runbook — Helios, containerized
 
-> **Status update — 2026-08-10:** Option A has been executed. The read-only gateway is deployed on
-> Helios, running and monitored; `/ready`, one authenticated Schwab quote, Prometheus scraping,
-> alerting, and crash-restart recovery have been proven. No account/order surface exists and direct
-> trading access remains authoritative. XSP has installed default-off C3 shadow wiring; it always
-> returns direct data and has not been enabled for a market session. The original plan and preflight
-> record below are
-> retained as deployment history; statements that the gateway is undeployed or unproven are
-> superseded by this note and the later records in `CODEX_STATE.md`.
+> **Historical deployment runbook:** Option A was superseded by the standalone production service
+> deployed from [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). No
+> account/order surface exists, direct trading remains authoritative, and XSP's shadow remains
+> default-off. The original plan and preflight record below are retained as deployment history;
+> its embedded Compose, runner, alerts, and key-file paths no longer exist in Butterfly Guy. See
+> `schwab-gateway-standalone-extraction-plan.md` for current evidence.
 >
 > A distinct `SchwabGatewayNotReady` alert is installed in
 > `infra/schwab-gateway-alerts.yml`. It requires a successful scrape plus two sustained minutes

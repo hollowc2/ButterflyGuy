@@ -1,5 +1,9 @@
 # Schwab gateway deployment options
 
+> **Historical decision brief:** The selected service was extracted and deployed from
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). Embedded runner, Compose,
+> and credential-proof references below no longer exist in Butterfly Guy.
+
 Status: decision brief. Nothing here is a recommendation to act, and nothing here has been
 run. Its purpose is to make "where does the gateway run" decidable by an operator.
 

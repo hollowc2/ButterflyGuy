@@ -44,8 +44,7 @@ runtime.
 | `src/butterfly_guy/services/` | Trade and position service orchestration, notifications |
 | `src/butterfly_guy/reports/` | Report and dashboard generation |
 | `src/butterfly_guy/equity_scan/` | Personal equity-research scanner (not part of the butterfly strategy) |
-| `src/butterfly_guy/schwab_gateway/` | Deployed read-only Schwab OAuth/REST gateway; consumer migration remains opt-in (see below) |
-| `src/butterfly_guy/gateway_client/` | Client for consuming the Schwab gateway |
+| `src/butterfly_guy/gateway_client/` | Default-off shadow comparison around the standalone SchwabGateway SDK |
 | `configs/` | SPX, NDX, and XSP configuration files |
 | `infra/` | Docker compose and observability wiring |
 | `docs/architecture/`, `docs/runbooks/` | Design notes, migration plans, and operational runbooks |
@@ -205,12 +204,13 @@ legacy `app_spx_candidate` Compose profile remains stopped and available for
 one rollback cycle; it must not run concurrently with the fleet-native
 `best-rr` evaluator because both use the preserved BEST_RR database.
 
-## Schwab gateway (operational read-only service)
+## Schwab gateway (standalone operational service)
 
-`src/butterfly_guy/schwab_gateway/` runs on Helios as an internal read-only service. Its readiness,
-authenticated Schwab access, Prometheus scrape, alerting, and crash-restart recovery are operational.
-It exposes bounded quote, spot, and option-chain reads; history, account, and order surfaces remain
-absent.
+The read-only gateway is maintained and deployed from
+[`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). Butterfly Guy pins the
+standalone `schwab-gateway-sdk` and `schwab-token-store` packages at `v0.1.0`; it no longer contains
+the gateway server, operator CLIs, Compose file, or alert rules. The standalone service exposes
+bounded quote, spot, and option-chain reads; history, account, and order surfaces remain absent.
 
 The trading applications still use direct Schwab access as the authoritative path. XSP is wired for
 an opt-in shadow comparison: it observes gateway spot and chain metadata reads while always returning
@@ -218,10 +218,10 @@ the direct result. The flag defaults off and remains disabled; enabling it for a
 observation is a separate operator decision. No trading decision, account operation, or order is routed
 through the gateway.
 
-For operational topology and the current rollout boundary, see
-`docs/architecture/schwab-gateway-option-a-deployment.md` and
-`docs/architecture/schwab-gateway-c3-shadow-wiring-plan.md`. The longer-term plan and rollback
-criteria are in `docs/architecture/schwab-gateway-migration.md`.
+For current extraction status and the append-only rollout evidence, see
+`docs/architecture/schwab-gateway-standalone-extraction-plan.md`. Standalone build, deployment,
+monitoring, and key-management instructions live in the SchwabGateway repository. The older
+Butterfly Guy gateway plans and runbooks are retained as historical records only.
 
 ### 4) Run the live orchestrator directly
 

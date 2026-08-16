@@ -1,11 +1,11 @@
 # Current Schwab Integration
 
 > **Historical baseline — 2026-08-03:** This document records the direct-only integration that
-> existed before the read-only gateway deployment. It is not a current topology reference. As of
-> 2026-08-10, the gateway runs on Helios with bounded quote, spot, and chain reads, but direct
-> Schwab access remains authoritative for every trading decision and all account/order work. XSP's
-> shadow canary is installed and default-off. For the current deployment boundary, see
-> `schwab-gateway-option-a-deployment.md` and `schwab-gateway-c3-shadow-wiring-plan.md`.
+> existed before the read-only gateway deployment. It is not a current topology reference. The
+> gateway now lives in [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway), while
+> direct Schwab access remains authoritative for every trading decision and all account/order work.
+> XSP's shadow canary remains default-off. See `schwab-gateway-standalone-extraction-plan.md` for
+> current status and append-only evidence.
 >
 > The baseline was verified against commit `de84d91` on 2026-08-03. Statements labelled
 > **Assumption** require runtime or Schwab verification.

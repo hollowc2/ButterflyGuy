@@ -155,16 +155,16 @@ Acceptance: standalone production is healthy and monitored; ButterflyGuy is unch
 
 ## Phase 7 — ButterflyGuy deployment and embedded-code removal
 
-Status: `NOT STARTED`
+Status: `IN PROGRESS`
 
 - [ ] Obtain explicit approval before any trading-service rebuild/restart and pass broker/DB
   flatness and unknown-order gates.
 - [ ] Deploy one service at a time, preserving image IDs and validating health, token reload,
   logs, reconciliation, uniqueness, and direct access.
-- [ ] Change XSP's default shadow URL to `http://schwab-gateway:8011`; keep shadow disabled.
-- [ ] Remove embedded gateway server/SDK/runner/CLIs/Compose/alerts and compatibility exports
+- [x] Change XSP's default shadow URL to `http://schwab-gateway:8011`; keep shadow disabled.
+- [x] Remove embedded gateway server/SDK/runner/CLIs/Compose/alerts and compatibility exports
   after standalone proof; retain only Butterfly-specific shadow/configuration.
-- [ ] Update docs/runbooks/graph and archive historical proof documents without rewriting
+- [x] Update docs/runbooks/graph and archive historical proof documents without rewriting
   historical evidence.
 
 Acceptance: ButterflyGuy runs without embedded gateway implementation; direct trading,
@@ -260,3 +260,5 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-15 | Phase 7 prep | BLOCKED | Helios token `creation_timestamp` remained `2026-08-10T20:23:30Z`; DB gate passed; authenticated broker initialization returned Schwab `invalid_grant` | The copied document was the revoked Aug 10 lineage, so the approved rebuild stopped before any image build, container restart, or runtime mutation. A newer local Aug 15 lineage was verified with the read-only broker audit before replacement; no secret value was emitted. |
 | 2026-08-15 | Phase 7 prep | IN PROGRESS | ButterflyGuy `16d9c86`; token created `2026-08-15T21:36:48Z`, mode `0600`, `1001:1001`; DB unsafe count `0`; broker SPX/NDX/XSP positions, active orders, and unknown statuses all `0` | Corrected token installed under the shared lock. Approved full application/candidate rebuild baseline images: SPX `sha256:377ae0b...55aa6`, NDX `sha256:8f90a18...bc77`, XSP `sha256:801ff60...3d24`, feed `sha256:f9df84d...97274`, six candidates `sha256:24a14da...c7e4`, `ba3343a...2735`, `2b2bdf0...a7574`, `3074ab5...b1f0`, `ba968cc...d0df9`, and `6208657...e957`. Exact recovery tags use `butterfly-phase7-rollback-<service>:20260815T2225Z`; database, monitoring, standalone gateway, stopped legacy gateway, and stopped legacy candidate remain out of scope. |
 | 2026-08-15 | Phase 7 prep | COMPLETE | deployed source `5be6630`; SPX `sha256:e2b7c0c...d17e9`, NDX `sha256:da381f8...7e44`, XSP `sha256:26951e7...1634`, feed `sha256:74b0c0e...5a1e`; candidates `sha256:43e73b9...79b8`, `4820dc1...09fd`, `d93a3a0...1173`, `90b91e6...2600`, `4da3cd4...e666`, `15355db...bbbe` | No-cache builds and unprivileged/read-only image smokes passed after adding Git to the candidate image. SPX, NDX, XSP, feed, and six paper evaluators were recreated one at a time; each passed image, readiness/health, token where applicable, clean-log, zero-restart, uniqueness, reconciliation/direct-access, and rollback-armed gates. Fleet settle: `10` running, `9` ready endpoints, feed health up, `6` token views equal, DB unsafe count `0`, final broker SPX/NDX/XSP positions/active orders/unknown statuses all `0`, standalone Prometheus target up, gateway alerts `0`. XSP remains direct with shadow disabled; database/monitoring/standalone and both stopped rollback services were unchanged. Recovery tags from the predeployment row are retained. Phase 7 embedded-code removal remains `NOT STARTED`. |
+| 2026-08-15 | Phase 7 removal | IN PROGRESS | ButterflyGuy baseline `44e6184`; focused pre-change matrix `139 passed`; standalone tag `v0.1.0` → `2d1da47b`; both lock entries resolve `2d1da47b` | Worktrees were clean before editing. Standalone `main` is newer, but its SDK/token-store trees match `v0.1.0`; no untagged revision was consumed and no live or broker action occurred. |
+| 2026-08-15 | Phase 7 removal | IN PROGRESS | focused retained matrix `187 passed`; full suite `630 passed, 1 skipped`; Ruff, wheel/sdist build, SPX/NDX/XSP Compose renders, immutable-pin/package/static boundaries, and `graphify update .` passed | Embedded server/operator/credential-proof code, compatibility exports, Compose, alerts, and key templates are removed; XSP defaults to `schwab-gateway:8011` with shadow false; direct trading/token consumers are unchanged. Deploying this removal build requires fresh explicit approval and broker/DB gates; no service was rebuilt or restarted. |

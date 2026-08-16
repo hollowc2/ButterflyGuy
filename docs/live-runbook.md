@@ -8,8 +8,8 @@ canary.
 1. Confirm `SCHWAB_GATEWAY_TOKEN_DIR` is present in the Compose interpolation environment
    (normally `infra/.env`) and resolves to the dedicated absolute host directory containing
    `tokens.json`. It must name the directory, not the document or repository root. Do not print
-   token or credential values. The variable is required for the trading stack even when the
-   separate gateway profile is not being started.
+   token or credential values. The variable is required for the trading stack independently of
+   the standalone SchwabGateway service.
 2. Confirm only one service is enabled for live-money mode. NDX stays paper/research;
    XSP is allowed only for the supervised one-contract canary below.
 3. Run `uv run pytest -q` and `uv run ruff check .`.

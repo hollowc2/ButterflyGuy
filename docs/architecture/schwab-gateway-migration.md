@@ -1,20 +1,18 @@
 # Schwab Gateway Migration Plan
 
-> **Current status — 2026-08-10:** The Phase 2 read-only gateway is deployed, running, and
-> monitored on Helios. `/ready`, authenticated Schwab reads, Prometheus scraping, alerting, and
-> crash-restart recovery have been proven. The live routes are `/v1/quotes`, `/v1/spot`, and
-> `/v1/chain`; `/v1/history`, account, and order routes do not exist. Direct Schwab access remains
-> authoritative. XSP has an installed, default-off C3 shadow canary that always returns the direct
-> result; it has not been enabled for a market session. This document remains the migration and
-> rollback plan, not a record that the gateway is undeployed.
+> **Historical migration plan:** The read-only gateway was extracted to
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway) and the standalone `v0.1.0`
+> service replaced Butterfly Guy's embedded implementation. Direct Schwab access remains
+> authoritative; XSP's shadow canary remains default-off; account and order routes remain absent.
+> See `schwab-gateway-standalone-extraction-plan.md` for current status and append-only evidence.
 
 ## Safety envelope
 
 The foundation work described below originally occurred on branch
 `codex/schwab-gateway-foundation` in the isolated worktree `/tmp/butterfly-schwab-gateway`.
 That isolation was a historical implementation safeguard. The deployed service is now operated
-through `infra/docker-compose.gateway.yml`; follow the deployment runbook for its current
-topology and do not treat the historical worktree language as an instruction to alter it.
+from the standalone repository; do not treat the historical worktree or embedded Compose language
+as an instruction to alter the current deployment.
 
 Production defaults remain direct. A gateway is never selected implicitly, and direct and
 gateway paths must never both submit an order.

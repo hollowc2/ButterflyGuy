@@ -1,5 +1,9 @@
 # Schwab Gateway Foundation: Local Run
 
+> **Historical embedded-service instructions:** The local demo, key-management, and Compose
+> workflow moved to [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). The
+> commands below are preserved as extraction history and no longer run from Butterfly Guy.
+
 This is an isolated fake-data smoke test. It does not read `.env`, a Schwab token, an
 account ID, or Schwab credentials, and it has no account/order routes. Do not use its demo
 quote for trading.

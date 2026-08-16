@@ -1,5 +1,10 @@
 # After-Hours Schwab Gateway Credential-Proof Runbook
 
+> **Historical runbook:** The embedded proof operator was retired after the standalone service was
+> proven. Current credential-proof operations belong to
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway); do not run the obsolete
+> Butterfly Guy paths below.
+
 ## Purpose and prohibition
 
 This package prepares a supervised after-hours proof; it does not authorize one. During the

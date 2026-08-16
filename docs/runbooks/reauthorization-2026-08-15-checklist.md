@@ -1,5 +1,10 @@
 # Re-authorization checklist — Saturday 2026-08-15
 
+> **Historical executed checklist:** Dates, images, containers, and embedded gateway references
+> below describe the 2026-08-15 window. Current standalone gateway operations live in
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway); do not reuse this checklist
+> as current host state.
+
 Operator-executed. Derived from the Window F execution (2026-08-08 21:56–22:15 UTC), which ran
 cleanly; this is that sequence with the Window G and Window H findings folded in.
 

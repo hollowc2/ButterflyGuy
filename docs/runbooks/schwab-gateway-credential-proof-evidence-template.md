@@ -1,5 +1,9 @@
 # Schwab Gateway Credential-Proof Evidence Template
 
+> **Historical template:** Credential-proof operations and current evidence guidance moved to
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). This template is retained
+> only with the historical proof record.
+
 Use this redacted template only after the two approvals in the after-hours runbook. Store captured
 evidence mode `0600`. Never add token or credential paths/values, environment values, payloads,
 headers, cookies, account identifiers, URLs, or raw exception text.

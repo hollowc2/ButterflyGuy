@@ -6,8 +6,8 @@ and answer different questions about it:
 - ``data.chain_utils.iter_chain_options`` yields one contract per strike, for trading;
 - ``data.collector.OptionChainCollector._parse_chain_response`` emits every contract as
   a database row;
-- ``gateway_client.chain_metadata.extract_chain_metadata`` derives bounded counts for
-  the gateway's ``/v1/chain`` surface and the shadow comparator.
+- ``schwab_gateway_sdk.chain_metadata.extract_chain_metadata`` derives bounded counts for
+  the standalone gateway's ``/v1/chain`` surface and the shadow comparator.
 
 The live parsers are read-only here. These tests assert the *relationship* between the
 three so the trio cannot drift apart silently, and deliberately record the one place

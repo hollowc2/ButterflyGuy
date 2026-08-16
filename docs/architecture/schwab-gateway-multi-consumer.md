@@ -1,13 +1,10 @@
 # Schwab Gateway Multi-Consumer Foundation
 
-> **Status update — 2026-08-10:** The read-only foundation is now deployed on Helios, running and
-> monitored. Readiness, one authenticated Schwab quote, Prometheus scraping, alerting, and
-> crash-restart recovery have been proven. Direct trading access remains authoritative, and XSP has
-> installed default-off C3 shadow wiring that always returns the direct result. Account and order
-> authority remain absent. The live read-only routes now include `/v1/quotes`, `/v1/spot`, and
-> `/v1/chain`; `/v1/history` remains absent. The implementation inventory below is retained for
-> design history; deployment and proof classifications written before the live window are
-> superseded by this note.
+> **Historical design record:** The read-only foundation was extracted to
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). Butterfly Guy retains only
+> the default-off shadow comparator and pinned SDK/token-store consumers. Direct trading remains
+> authoritative, account/order authority remains absent, and the implementation inventory below is
+> retained as design history.
 
 ## Status and safety boundary
 

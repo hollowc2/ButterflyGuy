@@ -1,5 +1,9 @@
 # Schwab Gateway Foundation Smoke Test
 
+> **Historical proof:** The tested implementation and its current smoke instructions now live in
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). This record is preserved as
+> pre-extraction evidence.
+
 ## Result
 
 **PASS (local-process proof); Docker runtime proof deferred for deployment safety.**

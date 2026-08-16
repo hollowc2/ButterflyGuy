@@ -1,5 +1,10 @@
 # Schwab Single-Token Manager
 
+> **Historical embedded-component design:** The production implementation moved to the
+> `schwab-token-store` package in
+> [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway) and Butterfly Guy imports
+> the pinned package directly. Local module paths below describe the pre-extraction implementation.
+
 ## Scope
 
 `schwab_gateway/token_manager.py` and `schwab_gateway/token_adapter.py` are standalone,

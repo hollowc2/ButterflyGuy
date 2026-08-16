@@ -1,8 +1,7 @@
-# SCHWAB_GATEWAY_TOKEN_DIR is the single host directory holding tokens.json, shared with
-# docker-compose.gateway.yml so the two files cannot disagree. It carries no default on
-# purpose: a bind whose source path does not exist does not fail, Docker silently creates
-# an empty directory, so an unset variable must refuse rather than guess. Compose reads it
-# from this directory's .env.
+# SCHWAB_GATEWAY_TOKEN_DIR is the established host directory holding the shared tokens.json.
+# It carries no default on purpose: a bind whose source path does not exist does not fail,
+# Docker silently creates an empty directory, so an unset variable must refuse rather than
+# guess. Compose reads it from this directory's .env.
 networks:
   monitoring_net:
     external: true
@@ -17,10 +16,10 @@ services:
     env_file:
       - ../.env
     volumes:
-      # The token *directory* is mounted, not the document. The gateway persists the
-      # shared token with os.replace, which swaps in a NEW inode; a document-level bind
-      # pins the old one, so the container silently stops seeing every later write --
-      # including the re-authorized refresh token. Mirrors docker-compose.gateway.yml.
+      # The token *directory* is mounted, not the document. Shared token writers persist
+      # with os.replace, which swaps in a NEW inode; a document-level bind pins the old
+      # one, so the container silently stops seeing every later write -- including a
+      # re-authorized refresh token.
       - "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}:${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}"
       - ../configs/config.yaml:/app/configs/config.yaml
       - ../data/chains:/app/data/chains
@@ -158,7 +157,7 @@ services:
       # interpolation values from infra/.env; they are not inherited by SPX/NDX.
       # Direct remains authoritative even when the shadow flag is enabled.
       SCHWAB_ACCESS_MODE: "direct"
-      SCHWAB_GATEWAY_URL: "${SCHWAB_GATEWAY_URL:-http://butterfly_schwab_gateway_live:8011}"
+      SCHWAB_GATEWAY_URL: "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
       SCHWAB_GATEWAY_API_KEY: "${SCHWAB_GATEWAY_API_KEY:-}"
       SCHWAB_GATEWAY_SHADOW_READS: "${SCHWAB_GATEWAY_SHADOW_READS_XSP:-false}"
     read_only: true
