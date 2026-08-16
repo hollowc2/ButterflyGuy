@@ -155,7 +155,7 @@ Acceptance: standalone production is healthy and monitored; ButterflyGuy is unch
 
 ## Phase 7 — ButterflyGuy deployment and embedded-code removal
 
-Status: `IN PROGRESS`
+Status: `BLOCKED`
 
 - [ ] Obtain explicit approval before any trading-service rebuild/restart and pass broker/DB
   flatness and unknown-order gates.
@@ -263,3 +263,4 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-15 | Phase 7 removal | IN PROGRESS | ButterflyGuy baseline `44e6184`; focused pre-change matrix `139 passed`; standalone tag `v0.1.0` → `2d1da47b`; both lock entries resolve `2d1da47b` | Worktrees were clean before editing. Standalone `main` is newer, but its SDK/token-store trees match `v0.1.0`; no untagged revision was consumed and no live or broker action occurred. |
 | 2026-08-15 | Phase 7 removal | IN PROGRESS | focused retained matrix `187 passed`; full suite `630 passed, 1 skipped`; Ruff, wheel/sdist build, SPX/NDX/XSP Compose renders, immutable-pin/package/static boundaries, and `graphify update .` passed | Embedded server/operator/credential-proof code, compatibility exports, Compose, alerts, and key templates are removed; XSP defaults to `schwab-gateway:8011` with shadow false; direct trading/token consumers are unchanged. Deploying this removal build requires fresh explicit approval and broker/DB gates; no service was rebuilt or restarted. |
 | 2026-08-15 | Phase 7 removal | IN PROGRESS | local implementation commit `d643b08` | Cohesive removal and local evidence were committed on `main` without pushing. The local repository is ready for a separately approved staged rollout; deployed source remains the earlier recorded Phase 7 prep build, so Phase 7 is not complete. |
+| 2026-08-15 | Phase 7 removal rollout | BLOCKED | approved preflight at deployed source `44e6184`; DB OPEN trades `0`; nonterminal intents `0`; authenticated broker account-position read returned HTTP `500` after three bounded attempts | Rollout stopped before source transfer, image build, tag, rebuild, restart, or other runtime mutation because broker flatness could not be proven. SPX/NDX/XSP retained their baseline container IDs/images, remained running with restart count `0`, and the Helios checkout remained clean. Retry requires a fresh broker/DB audit and renewed rollout approval after the upstream account read is healthy. |
