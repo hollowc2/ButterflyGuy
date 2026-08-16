@@ -459,13 +459,17 @@ def render_placeholder_html(*, underlying: str, generated_at: dt.datetime) -> st
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Butterfly Guy — {html.escape(underlying)} Live Performance</title>
+  <title>Butterfly Guy — {html.escape(underlying)} Paper Performance</title>
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/fonts/inter-var-latin.woff2">
+  <link rel="stylesheet" href="/assets/fonts.css">
   <style>{_BASE_CSS}</style>
 </head>
 <body>
 <main>
-  <h1>Butterfly Guy — {html.escape(underlying)} Live Performance</h1>
-  <div class="sub">Paper trading · Last updated {html.escape(stamp)}</div>
+  <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
+
+  <h1>Butterfly Guy — {html.escape(underlying)} Paper Performance</h1>
+  <div class="sub">Paper trading · Static snapshot, last built {html.escape(stamp)}</div>
   <section class="panel empty">No closed trades yet.</section>
 </main>
 </body>

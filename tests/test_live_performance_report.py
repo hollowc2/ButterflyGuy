@@ -216,6 +216,16 @@ def test_render_placeholder_html() -> None:
         generated_at=dt.datetime(2026, 6, 6, 13, 15, tzinfo=dt.timezone.utc),
     )
     assert "No closed trades yet" in html_doc
+    # The placeholder is a real published page when there are no closed trades,
+    # so it has to honour the same audit fixes as the main report: no
+    # third-party origins (the site CSP blocks them), a way back to the site,
+    # and no wording that implies a live feed.
+    assert "Paper Performance" in html_doc
+    assert "Live Performance" not in html_doc
+    assert '<a class="site-link" href="/">' in html_doc
+    assert "/assets/fonts.css" in html_doc
+    for origin in ("fonts.googleapis.com", "fonts.gstatic.com", "cdn.jsdelivr.net"):
+        assert origin not in html_doc
 
 
 def test_regenerated_data_stays_out_of_executable_script() -> None:
