@@ -190,12 +190,12 @@ Acceptance: legacy is not needed for the full stability window.
   `2026-08-17T00:35:43.575860619Z` and NDX at `2026-08-17T00:37:12.747255083Z`.
   Seven consecutive 24-hour periods therefore cannot complete before
   `2026-08-24T00:39:37.451595824Z`.
-- Continuity: no clock reset is recorded. Checkpoint evidence is complete through
-  `2026-08-17T04:42:19.598246Z`. The candidate feed's Docker log API could not return even one
-  record, but its 170,225-byte `json-file` was parsed directly through the existing
-  node-exporter's read-only host mount. All `848` envelopes were well formed; the `684`
-  records in the qualifying interval had zero anomalies in every required category. A
-  control parse of SPX's log produced the same clean classification.
+- Continuity: no clock reset is recorded. Fixed-output log, lifecycle, monitoring, runtime,
+  database, and resource evidence is complete through `2026-08-17T05:07:30.206354Z`; the
+  serialized broker-flatness and post-audit shared-lineage checks are complete through
+  `2026-08-17T05:10:11.775511Z`. The candidate feed's Docker log API gap was resolved through
+  the existing node-exporter's read-only host mount; every bounded nonempty envelope remains
+  well formed and every required anomaly category remains zero.
 - Full regular market session: `PENDING`.
 - Scheduled token reauthorization/reload-lineage cycle: `PENDING`. The lineage installed
   immediately before this window is baseline evidence only and does not satisfy this item.
@@ -205,6 +205,58 @@ Acceptance: legacy is not needed for the full stability window.
   final monitoring backups; the three `butterfly-token-rebuild-rollback-*` tags stamped
   `20260816T234322Z`; and the XSP Phase 7 removal rollback tag stamped
   `20260816T160420Z`. No rollback artifact was invoked or changed.
+
+#### Scheduled token-cycle approval packet — prepared, not approved
+
+- Proposed window: Saturday `2026-08-22T16:15:00Z` (`09:15 PDT`), while the market is closed,
+  after the required Monday full-session proof and before the baseline lineage's seven-day
+  deadline. The non-hour boundary avoids the normal hourly keepalive slot and restores a
+  Saturday-morning cadence with recovery time.
+- Current packet baseline: lineage `2026-08-16T23:34:35Z`; protected regular document mode
+  `0600`, owner `1001:1001`; six identical mounted views; lock available; all exact Phase 8
+  container identities unchanged; DB open trades/nonterminal intents `0/0`; serialized broker
+  SPX/NDX/XSP positions `0/0/0`, active orders `0`, missing/unmapped statuses `0/0`, and
+  duplicate IDs `0`. These facts must be re-proved immediately before the window; this packet
+  does not authorize proceeding on stale evidence.
+- Approval boundary: one interactive reauthorization minted by Corey on Zeus in a real terminal,
+  one protected stage to Helios, one protected pre-install backup, and one lock-aware atomic
+  install. It authorizes no strategy/config/schedule/network/database change, image build,
+  container recreate/restart, legacy action, push, or deletion. The browser/MFA flow is not run
+  through an agent because the underlying client can print credential material on an interrupted
+  terminal flow.
+- Affected readers/writers: `butterfly_spx_app`, `butterfly_ndx_app`, `butterfly_xsp_app`,
+  `butterfly_spx_candidate_feed`, `schwab_gateway_live`, and `schwab_gateway_candidate`, plus
+  lock-aware host utilities when they next run. Candidate evaluators do not hold the credential;
+  the stopped legacy gateway and stopped legacy candidate remain untouched.
+- Exact backup: under the shared exclusive lock, retain one mode-`0600`, owner-`1001:1001`
+  pre-install copy outside the worktree with redacted identifier
+  `phase8-pre-cycle-20260822T161500Z`. Its secret-bearing path and bytes must never enter output or
+  Git. Because successful OAuth reauthorization can invalidate the prior refresh lineage, this
+  backup is authoritative pre-install evidence but is not assumed usable after the issuer accepts
+  the new authorization.
+- Stage/install gates: prove the incoming file is regular, nonsymlink, protected, correctly owned,
+  schema-valid, newly created, and byte-identical to Corey's staged source using boolean comparison
+  only. Refuse an unchanged or older lineage. Acquire the existing exclusive lock with a bounded
+  timeout, capture the protected backup, atomically replace the shared document, then prove the
+  intended lineage, inode advancement, mode/owner, lock release, and all six identical views.
+- Required validation: zero container lifecycle changes; exact IDs/images/start/restarts remain;
+  all health/readiness and Prometheus target/token-ready/rule/alert gates pass; SPX/NDX/XSP and the
+  feed each emit one successful hot-reload and zero reload failures within the bounded window;
+  both gateways authenticate on fresh per-request clients; bounded logs have zero OAuth, lock,
+  persistence, readiness, reconciliation, unknown-order, duplicate-order, traceback, or
+  error/critical anomalies. Run the runtime image's isolated synthetic stale-callback probe, then
+  prove the new live lineage stays monotonic through repeated serialized account/order/position
+  audits with every broker count flat and every consumer view still identical.
+- Failure/rollback: before atomic install, leave the active document untouched and stop. After
+  install, never restore the older backup merely because it exists. If validation fails and the
+  prior lineage is still independently proven valid, restoration uses the same exclusive-lock and
+  atomic-install gates; otherwise the only safe rollback is one fresh Corey-minted authorization
+  followed by the same validation. No fallback restart is included: preserve evidence and pause
+  for separate approval if a cached consumer does not reload. Retain staging and backup artifacts
+  until cleanup is separately approved.
+
+Explicit Corey approval is required before staging, backing up, replacing, or otherwise touching
+credential material in this packet.
 
 Initial fixed-output resource baseline (all timestamps UTC):
 
