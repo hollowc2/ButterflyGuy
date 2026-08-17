@@ -260,6 +260,56 @@ Acceptance: legacy is not needed for the full stability window.
 Explicit Corey approval is required before staging, backing up, replacing, or otherwise touching
 credential material in this packet.
 
+#### Legacy-retirement approval packet — drafted, not executable
+
+- Acceptance dependency: this packet cannot become ready for approval until the qualifying clock
+  reaches `2026-08-24T00:39:37.451595824Z` without reset, the full-session and approved scheduled
+  token-cycle rows are complete, the final runtime/broker/test gates pass, and the document records
+  that observed evidence separately from the inference that the legacy service is no longer needed.
+- Exact proposed removal target: stopped container
+  `675a04e26b1c9b4c2726bfc0cc082b0ccebbb369d0f38fc05e7463eef29d3114`
+  named `butterfly_schwab_gateway_live`, using image
+  `sha256:6eb9f560effae529a2f578b5a4e5a1b0da2fd124cb4566fe9b097f01ec8b0ec8`.
+  It has remained exited since `2026-08-15T21:40:04.646047491Z`, restart count `0`, and is the
+  sole container using that image.
+- Current dependency evidence: deployed tracked infrastructure contains zero references to the
+  legacy container name; the active `schwab_gateway_live` is healthy; Prometheus has exactly the
+  standalone `schwab-gateway:8011` target up. The legacy object's historical Compose identity is
+  project `butterfly_gateway_foundation`, service `schwab_gateway_live`; it retains one network,
+  two mounts, a loopback `8011` binding, read-only/unprivileged security controls, and
+  `unless-stopped`. Those details are recovery evidence, not authorization to start it alongside
+  the standalone service, which owns the same host port.
+- Approval boundary: remove exactly the stopped container by full ID after a fresh identity/state
+  comparison. Do not stop/start/recreate any active service; do not remove the image, image tag,
+  network, mount source, volume, monitoring backup, token artifact, source checkout, or stopped
+  legacy candidate; do not change monitoring, configuration, routing, or Git state.
+- Required pre-removal preservation: create one protected server-local inspect/restore bundle
+  outside the worktree with redacted identifier
+  `phase8-legacy-retirement-pre-remove-20260824T010000Z`, mode `0600`, and expected owner. Its
+  secret-bearing path, environment, mount sources, and bytes must never enter output or Git. Add an
+  immutable retention tag `butterfly-legacy-gateway-retirement-rollback:20260824T010000Z` to the
+  exact image, then prove both the protected bundle and tag exist using booleans and exact image ID
+  only. Creating these recovery artifacts is part of the later destructive-action approval, not
+  authorized by this draft.
+- Removal validation: require exactly one expected destroy event for the full legacy ID and no
+  lifecycle event for any active Phase 8 resource; prove the legacy name/ID absent while the
+  retained original and rollback image tags still resolve to the exact image; re-run exact
+  container identities, endpoints, log anomalies, Prometheus target/token-ready/rules/alerts,
+  token protection/lineage/views/lock, DB safety, and serialized broker-flatness gates.
+- Rollback: if any removal validation fails, use only the protected restore bundle to recreate the
+  exact legacy configuration in a stopped state, prove its image/config/security/network/mount
+  shape and absence of port ownership, revalidate every active resource, append rollback evidence,
+  and stop. Do not start the recreated legacy service. A future emergency cutback would still
+  require separate approval to stop standalone, restore the preserved Phase 6 monitoring files,
+  start legacy, validate it, and re-point monitoring.
+- Cleanup exclusion: retain the image, both tags, protected restore bundle, Phase 6 monitoring
+  backups, token-cycle backups, application rollback tags, and all historical evidence after
+  container retirement. Any later artifact deletion requires a new inventory and explicit
+  approval.
+
+Even after every acceptance dependency passes, Corey must explicitly approve the exact destructive
+container removal and recovery-artifact creation before this packet is executed.
+
 Initial fixed-output resource baseline (all timestamps UTC):
 
 | Resource | Full container ID | Full image ID | Started at | Restarts | State / health / readiness |
