@@ -172,7 +172,7 @@ reconciliation, and token handling are unchanged.
 
 ## Phase 8 — Stability window and legacy retirement
 
-Status: `NOT STARTED`
+Status: `IN PROGRESS`
 
 - [ ] Run standalone for seven consecutive days including one full market session and one
   scheduled token reauthorization/reload lineage cycle.
@@ -182,6 +182,53 @@ Status: `NOT STARTED`
   Helios artifacts; preserve release/image/migration/rollback evidence.
 
 Acceptance: legacy is not needed for the full stability window.
+
+### Phase 8 stability ledger
+
+- Qualifying start: `2026-08-17T00:39:37.451595824Z`, the latest successfully
+  validated Phase 7 application start (`butterfly_xsp_app`) after SPX at
+  `2026-08-17T00:35:43.575860619Z` and NDX at `2026-08-17T00:37:12.747255083Z`.
+  Seven consecutive 24-hour periods therefore cannot complete before
+  `2026-08-24T00:39:37.451595824Z`.
+- Continuity: no clock reset is recorded. The initial checkpoint is provisional because
+  the candidate feed's Docker `json-file` history did not return within either a
+  five-minute bound or an explicitly end-bounded retry. Its container identity, zero
+  restarts, internal health/metrics `200`, zero collection/archive failure counters,
+  protected token view, and zero Docker lifecycle events passed, but those signals do not
+  replace the missing structured-log evidence.
+- Full regular market session: `PENDING`.
+- Scheduled token reauthorization/reload-lineage cycle: `PENDING`. The lineage installed
+  immediately before this window is baseline evidence only and does not satisfy this item.
+- Interruptions / clock resets: none observed. The log-retrieval evidence gap is not
+  classified as an outage or reset without service evidence, but it must be resolved before
+  the interval can be accepted.
+- Retained rollback: stopped legacy container/image; standalone `v0.1.0` image; Phase 6
+  final monitoring backups; the three `butterfly-token-rebuild-rollback-*` tags stamped
+  `20260816T234322Z`; and the XSP Phase 7 removal rollback tag stamped
+  `20260816T160420Z`. No rollback artifact was invoked or changed.
+
+Initial fixed-output resource baseline (all timestamps UTC):
+
+| Resource | Full container ID | Full image ID | Started at | Restarts | State / health / readiness |
+|---|---|---|---|---:|---|
+| `schwab_gateway_live` | `11f588627c88c00312b360451eadb9b56c86542aacfa6a4468e20826f61a02fb` | `sha256:d31e679d15e60e3ca8b794a4ff22ed4c742836cabd102656121a90630ab5ef04` | `2026-08-15T21:42:49.554138686Z` | 1 | running / healthy / `200` |
+| `butterfly_schwab_gateway_live` | `675a04e26b1c9b4c2726bfc0cc082b0ccebbb369d0f38fc05e7463eef29d3114` | `sha256:6eb9f560effae529a2f578b5a4e5a1b0da2fd124cb4566fe9b097f01ec8b0ec8` | `2026-08-15T21:06:54.410187984Z` | 0 | preserved stopped; finished `2026-08-15T21:40:04.646047491Z` |
+| `butterfly_spx_app` | `ef8c1dbc060f53b51f0cfa31fa3d524cfa9ca6307e6c6f41920d685c6007d162` | `sha256:1ca3485062f8e352e23efce48447b5b3463ee46f6c27ea39bc5da3a2dd9c726d` | `2026-08-17T00:35:43.575860619Z` | 0 | running / `200` / `200` |
+| `butterfly_ndx_app` | `0331224f4d131a4bf17603241140717c66cf2da1cc1a92fae81be307c0751ee8` | `sha256:a5d0cb60883b58ddc33e820944423ae83d85c75b412afe6cbf28ba31571e1203` | `2026-08-17T00:37:12.747255083Z` | 0 | running / `200` / `200` |
+| `butterfly_xsp_app` | `8979c8c645d87eeb0cbad0acf9c44887b355733d7cb33c98714cb6f0544f3950` | `sha256:e14544ec2b85e42f967038e322c3f991215f968220df16f669a69d0e895c44ac` | `2026-08-17T00:39:37.451595824Z` | 0 | running / `200` / `200` |
+| `butterfly_spx_candidate_feed` | `7c58e73b0178b8c7574e01a183f454747c47f3df4e9bc4fab72b624407ae8dc5` | `sha256:74b0c0eed742e4c1f4952bdd1c0ea6af77565e5c3decbf5f987eef3508035a1e` | `2026-08-15T22:56:16.342959487Z` | 0 | running / internal health `200`; log evidence pending |
+| `butterfly_spx_candidate_best-rr` | `e812e00e1aa28e180c5ca604793654166fcfa626d16ed89f2f5d606902fc9acd` | `sha256:43e73b9054fbe80fb332e6bf014fdee8329906bb8a911e73f578533bc8e579b8` | `2026-08-15T22:56:46.280166573Z` | 0 | running / `200` / `200` |
+| `butterfly_spx_candidate_vix-center` | `07433d2bf03f32eb155a1e59f639967be9971a9b10fd94d428fe046bc36616b4` | `sha256:4820dc10dc83d4fc72fe2de7419dacb2fbaa83abd14d9909609e6f76e62609fd` | `2026-08-15T22:57:10.301630582Z` | 0 | running / `200` / `200` |
+| `butterfly_spx_candidate_target-cost` | `e55cd8bed0674723b137686ad3aab14d40a47f1fb72802d880a98f148dc984ad` | `sha256:d93a3a0d7be86763a3cb138bc1abc8d8691e750d33c0cbb916db5861223d1173` | `2026-08-15T22:57:37.639036526Z` | 0 | running / `200` / `200` |
+| `butterfly_spx_candidate_gap-conviction` | `a07aaa102caee1849dcf92efb3fcc6efa3fa47ece70a8777515937d782a6bebd` | `sha256:90b91e665899b35374f04c3e1c4dc61906ae90630896ce55c34effe8d6042600` | `2026-08-15T22:58:06.845379052Z` | 0 | running / `200` / `200` |
+| `butterfly_spx_candidate_peak-trailer` | `8cb595ccefe75cc1660285066d4f30c13ace026a0113f5e87dc9e93ad0248ac4` | `sha256:4da3cd4ef0386c921b8922c2a2d11b9cc27a71562d375a93709ea7812b08e666` | `2026-08-15T22:58:35.229563554Z` | 0 | running / `200` / `200` |
+| `butterfly_spx_candidate_absolute-stop` | `0777f138db85202a6a6e4198d80af404d72f0d208b65f0b3251899d6abb18ede` | `sha256:15355dbb5aeb84c589ae1c477f56ac9bd2ea9c40700893d7df376a13a32fbbbe` | `2026-08-15T22:59:03.193518036Z` | 0 | running / `200` / `200` |
+| `schwab_gateway_candidate` | `edfff43e658ec5d92ea700f889647902bb9400a11e71c7b8abe7684e7cafe062` | `sha256:d31e679d15e60e3ca8b794a4ff22ed4c742836cabd102656121a90630ab5ef04` | `2026-08-11T17:15:06.528342560Z` | 1 | running / healthy / `200` |
+| `butterfly_spx_candidate` | `fb82c5e4302b10439da5c0067bbb5f01d4170ad0bfc491443aa4a2e3f1b6a9d5` | `sha256:f21f7b928b40f451831a5c1f974d66dfcf74d8f01f5e5ab602c1d537ba54a760` | `2026-07-23T16:30:58.483778998Z` | 0 | preserved stopped; finished `2026-07-28T16:50:15.545501365Z` |
+| `butterfly_timescaledb` | `668bde36dda806638f54a25b7b75d6397a76340966373a9cd4ed13f86dcb855c` | `sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6` | `2026-07-28T22:17:25.583848895Z` | 0 | running / healthy |
+| `butterfly_prometheus` | `28f88d40ea4d555f1e2f826eb6f9d853b8bdb969ae383daeb8c9afc68d8cf265` | `sha256:4a61322ac1103a0e3aea2a61ef1718422a48fa046441f299d71e660a3bc71ae9` | `2026-07-28T22:19:51.125151930Z` | 0 | running |
+| `butterfly_grafana` | `78d8a5b50d27ba2d0cdc368626d6394ec63c6e4857eb0942db50aa6b89af3b3f` | `sha256:e932bd6ed0e026595b08483cd0141e5103e1ab7ff8604839ff899b8dc54cabcb` | `2026-07-23T16:51:33.806423578Z` | 0 | running |
+| `butterfly_alertmanager` | `f47c29b624e9e8a4bc727674e92438a6826ce95d9c47caf749eb04575c7f0c09` | `sha256:51a825c2a40acc3e338fdd00d622e01ec090f72be2b3ea46be0839cd47a4d286` | `2026-07-22T16:21:12.601362566Z` | 0 | running |
 
 ## Phase 9 — Consumer onboarding
 
@@ -273,3 +320,8 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-16 | Phase 7 removal rollout retry 6 | COMPLETE | approved XSP-only correction preserved image rollback tag `butterfly-phase7-removal-retry2-rollback-xsp:20260816T160420Z` and permission-identical environment backup `/opt/butterflyguy/infra/.env.phase7-xsp-pre-20260816T160420Z`; exactly one `SCHWAB_GATEWAY_URL` line changed, with all other lines and file metadata preserved; rendered Compose requires `schwab-gateway:8011` and shadow false | XSP `d397feeda674` / `sha256:804a757...06f6` passed intended-image, zero-restart, health/readiness, structured-log, token initialization, uniqueness, paper/live guards, direct access, absent embedded gateway, resolved gateway alias, and unchanged-container gates. Settled fleet at clean source `43a0102`: SPX `c0f176cee845` / `sha256:b1dfbe1...7e549`, NDX `ef0ed41f6b0e` / `sha256:b4cea80...321f6`, and XSP all run uniquely with health/readiness `200`, zero restarts, and zero bounded log anomalies; all out-of-scope IDs are unchanged. Final DB OPEN trades and nonterminal intents are `0`; seven-day broker SPX/NDX/XSP positions, active orders, missing/unmapped statuses, and duplicate order IDs are all `0`. Rollback artifacts are retained; no database, monitoring, gateway, candidate, or legacy service was changed. |
 | 2026-08-16 | Token refresh rebuild | BLOCKED | pushed and activated clean source `a8376f6`; refreshed token file is newer than the Phase 7 rollout, protected as mode `0600`/owner `1001`, and byte-identical through the shared SPX/NDX/XSP mount; one authenticated seven-day audit passed with every position/order/status count `0`, then the immediate pre-restart audit and one bounded retry both returned `oauth_error` | DB OPEN trades and nonterminal intents remained `0`. Fresh no-cache images were built but not deployed: SPX `sha256:1ca3485...c726d`, NDX `sha256:a5d0cb6...e1203`, XSP `sha256:e14544e...c44ac`. Verified rollback tags `butterfly-token-rebuild-rollback-{spx,ndx,xsp}:20260816T234322Z` preserve the running images; `infra-app_*:latest` was restored to those images after the failed gate. SPX `c0f176cee845`, NDX `ef0ed41f6b0e`, and XSP `d397feeda674` were not recreated or restarted and remain unique, zero-restart, health/readiness `200`, and log-clean. Rebuild/restart remains blocked until authenticated broker initialization and the aggregate audit pass reliably with the refreshed token. |
 | 2026-08-16 | Token refresh rebuild retry | COMPLETE | explicit secret-replacement approval; secret-safe comparison proved the local configured token had a newer authorization lineage while Helios still mounted the prior lineage; lock-aware atomic replacement advanced the shared lineage, preserved mode `0600`/owner `1001`, and created a protected pre-replacement backup stamped `20260817T003229Z`; authenticated refresh and the aggregate broker audit passed before restart | At clean source `4098339`, previously built images were activated and services recreated one at a time: SPX `ef8c1dbc060f` / `sha256:1ca3485...c726d`, NDX `0331224f4d13` / `sha256:a5d0cb6...e1203`, XSP `8979c8c645d8` / `sha256:e14544e...c44ac`. Each passed intended-image, zero-restart, health/readiness, structured-log, token initialization, uniqueness, paper/live guards, direct access, absent embedded gateway, and between-service DB/broker gates; XSP also passed resolved `schwab-gateway:8011` and shadow false. Settled final fleet is unique, health/readiness `200`, zero-restart, log-clean, and sees byte-identical protected token contents. DB OPEN trades/nonterminal intents and seven-day broker SPX/NDX/XSP positions, active orders, missing/unmapped statuses, and duplicate order IDs are all `0`; all out-of-scope container IDs are unchanged and rollback tags remain retained. |
+| 2026-08-16 | Phase 8 baseline | IN PROGRESS | clean Helios `main` at `7ca86fb52fe05bb60f70afe2480db92361d45dda`; exact full resource baseline above; qualifying start `2026-08-17T00:39:37.451595824Z` | SPX/NDX/XSP match the expected full images, are uniquely running with zero restarts, and return health/readiness `200`. The seven-day gate ends no earlier than `2026-08-24T00:39:37.451595824Z`; earlier candidate and Phase 7 evidence is not credited. |
+| 2026-08-16 | Phase 8 baseline | IN PROGRESS | standalone `11f588627c88c00312b360451eadb9b56c86542aacfa6a4468e20826f61a02fb` / `sha256:d31e679d15e60e3ca8b794a4ff22ed4c742836cabd102656121a90630ab5ef04`; legacy `675a04e26b1c9b4c2726bfc0cc082b0ccebbb369d0f38fc05e7463eef29d3114` / `sha256:6eb9f560effae529a2f578b5a4e5a1b0da2fd124cb4566fe9b097f01ec8b0ec8` | Standalone is unique, healthy/ready `200`, loopback-only on `8011`, monitoring-only with alias `schwab-gateway`, unprivileged/read-only, all capabilities dropped, `no-new-privileges`, and `unless-stopped`; legacy remains preserved stopped. Exact Prometheus target is up, token-ready is `1`, both gateway rules are loaded, and zero gateway alerts fire. |
+| 2026-08-16 | Phase 8 baseline | IN PROGRESS | shared protected document: lineage `2026-08-16T23:34:35Z`, mode `0600`, owner `1001:1001`, six identical consumer views, lock available | One serialized authenticated broker audit caused an ordinary atomic access-token persistence: inode advanced from `876` to `3842` and mtime to `2026-08-17T02:11:27.607379Z` while reauthorization lineage remained unchanged. All six views stayed identical; this ordinary refresh is not the scheduled Phase 8 reauthorization cycle. |
+| 2026-08-16 | Phase 8 baseline | IN PROGRESS | DB OPEN trades `0`; nonterminal intents `0`; window trades/mark-v1 trades/broker intents `0/0/0`; broker SPX/NDX/XSP positions `0/0/0`, active orders `0`, missing/unmapped statuses `0/0`, duplicate order IDs `0`; Docker lifecycle events through `2026-08-17T03:12:02Z` all `0` | SPX/NDX/XSP and standalone logs from the window start have zero error/critical, traceback, auth, lock, persistence, reload-failure, unknown/duplicate-order, reconciliation, and readiness anomalies. Candidate-feed internal health/metrics are `200` with zero collection/archive failure counters, but its Docker history timed out after five minutes and again with an explicit end bound. Preserve this as an unresolved evidence gap; do not count the initial checkpoint complete or infer an outage/clock reset from it alone. |
+| 2026-08-16 | Phase 8 rollback baseline | IN PROGRESS | `butterfly-token-rebuild-rollback-spx:20260816T234322Z` → `sha256:b1dfbe1e90c70cf128be86c04ccc4c34ee87b6b27e5a3d04513f9a13ca17e549`; NDX → `sha256:b4cea80e9292e463f296b432cf473e7b812ca23a3052e87e8d4d9ab83bf321f6`; XSP → `sha256:804a757434dffdefbf96ae2a26781bdfa55cdb6e769ec90d4fffb7343a3406f6`; Phase 7 XSP rollback → `sha256:26951e728019d8fda94c9ea2b5b1bf69766bb0ef14c028cb3ccc58b04e351634` | All four verified tags remain present; stopped legacy and standalone release images remain present. No rollback, rebuild, restart, secret replacement, or runtime mutation occurred. |
