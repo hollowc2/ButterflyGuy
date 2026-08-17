@@ -190,18 +190,17 @@ Acceptance: legacy is not needed for the full stability window.
   `2026-08-17T00:35:43.575860619Z` and NDX at `2026-08-17T00:37:12.747255083Z`.
   Seven consecutive 24-hour periods therefore cannot complete before
   `2026-08-24T00:39:37.451595824Z`.
-- Continuity: no clock reset is recorded. The initial checkpoint is provisional because
-  the candidate feed's Docker `json-file` history did not return within either a
-  five-minute bound or an explicitly end-bounded retry. Its container identity, zero
-  restarts, internal health/metrics `200`, zero collection/archive failure counters,
-  protected token view, and zero Docker lifecycle events passed, but those signals do not
-  replace the missing structured-log evidence.
+- Continuity: no clock reset is recorded. The initial checkpoint is complete through
+  `2026-08-17T03:30:00Z`. The candidate feed's Docker log API could not return even one
+  record, but its 170,225-byte `json-file` was parsed directly through the existing
+  node-exporter's read-only host mount. All `848` envelopes were well formed; the `684`
+  records in the qualifying interval had zero anomalies in every required category. A
+  control parse of SPX's log produced the same clean classification.
 - Full regular market session: `PENDING`.
 - Scheduled token reauthorization/reload-lineage cycle: `PENDING`. The lineage installed
   immediately before this window is baseline evidence only and does not satisfy this item.
-- Interruptions / clock resets: none observed. The log-retrieval evidence gap is not
-  classified as an outage or reset without service evidence, but it must be resolved before
-  the interval can be accepted.
+- Interruptions / clock resets: none observed. The initial log-retrieval evidence gap was
+  resolved read-only without changing the feed, Docker configuration, or any live resource.
 - Retained rollback: stopped legacy container/image; standalone `v0.1.0` image; Phase 6
   final monitoring backups; the three `butterfly-token-rebuild-rollback-*` tags stamped
   `20260816T234322Z`; and the XSP Phase 7 removal rollback tag stamped
@@ -325,3 +324,4 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-16 | Phase 8 baseline | IN PROGRESS | shared protected document: lineage `2026-08-16T23:34:35Z`, mode `0600`, owner `1001:1001`, six identical consumer views, lock available | One serialized authenticated broker audit caused an ordinary atomic access-token persistence: inode advanced from `876` to `3842` and mtime to `2026-08-17T02:11:27.607379Z` while reauthorization lineage remained unchanged. All six views stayed identical; this ordinary refresh is not the scheduled Phase 8 reauthorization cycle. |
 | 2026-08-16 | Phase 8 baseline | IN PROGRESS | DB OPEN trades `0`; nonterminal intents `0`; window trades/mark-v1 trades/broker intents `0/0/0`; broker SPX/NDX/XSP positions `0/0/0`, active orders `0`, missing/unmapped statuses `0/0`, duplicate order IDs `0`; Docker lifecycle events through `2026-08-17T03:12:02Z` all `0` | SPX/NDX/XSP and standalone logs from the window start have zero error/critical, traceback, auth, lock, persistence, reload-failure, unknown/duplicate-order, reconciliation, and readiness anomalies. Candidate-feed internal health/metrics are `200` with zero collection/archive failure counters, but its Docker history timed out after five minutes and again with an explicit end bound. Preserve this as an unresolved evidence gap; do not count the initial checkpoint complete or infer an outage/clock reset from it alone. |
 | 2026-08-16 | Phase 8 rollback baseline | IN PROGRESS | `butterfly-token-rebuild-rollback-spx:20260816T234322Z` → `sha256:b1dfbe1e90c70cf128be86c04ccc4c34ee87b6b27e5a3d04513f9a13ca17e549`; NDX → `sha256:b4cea80e9292e463f296b432cf473e7b812ca23a3052e87e8d4d9ab83bf321f6`; XSP → `sha256:804a757434dffdefbf96ae2a26781bdfa55cdb6e769ec90d4fffb7343a3406f6`; Phase 7 XSP rollback → `sha256:26951e728019d8fda94c9ea2b5b1bf69766bb0ef14c028cb3ccc58b04e351634` | All four verified tags remain present; stopped legacy and standalone release images remain present. No rollback, rebuild, restart, secret replacement, or runtime mutation occurred. |
+| 2026-08-16 | Phase 8 checkpoint 0 | COMPLETE | direct read-only candidate-feed log aggregate through `2026-08-17T03:30:00Z`: file bytes `170225`, envelopes `848`, malformed `0`, qualifying records `684`; SPX control records `341`, malformed `0` | Docker's log API returned immediately for `tail=0` but timed out before one record for `tail=1`. The existing node-exporter host-root mount is read-only, so its UID-0 exec parsed the protected log in place without emitting records or changing state. Candidate feed and SPX both had zero error/critical, traceback, authentication, lock, persistence, reload-failure, unknown-order, duplicate-order, reconciliation, and readiness anomalies. The initial evidence gap is resolved and the qualifying clock remains `2026-08-17T00:39:37.451595824Z`. |
