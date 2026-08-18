@@ -235,6 +235,17 @@ Acceptance: legacy is not needed for the full stability window.
   trade, not a regression. Confirm NDX clears its halt at the next session open. The daily report
   card's `trade_count: 0` is not in conflict: it reports the real Schwab `MARGIN` account, whose
   balance correctly did not move because butterfly execution is paper.
+- In-window change `1532267`, "cap Grafana datasource connection pools", landed at
+  `2026-08-18T21:38:15-0700` from a separate session. It is compatible with the clock: the live
+  datasources were capped through the Grafana API, so `butterfly_grafana` was not restarted and
+  still reports `started=2026-07-23T16:51:33.806423578Z` with `restarts=0`, consistent with the
+  zero lifecycle events recorded above. The checked-in provisioning file and
+  `candidate_fleet/registry.py` only prevent `candidatectl render` from reintroducing uncapped
+  datasources, and neither is mounted into a running container. This also removes a latent threat
+  to the remaining window: Grafana held `46` of `max_connections=50`, starving the nightly report
+  among others, and the shared server now sits at `18` total connections. That starvation was not
+  the cause of the `2026-08-17` report failure, which was `ModuleNotFoundError`, but it was an
+  independent path to the same gate failing later in the window.
 - Scheduling note: Vixie cron ignores `CRON_TZ` in user crontabs, which
   `tools/run_live_performance_cron.sh` documents and defends against by scheduling both `20:30Z`
   and `21:30Z` and self-guarding on `13:30` America/Los_Angeles, so exactly one runs across a DST
