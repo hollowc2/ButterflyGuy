@@ -5,6 +5,9 @@ import yaml
 from pydantic import ValidationError
 
 from butterfly_guy.candidate_fleet.registry import (
+    GRAFANA_CONN_MAX_LIFETIME_SECONDS,
+    GRAFANA_MAX_IDLE_CONNS,
+    GRAFANA_MAX_OPEN_CONNS,
     CandidateRegistration,
     CandidateRegistry,
     load_registry,
@@ -310,3 +313,39 @@ def test_registry_requires_comparable_risk_profiles(tmp_path: Path) -> None:
         error == "risk-drift: risk settings must match baseline"
         for error in validate_registry(candidate, repository_root=tmp_path)
     )
+
+
+def test_generated_datasources_cap_grafana_connection_pools() -> None:
+    """Each candidate adds a datasource against the shared TimescaleDB server.
+
+    Grafana holds roughly ``maxOpenConns`` connections open per datasource, so an
+    uncapped fleet can exhaust ``max_connections`` and starve the evaluators.
+    """
+    runtime = render_runtime(registry())
+
+    datasources = yaml.safe_load(runtime.grafana_datasources)["datasources"]
+    assert datasources, "expected at least one generated datasource"
+
+    for datasource in datasources:
+        json_data = datasource["jsonData"]
+        assert json_data["maxOpenConns"] == GRAFANA_MAX_OPEN_CONNS
+        assert json_data["maxIdleConns"] == GRAFANA_MAX_IDLE_CONNS
+        assert json_data["connMaxLifetime"] == GRAFANA_CONN_MAX_LIFETIME_SECONDS
+
+    # The whole fleet's dashboard footprint must stay well inside the server's
+    # configured max_connections, leaving room for the evaluators and apps.
+    assert len(datasources) * GRAFANA_MAX_OPEN_CONNS <= 20
+
+
+def test_checked_in_provisioning_caps_grafana_connection_pools() -> None:
+    path = ROOT / "infra/grafana/provisioning/datasources/datasources.yml"
+    datasources = yaml.safe_load(path.read_text())["datasources"]
+
+    postgres = [d for d in datasources if d["type"] == "postgres"]
+    assert postgres, "expected checked-in postgres datasources"
+
+    for datasource in postgres:
+        json_data = datasource["jsonData"]
+        assert json_data["maxOpenConns"] == GRAFANA_MAX_OPEN_CONNS
+        assert json_data["maxIdleConns"] == GRAFANA_MAX_IDLE_CONNS
+        assert json_data["connMaxLifetime"] == GRAFANA_CONN_MAX_LIFETIME_SECONDS

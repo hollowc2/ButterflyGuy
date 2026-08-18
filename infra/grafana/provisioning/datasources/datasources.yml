@@ -23,6 +23,9 @@ datasources:
       postgresVersion: 1600
       timescaledb: true
       database: butterfly_guy
+      maxOpenConns: 2
+      maxIdleConns: 1
+      connMaxLifetime: 600
     editable: true
 
   - name: TimescaleDB SPX Candidate
@@ -39,4 +42,7 @@ datasources:
       postgresVersion: 1600
       timescaledb: true
       database: butterfly_guy_spx_candidate
+      maxOpenConns: 2
+      maxIdleConns: 1
+      connMaxLifetime: 600
     editable: true

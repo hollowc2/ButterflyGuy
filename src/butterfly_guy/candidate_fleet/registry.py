@@ -29,6 +29,13 @@ STANDALONE_CANDIDATE_RESOURCES = {
     "database_name": "butterfly_guy_spx_candidate",
 }
 
+# Every candidate adds one Grafana Postgres datasource against the shared
+# TimescaleDB server. Grafana keeps roughly maxOpenConns connections alive per
+# datasource, so these bound the fleet's total dashboard footprint.
+GRAFANA_MAX_OPEN_CONNS = 2
+GRAFANA_MAX_IDLE_CONNS = 1
+GRAFANA_CONN_MAX_LIFETIME_SECONDS = 600
+
 
 class CandidateRegistration(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -273,6 +280,13 @@ def render_runtime(
                     "sslmode": "disable",
                     "postgresVersion": 1600,
                     "timescaledb": True,
+                    # Grafana defaults to an effectively unbounded pool per
+                    # datasource. With one datasource per candidate that can
+                    # exhaust the shared server's max_connections and starve the
+                    # evaluators, so cap each pool.
+                    "maxOpenConns": GRAFANA_MAX_OPEN_CONNS,
+                    "maxIdleConns": GRAFANA_MAX_IDLE_CONNS,
+                    "connMaxLifetime": GRAFANA_CONN_MAX_LIFETIME_SECONDS,
                 },
                 "secureJsonData": {"password": "${DATABASE_PASSWORD}"},
                 "editable": False,
