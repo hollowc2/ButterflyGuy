@@ -174,8 +174,9 @@ reconciliation, and token handling are unchanged.
 
 Status: `IN PROGRESS`
 
-- [ ] Run standalone for seven consecutive days including one full market session and one
-  scheduled token reauthorization/reload lineage cycle.
+- [ ] Run standalone for seven consecutive days including one full market session (`COMPLETE`
+  `2026-08-18`) and one scheduled token reauthorization/reload lineage cycle (`PENDING`, due
+  Saturday `2026-08-22`).
 - [ ] Confirm monitoring has no unexplained downtime, persistence/lock/auth degradation and
   ButterflyGuy has no decision or broker-safety regression.
 - [ ] Obtain explicit approval before removing the stopped legacy container or obsolete
@@ -210,12 +211,35 @@ Acceptance: legacy is not needed for the full stability window.
 - Bounded-log method: substring scans over raw log text produce false positives, because `401` and
   `403` occur inside fractional-second timestamps such as `.401776` and `.403691`. Anomaly counts
   must be taken from parsed structured fields, not raw substrings.
-- Full regular market session: `PENDING`. The prior session is `FAILED — NO CREDIT`: pre-open
-  through settlement, EOD charts, the scheduled live-performance page, runtime safety, and broker
-  flatness passed, but the scheduled daily reporter raised `ModuleNotFoundError` before producing
-  its archive or success event. The next qualifying session is `2026-08-18`, observed through its
-  scheduled daily report. That reporter runs at `22:00Z`, confirmed by `daily_report_card_sent`
-  events at `2026-08-13T22:00:06.697953Z` and `2026-08-14T22:00:08.396761Z`.
+- Session-close evidence for `2026-08-18`, covering the clock start through `22:10Z`: the hourly
+  keepalive ran `19` times with `19` authenticated refreshes and `0` errors; token lineage held at
+  `2026-08-16T23:34:35Z` with mode `0600`/`1001:1001` and all six views agreeing on inode `788`
+  after an atomic replace, with the lock still acquirable; all `18` scoped containers kept exact
+  start times, restart counts, and image IDs, with `0` Docker lifecycle events; field-scoped logs
+  over `83,421` lines across six services returned `0` error/critical, traceback, auth, lock, and
+  persistence events, with `9` warnings that are all strategy-level (`no_candidates_*` at the open
+  and the single NDX `max_daily_loss_triggered`); all `11` in-scope Prometheus targets up with `0`
+  in-scope alerts; DB open trades and nonterminal intents both `0`; and the serialized broker audit
+  returned SPX/NDX/XSP positions, active orders, same-day target orders, missing/unmapped statuses,
+  and duplicate/missing IDs all `0`.
+- Full regular market session: `COMPLETE` for `2026-08-18`. The reporter that failed the previous
+  attempt succeeded: `schwab_client_initialized` at `2026-08-18T22:00:06.599560Z`,
+  `daily_report_card_sent` at `22:00:08.052569Z`, and archive
+  `reports/daily_report_card/2026-08-18.md` at `344` bytes, matching every prior good archive. The
+  scheduled live-performance page regenerated `index.html` at `2026-08-18T20:30:04.532842979Z`.
+  The session exercised real strategy paths rather than idling: three butterfly entries at
+  `14:00:10`–`14:00:13`, two `drawdown_afternoon` exits, one `cash_settled` expiry, and one
+  `max_daily_loss_triggered` risk halt — XSP id `243` at `-0.29`, SPX id `244` at `-1.75`, NDX id
+  `245` at `-5.83`, all `CLOSED`. `daily_risk_state` shows NDX `max_loss_hit`/`halted` true for the
+  day with SPX and XSP false, which is the risk limit behaving as designed on a single losing
+  trade, not a regression. Confirm NDX clears its halt at the next session open. The daily report
+  card's `trade_count: 0` is not in conflict: it reports the real Schwab `MARGIN` account, whose
+  balance correctly did not move because butterfly execution is paper.
+- Scheduling note: Vixie cron ignores `CRON_TZ` in user crontabs, which
+  `tools/run_live_performance_cron.sh` documents and defends against by scheduling both `20:30Z`
+  and `21:30Z` and self-guarding on `13:30` America/Los_Angeles, so exactly one runs across a DST
+  change. Every `CRON_TZ` line in the crontab is therefore inert, and the daily reporter's `0 22`
+  means `22:00Z`.
 - Scheduled token reauthorization/reload-lineage cycle: `PENDING`. The lineage installed
   immediately before this window is baseline evidence only and does not satisfy this item. The
   active lineage `2026-08-16T23:34:35Z` expires `2026-08-23T23:34:35Z`, a Sunday, so the cadence
@@ -529,3 +553,4 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-18 | Phase 8 corrective validation | COMPLETE | scheduled keepalive at `2026-08-18T04:00:06.893767848Z` returned one authenticated refresh and SPX quote `200`, with `0` import/auth/lock/persistence failures appended past the fixed `03:00Z` boundary at byte `148201` | Observed: lineage held at `2026-08-16T23:34:35Z` while only the access token rotated; protection `0600`/`1001:1001`; six identical views on inode `3779` at `787` bytes; lock acquired under five seconds. All `18` scoped containers kept exact start times, restart counts, and image IDs, with `0` Docker lifecycle events `03:00Z`–`04:01Z`. Field-scoped bounded logs over `624` well-formed lines across three applications, both gateways, and the feed returned `0` in every anomaly category; a raw-substring scan had produced three false positives from `401`/`403` inside fractional-second timestamps. All `11` in-scope Prometheus targets up with `0` in-scope alerts. Serialized broker audit returned SPX/NDX/XSP positions, active orders, same-day target orders, missing/unmapped statuses, and duplicate/missing IDs all `0`, executed from the repaired host virtualenv. Inference: the dependency-validation gate passes in full, so this timestamp is the fresh qualifying start with earliest end `2026-08-25T04:00:06.893767848Z`. |
 | 2026-08-18 | Phase 8 recovery-retention root cause | IDENTIFIED | host cron `/etc/cron.d/docker-image-prune` runs `36 0 * * * root docker image prune -af --filter "until=24h"`; its `00:36Z` firing falls inside the `2026-08-17T21:15:07.079205Z`–`2026-08-18T02:27:33.496877Z` loss window | Observed: `-a` removes tagged images no container references, and both missing stamps `20260816T234322Z`/`20260816T160420Z` were older than `24h` and orphaned by the current application images. `docker system df` reports `25` images, `25` active, `0B` reclaimable, the exact steady state this prune leaves; surviving gateway/legacy images are each held by a running or stopped container, and no prune appears in shell history. Inference: the prior "cause unknown" record is superseded. |
 | 2026-08-18 | Phase 8 recovery-retention correction | COMPLETE | `/etc/cron.d/docker-image-prune` now reads `36 0 * * * root docker image prune -f --filter "until=24h"`, applied `2026-08-18T04:11:36.012305190Z`; original preserved at `/root/docker-image-prune.bak-20260818T040006Z` outside `/etc/cron.d/` | Observed: `root:root` ownership and mode `644` unchanged, no residual `-a`, and no stray file added to `/etc/cron.d/`. Dangling images are `0`, so the next firing is a no-op. All six recovery/release tags — the three `butterfly-phase8-reset-recovery-*:20260818T030242Z`, `schwab_gateway_live:v0.1.0`, `butterfly_gateway_foundation-schwab_gateway_live:latest`, and `schwab_gateway_candidate-live:latest` — report `dangling=0`, and the three application tags still map exactly to running images `1ca3485062f8`/`a5d0cb60883b`/`e14544ec2b85`. Inference: recovery tags now survive an application recreate, closing the structural recurrence that lost the four historical images. Applied by Corey from an interactive terminal; no container, image, or service was otherwise touched. |
+| 2026-08-18 | Phase 8 full market session | COMPLETE | daily reporter succeeded at `2026-08-18T22:00:08.052569Z` with archive `reports/daily_report_card/2026-08-18.md` (`344` bytes); live-performance page regenerated `2026-08-18T20:30:04.532842979Z`; serialized broker audit `FLAT` | Observed: the session exercised entry, exit, settlement, and risk paths rather than idling — XSP `243` `cash_settled` `-0.29`, SPX `244` `drawdown_afternoon` `-1.75`, NDX `245` `drawdown_afternoon` `-5.83`, all `CLOSED`, with NDX `max_loss_hit`/`halted` true for the day and SPX/XSP false. Keepalive `19/19` authenticated refreshes with `0` errors; lineage `2026-08-16T23:34:35Z` held with six views on inode `788`, mode `0600`, lock acquirable; all `18` containers unchanged with `0` lifecycle events; `83,421` log lines across six services with `0` error/critical/traceback/auth/lock/persistence and `9` strategy-level warnings; `11/11` in-scope targets up, `0` in-scope alerts; DB open trades and nonterminal intents `0`. Inference: the market-session criterion is satisfied and the clock is unbroken. Only the token reauthorization/reload-lineage cycle remains open before the `2026-08-25T04:00:06.893767848Z` earliest end. Confirm NDX clears its daily halt at the next open. |
