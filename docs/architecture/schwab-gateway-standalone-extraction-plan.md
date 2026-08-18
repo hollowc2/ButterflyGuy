@@ -191,7 +191,7 @@ Acceptance: legacy is not needed for the full stability window.
   interval counts toward the required seven consecutive days. A new start and earliest end will
   be recorded only after the host environment and recovery-image baseline are explicitly
   approved, corrected, and fully validated.
-- Continuity: active-runtime evidence remains clean through `2026-08-18T02:30:23.535636Z`; the
+- Continuity: active-runtime evidence remains clean through `2026-08-18T03:07:08.236737Z`; the
   latest serialized broker-flatness audit and paired shared-lineage evidence are complete through
   `2026-08-18T02:31:06.537194Z`. The overall checkpoint fails closed on recovery-image retention.
   The candidate feed's Docker log API gap was resolved through
@@ -211,12 +211,13 @@ Acceptance: legacy is not needed for the full stability window.
   disappeared; Docker retained no image events for the interval, so exact deletion time and cause
   are unknown. No replacement clock starts while either condition remains unresolved.
 - Retained rollback: stopped legacy container/image; standalone `v0.1.0` image; Phase 6
-  final monitoring backups; and all three exact gateway-image tags remain. The three
+  final monitoring backups; all three exact gateway-image tags; and three replacement application
+  recovery tags stamped `20260818T030242Z` remain. The three
   `butterfly-token-rebuild-rollback-*` tags stamped `20260816T234322Z` and the XSP Phase 7 removal
   rollback tag stamped `20260816T160420Z` are missing together with their four underlying image
   IDs. No active container or gateway/legacy recovery image changed.
 
-#### Phase 8 corrective approval packet — prepared, not approved
+#### Phase 8 corrective approval packet — approved, validation in progress
 
 - Scope: repair the stale host virtualenv and establish a replacement application recovery
   baseline without changing source, strategy, risk, schedules, secrets, database, monitoring,
@@ -242,9 +243,11 @@ Acceptance: legacy is not needed for the full stability window.
   through the next scheduled daily report. The prior session remains failed evidence and cannot
   be repaired retroactively.
 
-Explicit Corey approval is required before installing either package or creating replacement
-image tags. It would not authorize a service restart/rebuild, token reauthorization, report send,
-legacy action, deletion beyond packet rollback, or Git push.
+Corey approved this packet. The two exact locked packages and three replacement recovery tags are
+installed; immediate validation passed. The approval did not authorize a service restart/rebuild,
+token reauthorization, report send, legacy action, deletion beyond packet rollback, or Git push.
+The fresh clock remains stopped until the next naturally scheduled hourly keepalive and its paired
+safety gates pass.
 
 #### Scheduled token-cycle approval packet — prepared, not approved
 
@@ -483,3 +486,4 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-17 | Phase 8 full-session report gate | FAILED | the strict session audit passed all production, candidate, feed, fill, settlement, schedule, decision, parity-failure, risk, limit, EOD, live-page, and broker-intent checks, then stopped at the required daily-report gate; the `2026-08-17` archive and valid delivery event are absent | Observed: the `22:00Z` cron invocation updated the report log and ended in an unhandled `ModuleNotFoundError`; the redacted frame chain ends at `send_daily_report_card.py:83` → `schwab_client.py:131` (`initialize`). Import/config/trading-day/webhook-presence/token-file/report-directory preflights pass. The host virtualenv lacks `schwab_token_store` and `schwab_gateway_sdk`, while the unchanged SPX runtime has both. The hourly keepalive log contains at least `36` consecutive missing-token-store failures, spanning the attempted Phase 8 start. Inference: this is a pre-existing host-environment regression, so the attempted clock is invalidated back to `2026-08-17T00:39:37.451595824Z`; the otherwise clean session receives no credit. Correction requires the approval packet above and a new complete session. |
 | 2026-08-18 | Phase 8 recovery-retention gate | BLOCKED | all four historical application rollback tags are absent, and image inspection confirms their exact underlying image IDs are also absent; all three standalone/legacy image tags still resolve to the exact recorded images | Observed: the four mappings passed at `2026-08-17T21:15:07.079205Z` and failed by the diagnostic ending `2026-08-18T02:27:33.496877Z`. Docker returned zero retained image events for that interval, so deletion time and cause remain unknown. No missing historical name will be reused or represented as restored. A replacement recovery baseline requires Corey's approval and a fresh clock. |
 | 2026-08-18 | Phase 8 post-failure safety isolation | BLOCKED | diagnostic interval `2026-08-17T21:15:07.079205Z`–`2026-08-18T02:30:23.535636Z`: all `18` exact containers, uniqueness, exposure, endpoints, runtime guards, lifecycle, bounded application/feed/gateway logs, Prometheus, token, and database gates pass before the checkpoint still fails closed on recovery retention | Observed: container lifecycle events and all required runtime anomaly categories are `0`; Prometheus target/token-ready minima are `1/1` with no alerts; DB open trades/nonterminal intents/broker intents are `0/0/0`. The paired broker audit again reports positions `0/0/0`, active and same-day target-underlying orders `0/0`, missing/unmapped statuses `0/0`, duplicate/missing IDs `0/0`, and ambiguous timestamps `0`; exact baseline lineage, protected six-view identity, and lock availability pass through `2026-08-18T02:31:06.537194Z`. Inference: the active trading/gateway/token runtime remains safe and unchanged, but clean runtime evidence cannot override the reporter/keepalive regression or lost recovery images. |
+| 2026-08-18 | Phase 8 corrective packet | IN PROGRESS | explicit approval; exact locked `schwab-token-store==0.1.0` and `schwab-gateway-sdk==0.1.0` installed into the host virtualenv from upstream commit `2d1da47b37ba48e3603f8d52a2fe73a55924aaf0` with `--no-deps`; three replacement tags `butterfly-phase8-reset-recovery-{spx,ndx,xsp}:20260818T030242Z` map to the exact currently running application images | Observed: both host imports now pass and match the unchanged runtime; installed-package metadata proves the exact locked commit/subdirectories. Immediate fixed-output interval through `2026-08-18T03:07:08.236737Z` passes source, all `18` exact containers, dependency boundary, uniqueness, exposure, endpoints, runtime guards, lifecycle, `12` bounded logs, Prometheus, token, DB, the recorded absence of all four historical rollback tags/images, all three replacement mappings, and all three gateway-image mappings. Lifecycle/anomaly counts are `0`; no container was restarted/recreated. Inference: the correction introduced no observed runtime regression, but no fresh clock starts until the naturally scheduled hourly keepalive succeeds and paired safety evidence passes. |
