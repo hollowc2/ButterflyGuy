@@ -172,7 +172,7 @@ reconciliation, and token handling are unchanged.
 
 ## Phase 8 — Stability window and legacy retirement
 
-Status: `BLOCKED`
+Status: `IN PROGRESS`
 
 - [ ] Run standalone for seven consecutive days including one full market session and one
   scheduled token reauthorization/reload lineage cycle.
@@ -185,37 +185,71 @@ Acceptance: legacy is not needed for the full stability window.
 
 ### Phase 8 stability ledger
 
-- Qualifying start: `PENDING CORRECTION`. The attempted start
-  `2026-08-17T00:39:37.451595824Z` is invalidated because the scheduled hourly keepalive was
-  already failing on a missing host dependency before that instant. None of the attempted
-  interval counts toward the required seven consecutive days. A new start and earliest end will
-  be recorded only after the host environment and recovery-image baseline are explicitly
-  approved, corrected, and fully validated.
-- Continuity: active-runtime evidence remains clean through `2026-08-18T03:07:08.236737Z`; the
-  latest serialized broker-flatness audit and paired shared-lineage evidence are complete through
-  `2026-08-18T02:31:06.537194Z`. The overall checkpoint fails closed on recovery-image retention.
-  The candidate feed's Docker log API gap was resolved through
-  the existing node-exporter's read-only host mount; every bounded nonempty envelope remains
-  well formed and every required anomaly category remains zero.
-- Full regular market session: `FAILED — NO CREDIT`. Pre-open through settlement, EOD charts,
-  the scheduled live-performance page, runtime safety, and broker flatness passed, but the
-  scheduled daily reporter raised `ModuleNotFoundError` before producing its archive or success
-  event. A new complete session is required after correction.
+- Qualifying start: `2026-08-18T04:00:06.893767848Z`, the instant the first naturally scheduled
+  hourly keepalive succeeded after the approved corrective packet. Earliest end is
+  `2026-08-25T04:00:06.893767848Z`. Seven days was retained over a shorter window because it is
+  exactly the Schwab refresh-token lifetime, so the interval contains a full token cycle
+  independent of start phase, it covers a complete Monday-through-Friday set of sessions, and it
+  absorbs a Saturday-to-Sunday reauthorization slip of the kind the current lineage already took.
+  The earlier attempted start `2026-08-17T00:39:37.451595824Z` remains invalidated and no part of
+  it is credited.
+- Continuity: the corrective packet's dependency-validation gate passed in full at
+  `2026-08-18T04:00:06.893767848Z`. The scheduled keepalive reported one authenticated refresh and
+  an SPX quote `200`; no import, auth, lock, or persistence failure appended after the fixed
+  `03:00Z` boundary at byte `148201`. Token lineage held at `2026-08-16T23:34:35Z` while only the
+  access token rotated, protection stayed `0600`/`1001:1001`, all six views agreed on inode `3779`
+  at `787` bytes, and the shared lock was acquired inside five seconds. All `18` scoped containers
+  kept their exact start times, restart counts, and image IDs, with zero Docker lifecycle events
+  between `03:00Z` and `04:01Z`. Field-scoped bounded logs across the three applications, both
+  gateways, and the feed returned zero warning/error/critical, traceback, auth, lock, and
+  persistence events over `624` well-formed lines. All `11` in-scope Prometheus targets are up with
+  zero in-scope alerts. The serialized broker audit returned SPX/NDX/XSP positions, active orders,
+  same-day target orders, missing/unmapped statuses, and duplicate/missing IDs all `0`; it ran from
+  the repaired host virtualenv, which also retires the `broker_initialization_failed` /
+  `import_token_store_failed` class of host regression.
+- Bounded-log method: substring scans over raw log text produce false positives, because `401` and
+  `403` occur inside fractional-second timestamps such as `.401776` and `.403691`. Anomaly counts
+  must be taken from parsed structured fields, not raw substrings.
+- Full regular market session: `PENDING`. The prior session is `FAILED — NO CREDIT`: pre-open
+  through settlement, EOD charts, the scheduled live-performance page, runtime safety, and broker
+  flatness passed, but the scheduled daily reporter raised `ModuleNotFoundError` before producing
+  its archive or success event. The next qualifying session is `2026-08-18`, observed through its
+  scheduled daily report. That reporter runs at `22:00Z`, confirmed by `daily_report_card_sent`
+  events at `2026-08-13T22:00:06.697953Z` and `2026-08-14T22:00:08.396761Z`.
 - Scheduled token reauthorization/reload-lineage cycle: `PENDING`. The lineage installed
-  immediately before this window is baseline evidence only and does not satisfy this item.
-- Interruptions / clock resets: attempted clock invalidated back to its proposed start. The host
-  virtualenv lacks both locked extracted packages while the runtime image has both; the bounded
-  keepalive log ends with at least `36` consecutive hourly `schwab_token_store` import failures,
-  spanning the attempted start. Separately, after the last exact retention pass at
-  `2026-08-17T21:15:07.079205Z`, all four application rollback tags and their underlying images
-  disappeared; Docker retained no image events for the interval, so exact deletion time and cause
-  are unknown. No replacement clock starts while either condition remains unresolved.
+  immediately before this window is baseline evidence only and does not satisfy this item. The
+  active lineage `2026-08-16T23:34:35Z` expires `2026-08-23T23:34:35Z`, a Sunday, so the cadence
+  has already slipped off Saturday. Re-authorize on Saturday `2026-08-22` to satisfy this item
+  inside the window and to restore the Saturday deadline.
+- Interruptions / clock resets: the attempted clock was invalidated back to its proposed start,
+  and both blocking conditions are now resolved. The host virtualenv lacked both locked extracted
+  packages while the runtime image had them; the bounded keepalive log carried `53` hourly
+  `schwab_token_store` import failures spanning the attempted start, and the first scheduled run
+  after the corrective install succeeded.
+- Recovery-image loss root cause: `IDENTIFIED`. The earlier record that deletion time and cause
+  were unknown is superseded. Helios carries a host cron at `/etc/cron.d/docker-image-prune`
+  running `36 0 * * * root docker image prune -af --filter "until=24h"`. Its `2026-08-18T00:36Z`
+  firing falls inside the `2026-08-17T21:15:07.079205Z`–`2026-08-18T02:27:33.496877Z` window in
+  which the four tags went from present to absent, and `-a` removes tagged images that no
+  container references. Both stamps `20260816T234322Z` and `20260816T160420Z` were older than the
+  `24h` filter and orphaned once the current application images took over. Corroboration:
+  `docker system df` reports `25` images, `25` active, `0B` reclaimable, which is exactly the
+  steady state this prune leaves; every surviving gateway/legacy image is held by a running or
+  stopped container. No prune appears in shell history, so this was the schedule, not an operator.
+  The recurrence risk is structural: the three replacement recovery tags survive only while their
+  images back running containers, so any application recreate orphans them and the first prune at
+  least `24h` later deletes them. Correcting the cron to `docker image prune -f --filter
+  "until=24h"` reaps only dangling layers and leaves tagged recovery images durable. Corey approved
+  that change; it is not yet applied, because the file is root-owned and requires an interactive
+  operator sudo. Until it is applied, treat every recovery tag as volatile across any application
+  recreate. The reclaimable `12.53GB` of build cache is untouched by either variant.
 - Retained rollback: stopped legacy container/image; standalone `v0.1.0` image; Phase 6
   final monitoring backups; all three exact gateway-image tags; and three replacement application
   recovery tags stamped `20260818T030242Z` remain. The three
   `butterfly-token-rebuild-rollback-*` tags stamped `20260816T234322Z` and the XSP Phase 7 removal
   rollback tag stamped `20260816T160420Z` are missing together with their four underlying image
-  IDs. No active container or gateway/legacy recovery image changed.
+  IDs, deleted by the host prune cron recorded above. No missing historical name will be reused or
+  represented as restored. No active container or gateway/legacy recovery image changed.
 
 #### Phase 8 corrective approval packet — approved, validation in progress
 
@@ -487,3 +521,5 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-18 | Phase 8 recovery-retention gate | BLOCKED | all four historical application rollback tags are absent, and image inspection confirms their exact underlying image IDs are also absent; all three standalone/legacy image tags still resolve to the exact recorded images | Observed: the four mappings passed at `2026-08-17T21:15:07.079205Z` and failed by the diagnostic ending `2026-08-18T02:27:33.496877Z`. Docker returned zero retained image events for that interval, so deletion time and cause remain unknown. No missing historical name will be reused or represented as restored. A replacement recovery baseline requires Corey's approval and a fresh clock. |
 | 2026-08-18 | Phase 8 post-failure safety isolation | BLOCKED | diagnostic interval `2026-08-17T21:15:07.079205Z`–`2026-08-18T02:30:23.535636Z`: all `18` exact containers, uniqueness, exposure, endpoints, runtime guards, lifecycle, bounded application/feed/gateway logs, Prometheus, token, and database gates pass before the checkpoint still fails closed on recovery retention | Observed: container lifecycle events and all required runtime anomaly categories are `0`; Prometheus target/token-ready minima are `1/1` with no alerts; DB open trades/nonterminal intents/broker intents are `0/0/0`. The paired broker audit again reports positions `0/0/0`, active and same-day target-underlying orders `0/0`, missing/unmapped statuses `0/0`, duplicate/missing IDs `0/0`, and ambiguous timestamps `0`; exact baseline lineage, protected six-view identity, and lock availability pass through `2026-08-18T02:31:06.537194Z`. Inference: the active trading/gateway/token runtime remains safe and unchanged, but clean runtime evidence cannot override the reporter/keepalive regression or lost recovery images. |
 | 2026-08-18 | Phase 8 corrective packet | IN PROGRESS | explicit approval; exact locked `schwab-token-store==0.1.0` and `schwab-gateway-sdk==0.1.0` installed into the host virtualenv from upstream commit `2d1da47b37ba48e3603f8d52a2fe73a55924aaf0` with `--no-deps`; three replacement tags `butterfly-phase8-reset-recovery-{spx,ndx,xsp}:20260818T030242Z` map to the exact currently running application images | Observed: both host imports now pass and match the unchanged runtime; installed-package metadata proves the exact locked commit/subdirectories. Immediate fixed-output interval through `2026-08-18T03:07:08.236737Z` passes source, all `18` exact containers, dependency boundary, uniqueness, exposure, endpoints, runtime guards, lifecycle, `12` bounded logs, Prometheus, token, DB, the recorded absence of all four historical rollback tags/images, all three replacement mappings, and all three gateway-image mappings. Lifecycle/anomaly counts are `0`; no container was restarted/recreated. Inference: the correction introduced no observed runtime regression, but no fresh clock starts until the naturally scheduled hourly keepalive succeeds and paired safety evidence passes. |
+| 2026-08-18 | Phase 8 corrective validation | COMPLETE | scheduled keepalive at `2026-08-18T04:00:06.893767848Z` returned one authenticated refresh and SPX quote `200`, with `0` import/auth/lock/persistence failures appended past the fixed `03:00Z` boundary at byte `148201` | Observed: lineage held at `2026-08-16T23:34:35Z` while only the access token rotated; protection `0600`/`1001:1001`; six identical views on inode `3779` at `787` bytes; lock acquired under five seconds. All `18` scoped containers kept exact start times, restart counts, and image IDs, with `0` Docker lifecycle events `03:00Z`–`04:01Z`. Field-scoped bounded logs over `624` well-formed lines across three applications, both gateways, and the feed returned `0` in every anomaly category; a raw-substring scan had produced three false positives from `401`/`403` inside fractional-second timestamps. All `11` in-scope Prometheus targets up with `0` in-scope alerts. Serialized broker audit returned SPX/NDX/XSP positions, active orders, same-day target orders, missing/unmapped statuses, and duplicate/missing IDs all `0`, executed from the repaired host virtualenv. Inference: the dependency-validation gate passes in full, so this timestamp is the fresh qualifying start with earliest end `2026-08-25T04:00:06.893767848Z`. |
+| 2026-08-18 | Phase 8 recovery-retention root cause | IDENTIFIED | host cron `/etc/cron.d/docker-image-prune` runs `36 0 * * * root docker image prune -af --filter "until=24h"`; its `00:36Z` firing falls inside the `2026-08-17T21:15:07.079205Z`–`2026-08-18T02:27:33.496877Z` loss window | Observed: `-a` removes tagged images no container references, and both missing stamps `20260816T234322Z`/`20260816T160420Z` were older than `24h` and orphaned by the current application images. `docker system df` reports `25` images, `25` active, `0B` reclaimable, the exact steady state this prune leaves; surviving gateway/legacy images are each held by a running or stopped container, and no prune appears in shell history. Inference: the prior "cause unknown" record is superseded, and the three replacement recovery tags are volatile across any application recreate until the approved `-a` removal is applied by an operator with sudo. |
