@@ -246,6 +246,43 @@ Acceptance: legacy is not needed for the full stability window.
   among others, and the shared server now sits at `18` total connections. That starvation was not
   the cause of the `2026-08-17` report failure, which was `ModuleNotFoundError`, but it was an
   independent path to the same gate failing later in the window.
+- Gateway rebuild `2026-08-19T18:26:20.639277918Z`: a parallel session rebuilt and replaced the
+  standalone gateway via `docker compose` from `/opt/schwab-gateway`, producing container
+  `1417d0972d08` on new image `e45e70f227f6` (`schwab_gateway-live:latest`). Corey ruled the clock
+  continues, on proof the rebuild is behaviorally a no-op: the gateway source digest is identical
+  at `d915f886f1dd93c502ee`, `schwab-gateway`/`schwab-gateway-sdk`/`schwab-token-store` are all
+  `0.1.0`, `schwab-py` `1.5.1` and `aiohttp` `3.14.3` match, and both images run Python `3.12.13`.
+  The checkout remains at the packet's pinned commit `2d1da47`. Prometheus recorded
+  `up{job="schwab_gateway"}=1` with no scrape gap over `18:15Z`–`18:40Z` and zero gateway alerts,
+  because the swap completed in about four seconds against a fifteen-second scrape. Trading was
+  unaffected: all three applications run `SCHWAB_ACCESS_MODE=direct`. The prior image
+  `schwab_gateway_live:v0.1.0` (`d31e679d15e6`) is retained for rollback. Record the running
+  gateway image as `e45e70f227f6` from this point.
+- Lifecycle-verification method: `docker events` is not a reliable audit source here. Over a
+  44-hour window it returned zero events while a container had provably been replaced, yet
+  returned `307` events for a one-hour window — the daemon's in-memory buffer does not reach back
+  far enough and fails silently rather than partially. Lifecycle must be verified by comparing
+  each container's `Id`, `StartedAt`, and `RestartCount` against the recorded baseline. A
+  `RestartCount` that resets to `0` alongside a newer `StartedAt` indicates replacement, not
+  restart.
+- Broker-audit method: `SchwabClientWrapper.get_positions()` returns the raw account payload, so
+  positions must be read from `securitiesAccount.positions`. An audit reading a top-level
+  `positions` key returns an empty list unconditionally and reports flatness vacuously. Earlier
+  `positions 0/0/0` lines produced that way are not evidence. Re-read correctly at
+  `2026-08-20T00:20Z`: `0` option positions and `0` butterfly-underlying positions, so
+  ButterflyGuy's broker exposure is genuinely flat.
+- Order-status mapping gap: `REPLACED` is absent from both `WORKING_ORDER_STATUSES` and
+  `TERMINAL_ORDER_STATUSES` in `execution/order_manager.py`, so any replaced order is counted
+  unmapped. This stayed invisible while the account held no orders and surfaced as soon as real
+  ones existed. It is latent, not a regression, but a replaced Butterfly order would today be
+  classified unmapped.
+- Account is not Butterfly-exclusive: on `2026-08-19` the shared Schwab `MARGIN` account traded
+  `TQQQ` — eight `BUY` fills of five shares between `19:11:02Z` and `19:54:14Z`, then a `SELL` of
+  ten at `23:50:48Z`, leaving `30` shares at market value `2189.40` against a liquidation value of
+  `2881.80`. No process on Helios placed these: the three applications, `turtlequant-bot`,
+  `halt_scanner`, and the configs contain no `TQQQ` reference, and the equity morning scan runs at
+  `13:00Z`. Treat the order and buying-power surface as shared, and scope every broker gate to
+  option and Butterfly-underlying instruments rather than to whole-account flatness.
 - Scheduling note: Vixie cron ignores `CRON_TZ` in user crontabs, which
   `tools/run_live_performance_cron.sh` documents and defends against by scheduling both `20:30Z`
   and `21:30Z` and self-guarding on `13:30` America/Los_Angeles, so exactly one runs across a DST
@@ -565,3 +602,5 @@ with an independent key and no ButterflyGuy dependency.
 | 2026-08-18 | Phase 8 recovery-retention root cause | IDENTIFIED | host cron `/etc/cron.d/docker-image-prune` runs `36 0 * * * root docker image prune -af --filter "until=24h"`; its `00:36Z` firing falls inside the `2026-08-17T21:15:07.079205Z`–`2026-08-18T02:27:33.496877Z` loss window | Observed: `-a` removes tagged images no container references, and both missing stamps `20260816T234322Z`/`20260816T160420Z` were older than `24h` and orphaned by the current application images. `docker system df` reports `25` images, `25` active, `0B` reclaimable, the exact steady state this prune leaves; surviving gateway/legacy images are each held by a running or stopped container, and no prune appears in shell history. Inference: the prior "cause unknown" record is superseded. |
 | 2026-08-18 | Phase 8 recovery-retention correction | COMPLETE | `/etc/cron.d/docker-image-prune` now reads `36 0 * * * root docker image prune -f --filter "until=24h"`, applied `2026-08-18T04:11:36.012305190Z`; original preserved at `/root/docker-image-prune.bak-20260818T040006Z` outside `/etc/cron.d/` | Observed: `root:root` ownership and mode `644` unchanged, no residual `-a`, and no stray file added to `/etc/cron.d/`. Dangling images are `0`, so the next firing is a no-op. All six recovery/release tags — the three `butterfly-phase8-reset-recovery-*:20260818T030242Z`, `schwab_gateway_live:v0.1.0`, `butterfly_gateway_foundation-schwab_gateway_live:latest`, and `schwab_gateway_candidate-live:latest` — report `dangling=0`, and the three application tags still map exactly to running images `1ca3485062f8`/`a5d0cb60883b`/`e14544ec2b85`. Inference: recovery tags now survive an application recreate, closing the structural recurrence that lost the four historical images. Applied by Corey from an interactive terminal; no container, image, or service was otherwise touched. |
 | 2026-08-18 | Phase 8 full market session | COMPLETE | daily reporter succeeded at `2026-08-18T22:00:08.052569Z` with archive `reports/daily_report_card/2026-08-18.md` (`344` bytes); live-performance page regenerated `2026-08-18T20:30:04.532842979Z`; serialized broker audit `FLAT` | Observed: the session exercised entry, exit, settlement, and risk paths rather than idling — XSP `243` `cash_settled` `-0.29`, SPX `244` `drawdown_afternoon` `-1.75`, NDX `245` `drawdown_afternoon` `-5.83`, all `CLOSED`, with NDX `max_loss_hit`/`halted` true for the day and SPX/XSP false. Keepalive `19/19` authenticated refreshes with `0` errors; lineage `2026-08-16T23:34:35Z` held with six views on inode `788`, mode `0600`, lock acquirable; all `18` containers unchanged with `0` lifecycle events; `83,421` log lines across six services with `0` error/critical/traceback/auth/lock/persistence and `9` strategy-level warnings; `11/11` in-scope targets up, `0` in-scope alerts; DB open trades and nonterminal intents `0`. Inference: the market-session criterion is satisfied and the clock is unbroken. Only the token reauthorization/reload-lineage cycle remains open before the `2026-08-25T04:00:06.893767848Z` earliest end. Confirm NDX clears its daily halt at the next open. |
+| 2026-08-19 | Phase 8 day 2 | COMPLETE | daily report `2026-08-19T22:00:08.267665582Z` with archive `2026-08-19.md` (`345` bytes); live-performance page `20:30:03.829535715Z`; equity morning scan produced `2026-08-18` and `2026-08-19` artifacts at `13:00Z` | Observed: three trades all `CLOSED` — SPX `246` `+0.09` `drawdown_morning`, XSP `247` `-0.34` `cash_settled`, NDX `248` `-6.03` `drawdown_afternoon`; DB open trades and nonterminal intents `0`. Keepalive `45/45` with `0` errors; lineage `2026-08-16T23:34:35Z` held. Logs across six services show `0` error/critical, traceback, auth, lock, and persistence events; warnings are strategy-level, including a bounded `974`-warning NDX entry-retry burst confined to `14:00:12Z`–`14:39:54Z` that stopped at entry. `17` of `18` containers are byte-identical to baseline; the gateway was replaced at `18:26:20Z` and ruled clock-compatible on proven image equivalence. Broker re-audited with the corrected positions path: `0` option and `0` Butterfly-underlying positions. The morning scan's clean runs confirm the host virtualenv repair covered a third consumer of the same import. Inference: day 2 credits; earliest end remains `2026-08-25T04:00:06.893767848Z`. |
+| 2026-08-19 | NDX daily-loss limit is structurally unreachable | OBSERVATION | `configs/config_ndx.yaml` sets `risk.max_daily_loss: 500.0`, but NDX entry debits run about `7.51` at a `100` multiplier, so one position risks roughly `751` | Observed: NDX has lost on all eight trades since `2026-08-10` — `-5.87`, `-7.53`, `-6.66`, `-6.45`, `-7.98`, `-7.93`, `-5.83`, `-6.03` — and `daily_risk_state` shows `max_loss_hit` and `halted` true on every one of those days, always at `trade_count = 1`. Because a single trade's maximum loss exceeds the daily budget, the guard cannot prevent a breach; it only records one afterwards. SPX carries the same `500.0` against roughly `-175` losses and XSP `50.0` against roughly `-34`, so both remain effective. Not a Phase 8 regression, since the pattern predates the window. Any change to trading limits requires Corey's explicit direction. |
