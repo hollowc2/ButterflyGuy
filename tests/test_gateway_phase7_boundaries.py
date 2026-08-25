@@ -130,28 +130,27 @@ def test_sdk_exposes_only_read_only_market_data_routes() -> None:
     )
 
 
-def test_compose_keeps_xsp_default_off_on_the_standalone_alias_and_others_direct() -> None:
+def test_compose_keeps_each_strategy_default_direct_with_staged_gateway_opt_in() -> None:
     compose = yaml.safe_load(_source("infra/docker-compose.yml"))
     services = compose["services"]
-    xsp_environment = services["app_xsp"]["environment"]
-
-    assert xsp_environment["SCHWAB_ACCESS_MODE"] == "direct"
-    assert xsp_environment["SCHWAB_GATEWAY_URL"] == (
-        "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
-    )
-    assert xsp_environment["SCHWAB_GATEWAY_SHADOW_READS"] == (
-        "${SCHWAB_GATEWAY_SHADOW_READS_XSP:-false}"
-    )
-
-    gateway_client_keys = {
-        "SCHWAB_ACCESS_MODE",
-        "SCHWAB_GATEWAY_URL",
-        "SCHWAB_GATEWAY_API_KEY",
-        "SCHWAB_GATEWAY_SHADOW_READS",
-    }
-    for service_name in ("app_spx", "app_ndx"):
-        environment = services[service_name].get("environment", {})
-        assert gateway_client_keys.isdisjoint(environment), service_name
+    for service_name, suffix in (
+        ("app_xsp", "XSP"),
+        ("app_spx", "SPX"),
+        ("app_ndx", "NDX"),
+    ):
+        environment = services[service_name]["environment"]
+        assert environment["SCHWAB_ACCESS_MODE"] == (
+            f"${{SCHWAB_ACCESS_MODE_{suffix}:-direct}}"
+        )
+        assert environment["SCHWAB_GATEWAY_URL"] == (
+            "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
+        )
+        assert environment["SCHWAB_GATEWAY_API_KEY"] == (
+            "${SCHWAB_GATEWAY_API_KEY:-}"
+        )
+        assert environment["SCHWAB_GATEWAY_SHADOW_READS"] == (
+            f"${{SCHWAB_GATEWAY_SHADOW_READS_{suffix}:-false}}"
+        )
 
 
 def test_default_settings_construct_no_gateway_client(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -82,7 +82,17 @@ def make_candidate(
 
 def make_order_manager(settings: ExecutionSettings, underlying: str = "SPX"):
     schwab = MagicMock()
-    schwab.get_option_chain = AsyncMock()
+    schwab.get_option_chain = AsyncMock(
+        side_effect=lambda _symbol, expiration: make_chain_data(
+            expiration,
+            5900,
+            5950,
+            6000,
+            1.1,
+            1.5,
+            2.4,
+        )
+    )
     schwab.place_order = AsyncMock(return_value="ORD1")
     schwab.cancel_order = AsyncMock()
     schwab.get_order_status = AsyncMock(return_value={"status": "WORKING"})
@@ -262,6 +272,29 @@ async def test_fetch_live_spread_returns_correct_bid_mark_ask():
     assert result.mark == pytest.approx(0.5)
     assert result.bid == pytest.approx(1.0 + 2.3 - 2 * 1.6)
     assert result.ask == pytest.approx(1.2 + 2.5 - 2 * 1.4)
+
+
+@pytest.mark.asyncio
+async def test_fetch_live_spread_uses_separate_market_data_provider():
+    settings = make_settings()
+    om, schwab = make_order_manager(settings)
+    market_data = AsyncMock()
+    om.market_data = market_data
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    expiration = candidate.lower_quote.expiration
+    market_data.get_option_chain.return_value = make_chain_data(
+        expiration,
+        5900,
+        5950,
+        6000,
+        1.1,
+        1.5,
+        2.4,
+    )
+
+    assert await om._fetch_live_spread(candidate) is not None
+    market_data.get_option_chain.assert_awaited_once()
+    schwab.get_option_chain.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -679,7 +712,7 @@ async def test_entry_steps_up_from_live_mark():
 
 
 @pytest.mark.asyncio
-async def test_entry_falls_back_to_candidate_cost_when_fetch_fails():
+async def test_live_entry_blocks_instead_of_using_candidate_cost_when_fetch_fails():
     settings = make_settings(price_ladder_steps=4)
     om, schwab = make_order_manager(settings)
     candidate = make_candidate(5900, 5950, 6000, 2.50)
@@ -688,9 +721,9 @@ async def test_entry_falls_back_to_candidate_cost_when_fetch_fails():
          patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
         result = await om.execute_entry(candidate, quantity=1)
 
-    assert result is not None
-    limit_price_used = om.builder.build_butterfly_open.call_args[0][1]
-    assert limit_price_used == candidate.cost
+    assert result is None
+    om.builder.build_butterfly_open.assert_not_called()
+    schwab.place_order.assert_not_awaited()
 
 
 @pytest.mark.asyncio

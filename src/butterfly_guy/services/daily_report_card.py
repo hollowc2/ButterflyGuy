@@ -10,6 +10,7 @@ from pathlib import Path
 
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.time_utils import EASTERN, is_trading_day
+from butterfly_guy.data.providers import PriceHistoryProvider
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.reports.daily_report_card import build_daily_report_card
 from butterfly_guy.reports.daily_report_card_config import DailyReportCardSettings
@@ -45,6 +46,7 @@ async def send_daily_report_card(
     dry_run: bool = False,
     dump_raw: bool = False,
     dump_raw_dir: Path | None = None,
+    market_data: PriceHistoryProvider | None = None,
 ) -> ReportCardResult:
     if not is_trading_day(report_date):
         return ReportCardResult(skipped=True, reason=f"{report_date} is not a trading day")
@@ -87,7 +89,7 @@ async def send_daily_report_card(
             print(message)
             print()
         charts_sent = await _send_equity_trade_charts(
-            schwab,
+            market_data or schwab,
             report_date=report_date,
             trades=card.trades,
             notifier=None,
@@ -114,7 +116,7 @@ async def send_daily_report_card(
     if notifier:
         await notifier.notify_messages(messages)
         charts_sent = await _send_equity_trade_charts(
-            schwab,
+            market_data or schwab,
             report_date=report_date,
             trades=card.trades,
             notifier=notifier,
@@ -140,7 +142,7 @@ async def send_daily_report_card(
 
 
 async def _send_equity_trade_charts(
-    schwab: SchwabClientWrapper,
+    market_data: PriceHistoryProvider,
     *,
     report_date: dt.date,
     trades: list,
@@ -156,7 +158,7 @@ async def _send_equity_trade_charts(
     candles_by_symbol: dict[str, list[dict]] = {}
     for trade in chart_trades:
         if trade.symbol not in candles_by_symbol:
-            candles_by_symbol[trade.symbol] = await schwab.get_intraday_bars_for_day(
+            candles_by_symbol[trade.symbol] = await market_data.get_intraday_bars_for_day(
                 trade.symbol, report_date
             )
         candles = candles_by_symbol[trade.symbol]

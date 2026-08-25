@@ -17,7 +17,10 @@ from butterfly_guy.core.config import (
     StrategySettings,
 )
 from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
-from butterfly_guy.data.providers import DirectSchwabMarketDataProvider
+from butterfly_guy.data.providers import (
+    DirectSchwabMarketDataProvider,
+    GatewayAuthoritativeMarketDataProvider,
+)
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
@@ -106,15 +109,24 @@ async def test_collector_market_data_shadow_is_opt_in_and_direct_authoritative(
     gateway.get_spot.assert_awaited_once_with("$XSP")
 
 
-def test_run_live_rejects_gateway_cutover_mode():
+def test_run_live_gateway_mode_is_authoritative_without_shadow(monkeypatch):
+    gateway = AsyncMock()
+    constructor = Mock(return_value=gateway)
+    monkeypatch.setattr(
+        "butterfly_guy.scripts.run_live.GatewayMarketDataClient", constructor
+    )
     settings = GatewayClientSettings(
         SCHWAB_ACCESS_MODE="gateway",
         SCHWAB_GATEWAY_URL="http://gateway:8011",
         SCHWAB_GATEWAY_API_KEY="internal-key",
     )
 
-    with pytest.raises(RuntimeError, match="does not support SCHWAB_ACCESS_MODE=gateway"):
-        _build_collector_market_data(Mock(), settings)
+    provider, shadow, configured_gateway = _build_collector_market_data(Mock(), settings)
+
+    assert isinstance(provider, GatewayAuthoritativeMarketDataProvider)
+    assert shadow is None
+    assert configured_gateway is gateway
+    constructor.assert_called_once_with("http://gateway:8011", "internal-key")
 
 
 @pytest.mark.asyncio

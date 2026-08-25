@@ -32,6 +32,12 @@ services:
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
       ALERTMANAGER_URL: http://alertmanager:9093
+      # Market-data cutover is staged per strategy and defaults to the existing
+      # direct path. Account/order/token operations remain direct in both modes.
+      SCHWAB_ACCESS_MODE: "${SCHWAB_ACCESS_MODE_SPX:-direct}"
+      SCHWAB_GATEWAY_URL: "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
+      SCHWAB_GATEWAY_API_KEY: "${SCHWAB_GATEWAY_API_KEY:-}"
+      SCHWAB_GATEWAY_SHADOW_READS: "${SCHWAB_GATEWAY_SHADOW_READS_SPX:-false}"
     read_only: true
     tmpfs:
       - /tmp
@@ -111,6 +117,10 @@ services:
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
       ALERTMANAGER_URL: http://alertmanager:9093
+      SCHWAB_ACCESS_MODE: "${SCHWAB_ACCESS_MODE_NDX:-direct}"
+      SCHWAB_GATEWAY_URL: "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
+      SCHWAB_GATEWAY_API_KEY: "${SCHWAB_GATEWAY_API_KEY:-}"
+      SCHWAB_GATEWAY_SHADOW_READS: "${SCHWAB_GATEWAY_SHADOW_READS_NDX:-false}"
     read_only: true
     tmpfs:
       - /tmp
@@ -153,10 +163,8 @@ services:
       LIVE_ACCOUNT_ALLOCATION: "20000"
       LIVE_MAX_ACCOUNT_DAILY_LOSS: "50"
       LIVE_XSP_CANARY: "false"
-      # C3 is an XSP-only canary. The URL, key, and canary flag are Compose
-      # interpolation values from infra/.env; they are not inherited by SPX/NDX.
-      # Direct remains authoritative even when the shadow flag is enabled.
-      SCHWAB_ACCESS_MODE: "direct"
+      # Each strategy can be promoted independently; direct remains the default.
+      SCHWAB_ACCESS_MODE: "${SCHWAB_ACCESS_MODE_XSP:-direct}"
       SCHWAB_GATEWAY_URL: "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
       SCHWAB_GATEWAY_API_KEY: "${SCHWAB_GATEWAY_API_KEY:-}"
       SCHWAB_GATEWAY_SHADOW_READS: "${SCHWAB_GATEWAY_SHADOW_READS_XSP:-false}"

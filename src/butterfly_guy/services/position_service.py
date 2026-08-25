@@ -9,6 +9,7 @@ from typing import Any, NamedTuple
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import (
+    clear_readiness,
     daily_pnl,
     position_peak_value,
     position_pnl,
@@ -27,6 +28,7 @@ from butterfly_guy.core.time_utils import (
     session_date,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
+from butterfly_guy.data.providers import CollectorMarketDataProvider
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import (
     SCHWAB_CHAIN_SYMBOLS,
@@ -59,6 +61,7 @@ from butterfly_guy.strategy.exit_mark_parity import (
 )
 
 log = get_logger(__name__)
+MARKET_DATA_FAILURE_THRESHOLD = 3
 
 
 class SettlementEvidenceError(RuntimeError):
@@ -244,9 +247,13 @@ class PositionService:
         monitoring_leg_queries: MonitoringLegQueries | None,
         tent_queries: TentQueries,
         notifier: DiscordNotifier | None = None,
+        market_data: CollectorMarketDataProvider | None = None,
     ) -> None:
         self.config = config
         self.schwab = schwab
+        # Keep broker transactions on ``schwab`` while market-data reads use
+        # the separately selected direct or gateway provider.
+        self.market_data = market_data or schwab
         self.order_manager = order_manager
         self.risk_engine = risk_engine
         self.trade_queries = trade_queries
@@ -281,22 +288,82 @@ class PositionService:
         log.info("position_monitor_started", trade_id=trade.trade_id)
 
         exited = False
+        market_data_failures = 0
+        market_data_alerted = False
+        market_data = getattr(self, "market_data", None) or getattr(
+            self, "schwab", None
+        )
         while is_market_open() and trade.trade_date == session_date() and not exited:
             try:
                 # Fetch latest chain for position valuation
                 expiration = get_0dte_expiration()
-                chain_data = await self.schwab.get_option_chain(
+                try:
+                    chain_data = await market_data.get_option_chain(
                         SCHWAB_CHAIN_SYMBOLS.get(
                             self.config.strategy.underlying,
                             self.config.strategy.underlying,
                         ),
                         expiration,
                     )
-                chain_fetched_at = now_eastern()
-                quotes = self._extract_quotes(chain_data, expiration, candidate)
+                    quotes = self._extract_quotes(chain_data, expiration, candidate)
+                    # Recovery is only proven after all held legs can be valued;
+                    # a syntactically valid chain missing one leg remains unsafe.
+                    pos_state = self.position_manager.update_position_value(
+                        candidate, quotes
+                    )
+                except Exception as market_data_error:
+                    market_data_failures += 1
+                    log.error(
+                        "position_market_data_failed",
+                        trade_id=trade.trade_id,
+                        consecutive_failures=market_data_failures,
+                        error=str(market_data_error),
+                    )
+                    if market_data_failures >= MARKET_DATA_FAILURE_THRESHOLD:
+                        set_readiness("market_data_unavailable")
+                        if not market_data_alerted:
+                            market_data_alerted = True
+                            await self.decision_queries.log_event(
+                                "position_market_data_unavailable",
+                                {
+                                    "trade_id": trade.trade_id,
+                                    "consecutive_failures": market_data_failures,
+                                },
+                                underlying=self.config.strategy.underlying,
+                            )
+                            if self.notifier:
+                                try:
+                                    await self.notifier._post(
+                                        "WARNING: position market data is unavailable "
+                                        f"for trade {trade.trade_id}; position remains OPEN."
+                                    )
+                                except Exception as notify_error:
+                                    log.warning(
+                                        "position_market_data_alert_failed",
+                                        error=str(notify_error),
+                                    )
+                    await asyncio.sleep(poll_interval)
+                    continue
 
-                # Update position
-                pos_state = self.position_manager.update_position_value(candidate, quotes)
+                if market_data_failures:
+                    clear_readiness("market_data_unavailable")
+                    await self.decision_queries.log_event(
+                        "position_market_data_recovered",
+                        {
+                            "trade_id": trade.trade_id,
+                            "consecutive_failures": market_data_failures,
+                        },
+                        underlying=self.config.strategy.underlying,
+                    )
+                    log.info(
+                        "position_market_data_recovered",
+                        trade_id=trade.trade_id,
+                        consecutive_failures=market_data_failures,
+                    )
+                    market_data_failures = 0
+                    market_data_alerted = False
+                chain_fetched_at = now_eastern()
+
                 if trade.entry_time is not None:
                     pos_state.position_age_minutes = max(
                         0.0,
@@ -621,7 +688,7 @@ class PositionService:
                 settlement_ts = None
                 try:
                     expiration = get_0dte_expiration()
-                    chain_data = await self.schwab.get_option_chain(
+                    chain_data = await self.market_data.get_option_chain(
                         SCHWAB_CHAIN_SYMBOLS.get(
                             self.config.strategy.underlying,
                             self.config.strategy.underlying,
@@ -727,7 +794,11 @@ class PositionService:
     ) -> tuple[float, str, dt.datetime | None]:
         """Use Schwab's final regular-session 1-minute close for cash settlement."""
         spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
-        candles = await self.schwab.get_intraday_bars(spot_symbol, days_back=1)
+        candles = await self.market_data.get_intraday_bars_for_day(
+            spot_symbol,
+            session_date,
+            include_extended_hours=False,
+        )
         final_close = final_regular_session_close_from_candles(candles, session_date)
         if final_close is not None:
             close_ts, close_price = final_close
@@ -737,9 +808,9 @@ class PositionService:
                 spot=close_price,
                 bar_time=close_ts.isoformat(),
             )
-            return close_price, "schwab_final_regular_session_1m_close", close_ts
+            return close_price, "market_data_final_regular_session_1m_close", close_ts
 
-        spot_price = await self.schwab.get_spot_price(spot_symbol)
+        spot_price = await self.market_data.get_spot_price(spot_symbol)
         if spot_price is None:
             raise ValueError(f"missing_spot_price_for_{underlying}")
         log.warning(
@@ -747,7 +818,7 @@ class PositionService:
             underlying=underlying,
             spot=spot_price,
         )
-        return spot_price, "schwab_spot_quote_fallback", None
+        return spot_price, "market_data_spot_quote_fallback", None
 
     async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:
         """Record trade exit metrics and update risk engine."""
@@ -822,7 +893,7 @@ class PositionService:
 
         underlying = row["underlying"]
         spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
-        candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
+        candles = await self.market_data.get_intraday_bars(spot_sym, days_back=1)
         spec = ButterflyChartSpec(
             underlying=underlying,
             direction=row["direction"],
