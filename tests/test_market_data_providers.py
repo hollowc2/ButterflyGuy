@@ -214,6 +214,59 @@ async def test_gateway_provider_rejects_invalid_option_contracts(
 
 
 @pytest.mark.asyncio
+async def test_gateway_provider_rejects_negative_time_value_from_gateway_contract() -> None:
+    """Pin the 2026-08-25 PAPER cutover failure at the consumer boundary."""
+    expiration = dt.date(2026, 8, 24)
+    call = _contract("CALL", "XSP CALL", 632.0)
+    call.time_value = -14.6
+    gateway = AsyncMock()
+    gateway.get_option_chain.return_value = SimpleNamespace(
+        option_chain=_observation(
+            symbol="XSP",
+            expiration=expiration,
+            underlying_price=632.5,
+            call_contract_count=1,
+            put_contract_count=1,
+            strike_count=1,
+            contracts=(call, _contract("PUT", "XSP PUT", 632.0)),
+        )
+    )
+    provider = GatewayAuthoritativeMarketDataProvider(gateway)
+
+    with pytest.raises(
+        GatewayMarketDataError,
+        match="gateway option contract time_value must be nonnegative",
+    ):
+        await provider.get_option_chain("XSP", expiration)
+
+
+@pytest.mark.asyncio
+async def test_gateway_provider_defaults_normalized_null_time_value_to_zero() -> None:
+    expiration = dt.date(2026, 8, 24)
+    call = _contract("CALL", "SPXW  260824C06320000", 6320.0)
+    call.time_value = None
+    gateway = AsyncMock()
+    gateway.get_option_chain.return_value = SimpleNamespace(
+        option_chain=_observation(
+            symbol="SPX",
+            expiration=expiration,
+            underlying_price=6320.5,
+            call_contract_count=1,
+            put_contract_count=1,
+            strike_count=1,
+            contracts=(call, _contract("PUT", "SPXW  260824P06320000", 6320.0)),
+        )
+    )
+    provider = GatewayAuthoritativeMarketDataProvider(gateway)
+
+    chain = await provider.get_option_chain("SPX", expiration)
+
+    normalized = chain["callExpDateMap"]["2026-08-24:0"]["6320"][0]
+    assert normalized["timeValue"] == 0.0
+    assert (normalized["bid"], normalized["ask"], normalized["mark"]) == (1.0, 1.2, 1.1)
+
+
+@pytest.mark.asyncio
 async def test_gateway_provider_omits_stale_contracts_after_integrity_validation() -> None:
     expiration = dt.date(2026, 8, 24)
     stale_call = _contract("CALL", "XSP STALE CALL", 632.0)

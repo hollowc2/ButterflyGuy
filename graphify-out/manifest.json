@@ -66,9 +66,9 @@
     "semantic_hash": ""
   },
   "pyproject.toml": {
-    "mtime": 1786425513.5550053,
-    "seen": 1786841712.526183,
-    "ast_hash": "47fc0953aa1edba73b2dd39e7c362b6d",
+    "mtime": 1787626780.353136,
+    "seen": 1787681039.1380033,
+    "ast_hash": "c2e5956c19ceb673edf0ca8f61753403",
     "semantic_hash": ""
   },
   "src/butterfly_guy/__init__.py": {
@@ -1454,9 +1454,9 @@
     "semantic_hash": ""
   },
   "tests/test_market_data_providers.py": {
-    "mtime": 1787625386.0197947,
-    "seen": 1787625423.2905815,
-    "ast_hash": "91f90151bedc160890cef9691ac6066b",
+    "mtime": 1787681075.325447,
+    "seen": 1787681101.8830369,
+    "ast_hash": "d6dc0a6f265bf74812e5b12d9a8094d5",
     "semantic_hash": ""
   },
   "CODEX_STATE.md": {
@@ -1664,9 +1664,9 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_phase7_boundaries.py": {
-    "mtime": 1787613296.2688086,
-    "seen": 1787614316.889212,
-    "ast_hash": "06d88a2dc9d8b923ae7b94403b9d59b4",
+    "mtime": 1787626869.02451,
+    "seen": 1787681039.1443555,
+    "ast_hash": "ea005fa4d9d3760ac8567ec9c315dc01",
     "semantic_hash": ""
   },
   ".claude/settings.local.json": {
@@ -1697,6 +1697,24 @@
     "mtime": 1787616864.1820886,
     "seen": 1787616918.6477578,
     "ast_hash": "9aaa26820413a31c96e8c456ba191cab",
+    "semantic_hash": ""
+  },
+  "docs/runbooks/gateway-paper-cutover-2026-08-25.md": {
+    "mtime": 1787639689.6716096,
+    "seen": 1787681039.1473367,
+    "ast_hash": "a28e2c83ab7055335c387bf6eb9fd6e2",
+    "semantic_hash": ""
+  },
+  "docs/runbooks/gateway-paper-cutover-handoff-prompt.md": {
+    "mtime": 1787639648.1333973,
+    "seen": 1787681039.1473384,
+    "ast_hash": "127e444e9975f8e2e6753c45d0cce570",
+    "semantic_hash": ""
+  },
+  "infra/docker-compose.gateway-paper-cutover.yml": {
+    "mtime": 1787639602.64126,
+    "seen": 1787681039.1475675,
+    "ast_hash": "59a5511d803840b745c1c7d55046c422",
     "semantic_hash": ""
   }
 }
