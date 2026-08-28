@@ -4,6 +4,10 @@
 
 Butterfly Guy is an automated 0-DTE butterfly options trading system and research platform for Schwab + TimescaleDB.
 
+It can also consume freshness-gated, venue-specific Level II snapshots from
+SchwabGateway over authenticated HTTP and WebSocket connections. See
+[`docs/gateway-order-books.md`](docs/gateway-order-books.md).
+
 SPX is the primary product and the main runtime path.
 
 NDX and XSP are experimental. Treat them as separate tuning paths, not as production parity with SPX.
