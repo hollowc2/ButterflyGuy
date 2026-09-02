@@ -100,6 +100,9 @@ ENTRY_LOOP_ERROR_THRESHOLD = 3
 # How often to check whether the token document has been re-authorized. Re-auth is a
 # weekly event, so this only has to be short enough to make the change quick to verify.
 TOKEN_RELOAD_INTERVAL = 300.0
+# The gateway may legitimately queue the third protected request behind two
+# three-second Schwab operations before granting it a fresh execution budget.
+GATEWAY_HTTP_TIMEOUT_SECONDS = 12.0
 
 
 def _build_collector_market_data(
@@ -118,6 +121,7 @@ def _build_collector_market_data(
         gateway = GatewayMarketDataClient(
             gateway_settings.gateway_url,
             gateway_settings.gateway_api_key.get_secret_value(),
+            timeout_seconds=GATEWAY_HTTP_TIMEOUT_SECONDS,
         )
         log.info("gateway_market_data_authoritative")
         return GatewayAuthoritativeMarketDataProvider(gateway), None, gateway
@@ -128,6 +132,7 @@ def _build_collector_market_data(
     gateway = GatewayMarketDataClient(
         gateway_settings.gateway_url,
         gateway_settings.gateway_api_key.get_secret_value(),
+        timeout_seconds=GATEWAY_HTTP_TIMEOUT_SECONDS,
     )
     shadow = ShadowComparingMarketDataProvider(
         direct,

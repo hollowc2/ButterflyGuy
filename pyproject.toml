@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-schwab-gateway-sdk = { git = "https://github.com/hollowc2/SchwabGateway.git", tag = "v0.2.0", subdirectory = "packages/sdk" }
+schwab-gateway-sdk = { git = "https://github.com/hollowc2/SchwabGateway.git", rev = "29c47d6011f96c0916ea15cc8a25cc17a38b189c", subdirectory = "packages/sdk" }
 schwab-token-store = { git = "https://github.com/hollowc2/SchwabGateway.git", tag = "v0.1.0", subdirectory = "packages/token-store" }
 
 [project.scripts]

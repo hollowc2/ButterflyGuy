@@ -18,7 +18,7 @@ from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvide
 from butterfly_guy.scripts.run_live import _build_collector_market_data
 
 ROOT = Path(__file__).resolve().parents[1]
-GATEWAY_SDK_COMMIT = "3d8c54db1c8126661f70944b6ba6b51add44042f"
+GATEWAY_SDK_COMMIT = "29c47d6011f96c0916ea15cc8a25cc17a38b189c"
 TOKEN_STORE_COMMIT = "2d1da47b37ba48e3603f8d52a2fe73a55924aaf0"
 
 
@@ -86,28 +86,45 @@ def test_standalone_packages_remain_pinned_and_consumers_import_them_directly() 
         (
             "schwab-gateway-sdk",
             "packages/sdk",
-            "v0.2.0",
-            "0.2.0",
+            "rev",
+            GATEWAY_SDK_COMMIT,
+            "0.4.0",
             GATEWAY_SDK_COMMIT,
         ),
         (
             "schwab-token-store",
             "packages/token-store",
+            "tag",
             "v0.1.0",
             "0.1.0",
             TOKEN_STORE_COMMIT,
         ),
     )
-    for distribution, subdirectory, tag, _version, _commit in expected_releases:
-        assert sources[distribution] == {
+    for (
+        distribution,
+        subdirectory,
+        reference_kind,
+        reference,
+        _version,
+        _commit,
+    ) in expected_releases:
+        expected_source = {
             "git": "https://github.com/hollowc2/SchwabGateway.git",
-            "tag": tag,
             "subdirectory": subdirectory,
+            reference_kind: reference,
         }
+        assert sources[distribution] == expected_source
 
     locked = tomllib.loads(_source("uv.lock"))
     packages = {package["name"]: package for package in locked["package"]}
-    for distribution, _subdirectory, _tag, version, commit in expected_releases:
+    for (
+        distribution,
+        _subdirectory,
+        _reference_kind,
+        _reference,
+        version,
+        commit,
+    ) in expected_releases:
         package = packages[distribution]
         assert package["version"] == version
         assert package["source"]["git"].endswith(f"#{commit}")
@@ -143,13 +160,15 @@ def test_sdk_exposes_only_read_only_market_data_routes() -> None:
         "/v1/option-chain",
         "/v1/history",
         "/v1/movers",
+        "/v1/order-book/recent",
         "/v1/session-history",
     }
     assert not any(
         sensitive in route
         for route in routes
-        for sensitive in ("account", "order", "position", "transaction")
+        for sensitive in ("account", "position", "transaction")
     )
+    assert not any(route.startswith("/v1/orders") for route in routes)
 
 
 def test_compose_keeps_each_strategy_default_direct_with_staged_gateway_opt_in() -> None:
