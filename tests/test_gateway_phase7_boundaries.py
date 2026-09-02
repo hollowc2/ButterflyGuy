@@ -18,7 +18,7 @@ from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvide
 from butterfly_guy.scripts.run_live import _build_collector_market_data
 
 ROOT = Path(__file__).resolve().parents[1]
-GATEWAY_SDK_COMMIT = "29c47d6011f96c0916ea15cc8a25cc17a38b189c"
+GATEWAY_SDK_COMMIT = "b514f08c18444bd692e58b38f4fe98bccf2d7db3"
 TOKEN_STORE_COMMIT = "2d1da47b37ba48e3603f8d52a2fe73a55924aaf0"
 
 
