@@ -175,7 +175,7 @@ hash differs.
    and readiness return 200, token state is ready, restart count is zero, and
    there is exactly one gateway process.
 4. Confirm the evidence target does not exist:
-   `/opt/butterflyguy-gateway-evidence/2026-09-01-order-book-aa9d6e6-refreeze-032625`.
+   `/opt/butterflyguy-gateway-evidence/2026-09-04-order-book-aa9d6e6-postreboot-171945`.
 5. From `/opt/butterflyguy`, run the redacted flatness gate:
 
 ```bash
@@ -208,8 +208,8 @@ tmux new -s gateway-order-book-soak
 cd /opt/butterflyguy
 .venv/bin/python \
   /opt/butterflyguy-gateway-acceptance-tools/schwab_gateway_session_soak_20260904_v6.py \
-  --session-date 2026-09-01 \
-  --evidence-dir /opt/butterflyguy-gateway-evidence/2026-09-01-order-book-aa9d6e6-refreeze-032625 \
+  --session-date 2026-09-04 \
+  --evidence-dir /opt/butterflyguy-gateway-evidence/2026-09-04-order-book-aa9d6e6-postreboot-171945 \
   --expected-container-id ccd2b0d2d2b3dc928bdfba46ba80a73ab6831cb6e955582ec50df5c1f9b39768 \
   --expected-image-id sha256:f1d287294864c05b00ca201d1d86f8344f0d6f61121074982f92667468fec7f0 \
   --expected-revision aa9d6e65a91c14eadf70df1c3da15101fb84d3f9 \
