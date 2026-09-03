@@ -7,6 +7,9 @@ import httpx
 import pytest
 
 from tools.schwab_gateway_session_soak import (
+    BOUNDED_TRANSIENT_CLASSIFICATIONS,
+    METRIC_RE,
+    _gateway_error_code,
     _reconstruct_surface_request,
     _request_with_retry,
     adjudicate_transient_non_200,
@@ -614,3 +617,125 @@ async def test_request_retry_keeps_persistent_server_error_gating(tmp_path) -> N
 
     assert result["classification"] == "gateway_or_upstream_server_error"
     assert len(result["attempts"]) == 3
+
+
+def _gateway_error(code: str) -> dict:
+    return {"schema_version": "1.0", "error": {"code": code, "message": code}}
+
+
+def test_gateway_error_code_reads_only_the_discriminator() -> None:
+    assert _gateway_error_code(_gateway_error("gateway_queue_timeout")) == (
+        "gateway_queue_timeout"
+    )
+    assert _gateway_error_code({"error": "boom"}) is None
+    assert _gateway_error_code({"error": {"message": "no code"}}) is None
+    assert _gateway_error_code(None) is None
+
+
+@pytest.mark.parametrize(
+    ("status", "code", "expected", "bounded"),
+    [
+        (503, "gateway_queue_timeout", "queue_wait_timeout", True),
+        (429, "gateway_capacity_exceeded", "admission_rejection", True),
+        (504, "upstream_timeout", "likely_three_second_upstream_timeout", True),
+        (503, "gateway_not_ready", "gateway_not_ready", False),
+        (503, "upstream_unavailable", "gateway_or_upstream_server_error", False),
+        (502, "upstream_malformed", "gateway_or_upstream_server_error", False),
+        (403, "capability_denied", "authentication_or_authorization_failure", False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_request_classifies_gateway_040_error_codes(
+    tmp_path, status, code, expected, bounded
+) -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status, json=_gateway_error(code))
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="http://gateway", transport=transport
+    ) as client:
+        result = await _request_with_retry(
+            client,
+            tmp_path,
+            "session_spx_regular",
+            "/v1/session-history",
+            {"symbol": "$SPX"},
+            retry_backoff_seconds=0,
+        )
+
+    assert result["classification"] == expected
+    assert result["error_code"] == code
+    assert (result["classification"] in BOUNDED_TRANSIENT_CLASSIFICATIONS) is bounded
+    # non-retryable classifications stop after the first attempt
+    if expected in ("gateway_not_ready", "authentication_or_authorization_failure"):
+        assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_request_classifies_bare_504_without_error_body(tmp_path) -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(504, text="gateway timeout")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="http://gateway", transport=transport
+    ) as client:
+        result = await _request_with_retry(
+            client,
+            tmp_path,
+            "session_spx_regular",
+            "/v1/session-history",
+            {"symbol": "$SPX"},
+            retry_backoff_seconds=0,
+        )
+
+    assert result["classification"] == "likely_three_second_upstream_timeout"
+    assert result["error_code"] is None
+
+
+def test_metric_re_matches_scheduler_series() -> None:
+    matched = [
+        'schwab_gateway_scheduler_queue_depth{priority_class="protected"} 0.0',
+        'schwab_gateway_scheduler_queue_wait_seconds_bucket{le="0.5",'
+        'operation="quotes",priority_class="background"} 64.0',
+        "schwab_gateway_scheduler_dispatch_total"
+        '{operation="history",priority_class="protected"} 3.0',
+        'schwab_gateway_token_state{state="ready"} 1.0',
+    ]
+    assert all(METRIC_RE.match(line) for line in matched)
+    assert METRIC_RE.match("process_cpu_seconds_total 1.0") is None
+
+
+def test_adjudication_recovered_queue_wait_timeout_is_observation() -> None:
+    names = ["session_spx_regular"]
+    log = [
+        {"index": i, "transient_non_200": [], "ok_names": names} for i in range(27)
+    ]
+    log[10] = {
+        "index": 10,
+        "transient_non_200": [
+            {
+                "name": "session_spx_regular",
+                "status": 503,
+                "error_code": "gateway_queue_timeout",
+                "classification": "queue_wait_timeout",
+                "latency_ms": 1004.2,
+                "attempts": 3,
+            }
+        ],
+        "ok_names": [],
+    }
+
+    result = adjudicate_transient_non_200(log)
+
+    assert result["gating"] == []
+    assert len(result["observations"]) == 1
+    obs = result["observations"][0]
+    assert obs["classification"] == "queue_wait_timeout"
+    assert obs["error_code"] == "gateway_queue_timeout"
+    assert obs["recovered_at_index"] == 11

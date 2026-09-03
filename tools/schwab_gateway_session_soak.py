@@ -40,7 +40,8 @@ METRIC_RE = re.compile(
     r"client_requests_total|option_chain_cache_(?:age_seconds|bytes|entries|events_total)|"
     r"option_chain_inflight|"
     r"option_chain_(?:crossed_market|negative_time_value)_normalizations_total)|"
-    r"schwab_gateway_token_(?:refresh_total|state))(?=[{ ]|$)"
+    r"schwab_gateway_token_(?:refresh_total|state)|"
+    r"schwab_gateway_scheduler_[a-z_]+)(?=[{ ]|$)"
 )
 ALLOWED_GATEWAY_LOG_FIELDS = {
     "timestamp",
@@ -54,24 +55,45 @@ ALLOWED_GATEWAY_LOG_FIELDS = {
     "previous_state",
     "reason",
     "result",
+    # gateway 0.4.0 strict-priority scheduler lifecycle events
+    "priority_class",
+    "queue_wait_ms",
+    "outcome",
+    "count",
+}
+# gateway 0.4.0 maps upstream/scheduler failures to a stable ``error.code`` in the
+# JSON body; the harness classifies from that discriminator rather than guessing
+# from status code plus elapsed wall time (queue wait now inflates elapsed).
+GATEWAY_ERROR_CODE_CLASSIFICATIONS = {
+    "gateway_capacity_exceeded": "admission_rejection",
+    "gateway_queue_timeout": "queue_wait_timeout",
+    "upstream_timeout": "likely_three_second_upstream_timeout",
+    "gateway_not_ready": "gateway_not_ready",
+    "upstream_unavailable": "gateway_or_upstream_server_error",
+    "upstream_malformed": "gateway_or_upstream_server_error",
 }
 RETRYABLE_REQUEST_CLASSIFICATIONS = frozenset(
     {
         "likely_three_second_upstream_timeout",
         "admission_rejection",
+        "queue_wait_timeout",
         "gateway_or_upstream_server_error",
         "client_or_transport_error",
     }
 )
-# Non-200 classifications that describe a bounded, recoverable upstream blip rather
-# than a compromised gateway.  A checkpoint records these to ``transient_non_200``
-# (adjudicated across checkpoints in ``main``) instead of failing outright.  Every
-# other non-200 outcome -- 401/403, non-504 5xx, transport errors, unexpected
-# status, invalid JSON on a 200 -- stays gating at the checkpoint.
+# Non-200 classifications that describe a bounded, recoverable blip -- an upstream
+# 3s execution timeout, a full priority pool, or a strict-priority queue-wait
+# expiry (all designed backpressure) -- rather than a compromised gateway.  A
+# checkpoint records these to ``transient_non_200`` (adjudicated across
+# checkpoints in ``main``) instead of failing outright.  Every other non-200
+# outcome stays gating at the checkpoint: 401/403, ``gateway_not_ready``,
+# ``upstream_unavailable`` / ``upstream_malformed`` and other 5xx, transport
+# errors, unexpected status, invalid JSON on a 200.
 BOUNDED_TRANSIENT_CLASSIFICATIONS = frozenset(
     {
         "likely_three_second_upstream_timeout",
         "admission_rejection",
+        "queue_wait_timeout",
     }
 )
 OPENING_WARMUP_SURFACES = ("spot_", "chain_", "history_", "session_")
@@ -582,6 +604,17 @@ def assert_production_identity(
     return errors
 
 
+def _gateway_error_code(body: Any) -> str | None:
+    """Read only the bounded ``error.code`` discriminator from a gateway body."""
+    if not isinstance(body, dict):
+        return None
+    error = body.get("error")
+    if not isinstance(error, dict):
+        return None
+    code = error.get("code")
+    return code if isinstance(code, str) else None
+
+
 async def _request(
     client: httpx.AsyncClient,
     directory: pathlib.Path,
@@ -599,14 +632,19 @@ async def _request(
             body = response.json()
         except ValueError:
             body = None
+        error_code = _gateway_error_code(body)
         if response.status_code == 200:
             classification = "success"
-        elif response.status_code == 504 and 2_500 <= elapsed_ms <= 4_000:
+        elif response.status_code in {401, 403}:
+            classification = "authentication_or_authorization_failure"
+        elif error_code in GATEWAY_ERROR_CODE_CLASSIFICATIONS:
+            classification = GATEWAY_ERROR_CODE_CLASSIFICATIONS[error_code]
+        elif response.status_code == 504:
+            # gateway 0.4.0 always tags a 504 as ``upstream_timeout``; tolerate a
+            # bare 504 too (older gateway / stripped body).
             classification = "likely_three_second_upstream_timeout"
         elif response.status_code == 429:
             classification = "admission_rejection"
-        elif response.status_code in {401, 403}:
-            classification = "authentication_or_authorization_failure"
         elif response.status_code >= 500:
             classification = "gateway_or_upstream_server_error"
         else:
@@ -616,6 +654,7 @@ async def _request(
             "path": str(raw_path),
             "sha256": digest,
             "status": response.status_code,
+            "error_code": error_code,
             "latency_ms": elapsed_ms,
             "bytes": len(response.content),
             "body": body,
@@ -628,6 +667,7 @@ async def _request(
             "path": None,
             "sha256": None,
             "status": None,
+            "error_code": None,
             "latency_ms": round((time.perf_counter() - started) * 1000, 3),
             "bytes": 0,
             "body": None,
@@ -863,6 +903,7 @@ def adjudicate_transient_non_200(
                 "checkpoint_index": idx,
                 "recovered_at_index": recovered_at,
                 "status": record["status"],
+                "error_code": record.get("error_code"),
                 "classification": record["classification"],
                 "latency_ms": record["latency_ms"],
                 "attempts": record["attempts"],
@@ -993,6 +1034,7 @@ async def run_checkpoint(
                     {
                         "name": request["name"],
                         "status": request["status"],
+                        "error_code": request.get("error_code"),
                         "classification": request["classification"],
                         "latency_ms": request["latency_ms"],
                         "attempts": len(request["attempts"]),
@@ -1166,6 +1208,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-seconds", type=int, default=900)
     parser.add_argument("--post-close-minutes", type=int, default=10)
     parser.add_argument("--opening-warmup-checkpoints", type=int, default=1)
+    parser.add_argument(
+        "--expected-consumer-priority",
+        choices=("protected", "background"),
+        default="protected",
+        help="scheduler priority class the soak key is registered under (0.4.0+)",
+    )
     return parser.parse_args()
 
 
@@ -1214,6 +1262,24 @@ async def main() -> int:
         },
         "opening_warmup_checkpoints": args.opening_warmup_checkpoints,
         "opening_warmup_observations": [],
+        "scheduler_policy": {
+            "gateway_scheduler": "bounded strict-priority (gateway 0.4.0+)",
+            "expected_consumer_priority": args.expected_consumer_priority,
+            "error_code_classifications": dict(
+                sorted(GATEWAY_ERROR_CODE_CLASSIFICATIONS.items())
+            ),
+            "gating_error_codes": [
+                "gateway_not_ready",
+                "upstream_unavailable",
+                "upstream_malformed",
+            ],
+            "note": (
+                "504/upstream_timeout, 429/gateway_capacity_exceeded and "
+                "503/gateway_queue_timeout are designed backpressure and are "
+                "adjudicated as bounded transients; scheduler metrics "
+                "(schwab_gateway_scheduler_*) are captured every checkpoint"
+            ),
+        },
         "transient_policy": {
             "bounded_transient_classifications": sorted(
                 BOUNDED_TRANSIENT_CLASSIFICATIONS
