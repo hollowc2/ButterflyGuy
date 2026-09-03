@@ -12,36 +12,46 @@ trading path. Candidate gateways, feeds, and evaluator fleets are retired from
 the active market-open scope and must not be started to satisfy an older
 checklist.
 
-The acceptance target is frozen at:
+The acceptance target:
 
 - container: `schwab_gateway_live`;
 - endpoint: `http://127.0.0.1:8011`;
-- container ID:
-  `ccd2b0d2d2b3dc928bdfba46ba80a73ab6831cb6e955582ec50df5c1f9b39768`;
-- image ID:
-  `sha256:f1d287294864c05b00ca201d1d86f8344f0d6f61121074982f92667468fec7f0`;
-- revision: `aa9d6e65a91c14eadf70df1c3da15101fb84d3f9`;
-- release tag: `gateway-order-book-aa9d6e6`;
-- started at: `2026-08-31T03:26:25.514589924Z`;
-- baseline restart count: `0`;
-- gateway process count: `1`;
 - Docker healthcheck override:
   `docs/runbooks/schwab-gateway-soak-health.override.yml`, SHA-256
   `2f998db4ff20a0a8640122419742f74db74edc03f3b9ea86a58e30d902b49cbf`.
 
-This freeze supersedes the pre-rebuild `383f5fb` / `d11b61e` target. The
-production gateway was intentionally rebuilt on 2026-08-29 while other Helios
-work was in progress, then recreated on 2026-08-30 PDT with the same immutable
-image and the healthcheck-only override above. A later Docker/containerd recovery
-preserved the container ID but advanced `StartedAt` to the value frozen above.
-PIA VPN was restored at `2026-08-31T03:34:28Z`, after which Docker, the gateway,
-and all three PAPER services were revalidated. The failed earlier evidence at
-`2026-08-31-order-book-aa9d6e6` is preserved and records only
-`production_started_at_changed`; do not overwrite or reuse it. Any subsequent
-Docker, container, or gateway restart invalidates the new freeze.
+**Identity is NOT frozen in this document.** The production gateway moved off
+the `aa9d6e6` order-book build on 2026-09-03 and is being iterated on the 0.4.x
+strict-priority scheduler line (`0.4.0` `b514f08` -> `0.4.1` `98db8a6` -> `0.4.2`
+`efee41f`, all 2026-09-03). Freeze the exact identity at preflight, once
+deployment has stopped, by capturing it into the launch command:
+
+```bash
+C=schwab_gateway_live
+docker inspect --format '{{.Id}} {{.Image}} {{index .Config.Labels "org.opencontainers.image.revision"}} {{.State.StartedAt}} {{.RestartCount}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$C"
+docker image inspect --format '{{.RepoTags}}' "$(docker inspect --format '{{.Image}}' "$C")"
+```
+
+Record `container ID`, `image ID`, `revision`, `started at`, and the
+`schwab-gateway:0.4.x-<short>` tag, and pass the first four to the harness as
+`--expected-*`. Restart count must be `0`, status `running`, health `healthy`,
+process count `1`.
+
+Notes for the 0.4.x line:
+
+- The `0.4.1`/`0.4.2` release builds do **not** stamp
+  `org.opencontainers.image.revision` (the `b514f08` build did). If the label is
+  empty, either fix the build to stamp it or pass `--expected-revision` matching
+  whatever `docker inspect` reports for that container; do not invent a value.
+- `0.4.1` gates live readiness on one successful Schwab round-trip at startup, so
+  a freshly redeployed gateway serves `503 gateway_not_ready` until it is warm.
+  The final build must be deployed and warm (`/ready` returns 200 with
+  `token_state: ready`) well before the 06:22 PDT baseline, and must not be
+  redeployed afterward. Any Docker, container, or gateway restart after the
+  baseline invalidates the run.
 
 The harness aborts full-session credit if the container ID, image ID, revision,
-start time, restart count, health, or process count changes.
+start time, restart count, health, or process count changes mid-session.
 
 Retired candidate services are outside this soak and should remain stopped.
 AfterHours Lab containers may change or restart without invalidating the
@@ -108,8 +118,8 @@ strict zero-skew comparison remains the default for fixtures.
 
 Stage these versioned files on Helios without replacing any service file:
 
-- `schwab_gateway_session_soak_20260904_v6.py` SHA-256
-  `c05d2d84a485cf31d47035eaf330e14427a97571dedeec031d995c579fca2dae`;
+- `schwab_gateway_session_soak_20260904_v7.py` SHA-256
+  `d8ede4fa9939849863c10bfe6c75535a74b46df668c888a1239318d1c2fb901a`;
 - `gateway_cutover_flatness_audit_20260828.py` SHA-256
   `9f215ecd3f6cd1cba048ea1921821da0730ad44a32cbb859fc468fbb443427f0`.
 
@@ -154,6 +164,26 @@ Replayed against the 2026-09-02 evidence: the three `session_*_regular` 504s at
 checkpoint 10 move to `transient_observations` (recovered at checkpoint 11) and
 the run's `violation_count` goes to 0.
 
+The `v7` soak tool carries the `v5`/`v6` changes unchanged and makes the harness
+aware of the gateway 0.4.x strict-priority scheduler:
+
+- Non-200s are classified from the stable `error.code` in the JSON body, not
+  from status code plus elapsed wall time (queue wait now inflates elapsed, so
+  the old `504 and 2500 <= elapsed_ms <= 4000` heuristic was unsafe). A bare 504
+  with no error body still classifies as an upstream timeout.
+- `503 gateway_queue_timeout` (`queue_wait_timeout`) joins
+  `likely_three_second_upstream_timeout` and `admission_rejection` (429 /
+  `gateway_capacity_exceeded`) as a bounded transient — designed backpressure,
+  adjudicated across checkpoints exactly like the 504s. `503 gateway_not_ready`,
+  `503 upstream_unavailable`, and `502 upstream_malformed` stay gating.
+- `METRIC_RE` now allowlists `schwab_gateway_scheduler_*`, so every checkpoint's
+  `metrics_before` / `metrics_after` capture queue depth, queue-wait and
+  execution histograms, dispatch, capacity-rejection, queue-timeout,
+  upstream-timeout and cancellation counters as evidence for the "bounded 504"
+  review bar. Filtered logs retain `priority_class` / `queue_wait_ms` /
+  `outcome`. The manifest carries a `scheduler_policy` block; pass
+  `--expected-consumer-priority protected` (the soak key's registered class).
+
 The soak tool has no Docker lifecycle, database, broker-account, token-write, or
 order capability. It reads the scoped gateway key without printing it, sends a
 maximum of three requests concurrently, and writes new evidence files with mode
@@ -167,21 +197,26 @@ hash differs.
 
 ## Tuesday preflight — final gate at 06:20-06:29 PDT
 
-1. Confirm the host clock says Tuesday 2026-09-01 and it is a normal session.
-2. After both parity processes have stopped, confirm the refreshed token is ready
-   and all four active consumers agree on the then-current host token inode and
-   approved truncated fingerprint without printing token contents.
-3. Confirm production identity exactly matches the frozen values above, health
-   and readiness return 200, token state is ready, restart count is zero, and
-   there is exactly one gateway process.
+1. Confirm the host clock says Friday 2026-09-04 and it is a normal session.
+2. Confirm gateway deployment has stopped, then capture the live identity (see
+   "The acceptance target" above) and freeze it into the launch command. Confirm
+   the refreshed token is ready and all four active consumers agree on the
+   then-current host token inode and approved truncated fingerprint without
+   printing token contents.
+3. Confirm production identity matches the captured values, health and readiness
+   return 200, token state is ready, restart count is zero, and there is exactly
+   one gateway process. On the 0.4.x line a freshly redeployed gateway serves
+   `503 gateway_not_ready` until its first successful Schwab round-trip — if
+   `/ready` is not 200 with `token_state: ready`, wait for warmup, do not start.
 4. Confirm the evidence target does not exist:
-   `/opt/butterflyguy-gateway-evidence/2026-09-04-order-book-aa9d6e6-postreboot-171945`.
+   `/opt/butterflyguy-gateway-evidence/2026-09-04-session-soak-<tag>` (substitute
+   the captured `0.4.x-<short>` tag).
 5. From `/opt/butterflyguy`, run the redacted flatness gate:
 
 ```bash
 .venv/bin/python \
   /opt/butterflyguy-gateway-acceptance-tools/gateway_cutover_flatness_audit_20260828.py \
-  --config configs/config.yaml --date 2026-09-01
+  --config configs/config.yaml --date 2026-09-04
 ```
 
 Require `flat: true`, database OPEN trades `0`, database nonterminal intents
@@ -202,18 +237,22 @@ session; it must establish a clean baseline no later than 06:29 PDT. The process
 waits for the 06:30 PDT / 09:30 EDT open, samples every 15 minutes through the
 13:00 PDT close, then performs the post-close check at 13:10 PDT.
 
+Substitute the identity values captured at preflight (`<...>` below) and the
+`0.4.x-<short>` tag in the evidence path.
+
 ```bash
 ssh -F /dev/null -o BatchMode=yes billy@helios
-tmux new -s gateway-order-book-soak
+tmux new -s gateway-session-soak
 cd /opt/butterflyguy
 .venv/bin/python \
-  /opt/butterflyguy-gateway-acceptance-tools/schwab_gateway_session_soak_20260904_v6.py \
+  /opt/butterflyguy-gateway-acceptance-tools/schwab_gateway_session_soak_20260904_v7.py \
   --session-date 2026-09-04 \
-  --evidence-dir /opt/butterflyguy-gateway-evidence/2026-09-04-order-book-aa9d6e6-postreboot-171945 \
-  --expected-container-id ccd2b0d2d2b3dc928bdfba46ba80a73ab6831cb6e955582ec50df5c1f9b39768 \
-  --expected-image-id sha256:f1d287294864c05b00ca201d1d86f8344f0d6f61121074982f92667468fec7f0 \
-  --expected-revision aa9d6e65a91c14eadf70df1c3da15101fb84d3f9 \
-  --expected-started-at 2026-08-31T03:26:25.514589924Z
+  --evidence-dir /opt/butterflyguy-gateway-evidence/2026-09-04-session-soak-<tag> \
+  --expected-container-id <container-id> \
+  --expected-image-id <image-id> \
+  --expected-revision <revision-or-docker-inspect-value> \
+  --expected-started-at <started-at> \
+  --expected-consumer-priority protected
 ```
 
 Detach with `Ctrl-b d`; do not interrupt the process. Do not use cron, systemd,
@@ -239,16 +278,22 @@ original acceptance criteria and review:
 - health/ready 200, token ready, restart zero, and one process throughout;
 - no protected 429, authentication failure, readiness flap, unexplained gap,
   stale required surface, incomplete chain, invalid market, or cache mismatch;
-- every non-200 classified from the preserved response and metrics/log boundary;
-- any 504 shown to be bounded and non-compromising rather than merely ignored:
-  under `v6` a recovered single-window upstream 504/429 is adjudicated into
-  `manifest["transient_observations"]` (with its `checkpoint_index`,
-  `recovered_at_index`, classification, and attempt count) against the thresholds
-  in `manifest["transient_policy"]`; a run passes with a non-empty
+- every non-200 classified from the preserved response `error.code` and the
+  metrics/log boundary;
+- any bounded backpressure (504 `upstream_timeout`, 429
+  `gateway_capacity_exceeded`, 503 `gateway_queue_timeout`) shown to be bounded
+  and non-compromising rather than merely ignored: under `v7` a recovered
+  single-window occurrence is adjudicated into `manifest["transient_observations"]`
+  (with its `checkpoint_index`, `recovered_at_index`, `error_code`,
+  classification, and attempt count) against the thresholds in
+  `manifest["transient_policy"]`; a run passes with a non-empty
   `transient_observations` as long as `violations` is empty. Confirm each entry
-  recovered at the next checkpoint (or the post-close probe) and that no
-  `sustained_upstream_failure`, `gateway_too_flaky`, or
-  `unconfirmed_final_checkpoint_transient` entry reached `violations`;
+  recovered at the next checkpoint (or the post-close probe), cross-check the
+  `schwab_gateway_scheduler_*` counters in the surrounding `metrics_before` /
+  `metrics_after` snapshots, and confirm no `sustained_upstream_failure`,
+  `gateway_too_flaky`, or `unconfirmed_final_checkpoint_transient` entry reached
+  `violations`. `gateway_not_ready`, `upstream_unavailable`, and
+  `upstream_malformed` are never tolerated;
 - SPX and XSP no-regression evidence;
 - NDX normalized contracts retain both endpoints, `bid <= mark <= ask`, retain
   chain counts, and expose both contract and aggregate normalization flags;
