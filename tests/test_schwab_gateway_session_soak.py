@@ -7,7 +7,9 @@ import httpx
 import pytest
 
 from tools.schwab_gateway_session_soak import (
+    _reconstruct_surface_request,
     _request_with_retry,
+    adjudicate_transient_non_200,
     assert_production_identity,
     cache_consistency_result,
     canonical_market_data,
@@ -460,3 +462,155 @@ def test_opening_warmup_does_not_weaken_later_checkpoints() -> None:
 
     assert gating == sorted(violations)
     assert observations == []
+
+
+def _transient(name: str) -> dict:
+    return {
+        "name": name,
+        "status": 504,
+        "classification": "likely_three_second_upstream_timeout",
+        "latency_ms": 3010.0,
+        "attempts": 3,
+    }
+
+
+def _log_entry(index: int, failed: list[str], ok: list[str]) -> dict:
+    return {
+        "index": index,
+        "transient_non_200": [_transient(name) for name in failed],
+        "ok_names": ok,
+    }
+
+
+def _session_names() -> list[str]:
+    return ["session_spx_regular", "session_ndx_regular", "session_xsp_regular"]
+
+
+def test_adjudication_recovered_next_checkpoint_is_observation_not_gating() -> None:
+    names = _session_names()
+    checkpoint_log = [
+        _log_entry(i, [], names)
+        for i in range(10)
+    ]
+    checkpoint_log.append(_log_entry(10, names, []))
+    checkpoint_log.append(_log_entry(11, [], names))
+    checkpoint_log.extend(_log_entry(i, [], names) for i in range(12, 27))
+
+    result = adjudicate_transient_non_200(checkpoint_log)
+
+    assert result["gating"] == []
+    assert {obs["name"] for obs in result["observations"]} == set(names)
+    assert all(obs["recovered_at_index"] == 11 for obs in result["observations"])
+
+
+def test_adjudication_two_consecutive_checkpoints_is_gating() -> None:
+    names = _session_names()
+    checkpoint_log = [_log_entry(i, [], names) for i in range(10)]
+    checkpoint_log.append(_log_entry(10, ["session_spx_regular"], names[1:]))
+    checkpoint_log.append(_log_entry(11, ["session_spx_regular"], names[1:]))
+    checkpoint_log.extend(_log_entry(i, [], names) for i in range(12, 27))
+
+    result = adjudicate_transient_non_200(checkpoint_log)
+
+    assert result["gating"] == [
+        "session_spx_regular:sustained_upstream_failure@10",
+        "session_spx_regular:sustained_upstream_failure@11",
+    ]
+    assert result["observations"] == []
+
+
+def test_adjudication_flaky_gateway_promotes_all_transients_to_gating() -> None:
+    names = _session_names()
+    checkpoint_log = [_log_entry(i, [], names) for i in range(20)]
+    # Three non-consecutive flaky checkpoints, each recovering next window.
+    for idx in (2, 8, 14):
+        checkpoint_log[idx] = _log_entry(idx, ["session_spx_regular"], names[1:])
+
+    result = adjudicate_transient_non_200(checkpoint_log)
+
+    assert result["gateway_too_flaky"] is True
+    assert result["flaky_checkpoint_threshold"] == 3
+    assert sorted(result["gating"]) == [
+        "session_spx_regular:gateway_too_flaky@14",
+        "session_spx_regular:gateway_too_flaky@2",
+        "session_spx_regular:gateway_too_flaky@8",
+    ]
+    assert result["observations"] == []
+
+
+def test_adjudication_final_checkpoint_needs_post_close_probe() -> None:
+    names = _session_names()
+    checkpoint_log = [_log_entry(i, [], names) for i in range(26)]
+    checkpoint_log.append(_log_entry(26, names, []))
+
+    unconfirmed = adjudicate_transient_non_200(checkpoint_log)
+    assert unconfirmed["final_checkpoint_names"] == sorted(names)
+    assert sorted(unconfirmed["gating"]) == sorted(
+        f"{name}:unconfirmed_final_checkpoint_transient@26" for name in names
+    )
+
+    confirmed = adjudicate_transient_non_200(
+        checkpoint_log, final_probe_ok={name: True for name in names}
+    )
+    assert confirmed["gating"] == []
+    assert {obs["name"] for obs in confirmed["observations"]} == set(names)
+    assert all(
+        obs["recovered_at_index"] == "post_close_probe"
+        for obs in confirmed["observations"]
+    )
+
+
+def test_adjudication_unrecovered_midsession_transient_stays_gating() -> None:
+    names = _session_names()
+    checkpoint_log = [_log_entry(i, [], names) for i in range(27)]
+    # Single flaky checkpoint but the surface never returns 200 at index 11.
+    checkpoint_log[10] = _log_entry(10, ["session_spx_regular"], names[1:])
+    checkpoint_log[11] = _log_entry(11, [], names[1:])
+
+    result = adjudicate_transient_non_200(checkpoint_log)
+
+    assert result["gating"] == [
+        "session_spx_regular:unrecovered_transient_non_200@10"
+    ]
+
+
+def test_reconstruct_surface_request_round_trips_every_surface() -> None:
+    session_date = dt.date(2026, 9, 2)
+    assert _reconstruct_surface_request("spot_vix", session_date) == (
+        "/v1/spot",
+        {"symbol": "$VIX"},
+    )
+    assert _reconstruct_surface_request("chain_spx_first", session_date) == (
+        "/v1/option-chain",
+        {"symbol": "$SPX", "expiration": "2026-09-02"},
+    )
+    assert _reconstruct_surface_request("history_ndx_minute", session_date) == (
+        "/v1/history",
+        {"symbol": "$NDX", "frequency": "minute", "days_back": "1"},
+    )
+    assert _reconstruct_surface_request("session_xsp_regular", session_date) == (
+        "/v1/session-history",
+        {"symbol": "$XSP", "date": "2026-09-02", "session": "regular"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_request_retry_keeps_persistent_server_error_gating(tmp_path) -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"detail": "upstream error"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="http://gateway", transport=transport
+    ) as client:
+        result = await _request_with_retry(
+            client,
+            tmp_path,
+            "session_spx_regular",
+            "/v1/session-history",
+            {"symbol": "$SPX"},
+            retry_backoff_seconds=0,
+        )
+
+    assert result["classification"] == "gateway_or_upstream_server_error"
+    assert len(result["attempts"]) == 3

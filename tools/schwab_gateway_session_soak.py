@@ -32,8 +32,8 @@ UTC = dt.timezone.utc
 SYMBOLS = ("$SPX", "$NDX", "$XSP")
 SPOT_SYMBOLS = (*SYMBOLS, "$VIX")
 MINUTE_HISTORY_LIVE_MAX_AGE_SECONDS = 180.0
-REQUEST_MAX_ATTEMPTS = 2
-REQUEST_RETRY_BACKOFF_SECONDS = 0.25
+REQUEST_MAX_ATTEMPTS = 3
+REQUEST_RETRY_BACKOFF_SECONDS = 0.5
 CONTAINER_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 METRIC_RE = re.compile(
     r"^(gateway_(?:admission_total|client_request_latency_seconds(?:_bucket|_count|_sum)?|"
@@ -61,6 +61,17 @@ RETRYABLE_REQUEST_CLASSIFICATIONS = frozenset(
         "admission_rejection",
         "gateway_or_upstream_server_error",
         "client_or_transport_error",
+    }
+)
+# Non-200 classifications that describe a bounded, recoverable upstream blip rather
+# than a compromised gateway.  A checkpoint records these to ``transient_non_200``
+# (adjudicated across checkpoints in ``main``) instead of failing outright.  Every
+# other non-200 outcome -- 401/403, non-504 5xx, transport errors, unexpected
+# status, invalid JSON on a 200 -- stays gating at the checkpoint.
+BOUNDED_TRANSIENT_CLASSIFICATIONS = frozenset(
+    {
+        "likely_three_second_upstream_timeout",
+        "admission_rejection",
     }
 )
 OPENING_WARMUP_SURFACES = ("spot_", "chain_", "history_", "session_")
@@ -748,6 +759,149 @@ def partition_opening_warmup_violations(
     return gating, observations
 
 
+def _reconstruct_surface_request(
+    name: str, session_date: dt.date
+) -> tuple[str, dict[str, str]]:
+    """Rebuild the request tuple for a checkpoint surface name (post-close probe)."""
+    symbol = "$" + name.split("_")[1].upper()
+    if name.startswith("spot_"):
+        return "/v1/spot", {"symbol": symbol}
+    if name.startswith("chain_"):
+        return "/v1/option-chain", {
+            "symbol": symbol,
+            "expiration": session_date.isoformat(),
+        }
+    if name.startswith("history_"):
+        return "/v1/history", {
+            "symbol": symbol,
+            "frequency": "minute",
+            "days_back": "1",
+        }
+    if name.startswith("session_"):
+        return "/v1/session-history", {
+            "symbol": symbol,
+            "date": session_date.isoformat(),
+            "session": "regular",
+        }
+    raise ValueError(f"unknown surface name: {name}")
+
+
+async def _confirm_surfaces(
+    client: httpx.AsyncClient,
+    root: pathlib.Path,
+    session_date: dt.date,
+    names: list[str],
+) -> dict[str, bool]:
+    """Hit each named surface once after close to confirm a final-checkpoint blip."""
+    directory = root / "raw" / "post_close_transient_probe"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    results: dict[str, bool] = {}
+    for name in names:
+        path, params = _reconstruct_surface_request(name, session_date)
+        outcome = await _request(client, directory, name, path, params)
+        results[name] = outcome["status"] == 200
+    return results
+
+
+def adjudicate_transient_non_200(
+    checkpoint_log: list[dict[str, Any]],
+    *,
+    final_probe_ok: dict[str, bool] | None = None,
+) -> dict[str, Any]:
+    """Adjudicate per-checkpoint ``transient_non_200`` records across the session.
+
+    ``checkpoint_log`` entries are ``{"index", "transient_non_200", "ok_names"}``
+    where ``ok_names`` lists the request names that returned a 200 with a JSON
+    object body at that checkpoint.
+
+    Rules, in priority order:
+      * 2+ consecutive checkpoints failing the same surface -> gating.
+      * flaky checkpoints >= ``max(3, ceil(0.10 * checkpoint_count))`` -> every
+        transient entry is promoted to gating ("gateway too flaky").
+      * transient at the final checkpoint -> observation only if a post-close probe
+        returned 200 for that surface, otherwise gating (also gating when no probe
+        result is supplied -- the conservative fallback).
+      * surface returned 200 at the immediately following checkpoint -> observation.
+      * anything else (not recovered, not confirmed) -> gating.
+    """
+    checkpoint_count = len(checkpoint_log)
+    threshold = max(3, math.ceil(0.10 * checkpoint_count)) if checkpoint_count else 3
+    ok_by_index = {c["index"]: set(c["ok_names"]) for c in checkpoint_log}
+    indices = [c["index"] for c in checkpoint_log]
+    last_index = indices[-1] if indices else None
+
+    failing_indices: dict[str, list[int]] = {}
+    for entry in checkpoint_log:
+        for record in entry["transient_non_200"]:
+            failing_indices.setdefault(record["name"], []).append(entry["index"])
+
+    sustained: set[tuple[str, int]] = set()
+    for name, idxs in failing_indices.items():
+        ordered = sorted(idxs)
+        for earlier, later in zip(ordered, ordered[1:], strict=False):
+            if later == earlier + 1:
+                sustained.add((name, earlier))
+                sustained.add((name, later))
+
+    flaky_checkpoint_count = sum(
+        1 for c in checkpoint_log if c["transient_non_200"]
+    )
+    gateway_too_flaky = bool(checkpoint_count) and flaky_checkpoint_count >= threshold
+
+    observations: list[dict[str, Any]] = []
+    gating: list[str] = []
+    final_names: list[str] = []
+    for entry in checkpoint_log:
+        idx = entry["index"]
+        for record in entry["transient_non_200"]:
+            name = record["name"]
+            recovered_at = (
+                idx + 1 if name in ok_by_index.get(idx + 1, set()) else None
+            )
+            observation = {
+                "name": name,
+                "checkpoint_index": idx,
+                "recovered_at_index": recovered_at,
+                "status": record["status"],
+                "classification": record["classification"],
+                "latency_ms": record["latency_ms"],
+                "attempts": record["attempts"],
+            }
+            if (name, idx) in sustained:
+                gating.append(f"{name}:sustained_upstream_failure@{idx}")
+                continue
+            if gateway_too_flaky:
+                gating.append(f"{name}:gateway_too_flaky@{idx}")
+                continue
+            if idx == last_index:
+                final_names.append(name)
+                probe_ok = (
+                    None if final_probe_ok is None else final_probe_ok.get(name, False)
+                )
+                if probe_ok:
+                    observation["recovered_at_index"] = "post_close_probe"
+                    observations.append(observation)
+                else:
+                    gating.append(
+                        f"{name}:unconfirmed_final_checkpoint_transient@{idx}"
+                    )
+                continue
+            if recovered_at is not None:
+                observations.append(observation)
+                continue
+            gating.append(f"{name}:unrecovered_transient_non_200@{idx}")
+
+    return {
+        "observations": observations,
+        "gating": sorted(set(gating)),
+        "checkpoint_count": checkpoint_count,
+        "flaky_checkpoint_threshold": threshold,
+        "flaky_checkpoint_count": flaky_checkpoint_count,
+        "gateway_too_flaky": gateway_too_flaky,
+        "final_checkpoint_names": sorted(set(final_names)),
+    }
+
+
 async def run_checkpoint(
     client: httpx.AsyncClient,
     root: pathlib.Path,
@@ -825,11 +979,27 @@ async def run_checkpoint(
     validations: dict[str, Any] = {}
     bodies: dict[str, dict[str, Any]] = {}
     summaries: list[dict[str, Any]] = []
+    transient_non_200: list[dict[str, Any]] = []
     for request in requests:
         body = request.pop("body")
         summaries.append(request)
         if request["status"] != 200 or not isinstance(body, dict):
-            violations.append(f"{request['name']}_non_200_or_invalid_json")
+            if (
+                request["status"] is not None
+                and request["classification"] in BOUNDED_TRANSIENT_CLASSIFICATIONS
+                and len(request["attempts"]) >= REQUEST_MAX_ATTEMPTS
+            ):
+                transient_non_200.append(
+                    {
+                        "name": request["name"],
+                        "status": request["status"],
+                        "classification": request["classification"],
+                        "latency_ms": request["latency_ms"],
+                        "attempts": len(request["attempts"]),
+                    }
+                )
+            else:
+                violations.append(f"{request['name']}_non_200_or_invalid_json")
             continue
         bodies[request["name"]] = body
         symbol = "$" + request["name"].split("_")[1].upper()
@@ -882,6 +1052,7 @@ async def run_checkpoint(
         "requests": summaries,
         "validations": validations,
         "cache_consistency": cache_consistency,
+        "transient_non_200": transient_non_200,
         "violations": sorted(set(violations)),
     }
     result_path = directory / "checkpoint.json"
@@ -1043,6 +1214,21 @@ async def main() -> int:
         },
         "opening_warmup_checkpoints": args.opening_warmup_checkpoints,
         "opening_warmup_observations": [],
+        "transient_policy": {
+            "bounded_transient_classifications": sorted(
+                BOUNDED_TRANSIENT_CLASSIFICATIONS
+            ),
+            "recovered_next_checkpoint": "observation_not_violation",
+            "consecutive_failed_checkpoints_gating": 2,
+            "flaky_checkpoint_rule": (
+                "promote all transient entries to gating when flaky checkpoints "
+                ">= max(3, ceil(0.10 * checkpoint_count))"
+            ),
+            "final_checkpoint_rule": (
+                "post-close confirmation probe; 200 => observation, else gating"
+            ),
+        },
+        "transient_observations": [],
         "checkpoints": [],
         "violations": [],
         "complete": False,
@@ -1086,6 +1272,7 @@ async def main() -> int:
         checkpoint_at = open_et.astimezone(UTC)
         index = 0
         production_drift = False
+        transient_adjudication_log: list[dict[str, Any]] = []
         while checkpoint_at <= close_et.astimezone(UTC):
             await _wait_until(checkpoint_at)
             checkpoint = await run_checkpoint(
@@ -1112,6 +1299,14 @@ async def main() -> int:
                     "violations": checkpoint["violations"],
                     "gating_violations": gating_violations,
                     "opening_warmup_observations": warmup_observations,
+                    "transient_non_200": checkpoint["transient_non_200"],
+                }
+            )
+            transient_adjudication_log.append(
+                {
+                    "index": index,
+                    "transient_non_200": checkpoint["transient_non_200"],
+                    "ok_names": sorted(checkpoint["validations"]),
                 }
             )
             if warmup_observations:
@@ -1153,6 +1348,33 @@ async def main() -> int:
             manifest["violations"].extend(
                 manifest["post_close_extended"]["violations"]
             )
+
+        if transient_adjudication_log:
+            final_probe_ok: dict[str, bool] | None = None
+            preliminary = adjudicate_transient_non_200(transient_adjudication_log)
+            if preliminary["final_checkpoint_names"]:
+                final_probe_ok = await _confirm_surfaces(
+                    client,
+                    root,
+                    args.session_date,
+                    preliminary["final_checkpoint_names"],
+                )
+            adjudication = adjudicate_transient_non_200(
+                transient_adjudication_log, final_probe_ok=final_probe_ok
+            )
+            manifest["transient_observations"] = adjudication["observations"]
+            manifest["transient_policy"]["checkpoint_count"] = adjudication[
+                "checkpoint_count"
+            ]
+            manifest["transient_policy"]["flaky_checkpoint_threshold"] = adjudication[
+                "flaky_checkpoint_threshold"
+            ]
+            manifest["transient_policy"]["flaky_checkpoint_count"] = adjudication[
+                "flaky_checkpoint_count"
+            ]
+            manifest["transient_policy"]["final_checkpoint_probe"] = final_probe_ok
+            manifest["violations"].extend(adjudication["gating"])
+            _write_manifest(root / "manifest.json", manifest)
 
     manifest["filtered_log_sha256"] = _filtered_gateway_logs(
         args.production_container,

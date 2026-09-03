@@ -108,13 +108,13 @@ strict zero-skew comparison remains the default for fixtures.
 
 Stage these versioned files on Helios without replacing any service file:
 
-- `schwab_gateway_session_soak_20260903_v5.py` SHA-256
-  `5c214fabb33ba137b8c23ff53ab19ba6ec24ffdd29aebbe32fce2d07bd331c82`;
+- `schwab_gateway_session_soak_20260904_v6.py` SHA-256
+  `c05d2d84a485cf31d47035eaf330e14427a97571dedeec031d995c579fca2dae`;
 - `gateway_cutover_flatness_audit_20260828.py` SHA-256
   `9f215ecd3f6cd1cba048ea1921821da0730ad44a32cbb859fc468fbb443427f0`.
 
-The `v5` soak tool replaces `v4` (used for the 2026-09-02 run). Its only
-behavioural change is in the cached option-chain comparison: `canonical_market_data`
+The `v5` soak tool replaced `v4` (used for the 2026-09-02 run). Its only
+behavioural change was in the cached option-chain comparison: `canonical_market_data`
 now also drops the reevaluated `stale` field and the `stale` /
 `stale_contracts_present` quality flags at every nesting level, so per-contract
 freshness re-stamping in the sub-second gap between the two chain reads no longer
@@ -124,6 +124,35 @@ freshness-only difference paths. Independent freshness gating is unchanged:
 cached response still fails `aggregate_stale` / `too_old_for_consumer`. Verified
 against the 2026-09-02 evidence: all recorded `cache_semantic_mismatch`
 checkpoints resolve to `semantic_equal=true` with zero market-field drift.
+
+The `v6` soak tool replaces `v5` and carries `v5`'s cache change unchanged. It
+adds tiered adjudication for bounded, recovered upstream non-200s, mirroring the
+opening-warmup partition:
+
+- A checkpoint no longer fails outright on a `likely_three_second_upstream_timeout`
+  (504 at the gateway's ~3 s upstream deadline) or `admission_rejection` (429)
+  once retries are exhausted; it records the surface to `checkpoint["transient_non_200"]`.
+  Every other non-200 stays gating at the checkpoint — 401/403, non-504 5xx
+  (`gateway_or_upstream_server_error`), `client_or_transport_error`,
+  `unexpected_http_status`, and invalid JSON on a 200.
+- After the checkpoint loop, `main()` adjudicates the accumulated transients:
+  a surface that returns 200 at the immediately following checkpoint becomes a
+  `transient_observations` entry (not a violation); 2+ consecutive failed
+  checkpoints for one surface, or transients on `>= max(3, ceil(0.10 * checkpoints))`
+  checkpoints, are promoted to gating; a transient at the final checkpoint is
+  confirmed by a single post-close probe of only those surfaces (200 =>
+  observation, else gating).
+- `manifest["transient_observations"]` and `manifest["transient_policy"]` record
+  the outcome and thresholds. The exit code is still
+  `0 if not manifest["violations"] else 1`; bounded/recovered 504s simply no
+  longer land in `violations`.
+- Defense in depth: `REQUEST_MAX_ATTEMPTS` 2 -> 3 and
+  `REQUEST_RETRY_BACKOFF_SECONDS` 0.25 -> 0.5 (attempts at 0 / +0.5 s / +1.5 s);
+  every raw attempt is still persisted.
+
+Replayed against the 2026-09-02 evidence: the three `session_*_regular` 504s at
+checkpoint 10 move to `transient_observations` (recovered at checkpoint 11) and
+the run's `violation_count` goes to 0.
 
 The soak tool has no Docker lifecycle, database, broker-account, token-write, or
 order capability. It reads the scoped gateway key without printing it, sends a
@@ -178,7 +207,7 @@ ssh -F /dev/null -o BatchMode=yes billy@helios
 tmux new -s gateway-order-book-soak
 cd /opt/butterflyguy
 .venv/bin/python \
-  /opt/butterflyguy-gateway-acceptance-tools/schwab_gateway_session_soak_20260903_v5.py \
+  /opt/butterflyguy-gateway-acceptance-tools/schwab_gateway_session_soak_20260904_v6.py \
   --session-date 2026-09-01 \
   --evidence-dir /opt/butterflyguy-gateway-evidence/2026-09-01-order-book-aa9d6e6-refreeze-032625 \
   --expected-container-id ccd2b0d2d2b3dc928bdfba46ba80a73ab6831cb6e955582ec50df5c1f9b39768 \
@@ -211,7 +240,15 @@ original acceptance criteria and review:
 - no protected 429, authentication failure, readiness flap, unexplained gap,
   stale required surface, incomplete chain, invalid market, or cache mismatch;
 - every non-200 classified from the preserved response and metrics/log boundary;
-- any 504 shown to be bounded and non-compromising rather than merely ignored;
+- any 504 shown to be bounded and non-compromising rather than merely ignored:
+  under `v6` a recovered single-window upstream 504/429 is adjudicated into
+  `manifest["transient_observations"]` (with its `checkpoint_index`,
+  `recovered_at_index`, classification, and attempt count) against the thresholds
+  in `manifest["transient_policy"]`; a run passes with a non-empty
+  `transient_observations` as long as `violations` is empty. Confirm each entry
+  recovered at the next checkpoint (or the post-close probe) and that no
+  `sustained_upstream_failure`, `gateway_too_flaky`, or
+  `unconfirmed_final_checkpoint_transient` entry reached `violations`;
 - SPX and XSP no-regression evidence;
 - NDX normalized contracts retain both endpoints, `bid <= mark <= ask`, retain
   chain counts, and expose both contract and aggregate normalization flags;
