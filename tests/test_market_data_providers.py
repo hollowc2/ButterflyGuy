@@ -5,6 +5,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from schwab_gateway_sdk.client import (
+    GatewayAuthenticationError,
+    GatewayTimeoutError,
+)
 
 from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
 from butterfly_guy.data.providers import (
@@ -180,6 +184,50 @@ async def test_gateway_provider_has_no_direct_fallback_on_gateway_error() -> Non
 
 
 @pytest.mark.asyncio
+async def test_gateway_provider_retries_one_transient_timeout() -> None:
+    gateway = AsyncMock()
+    gateway.get_spot.side_effect = [
+        GatewayTimeoutError("upstream timed out"),
+        SimpleNamespace(spot=_observation(symbol="$SPX", price=6300.0)),
+    ]
+    provider = GatewayAuthoritativeMarketDataProvider(
+        gateway,
+        max_attempts=2,
+        retry_backoff_seconds=0.25,
+    )
+
+    with patch("butterfly_guy.data.providers.asyncio.sleep", new=AsyncMock()) as sleep:
+        assert await provider.get_spot_price("$SPX") == 6300.0
+
+    assert gateway.get_spot.await_count == 2
+    sleep.assert_awaited_once_with(0.25)
+
+
+@pytest.mark.asyncio
+async def test_gateway_provider_does_not_retry_authentication_failure() -> None:
+    gateway = AsyncMock()
+    gateway.get_spot.side_effect = GatewayAuthenticationError("bad key")
+    provider = GatewayAuthoritativeMarketDataProvider(gateway, max_attempts=2)
+
+    with pytest.raises(GatewayAuthenticationError, match="bad key"):
+        await provider.get_spot_price("$SPX")
+
+    gateway.get_spot.assert_awaited_once_with("$SPX")
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"max_attempts": 0}, "max_attempts"),
+        ({"retry_backoff_seconds": -0.1}, "retry_backoff_seconds"),
+    ],
+)
+def test_gateway_provider_rejects_invalid_retry_settings(kwargs, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        GatewayAuthoritativeMarketDataProvider(AsyncMock(), **kwargs)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
@@ -264,6 +312,39 @@ async def test_gateway_provider_defaults_normalized_null_time_value_to_zero() ->
     normalized = chain["callExpDateMap"]["2026-08-24:0"]["6320"][0]
     assert normalized["timeValue"] == 0.0
     assert (normalized["bid"], normalized["ask"], normalized["mark"]) == (1.0, 1.2, 1.1)
+
+
+@pytest.mark.asyncio
+async def test_gateway_provider_retains_audibly_normalized_crossed_ndx_contract() -> None:
+    expiration = dt.date(2026, 8, 24)
+    call = _contract("CALL", "NDX 260824C06450000", 6450.0)
+    call.bid = 126.0
+    call.ask = 126.2
+    call.mark = 126.1
+    call.data_quality_flags = ("crossed_market_normalized",)
+    gateway = AsyncMock()
+    gateway.get_option_chain.return_value = SimpleNamespace(
+        option_chain=_observation(
+            symbol="NDX",
+            expiration=expiration,
+            underlying_price=6450.5,
+            call_contract_count=1,
+            put_contract_count=1,
+            strike_count=1,
+            contracts=(call, _contract("PUT", "NDX 260824P06450000", 6450.0)),
+            data_quality_flags=("crossed_markets_normalized",),
+        )
+    )
+    provider = GatewayAuthoritativeMarketDataProvider(gateway)
+
+    chain = await provider.get_option_chain("NDX", expiration)
+
+    normalized = chain["callExpDateMap"]["2026-08-24:0"]["6450"][0]
+    assert (normalized["bid"], normalized["ask"], normalized["mark"]) == (
+        126.0,
+        126.2,
+        126.1,
+    )
 
 
 @pytest.mark.asyncio

@@ -5,10 +5,16 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import math
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from schwab_gateway_sdk.client import GatewayMarketDataClient
+from schwab_gateway_sdk.client import (
+    GatewayCapacityError,
+    GatewayMarketDataClient,
+    GatewayTimeoutError,
+    GatewayUnavailableError,
+)
 
 from butterfly_guy.core.metrics import clear_readiness, set_readiness
 from butterfly_guy.core.time_utils import MARKET_OPEN, market_close_time
@@ -19,6 +25,11 @@ MINUTE_HISTORY_LIVE_MAX_AGE_SECONDS = 180.0
 MINUTE_HISTORY_POST_CLOSE_MAX_AGE_SECONDS = 8 * 60 * 60.0
 SESSION_CLOSE_BAR_TOLERANCE = dt.timedelta(minutes=5)
 GATEWAY_REQUIRED_SURFACES = frozenset({"spot", "option_chain", "minute_history"})
+TRANSIENT_GATEWAY_ERRORS = (
+    GatewayCapacityError,
+    GatewayTimeoutError,
+    GatewayUnavailableError,
+)
 
 
 def _now_eastern() -> dt.datetime:
@@ -167,11 +178,19 @@ class GatewayAuthoritativeMarketDataProvider:
         client: GatewayMarketDataClient,
         *,
         max_current_age_seconds: float = 30.0,
+        max_attempts: int = 2,
+        retry_backoff_seconds: float = 0.25,
     ) -> None:
         if max_current_age_seconds <= 0:
             raise ValueError("max_current_age_seconds must be positive")
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least one")
+        if retry_backoff_seconds < 0:
+            raise ValueError("retry_backoff_seconds must be nonnegative")
         self._client = client
         self._max_current_age_seconds = max_current_age_seconds
+        self._max_attempts = max_attempts
+        self._retry_backoff_seconds = retry_backoff_seconds
         self._required_surfaces_ready: set[str] = set()
         self.begin_readiness_tracking()
 
@@ -191,9 +210,28 @@ class GatewayAuthoritativeMarketDataProvider:
         clear_readiness("gateway_market_data_warming")
         set_readiness("gateway_market_data_unavailable")
 
-    async def _required_read(self, surface: str, operation: Any) -> Any:
+    async def _transient_read(
+        self,
+        operation: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                return await operation()
+            except TRANSIENT_GATEWAY_ERRORS:
+                if attempt == self._max_attempts:
+                    raise
+                await asyncio.sleep(
+                    self._retry_backoff_seconds * (2 ** (attempt - 1))
+                )
+        raise AssertionError("gateway retry loop exhausted")
+
+    async def _required_read(
+        self,
+        surface: str,
+        operation: Callable[[], Awaitable[Any]],
+    ) -> Any:
         try:
-            result = await operation
+            result = await self._transient_read(operation)
         except Exception:
             self._required_surface_failed()
             raise
@@ -201,7 +239,7 @@ class GatewayAuthoritativeMarketDataProvider:
         return result
 
     async def get_spot_price(self, symbol: str = "$SPX") -> float:
-        return await self._required_read("spot", self._get_spot_price(symbol))
+        return await self._required_read("spot", lambda: self._get_spot_price(symbol))
 
     async def _get_spot_price(self, symbol: str) -> float:
         response = await self._client.get_spot(symbol)
@@ -220,7 +258,7 @@ class GatewayAuthoritativeMarketDataProvider:
     ) -> dict[str, Any]:
         return await self._required_read(
             "option_chain",
-            self._get_option_chain(symbol, expiration),
+            lambda: self._get_option_chain(symbol, expiration),
         )
 
     async def _get_option_chain(
@@ -234,6 +272,7 @@ class GatewayAuthoritativeMarketDataProvider:
             max_age_seconds=self._max_current_age_seconds,
             allowed_quality_flags=frozenset(
                 {
+                    "crossed_markets_normalized",
                     "stale_contracts_present",
                     "missing_contract_event_timestamp",
                 }
@@ -258,7 +297,8 @@ class GatewayAuthoritativeMarketDataProvider:
         for contract in chain.contracts:
             contract_flags = set(contract.data_quality_flags)
             omittable_flags = {"stale", "missing_event_timestamp"}
-            fatal_flags = contract_flags - omittable_flags
+            usable_flags = {"crossed_market_normalized"}
+            fatal_flags = contract_flags - omittable_flags - usable_flags
             if fatal_flags:
                 raise GatewayMarketDataError(
                     "gateway option contract failed quality checks: "
@@ -268,7 +308,7 @@ class GatewayAuthoritativeMarketDataProvider:
                 not contract.stale
                 and contract.age_seconds is not None
                 and contract.age_seconds <= self._max_current_age_seconds
-                and not contract_flags
+                and not (contract_flags & omittable_flags)
             )
             if contract.expiration != expiration:
                 raise GatewayMarketDataError(
@@ -420,7 +460,7 @@ class GatewayAuthoritativeMarketDataProvider:
     ) -> list[dict]:
         return await self._required_read(
             "minute_history",
-            self._get_intraday_bars(symbol, days_back),
+            lambda: self._get_intraday_bars(symbol, days_back),
         )
 
     async def _get_intraday_bars(
@@ -455,7 +495,13 @@ class GatewayAuthoritativeMarketDataProvider:
         sessions = ("regular", "extended") if include_extended_hours else ("regular",)
         responses = await asyncio.gather(
             *(
-                self._client.get_session_history(symbol, day, session=session)
+                self._transient_read(
+                    lambda session=session: self._client.get_session_history(
+                        symbol,
+                        day,
+                        session=session,
+                    )
+                )
                 for session in sessions
             )
         )
@@ -542,10 +588,12 @@ class GatewayAuthoritativeMarketDataProvider:
     async def get_daily_bars(
         self, symbol: str, days_back: int = 10
     ) -> list[dict]:
-        response = await self._client.get_history(
-            symbol,
-            frequency="daily",
-            days_back=days_back,
+        response = await self._transient_read(
+            lambda: self._client.get_history(
+                symbol,
+                frequency="daily",
+                days_back=days_back,
+            )
         )
         return self._history_bars(
             response.history,
