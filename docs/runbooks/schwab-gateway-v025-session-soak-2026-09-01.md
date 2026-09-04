@@ -20,11 +20,24 @@ The acceptance target:
   `docs/runbooks/schwab-gateway-soak-health.override.yml`, SHA-256
   `2f998db4ff20a0a8640122419742f74db74edc03f3b9ea86a58e30d902b49cbf`.
 
-**Identity is NOT frozen in this document.** The production gateway moved off
-the `aa9d6e6` order-book build on 2026-09-03 and is being iterated on the 0.4.x
-strict-priority scheduler line (`0.4.0` `b514f08` -> `0.4.1` `98db8a6` -> `0.4.2`
-`efee41f`, all 2026-09-03). Freeze the exact identity at preflight, once
-deployment has stopped, by capturing it into the launch command:
+The production gateway moved off the `aa9d6e6` order-book build on 2026-09-03 and
+is now on the 0.4.x strict-priority scheduler line. Identity captured
+**2026-09-04 00:01 UTC** (stable, no restart in the prior 3 h, warm):
+
+- release tag: `schwab-gateway:0.4.2-efee41f`;
+- container ID:
+  `1a2dfa27c6a19ae72c13a87a9fe9ce2d5d42b9f20eb82179c1774fba6b4e433d`;
+- image ID:
+  `sha256:c8540b5c4eb2ab3d0dfa00d85d75a6fb774bcf22ca1d352b38b68507edb17dcd`;
+- revision label: **absent** (`docker inspect` reports `<no value>`; the `0.4.1` /
+  `0.4.2` release builds do not stamp `org.opencontainers.image.revision`, so pass
+  `--expected-revision '<no value>'` verbatim — the real revision `efee41f` is
+  preserved in the tag and evidence path);
+- started at: `2026-09-03T22:57:45.300059462Z`;
+- restart count `0`, status `running`, health `healthy`, gateway process count `1`.
+
+Re-capture and update the launch command below if the gateway is restarted before
+the baseline:
 
 ```bash
 C=schwab_gateway_live
@@ -32,23 +45,11 @@ docker inspect --format '{{.Id}} {{.Image}} {{index .Config.Labels "org.opencont
 docker image inspect --format '{{.RepoTags}}' "$(docker inspect --format '{{.Image}}' "$C")"
 ```
 
-Record `container ID`, `image ID`, `revision`, `started at`, and the
-`schwab-gateway:0.4.x-<short>` tag, and pass the first four to the harness as
-`--expected-*`. Restart count must be `0`, status `running`, health `healthy`,
-process count `1`.
-
-Notes for the 0.4.x line:
-
-- The `0.4.1`/`0.4.2` release builds do **not** stamp
-  `org.opencontainers.image.revision` (the `b514f08` build did). If the label is
-  empty, either fix the build to stamp it or pass `--expected-revision` matching
-  whatever `docker inspect` reports for that container; do not invent a value.
-- `0.4.1` gates live readiness on one successful Schwab round-trip at startup, so
-  a freshly redeployed gateway serves `503 gateway_not_ready` until it is warm.
-  The final build must be deployed and warm (`/ready` returns 200 with
-  `token_state: ready`) well before the 06:22 PDT baseline, and must not be
-  redeployed afterward. Any Docker, container, or gateway restart after the
-  baseline invalidates the run.
+`0.4.1` gates live readiness on one successful Schwab round-trip at startup, so a
+freshly redeployed gateway serves `503 gateway_not_ready` until it is warm. The
+build must stay deployed and warm (`/ready` returns 200 with `token_state: ready`)
+through the 06:22 PDT baseline and must not be redeployed afterward. Any Docker,
+container, or gateway restart after the baseline invalidates the run.
 
 The harness aborts full-session credit if the container ID, image ID, revision,
 start time, restart count, health, or process count changes mid-session.
@@ -62,20 +63,21 @@ context but does not freeze it.
 
 ## Credential lineage
 
-The shared token currently records:
+The shared token (observed 2026-09-04 00:01 UTC):
 
-- creation: `2026-08-29T21:20:16Z` (`14:20:16 PDT`);
-- expiry: `2026-09-05T21:20:16Z` (`14:20:16 PDT`);
+- expiry: on or after `2026-09-05T21:20:16Z` — the token was re-refreshed several
+  times on 2026-09-03 during the gateway 0.4.x rollout; `token_state: ready` and
+  3 successful refreshes since the current container started;
 - host file mode/owner: `0600`, `1001:1001`;
-- host inode observed after final infrastructure recovery: `60948`;
+- host inode: `42448`;
 - active token mounts: production gateway, SPX, NDX, and XSP all bind the same
-  host token directory.
+  host token directory and agree on inode `42448`.
 
-This lineage is valid through the full Tuesday session. Reauthorization is not
-part of the Tuesday preflight. The preflight must still prove host/container
-inode and truncated-fingerprint agreement for those four active consumers
-without printing token contents. Do not start a retired candidate service for
-token-agreement evidence.
+This lineage covers the full 2026-09-04 session. Reauthorization is not part of
+the preflight. The preflight must still prove host/container inode and
+truncated-fingerprint agreement for those four active consumers without printing
+token contents. Do not start a retired candidate service for token-agreement
+evidence.
 
 ## EquityScanner coexistence boundary
 
@@ -198,19 +200,18 @@ hash differs.
 ## Tuesday preflight — final gate at 06:20-06:29 PDT
 
 1. Confirm the host clock says Friday 2026-09-04 and it is a normal session.
-2. Confirm gateway deployment has stopped, then capture the live identity (see
-   "The acceptance target" above) and freeze it into the launch command. Confirm
-   the refreshed token is ready and all four active consumers agree on the
+2. Confirm the token is ready and all four active consumers agree on the
    then-current host token inode and approved truncated fingerprint without
-   printing token contents.
-3. Confirm production identity matches the captured values, health and readiness
-   return 200, token state is ready, restart count is zero, and there is exactly
-   one gateway process. On the 0.4.x line a freshly redeployed gateway serves
-   `503 gateway_not_ready` until its first successful Schwab round-trip — if
-   `/ready` is not 200 with `token_state: ready`, wait for warmup, do not start.
+   printing token contents. (Captured 2026-09-04 00:01 UTC: inode `42448`, mode
+   `0600`, owner `1001:1001`, all four consumers agree.)
+3. Confirm production identity matches the values in "The acceptance target"
+   above, health and readiness return 200, token state is ready, restart count is
+   zero, and there is exactly one gateway process. If the gateway was restarted
+   since the 00:01 UTC capture, re-capture and update the launch command; on the
+   0.4.x line a freshly redeployed gateway serves `503 gateway_not_ready` until
+   warm — if `/ready` is not 200 with `token_state: ready`, wait, do not start.
 4. Confirm the evidence target does not exist:
-   `/opt/butterflyguy-gateway-evidence/2026-09-04-session-soak-<tag>` (substitute
-   the captured `0.4.x-<short>` tag).
+   `/opt/butterflyguy-gateway-evidence/2026-09-04-session-soak-v0.4.2-efee41f`.
 5. From `/opt/butterflyguy`, run the redacted flatness gate:
 
 ```bash
@@ -237,8 +238,8 @@ session; it must establish a clean baseline no later than 06:29 PDT. The process
 waits for the 06:30 PDT / 09:30 EDT open, samples every 15 minutes through the
 13:00 PDT close, then performs the post-close check at 13:10 PDT.
 
-Substitute the identity values captured at preflight (`<...>` below) and the
-`0.4.x-<short>` tag in the evidence path.
+Identity below was captured 2026-09-04 00:01 UTC. Re-verify at preflight; if the
+gateway was restarted, re-capture and update the four `--expected-*` values.
 
 ```bash
 ssh -F /dev/null -o BatchMode=yes billy@helios
@@ -247,11 +248,11 @@ cd /opt/butterflyguy
 .venv/bin/python \
   /opt/butterflyguy-gateway-acceptance-tools/schwab_gateway_session_soak_20260904_v7.py \
   --session-date 2026-09-04 \
-  --evidence-dir /opt/butterflyguy-gateway-evidence/2026-09-04-session-soak-<tag> \
-  --expected-container-id <container-id> \
-  --expected-image-id <image-id> \
-  --expected-revision <revision-or-docker-inspect-value> \
-  --expected-started-at <started-at> \
+  --evidence-dir /opt/butterflyguy-gateway-evidence/2026-09-04-session-soak-v0.4.2-efee41f \
+  --expected-container-id 1a2dfa27c6a19ae72c13a87a9fe9ce2d5d42b9f20eb82179c1774fba6b4e433d \
+  --expected-image-id sha256:c8540b5c4eb2ab3d0dfa00d85d75a6fb774bcf22ca1d352b38b68507edb17dcd \
+  --expected-revision '<no value>' \
+  --expected-started-at 2026-09-03T22:57:45.300059462Z \
   --expected-consumer-priority protected
 ```
 

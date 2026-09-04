@@ -314,6 +314,31 @@ def test_production_identity_assertion_detects_only_frozen_target_drift() -> Non
     ]
 
 
+def test_production_identity_tolerates_unstamped_revision_label() -> None:
+    # 0.4.1/0.4.2 gateway builds omit org.opencontainers.image.revision, so
+    # `docker inspect --format '{{index .Config.Labels "..."}}'` yields the
+    # literal string "<no value>"; the run pins it like any other field.
+    expected = {
+        "container_id": "c",
+        "image_id": "i",
+        "revision": "<no value>",
+        "started_at": "s",
+    }
+    observed = {
+        **expected,
+        "restart_count": 0,
+        "status": "running",
+        "health": "healthy",
+        "gateway_processes": 1,
+    }
+
+    assert assert_production_identity(observed, expected) == []
+    observed["revision"] = "abc123"
+    assert assert_production_identity(observed, expected) == [
+        "production_revision_changed"
+    ]
+
+
 def test_health_violations_requires_ready_token_without_exposing_details() -> None:
     healthy = {
         "health": {"status": 200, "body": {"status": "healthy"}},
