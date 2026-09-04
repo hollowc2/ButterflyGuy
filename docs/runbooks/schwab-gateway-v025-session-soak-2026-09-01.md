@@ -230,34 +230,53 @@ Do not start the soak if a production invariant or flatness gate fails.
 AfterHours changes alone are not failures. A retired candidate service being
 stopped is expected, not a failure.
 
-## Start the full-session harness
+## Start the full-session harness (unattended)
 
-The launcher sleeps until 06:22 PDT so it cannot establish its baseline while a
-parity process is still allowed to run. Start it beforehand in a durable `tmux`
-session; it must establish a clean baseline no later than 06:29 PDT. The process
-waits for the 06:30 PDT / 09:30 EDT open, samples every 15 minutes through the
-13:00 PDT close, then performs the post-close check at 13:10 PDT.
+Use the dated launcher so no operator needs to be present at the open. It is
+`tools/launch_schwab_gateway_session_soak_20260904.sh` in the repo; stage it on
+Helios first (SSH writes to the acceptance-tools dir are blocked for the coding
+agent, so paste this yourself):
 
-Identity below was captured 2026-09-04 00:01 UTC. Re-verify at preflight; if the
-gateway was restarted, re-capture and update the four `--expected-*` values.
+```bash
+cat tools/launch_schwab_gateway_session_soak_20260904.sh | \
+  ssh -F /dev/null -o BatchMode=yes billy@helios \
+  'umask 077; D=/opt/butterflyguy-gateway-acceptance-tools/launch_schwab_gateway_session_soak_20260904.sh; \
+   test -e "$D" && { echo EXISTS-ABORT; exit 3; }; cat > "$D"; chmod 0700 "$D"; sha256sum "$D"'
+```
+
+Then start it **the evening before** in a durable `tmux` session and detach:
 
 ```bash
 ssh -F /dev/null -o BatchMode=yes billy@helios
 tmux new -s gateway-session-soak
-cd /opt/butterflyguy
-.venv/bin/python \
-  /opt/butterflyguy-gateway-acceptance-tools/schwab_gateway_session_soak_20260904_v7.py \
-  --session-date 2026-09-04 \
-  --evidence-dir /opt/butterflyguy-gateway-evidence/2026-09-04-session-soak-v0.4.2-efee41f \
-  --expected-container-id 1a2dfa27c6a19ae72c13a87a9fe9ce2d5d42b9f20eb82179c1774fba6b4e433d \
-  --expected-image-id sha256:c8540b5c4eb2ab3d0dfa00d85d75a6fb774bcf22ca1d352b38b68507edb17dcd \
-  --expected-revision '<no value>' \
-  --expected-started-at 2026-09-03T22:57:45.300059462Z \
-  --expected-consumer-priority protected
+/opt/butterflyguy-gateway-acceptance-tools/launch_schwab_gateway_session_soak_20260904.sh
+# Ctrl-b d to detach
 ```
 
-Detach with `Ctrl-b d`; do not interrupt the process. Do not use cron, systemd,
-Compose, or a container recreation for this harness.
+The launcher sleeps until 06:20 PDT, then re-asserts every production invariant
+(gateway container ID / image / `StartedAt` / running / restart 0 / healthy /
+one process, `/health` + `/ready` 200 with `token_state: ready`, token-mount
+inode agreement across all four consumers, no retired candidate container,
+`docker`/`containerd`/`piavpn` active) and runs the flatness gate for
+2026-09-04. **Any failed assertion aborts before the harness starts** — a bad
+run never begins; the reason is written to
+`/opt/butterflyguy-gateway-acceptance-tools/schwab-gateway-session-soak-2026-09-04.log`.
+On success it `exec`s the harness, which waits for the 06:30 PDT / 09:30 EDT
+open, samples every 15 minutes through the 13:00 PDT / 16:00 EDT close, and does
+the post-close check at 13:10 PDT.
+
+The identity baked into the launcher was captured 2026-09-04 00:01 UTC and
+dry-run-verified against live Helios (24/24 assertions pass). If the gateway is
+restarted before the launcher wakes, its `StartedAt` assertion will abort;
+re-capture the four identity values (runbook § "The acceptance target"), edit the
+`GW_*` constants at the top of the launcher, and restart it.
+
+To run it by hand instead (operator present), the launcher's final `exec` line is
+the full harness invocation.
+
+Do not interrupt the process once running. Do not use cron, systemd, Compose, or a
+container recreation for this harness — the sleeping `tmux`-hosted launcher is the
+supported unattended path.
 
 Each checkpoint exercises SPX/NDX/XSP concurrent spot, uncached and cached
 same-day chains, minute history, regular session history, and VIX spot. It
