@@ -20,6 +20,16 @@ from butterfly_guy.execution.order_manager import (
     walk_orders,
 )
 
+HISTORICAL_AUDIT_TERMINAL_STATUSES = TERMINAL_ORDER_STATUSES | {"REPLACED"}
+
+
+def _allowed_roots(underlying: str) -> set[str]:
+    if underlying == "SPX":
+        return {"SPX", "SPXW"}
+    if underlying == "NDX":
+        return {"NDX", "NDXP"}
+    return {underlying}
+
 
 def _order_symbols(order: dict[str, Any]) -> list[str]:
     symbols: list[str] = []
@@ -42,7 +52,7 @@ def _status_category(status: Any) -> str:
         return "partial"
     if status in CANCEL_PENDING_STATUSES:
         return "cancel_pending"
-    if status in TERMINAL_ORDER_STATUSES:
+    if status in HISTORICAL_AUDIT_TERMINAL_STATUSES:
         return status.lower()
     if status in WORKING_ORDER_STATUSES:
         return "working"
@@ -52,7 +62,7 @@ def _status_category(status: Any) -> str:
 def _summarize(order: dict[str, Any], underlying: str = "SPX") -> dict[str, Any]:
     child_statuses = [child.get("status") for child in list(walk_orders(order))[1:]]
     symbol_roots = {symbol.upper().split()[0] for symbol in _order_symbols(order)}
-    allowed_roots = {"SPX", "SPXW"} if underlying == "SPX" else {underlying}
+    allowed_roots = _allowed_roots(underlying)
     return {
         "status": order.get("status"),
         "status_category": _status_category(order.get("status")),
@@ -73,7 +83,7 @@ def _build_payload(
     orders: list[dict[str, Any]], report_date: str, underlying: str = "SPX"
 ) -> dict[str, Any]:
     underlying = underlying.upper()
-    allowed_roots = {"SPX", "SPXW"} if underlying == "SPX" else {underlying}
+    allowed_roots = _allowed_roots(underlying)
     orders = [
         order
         for order in orders
@@ -103,7 +113,7 @@ async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="configs/config.yaml")
     parser.add_argument("--date", default=dt.date.today().isoformat())
-    parser.add_argument("--underlying", choices=("SPX", "XSP"), default="SPX")
+    parser.add_argument("--underlying", choices=("SPX", "NDX", "XSP"), default="SPX")
     parser.add_argument("--out-dir", default="reports")
     args = parser.parse_args()
 

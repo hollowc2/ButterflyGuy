@@ -11,6 +11,7 @@ def test_status_category_maps_known_broker_statuses():
     assert _status_category("FILLED") == "filled"
     assert _status_category("REJECTED") == "rejected"
     assert _status_category("EXPIRED") == "expired"
+    assert _status_category("REPLACED") == "replaced"
     assert _status_category("WORKING") == "working"
     assert _status_category("NOT_IN_OUR_MATRIX") == "unknown"
     assert _status_category(None) == "missing"
@@ -149,3 +150,27 @@ def test_payload_filters_explicit_xsp_underlying():
 
     assert payload["status_counts"] == {"WORKING": 1}
     assert payload["orders"][0]["symbol_roots"] == ["XSP"]
+
+
+def test_payload_filters_explicit_ndx_underlying():
+    payload = _build_payload(
+        [
+            {
+                "status": "REPLACED",
+                "orderLegCollection": [
+                    {"instrument": {"symbol": "NDXP  260713C26400000"}}
+                ],
+            },
+            {
+                "status": "FILLED",
+                "orderLegCollection": [
+                    {"instrument": {"symbol": "SPXW  260713C06000000"}}
+                ],
+            },
+        ],
+        "2026-07-13",
+        underlying="NDX",
+    )
+
+    assert payload["status_category_counts"] == {"replaced": 1}
+    assert payload["orders"][0]["symbol_roots"] == ["NDXP"]
