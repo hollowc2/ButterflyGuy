@@ -35,6 +35,7 @@ from butterfly_guy.core.time_utils import (
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.db_chain_quotes import rows_to_option_quotes
+from butterfly_guy.data.providers import CollectorMarketDataProvider
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import (
     SCHWAB_CHAIN_SYMBOLS,
@@ -123,9 +124,13 @@ class TradeService:
         notifier: DiscordNotifier | None = None,
         regime: Regime = Regime.UNKNOWN,
         gap_regime_filter: GapRegimeFilter | None = None,
+        market_data: CollectorMarketDataProvider | None = None,
     ) -> None:
         self.config = config
         self.schwab = schwab
+        # Account and order operations stay on ``schwab``. Read-only strategy
+        # data can be cut over independently to the standalone gateway.
+        self.market_data = market_data or schwab
         self.risk_engine = risk_engine
         self.order_manager = order_manager
         self.builder = builder
@@ -220,7 +225,7 @@ class TradeService:
 
         # Get initial spot price for chain scanning and VIX anchoring
         try:
-            spot_price = await self.schwab.get_spot_price(spot_symbol)
+            spot_price = await self.market_data.get_spot_price(spot_symbol)
         except Exception as e:
             log.error("spot_fetch_failed", error=str(e))
             return None
@@ -359,9 +364,9 @@ class TradeService:
         for step in range(max_steps):
             # Re-fetch chain + spot each attempt — market may have moved
             try:
-                chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
+                chain_data = await self.market_data.get_option_chain(chain_symbol, expiration)
                 chain_fetched_at = now_eastern()
-                spot_price = await self.schwab.get_spot_price(spot_symbol)
+                spot_price = await self.market_data.get_spot_price(spot_symbol)
                 spot_fetched_at = now_eastern()
             except Exception as e:
                 log.error("chain_fetch_failed", step=step, error=str(e))
@@ -838,7 +843,7 @@ class TradeService:
             return None
         try:
             spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
-            candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
+            candles = await self.market_data.get_intraday_bars(spot_sym, days_back=1)
             spec = ButterflyChartSpec(
                 underlying=underlying,
                 direction=direction,
@@ -868,7 +873,7 @@ class TradeService:
         try:
             underlying = self.config.strategy.underlying
             spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
-            candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
+            candles = await self.market_data.get_intraday_bars(spot_sym, days_back=1)
             bars: list[MinuteBar] = []
             for c in candles:
                 ts_ms = c.get("datetime", 0)
@@ -893,7 +898,7 @@ class TradeService:
         try:
             underlying = self.config.strategy.underlying
             spot_sym = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
-            candles = await self.schwab.get_intraday_bars(spot_sym, days_back=1)
+            candles = await self.market_data.get_intraday_bars(spot_sym, days_back=1)
             return _session_open_from_intraday_candles(candles, now_eastern().date())
         except Exception as e:
             log.warning("session_open_fetch_failed", error=str(e))

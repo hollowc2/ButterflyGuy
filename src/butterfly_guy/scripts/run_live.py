@@ -37,6 +37,7 @@ from butterfly_guy.data.collector import OptionChainCollector
 from butterfly_guy.data.providers import (
     CollectorMarketDataProvider,
     DirectSchwabMarketDataProvider,
+    GatewayAuthoritativeMarketDataProvider,
 )
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
@@ -99,14 +100,9 @@ ENTRY_LOOP_ERROR_THRESHOLD = 3
 # How often to check whether the token document has been re-authorized. Re-auth is a
 # weekly event, so this only has to be short enough to make the change quick to verify.
 TOKEN_RELOAD_INTERVAL = 300.0
-
-
-def _require_direct_gateway_mode(settings: GatewayClientSettings) -> None:
-    if settings.access_mode != "direct":
-        raise RuntimeError(
-            "run_live does not support SCHWAB_ACCESS_MODE=gateway; "
-            "keep direct mode for C3 shadow reads"
-        )
+# The gateway may legitimately queue the third protected request behind two
+# three-second Schwab operations before granting it a fresh execution budget.
+GATEWAY_HTTP_TIMEOUT_SECONDS = 12.0
 
 
 def _build_collector_market_data(
@@ -117,21 +113,26 @@ def _build_collector_market_data(
     ShadowComparingMarketDataProvider | None,
     GatewayMarketDataClient | None,
 ]:
-    """Build the collector provider while keeping direct reads authoritative.
-
-    Gateway cutover is deliberately not implemented here. When the opt-in shadow
-    flag is disabled, no gateway HTTP client is constructed at all.
-    """
+    """Select one authoritative read path without changing broker boundaries."""
     gateway_settings = settings or GatewayClientSettings()
-    _require_direct_gateway_mode(gateway_settings)
 
     direct = DirectSchwabMarketDataProvider(schwab)
+    if gateway_settings.access_mode == "gateway":
+        gateway = GatewayMarketDataClient(
+            gateway_settings.gateway_url,
+            gateway_settings.gateway_api_key.get_secret_value(),
+            timeout_seconds=GATEWAY_HTTP_TIMEOUT_SECONDS,
+        )
+        log.info("gateway_market_data_authoritative")
+        return GatewayAuthoritativeMarketDataProvider(gateway), None, gateway
+
     if not gateway_settings.shadow_reads:
         return direct, None, None
 
     gateway = GatewayMarketDataClient(
         gateway_settings.gateway_url,
         gateway_settings.gateway_api_key.get_secret_value(),
+        timeout_seconds=GATEWAY_HTTP_TIMEOUT_SECONDS,
     )
     shadow = ShadowComparingMarketDataProvider(
         direct,
@@ -145,7 +146,7 @@ def _build_collector_market_data(
 async def _close_runtime_resources(
     shadow_market_data: ShadowComparingMarketDataProvider | None,
     gateway_client: GatewayMarketDataClient | None,
-    schwab: SchwabClientWrapper,
+    schwab: SchwabClientWrapper | None,
     db: DatabasePool,
 ) -> None:
     """Drain shadow work and close every owned resource, even if one close fails."""
@@ -158,7 +159,8 @@ async def _close_runtime_resources(
                 await gateway_client.close()
         finally:
             try:
-                await schwab.close()
+                if schwab is not None:
+                    await schwab.close()
             finally:
                 await db.close()
 
@@ -840,10 +842,8 @@ async def main() -> None:
     setup_logging(config.monitoring.log_level, json_output=True)
 
     _assert_live_config_supported(config)
-    # Validate the opt-in gateway settings before opening the DB or direct Schwab
-    # client. A malformed shadow environment must not leak either resource.
+    # Validate opt-in gateway settings before opening the DB or direct Schwab client.
     gateway_settings = GatewayClientSettings()
-    _require_direct_gateway_mode(gateway_settings)
 
     log.info(
         "live_trading_starting",
@@ -864,299 +864,309 @@ async def main() -> None:
 
     # Init DB
     db = DatabasePool(config.database.dsn)
-    await db.initialize()
-    await run_migrations(db)
-
-    # Init Schwab
-    schwab = SchwabClientWrapper(config.schwab)
-    await schwab.initialize()
-    market_data, shadow_market_data, gateway_client = _build_collector_market_data(
-        schwab, gateway_settings
-    )
-
-    # Build query objects
-    chain_q = ChainQueries(db)
-    spot_q = SpotQueries(db)
-    trade_q = TradeQueries(db)
-    risk_q = RiskQueries(db)
-    decision_q = DecisionQueries(db)
-    intent_q = OrderIntentQueries(db)
-    monitoring_leg_q = MonitoringLegQueries(db)
-    candidate_q = CandidateQueries(db)
-    daily_bar_q = DailyBarQueries(db)
-    tent_q = TentQueries(db)
-
-    # Discord trade notifications for SPX only (paper and live).
-    # NDX/XSP stay on logs/metrics; risk warnings use Telegram.
-    webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get(
-        "DISCORD_WEBHOOK_URL",
-        "",
-    )
-    risk_notifier = TelegramNotifier()
-    alertmanager_url = os.getenv("ALERTMANAGER_URL", "")
-    critical_notifier = (
-        AlertmanagerNotifier(alertmanager_url, config.strategy.underlying)
-        if alertmanager_url
-        else None
-    )
-    notifier = (
-        DiscordNotifier(webhook)
-        if webhook and config.strategy.underlying == "SPX"
-        else None
-    )
-
-    # Classify today's market regime (must precede TradeService construction)
-    regime_classifier = RegimeClassifier()
-    lookback = regime_classifier.lookback_days
-    recent_spx = await daily_bar_q.get_recent_closes(
-        config.strategy.underlying, days=lookback + 5
-    )
-    vix_closes = await daily_bar_q.get_recent_closes("$VIX", days=1)
-    vix_level = vix_closes[0] if vix_closes else 0.0
-    regime = regime_classifier.classify(recent_spx, vix_level)
-    log.info(
-        "regime_classified",
-        regime=regime.value,
-        spx_bars=len(recent_spx),
-        vix=vix_level,
-    )
-
-    gap_regime_filter = GapRegimeFilter(
-        bull_call_bias=config.entry.bull_call_bias,
-        min_gap_pct=config.entry.min_gap_pct,
-    )
-
-    # Build service objects
-    risk_engine = RiskEngine(
-        config.risk,
-        risk_q,
-        config.strategy.underlying,
-        notifier=risk_notifier,
-    )
-    order_builder = ButterflyOrderBuilder()
-    order_manager = OrderManager(
-        config.execution,
-        schwab,
-        order_builder,
-        config.strategy.underlying,
-        intent_queries=intent_q,
-    )
-
-    trade_service = TradeService(
-        config=config,
-        schwab=schwab,
-        risk_engine=risk_engine,
-        order_manager=order_manager,
-        builder=ButterflyBuilder(config.strategy),
-        selector=ButterflySelector(config.strategy),
-        direction_filter=DirectionFilter(),
-        chain_queries=chain_q,
-        trade_queries=trade_q,
-        candidate_queries=candidate_q,
-        decision_queries=decision_q,
-        notifier=notifier,
-        regime=regime,
-        gap_regime_filter=gap_regime_filter,
-    )
-
-    position_service = PositionService(
-        config=config,
-        schwab=schwab,
-        order_manager=order_manager,
-        risk_engine=risk_engine,
-        trade_queries=trade_q,
-        decision_queries=decision_q,
-        chain_queries=chain_q,
-        monitoring_leg_queries=monitoring_leg_q,
-        tent_queries=tent_q,
-        notifier=notifier,
-    )
-
-    collector = OptionChainCollector(
-        config=config,
-        schwab=market_data,
-        chain_queries=chain_q,
-        spot_queries=spot_q,
-        daily_bar_queries=daily_bar_q,
-    )
-
-    # Recover any open trade and initialize daily metrics from DB
-    underlying = config.strategy.underlying
-    recovered_trade: TradeRecord | None = None
-    recovered_candidate: ButterflyCandidate | None = None
-
-    trades_active.labels(underlying=underlying).set(0)
-    entry_loop_errors.labels(underlying=underlying).inc(0)
-
-    recovered_peak: float | None = None
-
-    today = session_date()
-    open_rows = await trade_q.get_open_trades(underlying)
-    if not config.execution.paper_trading:
-        await _reconcile_broker_state(
-            schwab,
-            underlying,
-            open_rows,
-            intent_q,
-            trade_q,
-            critical_notifier,
-            today,
-        )
-        if critical_notifier:
-            for condition in (
-                "reconciliation_failure",
-                "broker_ambiguity",
-                "settlement_failure",
-            ):
-                await critical_notifier.resolve_critical(condition)
-        open_rows = await trade_q.get_open_trades(underlying)
-
-    if open_rows:
-        row = open_rows[0]
-        recovered_trade = TradeRecord(
-            trade_id=row["id"],
-            trade_date=row["trade_date"],
-            direction=row["direction"],
-            wing_width=row["wing_width"],
-            center_strike=float(row["center_strike"]),
-            lower_strike=float(row["lower_strike"]),
-            upper_strike=float(row["upper_strike"]),
-            entry_price=float(row["entry_price"]),
-            entry_time=row["entry_time"],
-            lower_symbol=row.get("lower_symbol") or "",
-            center_symbol=row.get("center_symbol") or "",
-            upper_symbol=row.get("upper_symbol") or "",
-            quantity=row.get("quantity") or 1,
-            status=row.get("status") or "OPEN",
-        )
-        recovered_candidate = ButterflyCandidate(
-            direction=recovered_trade.direction,
-            wing_width=recovered_trade.wing_width,
-            center_strike=recovered_trade.center_strike,
-            lower_strike=recovered_trade.lower_strike,
-            upper_strike=recovered_trade.upper_strike,
-            cost=recovered_trade.entry_price,
-            max_profit=0.0,
-            reward_risk=0.0,
-            lower_be=0.0,
-            upper_be=0.0,
-            distance_from_spot=0.0,
-            spot_price=0.0,
-            lower_symbol=recovered_trade.lower_symbol,
-            center_symbol=recovered_trade.center_symbol,
-            upper_symbol=recovered_trade.upper_symbol,
-        )
-        # Restore persisted peak so drawdown thresholds are correct after restart
-        raw_peak = row.get("peak_value")
-        recovered_peak = float(raw_peak) if raw_peak is not None else None
-        trades_active.labels(underlying=underlying).set(len(open_rows))
-        log.info(
-            "recovered_open_trade",
-            trade_id=recovered_trade.trade_id,
-            underlying=underlying,
-            recovered_peak=recovered_peak,
-        )
-
-    # Initialize daily counters from DB so metrics survive restarts
-    today_trades = await trade_q.get_trades_for_date(today, underlying)
-    daily_trade_count.labels(underlying=underlying).set(len(today_trades))
-    await risk_engine.sync_trade_count(len(today_trades), today)
-    realized_pnl = sum(
-        trade_pnl_dollars(t["pnl"], int(t.get("quantity") or 1))
-        for t in today_trades
-        if t.get("pnl") is not None
-    )
-
-    # Sync risk state PnL — if an open trade was recovered, include its entry cost as
-    # worst-case committed exposure so the daily loss budget is correctly consumed.
-    if recovered_trade is not None and recovered_trade.trade_date == today:
-        open_trade_entry = trade_pnl_dollars(
-            recovered_trade.entry_price, recovered_trade.quantity
-        )
-        worst_case_pnl = realized_pnl - open_trade_entry
-        await risk_engine.sync_realized_pnl(worst_case_pnl, today)
-        log.info(
-            "startup_pnl_sync_with_open_trade",
-            realized_pnl=realized_pnl,
-            open_trade_entry=open_trade_entry,
-            worst_case_pnl=worst_case_pnl,
-        )
-    else:
-        await risk_engine.sync_realized_pnl(realized_pnl, today)
-
-    daily_pnl.labels(underlying=underlying).set(realized_pnl)
-    broker_gate = BrokerStateGate()
-    token_reload_gate = BrokerStateGate()
-
-    # Seed candidates_found from the most recent scan today
-    last_scan_count = await db.pool.fetchval(
-        """
-        SELECT COUNT(*) FROM butterfly_candidates
-        WHERE underlying = $1
-          AND scan_time = (
-              SELECT MAX(scan_time) FROM butterfly_candidates
-              WHERE underlying = $1 AND scan_time::date = $2
-          )
-        """,
-        underlying, today,
-    )
-    if last_scan_count:
-        butterfly_candidates_found.labels(underlying=underlying).set(last_scan_count)
-
-    set_readiness(None)
-    supervised: list[asyncio.Task[Any]] = []
+    schwab: SchwabClientWrapper | None = None
+    shadow_market_data: ShadowComparingMarketDataProvider | None = None
+    gateway_client: GatewayMarketDataClient | None = None
     try:
-        async with asyncio.TaskGroup() as tg:
-            supervised.append(tg.create_task(collector.run_loop(), name="collector"))
-            supervised.append(
-                tg.create_task(
-                    entry_loop(
-                        trade_service,
-                        position_service,
-                        recovered_trade,
-                        recovered_candidate,
-                        recovered_peak,
-                        broker_gate,
-                        token_reload_gate,
-                        critical_notifier,
-                    ),
-                    name="entry_loop",
-                )
+        await db.initialize()
+        await run_migrations(db)
+
+        # Init direct broker client even in gateway market-data mode. It exclusively
+        # owns account, order, transaction, reconciliation, and token operations.
+        schwab = SchwabClientWrapper(config.schwab)
+        await schwab.initialize()
+        market_data, shadow_market_data, gateway_client = _build_collector_market_data(
+            schwab, gateway_settings
+        )
+
+        # Build query objects
+        chain_q = ChainQueries(db)
+        spot_q = SpotQueries(db)
+        trade_q = TradeQueries(db)
+        risk_q = RiskQueries(db)
+        decision_q = DecisionQueries(db)
+        intent_q = OrderIntentQueries(db)
+        monitoring_leg_q = MonitoringLegQueries(db)
+        candidate_q = CandidateQueries(db)
+        daily_bar_q = DailyBarQueries(db)
+        tent_q = TentQueries(db)
+
+        # Discord trade notifications for SPX only (paper and live).
+        # NDX/XSP stay on logs/metrics; risk warnings use Telegram.
+        webhook = os.environ.get("DISCORD_WEBHOOK_URL") or dotenv_values(".env").get(
+            "DISCORD_WEBHOOK_URL",
+            "",
+        )
+        risk_notifier = TelegramNotifier()
+        alertmanager_url = os.getenv("ALERTMANAGER_URL", "")
+        critical_notifier = (
+            AlertmanagerNotifier(alertmanager_url, config.strategy.underlying)
+            if alertmanager_url
+            else None
+        )
+        notifier = (
+            DiscordNotifier(webhook)
+            if webhook and config.strategy.underlying == "SPX"
+            else None
+        )
+
+        # Classify today's market regime (must precede TradeService construction)
+        regime_classifier = RegimeClassifier()
+        lookback = regime_classifier.lookback_days
+        recent_spx = await daily_bar_q.get_recent_closes(
+            config.strategy.underlying, days=lookback + 5
+        )
+        vix_closes = await daily_bar_q.get_recent_closes("$VIX", days=1)
+        vix_level = vix_closes[0] if vix_closes else 0.0
+        regime = regime_classifier.classify(recent_spx, vix_level)
+        log.info(
+            "regime_classified",
+            regime=regime.value,
+            spx_bars=len(recent_spx),
+            vix=vix_level,
+        )
+
+        gap_regime_filter = GapRegimeFilter(
+            bull_call_bias=config.entry.bull_call_bias,
+            min_gap_pct=config.entry.min_gap_pct,
+        )
+
+        # Build service objects
+        risk_engine = RiskEngine(
+            config.risk,
+            risk_q,
+            config.strategy.underlying,
+            notifier=risk_notifier,
+        )
+        order_builder = ButterflyOrderBuilder()
+        order_manager = OrderManager(
+            config.execution,
+            schwab,
+            order_builder,
+            config.strategy.underlying,
+            intent_queries=intent_q,
+            market_data=market_data,
+        )
+
+        trade_service = TradeService(
+            config=config,
+            schwab=schwab,
+            risk_engine=risk_engine,
+            order_manager=order_manager,
+            builder=ButterflyBuilder(config.strategy),
+            selector=ButterflySelector(config.strategy),
+            direction_filter=DirectionFilter(),
+            chain_queries=chain_q,
+            trade_queries=trade_q,
+            candidate_queries=candidate_q,
+            decision_queries=decision_q,
+            notifier=notifier,
+            regime=regime,
+            gap_regime_filter=gap_regime_filter,
+            market_data=market_data,
+        )
+
+        position_service = PositionService(
+            config=config,
+            schwab=schwab,
+            order_manager=order_manager,
+            risk_engine=risk_engine,
+            trade_queries=trade_q,
+            decision_queries=decision_q,
+            chain_queries=chain_q,
+            monitoring_leg_queries=monitoring_leg_q,
+            tent_queries=tent_q,
+            notifier=notifier,
+            market_data=market_data,
+        )
+
+        collector = OptionChainCollector(
+            config=config,
+            schwab=market_data,
+            chain_queries=chain_q,
+            spot_queries=spot_q,
+            daily_bar_queries=daily_bar_q,
+        )
+
+        # Recover any open trade and initialize daily metrics from DB
+        underlying = config.strategy.underlying
+        recovered_trade: TradeRecord | None = None
+        recovered_candidate: ButterflyCandidate | None = None
+
+        trades_active.labels(underlying=underlying).set(0)
+        entry_loop_errors.labels(underlying=underlying).inc(0)
+
+        recovered_peak: float | None = None
+
+        today = session_date()
+        open_rows = await trade_q.get_open_trades(underlying)
+        if not config.execution.paper_trading:
+            await _reconcile_broker_state(
+                schwab,
+                underlying,
+                open_rows,
+                intent_q,
+                trade_q,
+                critical_notifier,
+                today,
             )
-            if not config.execution.paper_trading:
+            if critical_notifier:
+                for condition in (
+                    "reconciliation_failure",
+                    "broker_ambiguity",
+                    "settlement_failure",
+                ):
+                    await critical_notifier.resolve_critical(condition)
+            open_rows = await trade_q.get_open_trades(underlying)
+
+        if open_rows:
+            row = open_rows[0]
+            recovered_trade = TradeRecord(
+                trade_id=row["id"],
+                trade_date=row["trade_date"],
+                direction=row["direction"],
+                wing_width=row["wing_width"],
+                center_strike=float(row["center_strike"]),
+                lower_strike=float(row["lower_strike"]),
+                upper_strike=float(row["upper_strike"]),
+                entry_price=float(row["entry_price"]),
+                entry_time=row["entry_time"],
+                lower_symbol=row.get("lower_symbol") or "",
+                center_symbol=row.get("center_symbol") or "",
+                upper_symbol=row.get("upper_symbol") or "",
+                quantity=row.get("quantity") or 1,
+                status=row.get("status") or "OPEN",
+            )
+            recovered_candidate = ButterflyCandidate(
+                direction=recovered_trade.direction,
+                wing_width=recovered_trade.wing_width,
+                center_strike=recovered_trade.center_strike,
+                lower_strike=recovered_trade.lower_strike,
+                upper_strike=recovered_trade.upper_strike,
+                cost=recovered_trade.entry_price,
+                max_profit=0.0,
+                reward_risk=0.0,
+                lower_be=0.0,
+                upper_be=0.0,
+                distance_from_spot=0.0,
+                spot_price=0.0,
+                lower_symbol=recovered_trade.lower_symbol,
+                center_symbol=recovered_trade.center_symbol,
+                upper_symbol=recovered_trade.upper_symbol,
+            )
+            # Restore persisted peak so drawdown thresholds are correct after restart
+            raw_peak = row.get("peak_value")
+            recovered_peak = float(raw_peak) if raw_peak is not None else None
+            trades_active.labels(underlying=underlying).set(len(open_rows))
+            log.info(
+                "recovered_open_trade",
+                trade_id=recovered_trade.trade_id,
+                underlying=underlying,
+                recovered_peak=recovered_peak,
+            )
+
+        # Initialize daily counters from DB so metrics survive restarts
+        today_trades = await trade_q.get_trades_for_date(today, underlying)
+        daily_trade_count.labels(underlying=underlying).set(len(today_trades))
+        await risk_engine.sync_trade_count(len(today_trades), today)
+        realized_pnl = sum(
+            trade_pnl_dollars(t["pnl"], int(t.get("quantity") or 1))
+            for t in today_trades
+            if t.get("pnl") is not None
+        )
+
+        # Sync risk state PnL — if an open trade was recovered, include its entry cost as
+        # worst-case committed exposure so the daily loss budget is correctly consumed.
+        if recovered_trade is not None and recovered_trade.trade_date == today:
+            open_trade_entry = trade_pnl_dollars(
+                recovered_trade.entry_price, recovered_trade.quantity
+            )
+            worst_case_pnl = realized_pnl - open_trade_entry
+            await risk_engine.sync_realized_pnl(worst_case_pnl, today)
+            log.info(
+                "startup_pnl_sync_with_open_trade",
+                realized_pnl=realized_pnl,
+                open_trade_entry=open_trade_entry,
+                worst_case_pnl=worst_case_pnl,
+            )
+        else:
+            await risk_engine.sync_realized_pnl(realized_pnl, today)
+
+        daily_pnl.labels(underlying=underlying).set(realized_pnl)
+        broker_gate = BrokerStateGate()
+        token_reload_gate = BrokerStateGate()
+
+        # Seed candidates_found from the most recent scan today
+        last_scan_count = await db.pool.fetchval(
+            """
+            SELECT COUNT(*) FROM butterfly_candidates
+            WHERE underlying = $1
+              AND scan_time = (
+                  SELECT MAX(scan_time) FROM butterfly_candidates
+                  WHERE underlying = $1 AND scan_time::date = $2
+              )
+            """,
+            underlying, today,
+        )
+        if last_scan_count:
+            butterfly_candidates_found.labels(underlying=underlying).set(last_scan_count)
+
+        set_readiness(None)
+        if isinstance(market_data, GatewayAuthoritativeMarketDataProvider):
+            market_data.begin_readiness_tracking()
+        supervised: list[asyncio.Task[Any]] = []
+        try:
+            async with asyncio.TaskGroup() as tg:
+                supervised.append(tg.create_task(collector.run_loop(), name="collector"))
                 supervised.append(
                     tg.create_task(
-                        broker_reconciler_loop(
-                            schwab,
-                            underlying,
-                            trade_q,
-                            intent_q,
+                        entry_loop(
+                            trade_service,
+                            position_service,
+                            recovered_trade,
+                            recovered_candidate,
+                            recovered_peak,
                             broker_gate,
-                            critical_notifier=critical_notifier,
+                            token_reload_gate,
+                            critical_notifier,
                         ),
-                        name="broker_reconciler",
+                        name="entry_loop",
                     )
                 )
-            supervised.append(
-                tg.create_task(
-                    daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset"
-                )
-            )
-            supervised.append(
-                tg.create_task(
-                    token_reload_loop(schwab, token_reload_gate), name="token_reload"
-                )
-            )
-            if notifier:
+                if not config.execution.paper_trading:
+                    supervised.append(
+                        tg.create_task(
+                            broker_reconciler_loop(
+                                schwab,
+                                underlying,
+                                trade_q,
+                                intent_q,
+                                broker_gate,
+                                critical_notifier=critical_notifier,
+                            ),
+                            name="broker_reconciler",
+                        )
+                    )
                 supervised.append(
-                    tg.create_task(eod_chart_loop(position_service), name="eod_charts")
+                    tg.create_task(
+                        daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset"
+                    )
                 )
-            install_shutdown_handler(supervised)
-    except* Exception as eg:
-        for exc in eg.exceptions:
-            log.error("task_group_error", error=str(exc))
-            if notifier:
-                await notifier.notify_error(str(exc), context="TaskGroup")
+                supervised.append(
+                    tg.create_task(
+                        token_reload_loop(schwab, token_reload_gate), name="token_reload"
+                    )
+                )
+                if notifier:
+                    supervised.append(
+                        tg.create_task(eod_chart_loop(position_service), name="eod_charts")
+                    )
+                install_shutdown_handler(supervised)
+        except* Exception as eg:
+            for exc in eg.exceptions:
+                log.error("task_group_error", error=str(exc))
+                if notifier:
+                    await notifier.notify_error(str(exc), context="TaskGroup")
     finally:
         set_readiness("shutting_down")
         await _close_runtime_resources(

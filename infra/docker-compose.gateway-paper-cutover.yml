@@ -1,0 +1,69 @@
+# Helios PAPER-only authoritative market-data cutover overlay.
+#
+# Render with the protected ButterflyGuy, gateway deployment, and scoped consumer
+# env files. The consumer env file is mode 0600 and is never committed. Supply the
+# exact locally built strategy image ID through BUTTERFLY_GATEWAY_PAPER_IMAGE.
+#
+# This overlay does not change account/order routing. Real-money use is prohibited
+# until a separately reviewed force-fresh chain policy is implemented.
+services:
+  app_spx:
+    build: !reset null
+    image: "${BUTTERFLY_GATEWAY_PAPER_IMAGE:?set exact strategy image ID}"
+    pull_policy: never
+    env_file: !override
+      - /opt/butterflyguy/.env
+      - /opt/butterflyguy-gateway-consumer.env
+    volumes: !override
+      - "${SCHWAB_GATEWAY_TOKEN_DIR:?set token directory}:${SCHWAB_GATEWAY_TOKEN_DIR:?set token directory}"
+      - /opt/butterflyguy/configs/config.yaml:/app/configs/config.yaml
+      - /opt/butterflyguy/data/chains:/app/data/chains
+    environment:
+      SCHWAB_ACCESS_MODE: gateway
+      SCHWAB_GATEWAY_URL: http://schwab-gateway:8011
+      SCHWAB_GATEWAY_API_KEY: "${SCHWAB_GATEWAY_API_KEY:?set scoped gateway consumer key}"
+      SCHWAB_GATEWAY_SHADOW_READS: "false"
+      EXECUTION__PAPER_TRADING: "true"
+      EXECUTION__ALLOW_LIVE_TRADING: "false"
+      ALLOW_LIVE_TRADING: "false"
+
+  app_ndx:
+    build: !reset null
+    image: "${BUTTERFLY_GATEWAY_PAPER_IMAGE:?set exact strategy image ID}"
+    pull_policy: never
+    env_file: !override
+      - /opt/butterflyguy/.env
+      - /opt/butterflyguy-gateway-consumer.env
+    volumes: !override
+      - "${SCHWAB_GATEWAY_TOKEN_DIR:?set token directory}:${SCHWAB_GATEWAY_TOKEN_DIR:?set token directory}"
+      - /opt/butterflyguy/configs/config_ndx.yaml:/app/configs/config_ndx.yaml
+      - /opt/butterflyguy/data/chains:/app/data/chains
+    environment:
+      SCHWAB_ACCESS_MODE: gateway
+      SCHWAB_GATEWAY_URL: http://schwab-gateway:8011
+      SCHWAB_GATEWAY_API_KEY: "${SCHWAB_GATEWAY_API_KEY:?set scoped gateway consumer key}"
+      SCHWAB_GATEWAY_SHADOW_READS: "false"
+      EXECUTION__PAPER_TRADING: "true"
+      EXECUTION__ALLOW_LIVE_TRADING: "false"
+      ALLOW_LIVE_TRADING: "false"
+
+  app_xsp:
+    build: !reset null
+    image: "${BUTTERFLY_GATEWAY_PAPER_IMAGE:?set exact strategy image ID}"
+    pull_policy: never
+    env_file: !override
+      - /opt/butterflyguy/.env
+      - /opt/butterflyguy-gateway-consumer.env
+    volumes: !override
+      - "${SCHWAB_GATEWAY_TOKEN_DIR:?set token directory}:${SCHWAB_GATEWAY_TOKEN_DIR:?set token directory}"
+      - /opt/butterflyguy/configs/config_xsp.yaml:/app/configs/config_xsp.yaml
+      - /opt/butterflyguy/data/chains:/app/data/chains
+    environment:
+      SCHWAB_ACCESS_MODE: gateway
+      SCHWAB_GATEWAY_URL: http://schwab-gateway:8011
+      SCHWAB_GATEWAY_API_KEY: "${SCHWAB_GATEWAY_API_KEY:?set scoped gateway consumer key}"
+      SCHWAB_GATEWAY_SHADOW_READS: "false"
+      EXECUTION__PAPER_TRADING: "true"
+      EXECUTION__ALLOW_LIVE_TRADING: "false"
+      ALLOW_LIVE_TRADING: "false"
+

@@ -5,28 +5,30 @@ from pathlib import Path
 import yaml
 
 
-def test_only_xsp_receives_the_default_off_gateway_shadow_canary() -> None:
+def test_each_strategy_has_an_independent_default_direct_gateway_toggle() -> None:
     compose = yaml.safe_load(Path("infra/docker-compose.yml").read_text())
     services = compose["services"]
-    xsp_environment = services["app_xsp"]["environment"]
-
-    assert xsp_environment["SCHWAB_ACCESS_MODE"] == "direct"
-    assert xsp_environment["SCHWAB_GATEWAY_URL"] == (
-        "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
-    )
-    assert xsp_environment["SCHWAB_GATEWAY_API_KEY"] == (
-        "${SCHWAB_GATEWAY_API_KEY:-}"
-    )
-    assert xsp_environment["SCHWAB_GATEWAY_SHADOW_READS"] == (
-        "${SCHWAB_GATEWAY_SHADOW_READS_XSP:-false}"
-    )
-
-    for service_name in ("app_spx", "app_spx_candidate", "app_ndx"):
+    for service_name, suffix in (
+        ("app_xsp", "XSP"),
+        ("app_spx", "SPX"),
+        ("app_ndx", "NDX"),
+    ):
         environment = services[service_name]["environment"]
-        assert "SCHWAB_ACCESS_MODE" not in environment
-        assert "SCHWAB_GATEWAY_URL" not in environment
-        assert "SCHWAB_GATEWAY_API_KEY" not in environment
-        assert "SCHWAB_GATEWAY_SHADOW_READS" not in environment
+        assert environment["SCHWAB_ACCESS_MODE"] == (
+            f"${{SCHWAB_ACCESS_MODE_{suffix}:-direct}}"
+        )
+        assert environment["SCHWAB_GATEWAY_URL"] == (
+            "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
+        )
+        assert environment["SCHWAB_GATEWAY_API_KEY"] == (
+            "${SCHWAB_GATEWAY_API_KEY:-}"
+        )
+        assert environment["SCHWAB_GATEWAY_SHADOW_READS"] == (
+            f"${{SCHWAB_GATEWAY_SHADOW_READS_{suffix}:-false}}"
+        )
+
+    candidate_environment = services["app_spx_candidate"]["environment"]
+    assert "SCHWAB_ACCESS_MODE" not in candidate_environment
 
 
 def test_default_compose_token_binds_require_the_shared_token_directory() -> None:
@@ -54,7 +56,9 @@ def test_environment_example_names_the_required_compose_token_directory() -> Non
     example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "SCHWAB_GATEWAY_TOKEN_DIR=/absolute/path/to/schwab-token-directory" in example
-    assert "SCHWAB_GATEWAY_SHADOW_READS_XSP=false" in example
+    for suffix in ("XSP", "SPX", "NDX"):
+        assert f"SCHWAB_ACCESS_MODE_{suffix}=direct" in example
+        assert f"SCHWAB_GATEWAY_SHADOW_READS_{suffix}=false" in example
 
 
 def test_default_compose_binds_the_token_directory_never_the_document() -> None:

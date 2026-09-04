@@ -18,7 +18,8 @@ from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvide
 from butterfly_guy.scripts.run_live import _build_collector_market_data
 
 ROOT = Path(__file__).resolve().parents[1]
-STANDALONE_COMMIT = "2d1da47b37ba48e3603f8d52a2fe73a55924aaf0"
+GATEWAY_SDK_COMMIT = "b514f08c18444bd692e58b38f4fe98bccf2d7db3"
+TOKEN_STORE_COMMIT = "2d1da47b37ba48e3603f8d52a2fe73a55924aaf0"
 
 
 def _source(relative: str) -> str:
@@ -81,22 +82,52 @@ def test_production_code_has_no_embedded_gateway_imports() -> None:
 def test_standalone_packages_remain_pinned_and_consumers_import_them_directly() -> None:
     project = tomllib.loads(_source("pyproject.toml"))
     sources = project["tool"]["uv"]["sources"]
-    for distribution, subdirectory in (
-        ("schwab-gateway-sdk", "packages/sdk"),
-        ("schwab-token-store", "packages/token-store"),
-    ):
-        assert sources[distribution] == {
+    expected_releases = (
+        (
+            "schwab-gateway-sdk",
+            "packages/sdk",
+            "rev",
+            GATEWAY_SDK_COMMIT,
+            "0.4.0",
+            GATEWAY_SDK_COMMIT,
+        ),
+        (
+            "schwab-token-store",
+            "packages/token-store",
+            "tag",
+            "v0.1.0",
+            "0.1.0",
+            TOKEN_STORE_COMMIT,
+        ),
+    )
+    for (
+        distribution,
+        subdirectory,
+        reference_kind,
+        reference,
+        _version,
+        _commit,
+    ) in expected_releases:
+        expected_source = {
             "git": "https://github.com/hollowc2/SchwabGateway.git",
-            "tag": "v0.1.0",
             "subdirectory": subdirectory,
+            reference_kind: reference,
         }
+        assert sources[distribution] == expected_source
 
     locked = tomllib.loads(_source("uv.lock"))
     packages = {package["name"]: package for package in locked["package"]}
-    for distribution in ("schwab-gateway-sdk", "schwab-token-store"):
+    for (
+        distribution,
+        _subdirectory,
+        _reference_kind,
+        _reference,
+        version,
+        commit,
+    ) in expected_releases:
         package = packages[distribution]
-        assert package["version"] == "0.1.0"
-        assert package["source"]["git"].endswith(f"#{STANDALONE_COMMIT}")
+        assert package["version"] == version
+        assert package["source"]["git"].endswith(f"#{commit}")
 
     assert "from schwab_gateway_sdk." in _source(
         "src/butterfly_guy/gateway_client/shadow.py"
@@ -122,36 +153,45 @@ def test_sdk_exposes_only_read_only_market_data_routes() -> None:
         and node.value.startswith("/v1/")
     }
 
-    assert routes == {"/v1/quotes", "/v1/spot", "/v1/chain"}
+    assert routes == {
+        "/v1/quotes",
+        "/v1/spot",
+        "/v1/chain",
+        "/v1/option-chain",
+        "/v1/history",
+        "/v1/movers",
+        "/v1/order-book/recent",
+        "/v1/session-history",
+    }
     assert not any(
         sensitive in route
         for route in routes
-        for sensitive in ("account", "order", "position", "transaction")
+        for sensitive in ("account", "position", "transaction")
     )
+    assert not any(route.startswith("/v1/orders") for route in routes)
 
 
-def test_compose_keeps_xsp_default_off_on_the_standalone_alias_and_others_direct() -> None:
+def test_compose_keeps_each_strategy_default_direct_with_staged_gateway_opt_in() -> None:
     compose = yaml.safe_load(_source("infra/docker-compose.yml"))
     services = compose["services"]
-    xsp_environment = services["app_xsp"]["environment"]
-
-    assert xsp_environment["SCHWAB_ACCESS_MODE"] == "direct"
-    assert xsp_environment["SCHWAB_GATEWAY_URL"] == (
-        "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
-    )
-    assert xsp_environment["SCHWAB_GATEWAY_SHADOW_READS"] == (
-        "${SCHWAB_GATEWAY_SHADOW_READS_XSP:-false}"
-    )
-
-    gateway_client_keys = {
-        "SCHWAB_ACCESS_MODE",
-        "SCHWAB_GATEWAY_URL",
-        "SCHWAB_GATEWAY_API_KEY",
-        "SCHWAB_GATEWAY_SHADOW_READS",
-    }
-    for service_name in ("app_spx", "app_ndx"):
-        environment = services[service_name].get("environment", {})
-        assert gateway_client_keys.isdisjoint(environment), service_name
+    for service_name, suffix in (
+        ("app_xsp", "XSP"),
+        ("app_spx", "SPX"),
+        ("app_ndx", "NDX"),
+    ):
+        environment = services[service_name]["environment"]
+        assert environment["SCHWAB_ACCESS_MODE"] == (
+            f"${{SCHWAB_ACCESS_MODE_{suffix}:-direct}}"
+        )
+        assert environment["SCHWAB_GATEWAY_URL"] == (
+            "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
+        )
+        assert environment["SCHWAB_GATEWAY_API_KEY"] == (
+            "${SCHWAB_GATEWAY_API_KEY:-}"
+        )
+        assert environment["SCHWAB_GATEWAY_SHADOW_READS"] == (
+            f"${{SCHWAB_GATEWAY_SHADOW_READS_{suffix}:-false}}"
+        )
 
 
 def test_default_settings_construct_no_gateway_client(monkeypatch: pytest.MonkeyPatch) -> None:

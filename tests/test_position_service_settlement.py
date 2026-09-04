@@ -68,6 +68,190 @@ def test_final_regular_session_close_returns_none_without_session_bar() -> None:
 
 
 @pytest.mark.asyncio
+async def test_settlement_spot_uses_separate_market_data_provider() -> None:
+    day = dt.date(2026, 6, 16)
+    service = PositionService.__new__(PositionService)
+    service.schwab = AsyncMock()
+    service.market_data = AsyncMock()
+    service.market_data.get_intraday_bars_for_day.return_value = [
+        _candle(dt.datetime(2026, 6, 16, 16, 0, tzinfo=EASTERN), 7511.57)
+    ]
+
+    spot, source, timestamp = await service._settlement_spot_price("SPX", day)
+
+    assert spot == 7511.57
+    assert source == "market_data_final_regular_session_1m_close"
+    assert timestamp == dt.datetime(2026, 6, 16, 16, 0, tzinfo=EASTERN)
+    service.market_data.get_intraday_bars_for_day.assert_awaited_once_with(
+        "$SPX",
+        day,
+        include_extended_hours=False,
+    )
+    service.schwab.get_intraday_bars_for_day.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_settlement_spot_uses_prior_exact_session_after_midnight() -> None:
+    session_day = dt.date(2026, 6, 16)
+    service = PositionService.__new__(PositionService)
+    service.schwab = AsyncMock()
+    service.market_data = AsyncMock()
+    service.market_data.get_intraday_bars_for_day.return_value = [
+        _candle(dt.datetime(2026, 6, 16, 15, 59, tzinfo=EASTERN), 7511.57),
+        _candle(dt.datetime(2026, 6, 17, 9, 30, tzinfo=EASTERN), 7525.0),
+    ]
+
+    spot, source, timestamp = await service._settlement_spot_price(
+        "SPX",
+        session_day,
+    )
+
+    assert spot == 7511.57
+    assert source == "market_data_final_regular_session_1m_close"
+    assert timestamp == dt.datetime(2026, 6, 16, 15, 59, tzinfo=EASTERN)
+    service.market_data.get_intraday_bars_for_day.assert_awaited_once_with(
+        "$SPX",
+        session_day,
+        include_extended_hours=False,
+    )
+    service.market_data.get_spot_price.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_repeated_position_market_data_failures_mark_not_ready_and_keep_open() -> None:
+    set_readiness(None)
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.strategy.underlying = "XSP"
+    service.market_data = AsyncMock()
+    service.market_data.get_option_chain.side_effect = (
+        RuntimeError("gateway unavailable"),
+        RuntimeError("gateway unavailable"),
+        RuntimeError("gateway unavailable"),
+        asyncio.CancelledError(),
+    )
+    service.decision_queries = MagicMock(log_event=AsyncMock())
+    service.notifier = None
+    service.position_manager = MagicMock()
+    service.state_machine = MagicMock()
+    service.monitoring_leg_queries = None
+    service.tent_queries = MagicMock(insert=AsyncMock())
+    service.trade_queries = MagicMock()
+    service._last_persisted_peak = 1.0
+    service._last_profit_state = None
+    day = dt.date(2026, 8, 24)
+    trade = TradeRecord(trade_id=7, trade_date=day, entry_price=1.0)
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=True
+    ), patch(
+        "butterfly_guy.services.position_service.session_date", return_value=day
+    ), patch(
+        "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
+    ), pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock())
+
+    ready, reason = readiness_snapshot()
+    assert ready is False
+    assert reason == "market_data_unavailable"
+    service.position_manager.update_position_value.assert_not_called()
+    service.trade_queries.close_trade.assert_not_called()
+    assert any(
+        call.args[0] == "position_market_data_unavailable"
+        for call in service.decision_queries.log_event.await_args_list
+    )
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_validated_position_market_data_recovery_clears_readiness() -> None:
+    set_readiness("market_data_unavailable")
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.strategy.underlying = "XSP"
+    service.market_data = AsyncMock()
+    service.market_data.get_option_chain.side_effect = (
+        RuntimeError("gateway unavailable"),
+        {"putExpDateMap": {}},
+        asyncio.CancelledError(),
+    )
+    service._extract_quotes = MagicMock(return_value={})
+    position_state = MagicMock(peak_update_rejected=False, peak_value=1.0)
+    service.position_manager = MagicMock(
+        update_position_value=MagicMock(return_value=position_state)
+    )
+    service.state_machine = MagicMock()
+    service.state_machine.evaluate.return_value = None
+    service.state_machine.state.name = "INITIAL"
+    service.decision_queries = MagicMock(log_event=AsyncMock())
+    service.notifier = None
+    service.monitoring_leg_queries = None
+    service.tent_queries = MagicMock(insert=AsyncMock())
+    service.trade_queries = MagicMock(update_peak_value=AsyncMock())
+    service._last_persisted_peak = 1.0
+    service._last_profit_state = None
+    day = dt.date(2026, 8, 24)
+    trade = TradeRecord(trade_id=7, trade_date=day, entry_price=1.0)
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=True
+    ), patch(
+        "butterfly_guy.services.position_service.session_date", return_value=day
+    ), patch(
+        "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
+    ), pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock())
+
+    assert readiness_snapshot() == (True, None)
+    assert any(
+        call.args[0] == "position_market_data_recovered"
+        for call in service.decision_queries.log_event.await_args_list
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_held_leg_does_not_clear_market_data_readiness() -> None:
+    set_readiness("market_data_unavailable")
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.strategy.underlying = "XSP"
+    service.market_data = AsyncMock()
+    service.market_data.get_option_chain.side_effect = (
+        {"putExpDateMap": {}},
+        asyncio.CancelledError(),
+    )
+    service._extract_quotes = MagicMock(return_value={"LOWER": MagicMock()})
+    service.position_manager = MagicMock()
+    service.position_manager.update_position_value.side_effect = ValueError(
+        "missing held leg quotes"
+    )
+    service.state_machine = MagicMock()
+    service.decision_queries = MagicMock(log_event=AsyncMock())
+    service.notifier = None
+    service.monitoring_leg_queries = None
+    service.tent_queries = MagicMock(insert=AsyncMock())
+    service.trade_queries = MagicMock()
+    day = dt.date(2026, 8, 24)
+    trade = TradeRecord(trade_id=8, trade_date=day, entry_price=1.0)
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=True
+    ), patch(
+        "butterfly_guy.services.position_service.session_date", return_value=day
+    ), patch(
+        "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
+    ), pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock())
+
+    assert readiness_snapshot() == (False, "market_data_unavailable")
+    assert not any(
+        call.args[0] == "position_market_data_recovered"
+        for call in service.decision_queries.log_event.await_args_list
+    )
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
 async def test_record_exit_metrics_converts_contract_pnl_to_dollars() -> None:
     service = PositionService.__new__(PositionService)
     service.config = MagicMock()

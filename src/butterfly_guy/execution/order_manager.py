@@ -17,6 +17,7 @@ from butterfly_guy.core.metrics import (
 )
 from butterfly_guy.core.time_utils import get_0dte_expiration, now_utc, session_date
 from butterfly_guy.data.chain_utils import iter_chain_options
+from butterfly_guy.data.providers import OptionChainProvider
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
 from butterfly_guy.db.queries import OrderIntentQueries
@@ -230,9 +231,11 @@ class OrderManager:
         builder: ButterflyOrderBuilder,
         underlying: str = "SPX",
         intent_queries: OrderIntentQueries | None = None,
+        market_data: OptionChainProvider | None = None,
     ) -> None:
         self.settings = settings
         self.schwab = schwab
+        self.market_data = market_data or schwab
         self.builder = builder
         self.underlying = underlying
         self.intent_queries = intent_queries
@@ -260,7 +263,7 @@ class OrderManager:
                 if candidate.lower_quote is not None
                 else get_0dte_expiration()
             )
-            chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
+            chain_data = await self.market_data.get_option_chain(chain_symbol, expiration)
 
             target_strikes = {
                 candidate.lower_strike,
@@ -441,6 +444,16 @@ class OrderManager:
         if await self._entry_blocked_by_working_orders(exclude_intent_id=intent_id):
             return None
 
+        # A live order may only be submitted after a fresh authoritative chain
+        # proves that the butterfly is currently priceable. The caller's
+        # candidate cost is selection evidence, not a safe availability fallback.
+        if await self._fetch_live_spread(candidate) is None:
+            log.error(
+                "live_entry_blocked_market_data_unavailable",
+                center=candidate.center_strike,
+            )
+            return None
+
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
         if intent_id is None and self.intent_queries is not None:
             intent_id = await self.intent_queries.create_intent(
@@ -534,8 +547,13 @@ class OrderManager:
                     return None
 
                 live_spread = await self._fetch_live_spread(candidate)
-                if live_spread is not None:
-                    mid_price = live_spread.mark
+                if live_spread is None:
+                    log.error(
+                        "live_entry_blocked_market_data_unavailable",
+                        center=candidate.center_strike,
+                    )
+                    return None
+                mid_price = live_spread.mark
 
                 limit_price = round(mid_price + i * step, 2)
                 log.debug("entry_ladder_step", step=i, price=limit_price, mid_price=mid_price)

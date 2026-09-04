@@ -12,8 +12,11 @@ import datetime as dt
 import os
 import sys
 from pathlib import Path
+from typing import Mapping
 
 from dotenv import dotenv_values
+from schwab_gateway_sdk.client import GatewayMarketDataClient
+from schwab_gateway_sdk.config import GatewayClientSettings
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -22,6 +25,10 @@ sys.path.insert(0, str(ROOT / "tools"))
 from butterfly_guy.core.config import load_config  # noqa: E402
 from butterfly_guy.core.logging import get_logger, setup_logging  # noqa: E402
 from butterfly_guy.core.time_utils import is_trading_day, now_eastern  # noqa: E402
+from butterfly_guy.data.providers import (  # noqa: E402
+    DirectSchwabMarketDataProvider,
+    GatewayAuthoritativeMarketDataProvider,
+)
 from butterfly_guy.data.schwab_client import SchwabClientWrapper  # noqa: E402
 from butterfly_guy.reports.daily_report_card_config import (  # noqa: E402
     load_daily_report_card_config,
@@ -36,6 +43,30 @@ def parse_report_date(value: str | None) -> dt.date:
     if value:
         return dt.date.fromisoformat(value)
     return now_eastern().date()
+
+
+def load_report_gateway_settings(
+    *,
+    infra_env_path: Path = ROOT / "infra" / ".env",
+    process_env: Mapping[str, str] | None = None,
+) -> GatewayClientSettings:
+    """Load the host cron's market-data settings without exposing key material."""
+    environment = os.environ if process_env is None else process_env
+    infra_values = dotenv_values(infra_env_path)
+
+    def value(name: str, default: str = "") -> str:
+        return str(environment.get(name) or infra_values.get(name) or default)
+
+    return GatewayClientSettings(
+        SCHWAB_ACCESS_MODE=value("SCHWAB_ACCESS_MODE_REPORT", "direct"),
+        # The report runs on the host, so never inherit the trading containers'
+        # Docker-only `http://schwab-gateway:8011` alias.
+        SCHWAB_GATEWAY_URL=value(
+            "SCHWAB_GATEWAY_REPORT_URL",
+            "http://127.0.0.1:8011",
+        ),
+        SCHWAB_GATEWAY_API_KEY=value("SCHWAB_GATEWAY_API_KEY"),
+    )
 
 
 async def main() -> int:
@@ -79,9 +110,18 @@ async def main() -> int:
         return 1
 
     notifier = DiscordNotifier(webhook) if webhook and not args.dry_run else None
+    gateway_settings = load_report_gateway_settings()
     schwab = SchwabClientWrapper(app_config.schwab)
-    await schwab.initialize()
+    gateway = None
     try:
+        await schwab.initialize()
+        market_data = DirectSchwabMarketDataProvider(schwab)
+        if gateway_settings.access_mode == "gateway":
+            gateway = GatewayMarketDataClient(
+                gateway_settings.gateway_url,
+                gateway_settings.gateway_api_key.get_secret_value(),
+            )
+            market_data = GatewayAuthoritativeMarketDataProvider(gateway)
         result = await send_daily_report_card(
             schwab,
             report_date=report_date,
@@ -91,9 +131,14 @@ async def main() -> int:
             dry_run=args.dry_run,
             dump_raw=args.dump_raw,
             dump_raw_dir=Path(card_config.report_dir) / "raw" if args.dump_raw else None,
+            market_data=market_data,
         )
     finally:
-        await schwab.close()
+        try:
+            if gateway is not None:
+                await gateway.close()
+        finally:
+            await schwab.close()
 
     if result.skipped:
         print(f"Skipped: {result.reason}")

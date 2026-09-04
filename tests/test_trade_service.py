@@ -68,6 +68,29 @@ def test_session_open_returns_none_when_no_regular_session_bar_exists():
 
 
 @pytest.mark.asyncio
+async def test_session_open_uses_separate_market_data_provider():
+    service = TradeService.__new__(TradeService)
+    service.config = AppConfig()
+    service.schwab = AsyncMock()
+    service.market_data = AsyncMock()
+    today = now_eastern().date()
+    service.market_data.get_intraday_bars.return_value = [
+        _candle(
+            dt.datetime.combine(
+                today,
+                dt.time(9, 30),
+                tzinfo=now_eastern().tzinfo,
+            ),
+            6300.0,
+        )
+    ]
+
+    assert await service._session_open_price() == 6300.0
+    service.market_data.get_intraday_bars.assert_awaited_once()
+    service.schwab.get_intraday_bars.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_attempt_entry_blocks_stale_vix_before_chain_fetch():
     config = AppConfig(
         strategy=StrategySettings(
