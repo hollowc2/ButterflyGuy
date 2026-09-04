@@ -107,6 +107,11 @@ async def test_collector_market_data_shadow_is_opt_in_and_direct_authoritative(
     await provider.wait_for_shadow_reads()
     schwab.get_spot_price.assert_awaited_once_with("$XSP")
     gateway.get_spot.assert_awaited_once_with("$XSP")
+    gateway_constructor.assert_called_once_with(
+        "http://gateway:8011",
+        "internal-key",
+        timeout_seconds=12.0,
+    )
 
 
 def test_run_live_gateway_mode_is_authoritative_without_shadow(monkeypatch):
@@ -126,7 +131,11 @@ def test_run_live_gateway_mode_is_authoritative_without_shadow(monkeypatch):
     assert isinstance(provider, GatewayAuthoritativeMarketDataProvider)
     assert shadow is None
     assert configured_gateway is gateway
-    constructor.assert_called_once_with("http://gateway:8011", "internal-key")
+    constructor.assert_called_once_with(
+        "http://gateway:8011",
+        "internal-key",
+        timeout_seconds=12.0,
+    )
 
 
 @pytest.mark.asyncio
