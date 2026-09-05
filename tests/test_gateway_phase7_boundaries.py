@@ -18,7 +18,7 @@ from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvide
 from butterfly_guy.scripts.run_live import _build_collector_market_data
 
 ROOT = Path(__file__).resolve().parents[1]
-GATEWAY_SDK_COMMIT = "b514f08c18444bd692e58b38f4fe98bccf2d7db3"
+GATEWAY_SDK_COMMIT = "e04afbdf40f4dcf7d7241dac41c8dd90ce96362a"
 TOKEN_STORE_COMMIT = "2d1da47b37ba48e3603f8d52a2fe73a55924aaf0"
 
 
@@ -88,7 +88,7 @@ def test_standalone_packages_remain_pinned_and_consumers_import_them_directly() 
             "packages/sdk",
             "rev",
             GATEWAY_SDK_COMMIT,
-            "0.4.0",
+            "0.4.4",
             GATEWAY_SDK_COMMIT,
         ),
         (
