@@ -27,6 +27,7 @@ from butterfly_guy.core.metrics import (
     trades_active,
 )
 from butterfly_guy.core.time_utils import (
+    get_0dte_expiration,
     is_market_open,
     is_trading_day,
     market_close_time,
@@ -40,7 +41,11 @@ from butterfly_guy.data.providers import (
     GatewayAuthoritativeMarketDataProvider,
 )
 from butterfly_guy.data.schemas import ButterflyCandidate, TradeRecord
-from butterfly_guy.data.schwab_client import SchwabClientWrapper
+from butterfly_guy.data.schwab_client import (
+    SCHWAB_CHAIN_SYMBOLS,
+    SCHWAB_SPOT_SYMBOLS,
+    SchwabClientWrapper,
+)
 from butterfly_guy.db.connection import DatabasePool
 from butterfly_guy.db.migrations.run_migrations import run_migrations
 from butterfly_guy.db.queries import (
@@ -103,6 +108,26 @@ TOKEN_RELOAD_INTERVAL = 300.0
 # The gateway may legitimately queue the third protected request behind two
 # three-second Schwab operations before granting it a fresh execution budget.
 GATEWAY_HTTP_TIMEOUT_SECONDS = 12.0
+GATEWAY_READINESS_PROBE_INTERVAL_SECONDS = 60.0
+
+
+async def gateway_market_data_readiness_loop(
+    market_data: GatewayAuthoritativeMarketDataProvider,
+    underlying: str,
+) -> None:
+    """Warm missing gateway surfaces without entering or managing a trade."""
+    spot_symbol = SCHWAB_SPOT_SYMBOLS.get(underlying, f"${underlying}")
+    chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
+    while True:
+        try:
+            await market_data.warm_readiness(
+                spot_symbol=spot_symbol,
+                chain_symbol=chain_symbol,
+                expiration=get_0dte_expiration(),
+            )
+        except Exception as exc:
+            log.warning("gateway_market_data_readiness_probe_failed", error=str(exc))
+        await asyncio.sleep(GATEWAY_READINESS_PROBE_INTERVAL_SECONDS)
 
 
 def _build_collector_market_data(
@@ -1118,6 +1143,16 @@ async def main() -> None:
         try:
             async with asyncio.TaskGroup() as tg:
                 supervised.append(tg.create_task(collector.run_loop(), name="collector"))
+                if isinstance(market_data, GatewayAuthoritativeMarketDataProvider):
+                    supervised.append(
+                        tg.create_task(
+                            gateway_market_data_readiness_loop(
+                                market_data,
+                                underlying,
+                            ),
+                            name="gateway_market_data_readiness",
+                        )
+                    )
                 supervised.append(
                     tg.create_task(
                         entry_loop(

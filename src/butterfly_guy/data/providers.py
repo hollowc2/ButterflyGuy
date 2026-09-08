@@ -206,6 +206,23 @@ class GatewayAuthoritativeMarketDataProvider:
         clear_readiness("gateway_market_data_unavailable")
         set_readiness("gateway_market_data_warming")
 
+    async def warm_readiness(
+        self,
+        *,
+        spot_symbol: str,
+        chain_symbol: str,
+        expiration: dt.date,
+    ) -> None:
+        """Exercise each required read surface that has not succeeded yet."""
+        operations = (
+            ("spot", lambda: self.get_spot_price(spot_symbol)),
+            ("option_chain", lambda: self.get_option_chain(chain_symbol, expiration)),
+            ("minute_history", lambda: self.get_intraday_bars(spot_symbol)),
+        )
+        for surface, operation in operations:
+            if surface not in self._required_surfaces_ready:
+                await operation()
+
     def _required_surface_succeeded(self, surface: str) -> None:
         self._required_surfaces_ready.add(surface)
         if self._required_surfaces_ready == GATEWAY_REQUIRED_SURFACES:

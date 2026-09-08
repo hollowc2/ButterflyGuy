@@ -4,7 +4,7 @@ import asyncio
 import datetime as dt
 import os
 import signal
-from unittest.mock import AsyncMock, Mock, call
+from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 from schwab_gateway_sdk.config import GatewayClientSettings
@@ -38,6 +38,7 @@ from butterfly_guy.scripts.run_live import (
     _reconcile_broker_state,
     broker_reconciler_loop,
     entry_loop,
+    gateway_market_data_readiness_loop,
     install_shutdown_handler,
     token_reload_loop,
 )
@@ -52,6 +53,32 @@ OPEN_TRADE = {
     "upper_symbol": UPPER,
     "quantity": 1,
 }
+
+
+@pytest.mark.asyncio
+async def test_gateway_readiness_loop_only_performs_read_only_warmup() -> None:
+    provider = Mock(spec=GatewayAuthoritativeMarketDataProvider)
+    provider.warm_readiness = AsyncMock()
+    expiration = dt.date(2026, 8, 24)
+
+    with (
+        patch(
+            "butterfly_guy.scripts.run_live.get_0dte_expiration",
+            return_value=expiration,
+        ),
+        patch(
+            "butterfly_guy.scripts.run_live.asyncio.sleep",
+            side_effect=asyncio.CancelledError,
+        ),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await gateway_market_data_readiness_loop(provider, "XSP")
+
+    provider.warm_readiness.assert_awaited_once_with(
+        spot_symbol="$XSP",
+        chain_symbol="$XSP",
+        expiration=expiration,
+    )
 
 
 def test_collector_market_data_defaults_to_direct_without_a_gateway_client(

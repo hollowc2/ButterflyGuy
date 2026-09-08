@@ -616,6 +616,73 @@ async def test_gateway_readiness_requires_all_live_surfaces_since_last_failure()
 
 
 @pytest.mark.asyncio
+async def test_gateway_readiness_warmup_revalidates_all_surfaces_after_failure() -> None:
+    expiration = dt.date(2026, 8, 24)
+    now = dt.datetime(2026, 8, 24, 14, 0, tzinfo=dt.timezone(dt.timedelta(hours=-4)))
+    gateway = AsyncMock()
+    gateway.get_spot.return_value = SimpleNamespace(
+        spot=_observation(symbol="XSP", price=632.5)
+    )
+    gateway.get_option_chain.return_value = SimpleNamespace(
+        option_chain=_observation(
+            symbol="XSP",
+            expiration=expiration,
+            underlying_price=632.5,
+            call_contract_count=1,
+            put_contract_count=1,
+            strike_count=1,
+            contracts=(
+                _contract("CALL", "XSP CALL", 632.0),
+                _contract("PUT", "XSP PUT", 632.0),
+            ),
+        )
+    )
+    gateway.get_history.return_value = SimpleNamespace(
+        history=_observation(
+            symbol="XSP",
+            bars=(_bar(now - dt.timedelta(minutes=1), 632.5),),
+        )
+    )
+    provider = GatewayAuthoritativeMarketDataProvider(gateway)
+
+    with patch("butterfly_guy.data.providers._now_eastern", return_value=now):
+        await provider.warm_readiness(
+            spot_symbol="$XSP",
+            chain_symbol="$XSP",
+            expiration=expiration,
+        )
+    assert readiness_snapshot() == (True, None)
+
+    # A no-op warmup does not add traffic once every surface is ready.
+    with patch("butterfly_guy.data.providers._now_eastern", return_value=now):
+        await provider.warm_readiness(
+            spot_symbol="$XSP",
+            chain_symbol="$XSP",
+            expiration=expiration,
+        )
+    assert gateway.get_spot.await_count == 1
+    assert gateway.get_option_chain.await_count == 1
+    assert gateway.get_history.await_count == 1
+
+    gateway.get_option_chain.side_effect = RuntimeError("gateway unavailable")
+    with pytest.raises(RuntimeError, match="gateway unavailable"):
+        await provider.get_option_chain("$XSP", expiration)
+    assert readiness_snapshot() == (False, "gateway_market_data_unavailable")
+
+    gateway.get_option_chain.side_effect = None
+    with patch("butterfly_guy.data.providers._now_eastern", return_value=now):
+        await provider.warm_readiness(
+            spot_symbol="$XSP",
+            chain_symbol="$XSP",
+            expiration=expiration,
+        )
+    assert readiness_snapshot() == (True, None)
+    assert gateway.get_spot.await_count == 2
+    assert gateway.get_option_chain.await_count == 3
+    assert gateway.get_history.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_empty_extended_session_is_allowed_but_other_flags_remain_fatal() -> None:
     day = dt.date(2026, 8, 24)
     now = dt.datetime(2026, 8, 25, 10, 0, tzinfo=dt.timezone(dt.timedelta(hours=-4)))
