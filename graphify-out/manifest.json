@@ -602,9 +602,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1788559342.3856196,
-    "seen": 1788842343.8875701,
-    "ast_hash": "0a63c6778e07320fdf22c8eea1363703",
+    "mtime": 1788902888.6760225,
+    "seen": 1788903142.9386194,
+    "ast_hash": "dab3c542a621cfc856c282878f10194f",
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_morning_scan.py": {
@@ -1064,9 +1064,9 @@
     "semantic_hash": ""
   },
   "tests/test_run_live.py": {
-    "mtime": 1788559346.1465518,
-    "seen": 1788842343.8906443,
-    "ast_hash": "4a27c7d26e7a8f92a2e927b99da08ebe",
+    "mtime": 1788902888.7880208,
+    "seen": 1788903142.941941,
+    "ast_hash": "fea3cb71c6b6104c049376df30428faf",
     "semantic_hash": ""
   },
   "tests/test_run_migrations.py": {
@@ -1430,9 +1430,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/providers.py": {
-    "mtime": 1788902016.3634455,
-    "seen": 1788902112.8487198,
-    "ast_hash": "e7830f176352d49c2feddf360a28d272",
+    "mtime": 1788902888.6200233,
+    "seen": 1788903142.9360478,
+    "ast_hash": "75b8054e65b053e1d4c701f1d1928f1f",
     "semantic_hash": ""
   },
   "src/butterfly_guy/gateway_client/__init__.py": {
@@ -1454,9 +1454,9 @@
     "semantic_hash": ""
   },
   "tests/test_market_data_providers.py": {
-    "mtime": 1788902053.5857081,
-    "seen": 1788902112.8541589,
-    "ast_hash": "b9edba1b3b673f85936f1d471751ca9d",
+    "mtime": 1788902888.7430215,
+    "seen": 1788903142.9414766,
+    "ast_hash": "90c14e953be0e745d2e6e3257d4bdfd8",
     "semantic_hash": ""
   },
   "CODEX_STATE.md": {
@@ -1814,9 +1814,9 @@
     "semantic_hash": ""
   },
   "tools/schwab_gateway_v046_readiness_soak.py": {
-    "mtime": 1788902725.8113031,
-    "seen": 1788902757.1749651,
-    "ast_hash": "4e8dd73bb6cb05576c7210f50e3e557b",
+    "mtime": 1788903110.599645,
+    "seen": 1788903142.9427438,
+    "ast_hash": "8144f1af24375a7a439205503aea68e5",
     "semantic_hash": ""
   }
 }
