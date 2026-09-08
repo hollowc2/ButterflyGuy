@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from butterfly_guy.equity_scan.config import EquityScanSettings
 from butterfly_guy.equity_scan.universes import (
     build_liquid_meta,
@@ -12,7 +14,10 @@ from butterfly_guy.equity_scan.universes import (
     filter_symbols_by_price,
     load_sector_map,
     parse_nasdaq_listed_text,
+    parse_nq100_html,
     parse_nyse_listed_text,
+    refresh_builtin_universes,
+    write_universe_file,
 )
 
 NASDAQ_SAMPLE = """\
@@ -33,6 +38,73 @@ ABR$F|Arbor Realty Preferred|N|ABRpF|N|100|N|ABR-F
 ACHR.W|Archer Aviation Warrants|N|ACHR.WS|N|100|N|ACHR+
 File Creation Time: 060820261200|||||||
 """
+
+NQ100_CURRENT_FORMAT_SAMPLE = """\
+<table class="infobox"><tr><th>Constituents</th><td>102</td></tr></table>
+<table class="wikitable sortable sticky-header-multi static-row-numbers">
+<tbody><tr><th id="mwHA">Ticker</th><th id="mwHQ">Company</th>
+<th>ICB Industry</th><th>ICB Subsector</th></tr>
+<tr id="mwIw"><td id="mwJA">ADBE</td><td id="mwJQ">
+<a rel="mw:WikiLink" href="/wiki/Adobe_Inc.">Adobe Inc.</a></td>
+<td>Technology</td><td>Software</td></tr>
+<tr><td><a href="/wiki/Alphabet_Inc.">GOOGL</a></td>
+<td>Alphabet Inc.</td><td>Technology</td><td>Software</td></tr></tbody>
+</table>
+"""
+
+
+def test_parse_nq100_html_handles_current_parsoid_cell_attributes_and_nested_tags():
+    assert parse_nq100_html(NQ100_CURRENT_FORMAT_SAMPLE) == ["ADBE", "GOOGL"]
+
+
+def test_refresh_builtin_universes_preserves_files_when_fetch_is_implausibly_small(
+    tmp_path,
+    monkeypatch,
+):
+    universe_dir = tmp_path / "universes"
+    universe_dir.mkdir()
+    existing = {
+        "sp500.txt": "OLD-SP500\n",
+        "nq100.txt": "OLD-NQ100\n",
+        "sectors.json": '{"OLD": "Sector"}\n',
+    }
+    for name, content in existing.items():
+        (universe_dir / name).write_text(content)
+
+    monkeypatch.setattr(
+        "butterfly_guy.equity_scan.universes.fetch_sp500_tickers",
+        lambda: [f"SP{i}" for i in range(500)],
+    )
+    monkeypatch.setattr(
+        "butterfly_guy.equity_scan.universes.fetch_nq100_tickers",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        "butterfly_guy.equity_scan.universes.fetch_sp500_sectors",
+        lambda: {f"SP{i}": "Sector" for i in range(500)},
+    )
+
+    with pytest.raises(RuntimeError, match=r"Refusing to replace nq100: fetched 0"):
+        refresh_builtin_universes(universe_dir)
+
+    for name, content in existing.items():
+        assert (universe_dir / name).read_text() == content
+
+
+def test_write_universe_file_preserves_existing_file_if_replace_fails(tmp_path, monkeypatch):
+    path = tmp_path / "nq100.txt"
+    path.write_text("EXISTING\n")
+
+    def fail_replace(_source, _destination):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr("butterfly_guy.equity_scan.universes.os.replace", fail_replace)
+
+    with pytest.raises(OSError, match="simulated replace failure"):
+        write_universe_file(path, ["AAPL", "MSFT"])
+
+    assert path.read_text() == "EXISTING\n"
+    assert list(tmp_path.iterdir()) == [path]
 
 
 def test_parse_nasdaq_listed_text_filters_etfs_tests_and_preferreds():

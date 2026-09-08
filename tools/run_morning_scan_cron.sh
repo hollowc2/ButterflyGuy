@@ -42,4 +42,5 @@ if [[ "$parity_date" == "2026-09-01" || "$parity_date" == "2026-09-02" ]]; then
     --log-level WARNING
 fi
 
-exec /opt/butterflyguy/.venv/bin/python src/butterfly_guy/scripts/run_morning_scan.py --log-level WARNING
+/opt/butterflyguy/.venv/bin/python src/butterfly_guy/scripts/run_morning_scan.py --log-level WARNING
+printf '%s equity_morning_scan_success\n' "$(date -Is)"

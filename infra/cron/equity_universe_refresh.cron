@@ -1,0 +1,6 @@
+# Equity universe refresh — Sunday 8:00 PM Pacific.
+# Host cron runs in UTC. Sunday 8 PM Pacific is Monday 03:00 UTC during PDT
+# and Monday 04:00 UTC during PST; the wrapper admits exactly one slot.
+# Install:
+#   crontab -l 2>/dev/null | grep -v refresh_equity_universes.py | grep -v run_equity_universe_refresh_cron.sh | cat - infra/cron/equity_universe_refresh.cron | crontab -
+0 3,4 * * 1 cd /opt/butterflyguy && tools/run_equity_universe_refresh_cron.sh >> /opt/butterflyguy/equity_universe_refresh.log 2>&1

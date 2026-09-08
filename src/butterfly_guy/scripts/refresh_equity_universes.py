@@ -104,7 +104,7 @@ async def run_refresh(
     counts: dict[str, int] = {}
 
     if not liquid_only:
-        counts.update(refresh_builtin_universes(scan_config.universe_dir))
+        counts.update(refresh_builtin_universes(scan_config.universe_dir, dry_run=dry_run))
 
     app_config = load_config(app_config_path)
     schwab = SchwabClientWrapper(app_config.schwab)
