@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from schwab_gateway_sdk.client import (
     GatewayAuthenticationError,
+    GatewayResponseError,
     GatewayTimeoutError,
 )
 
@@ -141,7 +142,7 @@ async def test_gateway_provider_adapts_typed_spot_and_full_chain() -> None:
     put = chain["putExpDateMap"]["2026-08-24:0"]["632"][0]
     assert (call["symbol"], put["symbol"]) == ("XSP CALL", "XSP PUT")
     assert call["totalVolume"] == 12
-    gateway.get_option_chain.assert_awaited_once_with("XSP", expiration)
+    gateway.get_option_chain.assert_awaited_once_with("$XSP", expiration)
 
 
 @pytest.mark.asyncio
@@ -174,13 +175,44 @@ async def test_gateway_provider_fails_closed_on_unusable_spot(
 
 
 @pytest.mark.asyncio
-async def test_gateway_provider_has_no_direct_fallback_on_gateway_error() -> None:
+@pytest.mark.parametrize(
+    ("supplied_symbol", "expected_symbol"),
+    [
+        ("SPX", "$SPX"),
+        ("$SPX", "$SPX"),
+        (" ndx ", "$NDX"),
+        (" $ndx ", "$NDX"),
+        ("xSp", "$XSP"),
+        (" $XSP ", "$XSP"),
+        ("AAPL", "AAPL"),
+    ],
+)
+async def test_gateway_provider_canonicalizes_chain_symbol_at_client_boundary(
+    supplied_symbol: str,
+    expected_symbol: str,
+) -> None:
+    expiration = dt.date(2026, 8, 24)
     gateway = AsyncMock()
     gateway.get_option_chain.side_effect = RuntimeError("gateway unavailable")
     provider = GatewayAuthoritativeMarketDataProvider(gateway)
 
     with pytest.raises(RuntimeError, match="gateway unavailable"):
-        await provider.get_option_chain("SPX", dt.date(2026, 8, 24))
+        await provider.get_option_chain(supplied_symbol, expiration)
+
+    gateway.get_option_chain.assert_awaited_once_with(expected_symbol, expiration)
+
+
+@pytest.mark.asyncio
+async def test_gateway_provider_does_not_retry_deterministic_response_error() -> None:
+    expiration = dt.date(2026, 8, 24)
+    gateway = AsyncMock()
+    gateway.get_option_chain.side_effect = GatewayResponseError("bad request")
+    provider = GatewayAuthoritativeMarketDataProvider(gateway, max_attempts=2)
+
+    with pytest.raises(GatewayResponseError, match="bad request"):
+        await provider.get_option_chain("SPX", expiration)
+
+    gateway.get_option_chain.assert_awaited_once_with("$SPX", expiration)
 
 
 @pytest.mark.asyncio

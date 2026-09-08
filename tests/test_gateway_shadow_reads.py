@@ -80,6 +80,7 @@ class RecordingGateway:
         self.spot_result = spot_result
         self.chain_result = chain_result
         self.calls: list[str] = []
+        self.chain_requests: list[tuple[str, dt.date]] = []
 
     async def get_spot(self, symbol: str):
         self.calls.append("get_spot")
@@ -89,6 +90,7 @@ class RecordingGateway:
 
     async def get_chain_metadata(self, symbol: str, expiration: dt.date):
         self.calls.append("get_chain_metadata")
+        self.chain_requests.append((symbol, expiration))
         if isinstance(self.chain_result, Exception):
             raise self.chain_result
         return self.chain_result
@@ -202,6 +204,33 @@ async def test_direct_result_is_unchanged_when_the_gateway_agrees() -> None:
 
     assert gateway.calls == ["get_spot", "get_chain_metadata"]
     assert provider.recorder.total() == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("supplied_symbol", "expected_symbol"),
+    [
+        ("SPX", "$SPX"),
+        ("$SPX", "$SPX"),
+        (" ndx ", "$NDX"),
+        (" $ndx ", "$NDX"),
+        ("xSp", "$XSP"),
+        (" $XSP ", "$XSP"),
+        ("AAPL", "AAPL"),
+    ],
+)
+async def test_shadow_provider_canonicalizes_chain_metadata_symbol_at_client_boundary(
+    supplied_symbol: str,
+    expected_symbol: str,
+) -> None:
+    direct = DirectProvider()
+    gateway = RecordingGateway(chain_result=chain_response())
+    provider = ShadowComparingMarketDataProvider(direct, gateway, shadow_reads=True)
+
+    assert await provider.get_option_chain(supplied_symbol, EXPIRATION) is CHAIN_PAYLOAD
+    await provider.wait_for_shadow_reads()
+
+    assert gateway.chain_requests == [(expected_symbol, EXPIRATION)]
 
 
 @pytest.mark.asyncio

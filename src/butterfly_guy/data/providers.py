@@ -18,7 +18,7 @@ from schwab_gateway_sdk.client import (
 
 from butterfly_guy.core.metrics import clear_readiness, set_readiness
 from butterfly_guy.core.time_utils import MARKET_OPEN, market_close_time
-from butterfly_guy.data.schwab_client import SchwabClientWrapper
+from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
 
 EASTERN = ZoneInfo("America/New_York")
 MINUTE_HISTORY_LIVE_MAX_AGE_SECONDS = 180.0
@@ -42,6 +42,13 @@ class GatewayMarketDataError(RuntimeError):
 
 def _same_symbol(left: str, right: str) -> bool:
     return left.strip().upper().lstrip("$") == right.strip().upper().lstrip("$")
+
+
+def canonicalize_schwab_chain_symbol(symbol: str) -> str:
+    """Return the Schwab chain symbol for a known index alias."""
+    stripped = symbol.strip()
+    alias = stripped.upper().removeprefix("$")
+    return SCHWAB_CHAIN_SYMBOLS.get(alias, stripped)
 
 
 def _finite_number(value: object, *, positive: bool = False) -> float:
@@ -264,7 +271,8 @@ class GatewayAuthoritativeMarketDataProvider:
     async def _get_option_chain(
         self, symbol: str, expiration: dt.date
     ) -> dict[str, Any]:
-        response = await self._client.get_option_chain(symbol, expiration)
+        request_symbol = canonicalize_schwab_chain_symbol(symbol)
+        response = await self._client.get_option_chain(request_symbol, expiration)
         chain = response.option_chain
         _require_usable_observation(
             chain,

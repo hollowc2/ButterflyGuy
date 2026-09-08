@@ -29,7 +29,10 @@ from butterfly_guy.core.metrics import (
     gateway_shadow_comparisons,
     gateway_shadow_discrepancies,
 )
-from butterfly_guy.data.providers import CollectorMarketDataProvider
+from butterfly_guy.data.providers import (
+    CollectorMarketDataProvider,
+    canonicalize_schwab_chain_symbol,
+)
 
 log = get_logger(__name__)
 
@@ -245,8 +248,9 @@ class ShadowComparingMarketDataProvider:
             self._direct.get_option_chain(symbol, expiration)
         )
         if self.shadow_enabled:
+            request_symbol = canonicalize_schwab_chain_symbol(symbol)
             gateway_task = asyncio.create_task(
-                self._gateway.get_chain_metadata(symbol, expiration)
+                self._gateway.get_chain_metadata(request_symbol, expiration)
             )
             self._spawn_background(
                 self._shadow_chain(expiration, direct_task, gateway_task),
