@@ -37,10 +37,12 @@ REQUEST_RETRY_BACKOFF_SECONDS = 0.5
 CONTAINER_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 METRIC_RE = re.compile(
     r"^(gateway_(?:admission_total|client_request_latency_seconds(?:_bucket|_count|_sum)?|"
+    r"event_loop_lag_seconds|"
     r"client_requests_total|option_chain_cache_(?:age_seconds|bytes|entries|events_total)|"
     r"option_chain_inflight|"
-    r"option_chain_(?:crossed_market|negative_time_value)_normalizations_total)|"
-    r"schwab_gateway_token_(?:refresh_total|state)|"
+    r"option_chain_(?:crossed_market|negative_intrinsic_value|negative_time_value)_normalizations_total)|"
+    r"schwab_gateway_(?:token_(?:refresh_total|state|lock_(?:hold|wait)_seconds(?:_bucket|_count|_sum)?)|"
+    r"upstream_operation_latency_seconds(?:_bucket|_count|_sum)?)|"
     r"schwab_gateway_scheduler_[a-z_]+)(?=[{ ]|$)"
 )
 ALLOWED_GATEWAY_LOG_FIELDS = {
@@ -229,6 +231,14 @@ def validate_chain(
     normalized_crosses = 0
     stale_contracts = 0
     missing_event_timestamps = 0
+    intrinsic_counts: Counter[str] = Counter()
+    time_value_counts: Counter[str] = Counter()
+    formula_consistency: dict[str, Counter[str]] = {
+        "CALL": Counter(),
+        "PUT": Counter(),
+    }
+    intrinsic_values: list[float] = []
+    time_values: list[float] = []
 
     for contract in contracts:
         if not isinstance(contract, dict):
@@ -252,6 +262,64 @@ def validate_chain(
             strike_value = float(strike)
             strikes.add(strike_value)
             strike_order[option_type].append(strike_value)
+
+        intrinsic = contract.get("intrinsic_value")
+        if intrinsic is None:
+            intrinsic_counts["null"] += 1
+        elif isinstance(intrinsic, bool):
+            intrinsic_counts["boolean"] += 1
+        elif not isinstance(intrinsic, (int, float)):
+            intrinsic_counts["malformed"] += 1
+        elif not math.isfinite(intrinsic):
+            intrinsic_counts["nonfinite"] += 1
+        else:
+            intrinsic_value = float(intrinsic)
+            intrinsic_values.append(intrinsic_value)
+            if intrinsic_value < 0:
+                intrinsic_counts["negative"] += 1
+            elif intrinsic_value == 0:
+                intrinsic_counts["zero"] += 1
+            else:
+                intrinsic_counts["positive"] += 1
+
+            if _finite(strike) and strike > 0:
+                underlying = chain.get("underlying_price")
+                if _finite(underlying) and underlying > 0:
+                    expected_intrinsic = (
+                        max(float(underlying) - float(strike), 0.0)
+                        if option_type == "CALL"
+                        else max(float(strike) - float(underlying), 0.0)
+                    )
+                    bucket = (
+                        "match"
+                        if math.isclose(
+                            intrinsic_value,
+                            expected_intrinsic,
+                            rel_tol=0.0,
+                            abs_tol=0.01,
+                        )
+                        else "mismatch"
+                    )
+                    formula_consistency[option_type][bucket] += 1
+
+        time_value = contract.get("time_value")
+        if time_value is None:
+            time_value_counts["null"] += 1
+        elif isinstance(time_value, bool):
+            time_value_counts["boolean"] += 1
+        elif not isinstance(time_value, (int, float)):
+            time_value_counts["malformed"] += 1
+        elif not math.isfinite(time_value):
+            time_value_counts["nonfinite"] += 1
+        else:
+            time_value_float = float(time_value)
+            time_values.append(time_value_float)
+            if time_value_float < 0:
+                time_value_counts["negative"] += 1
+            elif time_value_float == 0:
+                time_value_counts["zero"] += 1
+            else:
+                time_value_counts["positive"] += 1
 
         bid, ask, mark = contract.get("bid"), contract.get("ask"), contract.get("mark")
         if not all(_finite(value) and value >= 0 for value in (bid, ask, mark)):
@@ -319,6 +387,16 @@ def validate_chain(
         errors.append("mark_outside_market")
     if invalid_sizes:
         errors.append("invalid_size_volume_interest")
+    if sum(
+        intrinsic_counts[key]
+        for key in ("null", "boolean", "malformed", "nonfinite", "negative")
+    ):
+        errors.append("invalid_intrinsic_value")
+    if sum(
+        time_value_counts[key]
+        for key in ("boolean", "malformed", "nonfinite", "negative")
+    ):
+        errors.append("invalid_time_value")
 
     chain_flags = [str(item) for item in chain.get("data_quality_flags", [])]
     if normalized_crosses and "crossed_markets_normalized" not in chain_flags:
@@ -348,6 +426,20 @@ def validate_chain(
         "invalid_sizes": invalid_sizes,
         "wrong_expirations": wrong_expirations,
         "duplicate_symbols": duplicate_symbols,
+        "intrinsic_value_counts": dict(sorted(intrinsic_counts.items())),
+        "intrinsic_value_range": (
+            [min(intrinsic_values), max(intrinsic_values)]
+            if intrinsic_values
+            else None
+        ),
+        "time_value_counts": dict(sorted(time_value_counts.items())),
+        "time_value_range": (
+            [min(time_values), max(time_values)] if time_values else None
+        ),
+        "formula_consistency": {
+            side: dict(sorted(counts.items()))
+            for side, counts in formula_consistency.items()
+        },
         "errors": sorted(set(errors)),
     }
 

@@ -1430,9 +1430,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/providers.py": {
-    "mtime": 1788559341.6286333,
-    "seen": 1788842343.8853455,
-    "ast_hash": "3e8d2b8e491c1e1ca3073b44cece88e8",
+    "mtime": 1788902016.3634455,
+    "seen": 1788902112.8487198,
+    "ast_hash": "e7830f176352d49c2feddf360a28d272",
     "semantic_hash": ""
   },
   "src/butterfly_guy/gateway_client/__init__.py": {
@@ -1454,9 +1454,9 @@
     "semantic_hash": ""
   },
   "tests/test_market_data_providers.py": {
-    "mtime": 1788559345.1595697,
-    "seen": 1788842343.890274,
-    "ast_hash": "d3f363f23414be73180c5960f6703e73",
+    "mtime": 1788902053.5857081,
+    "seen": 1788902112.8541589,
+    "ast_hash": "b9edba1b3b673f85936f1d471751ca9d",
     "semantic_hash": ""
   },
   "CODEX_STATE.md": {
@@ -1544,9 +1544,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/gateway_client/shadow.py": {
-    "mtime": 1786463746.0278,
-    "seen": 1786841712.526245,
-    "ast_hash": "8925dd8d15742eda00b284a7e490af39",
+    "mtime": 1788902016.5684414,
+    "seen": 1788902112.8495245,
+    "ast_hash": "db337aa533dad25c73c8c29f92979976",
     "semantic_hash": ""
   },
   "tests/test_auth_init.py": {
@@ -1562,9 +1562,9 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_shadow_reads.py": {
-    "mtime": 1786923393.257826,
-    "seen": 1787614316.889213,
-    "ast_hash": "35dc19501838b4b5b2243629fa7a9455",
+    "mtime": 1788902016.9244342,
+    "seen": 1788902112.8540897,
+    "ast_hash": "e80e2de7ae6152001054383303dd4260",
     "semantic_hash": ""
   },
   "docs/ai/BRANCH_REVIEW_INTEGRATION_PLAN.md": {
@@ -1742,9 +1742,9 @@
     "semantic_hash": ""
   },
   "tests/test_schwab_gateway_session_soak.py": {
-    "mtime": 1788559346.4625463,
-    "seen": 1788842343.8907108,
-    "ast_hash": "f2ce4886c78699fce72779a22c4c4874",
+    "mtime": 1788899580.6751776,
+    "seen": 1788899892.5580182,
+    "ast_hash": "a20e5d2791fa73e067b480f248d20e22",
     "semantic_hash": ""
   },
   "tools/gateway_cutover_flatness_audit.py": {
@@ -1778,9 +1778,9 @@
     "semantic_hash": ""
   },
   "tools/schwab_gateway_session_soak.py": {
-    "mtime": 1788559348.0075185,
-    "seen": 1788842343.8911211,
-    "ast_hash": "0729f9efeaf97213c2d2248c1a381818",
+    "mtime": 1788899569.2793546,
+    "seen": 1788899892.5588942,
+    "ast_hash": "f81413486db63d5f35a177793dc688db",
     "semantic_hash": ""
   },
   "docs/gateway-order-books.md": {
@@ -1805,6 +1805,18 @@
     "mtime": 1788559338.633687,
     "seen": 1788842343.8930311,
     "ast_hash": "c0c45b47cb571c9f23972f886ac0d77d",
+    "semantic_hash": ""
+  },
+  "tools/launch_schwab_gateway_readiness_soak_20260909.sh": {
+    "mtime": 1788897766.130128,
+    "seen": 1788898454.0093899,
+    "ast_hash": "9f4d3a91d25b2fd692cb8314314341ef",
+    "semantic_hash": ""
+  },
+  "tools/schwab_gateway_v046_readiness_soak.py": {
+    "mtime": 1788902725.8113031,
+    "seen": 1788902757.1749651,
+    "ast_hash": "4e8dd73bb6cb05576c7210f50e3e557b",
     "semantic_hash": ""
   }
 }

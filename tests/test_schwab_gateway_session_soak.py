@@ -39,10 +39,50 @@ def _contract(option_type: str, symbol: str, strike: float) -> dict:
         "ask_size": 3,
         "total_volume": 4,
         "open_interest": 5,
+        "intrinsic_value": 0.0,
+        "time_value": 1.1,
         "event_timestamp": "2026-08-31T13:31:00Z",
         "stale": False,
         "data_quality_flags": [],
     }
+
+
+def test_chain_rejects_invalid_intrinsic_and_time_values() -> None:
+    call = _contract("CALL", "SPXW_CALL", 100.0)
+    put = _contract("PUT", "SPXW_PUT", 101.0)
+    call["intrinsic_value"] = -0.01
+    put["time_value"] = float("inf")
+
+    result = validate_chain(_chain(call, put), "$NDX", SESSION_DATE)
+
+    assert "invalid_intrinsic_value" in result["errors"]
+    assert "invalid_time_value" in result["errors"]
+    assert result["intrinsic_value_counts"]["negative"] == 1
+    assert result["time_value_counts"]["nonfinite"] == 1
+
+
+def test_chain_records_formula_consistency_by_option_type() -> None:
+    call = _contract("CALL", "NDX_CALL", 6449.5)
+    put = _contract("PUT", "NDX_PUT", 6451.5)
+    call["intrinsic_value"] = 1.0
+    put["intrinsic_value"] = 1.0
+
+    result = validate_chain(_chain(call, put), "$NDX", SESSION_DATE)
+
+    assert result["formula_consistency"] == {
+        "CALL": {"match": 1},
+        "PUT": {"match": 1},
+    }
+
+
+def test_chain_records_but_does_not_reject_null_time_value() -> None:
+    call = _contract("CALL", "NDX_CALL", 6500.0)
+    call["time_value"] = None
+
+    result = validate_chain(_chain(call), "$NDX", SESSION_DATE)
+
+    assert result["time_value_counts"]["null"] == 1
+    assert "invalid_time_value" not in result["errors"]
 
 
 def _chain(*contracts: dict, flags: list[str] | None = None) -> dict:
