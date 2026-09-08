@@ -59,8 +59,8 @@ EXPECTED = {
     },
     **{
         container: {
-            "image_id": "sha256:cec77e3c3eeb3890ff93f13ffaa5c690efbe76655366ae2a02b4448fccf2df76",
-            "revision": "eb7abad468b90cea228f5b27832be0ba307e1897",
+            "image_id": "sha256:1f7b1a513e72e82b1f93a9bf838466f11d196178840e27df838cc765f35b55a9",
+            "revision": "be171aef6f2291b3ba953f3d5d35824be5f8e556",
         }
         for container, _port in STRATEGIES.values()
     },
