@@ -322,6 +322,22 @@ def endpoint_snapshot() -> tuple[dict[str, Any], list[str]]:
     return endpoints, violations
 
 
+def preopen_endpoint_violations(
+    endpoints: dict[str, Any], violations: list[str]
+) -> list[str]:
+    """Allow only the documented post-close strategy readiness state."""
+    allowed: set[str] = set()
+    for container, _port in STRATEGIES.values():
+        ready = endpoints.get(container, {}).get("/ready", {})
+        if (
+            ready.get("status") == 503
+            and (ready.get("body") or {}).get("reason")
+            == "gateway_market_data_unavailable"
+        ):
+            allowed.add(f"{container}:ready_non_200")
+    return [violation for violation in violations if violation not in allowed]
+
+
 def parse_prometheus(text: str, allow: re.Pattern[str]) -> dict[str, float]:
     values: dict[str, float] = {}
     for line in text.splitlines():
@@ -845,7 +861,10 @@ def main() -> int:
         manifest["violations"].extend(f"preflight:{error}" for error in candidate_errors)
         endpoints, endpoint_errors = endpoint_snapshot()
         manifest["preflight_endpoints"] = endpoints
-        manifest["violations"].extend(f"preflight:{error}" for error in endpoint_errors)
+        manifest["violations"].extend(
+            f"preflight:{error}"
+            for error in preopen_endpoint_violations(endpoints, endpoint_errors)
+        )
         preflight_metrics, metric_errors = metrics_snapshot()
         manifest["preflight_metrics"] = preflight_metrics
         manifest["violations"].extend(f"preflight:{error}" for error in metric_errors)
