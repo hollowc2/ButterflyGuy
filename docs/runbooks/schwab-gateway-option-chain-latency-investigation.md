@@ -163,3 +163,18 @@ by contract-level freshness filtering. No timeout, freshness rule, gateway
 fallback, price synthesis, or gateway service change was introduced. Regression
 replay covers omission and recovery of each of the lower, center, and upper held
 legs and verifies that missing data cannot reach exit execution.
+
+## 2026-09-09 runtime follow-up
+
+The first 24 hours of the `v0.4.6` PAPER fleet showed healthy gateway resource
+headroom but short protected timeout clusters during traffic consistent with
+overlapping two-second position-monitor polling. The ButterflyGuy runtime now
+aligns gateway-authoritative SPX, NDX, and XSP processes to evenly spaced
+phases within that existing two-second period before it starts collector,
+readiness, entry, and recovered-position tasks. This is a gateway-only startup
+delay of less than two seconds; it does not change polling intervals, direct
+market-data behavior, broker access, order handling, or risk limits.
+
+Promotion still requires a subsequent full regular-session observation with
+zero protected `503`/`504`, queue timeouts, and upstream timeouts. Do not widen
+the gateway's timeout budgets to make that gate pass.

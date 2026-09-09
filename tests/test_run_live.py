@@ -39,6 +39,7 @@ from butterfly_guy.scripts.run_live import (
     broker_reconciler_loop,
     entry_loop,
     gateway_market_data_readiness_loop,
+    gateway_runtime_phase_delay,
     install_shutdown_handler,
     token_reload_loop,
 )
@@ -162,6 +163,26 @@ def test_run_live_gateway_mode_is_authoritative_without_shadow(monkeypatch):
         "http://gateway:8011",
         "internal-key",
         timeout_seconds=12.0,
+    )
+
+
+@pytest.mark.parametrize(
+    ("underlying", "clock_seconds", "expected"),
+    [
+        ("SPX", 100.0, 0.0),
+        ("NDX", 100.0, 2.0 / 3.0),
+        ("XSP", 100.0, 4.0 / 3.0),
+        ("NDX", 100.5, 1.0 / 6.0),
+        ("OTHER", 100.25, 1.75),
+    ],
+)
+def test_gateway_runtime_phase_delay_spreads_underlyings_evenly(
+    underlying: str,
+    clock_seconds: float,
+    expected: float,
+) -> None:
+    assert gateway_runtime_phase_delay(underlying, clock_seconds) == pytest.approx(
+        expected
     )
 
 
