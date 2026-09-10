@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import datetime as dt
 
+import pytest
+
 from butterfly_guy.core.config import (
     PeakTrackingSettings,
     ProfitManagementSettings,
     QuoteQualitySettings,
 )
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
-from butterfly_guy.position.position_manager import PositionManager, fly_settlement_value
+from butterfly_guy.position.position_manager import (
+    PositionManager,
+    PositionQuotesUnavailableError,
+    fly_settlement_value,
+)
 
 
 def make_candidate(direction: str = "PUT") -> ButterflyCandidate:
@@ -135,3 +141,26 @@ def test_peak_tracking_rejects_bad_quote_quality():
     assert state.peak_value == 0.25
     assert state.peak_update_rejected is True
     assert state.peak_rejection_reason == "quote_quality"
+
+
+@pytest.mark.parametrize("missing_strike", (737.0, 740.0, 743.0))
+def test_missing_held_quote_preserves_last_mark_without_returning_stale_state(
+    missing_strike: float,
+) -> None:
+    manager = PositionManager("XSP")
+    manager.reset(entry_price=0.25)
+    candidate = make_xsp_candidate()
+    first = manager.update_position_value(candidate, quote_map(0.40))
+    incomplete = {
+        strike: quote
+        for strike, quote in quote_map(0.50).items()
+        if strike != missing_strike
+    }
+
+    with pytest.raises(PositionQuotesUnavailableError) as exc_info:
+        manager.update_position_value(candidate, incomplete)
+
+    assert exc_info.value.missing_strikes == (missing_strike,)
+    assert exc_info.value.last_known_value == first.current_value
+    recovered = manager.update_position_value(candidate, quote_map(0.41))
+    assert recovered.current_value == 0.41

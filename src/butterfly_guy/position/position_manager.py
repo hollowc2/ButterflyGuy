@@ -17,6 +17,22 @@ from butterfly_guy.quant_engine.black_scholes import bs_call_price, bs_put_price
 log = get_logger(__name__)
 
 
+class PositionQuotesUnavailableError(ValueError):
+    """A held butterfly cannot be valued from the current observation."""
+
+    def __init__(
+        self,
+        missing_strikes: tuple[float, ...],
+        last_known_value: float | None,
+    ) -> None:
+        self.missing_strikes = missing_strikes
+        self.last_known_value = last_known_value
+        super().__init__(
+            "missing held position quotes for strikes "
+            + ", ".join(str(strike) for strike in missing_strikes)
+        )
+
+
 def fly_bid_value(lower: OptionQuote, center: OptionQuote, upper: OptionQuote) -> float:
     """Butterfly value at market bid (what a MM pays to buy it from you)."""
     return lower.bid + upper.bid - 2 * center.ask
@@ -177,20 +193,30 @@ class PositionManager:
         peak_update_rejected = False
         peak_rejection_reason: str | None = None
 
-        if not all([lower_q, center_q, upper_q]):
-            # Use last known value if quotes missing
-            current_value = self._peak_value
-            log.warning("missing_quotes_for_position")
-        else:
-            current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
-            spread_bid = max(0.0, fly_bid_value(lower_q, center_q, upper_q))
-            spread_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
-            max_leg_spread_to_mark_ratio = _max_leg_spread_to_mark_ratio(
-                lower_q,
-                center_q,
-                upper_q,
+        missing_strikes = tuple(
+            strike
+            for strike, quote in (
+                (candidate.lower_strike, lower_q),
+                (candidate.center_strike, center_q),
+                (candidate.upper_strike, upper_q),
             )
-            max_leg_spread_abs = max(q.ask - q.bid for q in (lower_q, center_q, upper_q))
+            if quote is None
+        )
+        if missing_strikes:
+            # Retain the last complete observation internally, but never emit a
+            # PositionState that could be mistaken for a fresh valuation.
+            raise PositionQuotesUnavailableError(missing_strikes, self._last_mark_value)
+
+        assert lower_q is not None and center_q is not None and upper_q is not None
+        current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
+        spread_bid = max(0.0, fly_bid_value(lower_q, center_q, upper_q))
+        spread_ask = lower_q.ask + upper_q.ask - 2 * center_q.bid
+        max_leg_spread_to_mark_ratio = _max_leg_spread_to_mark_ratio(
+            lower_q,
+            center_q,
+            upper_q,
+        )
+        max_leg_spread_abs = max(q.ask - q.bid for q in (lower_q, center_q, upper_q))
 
         # Update mark peak only after configured confirmation and quote-quality gates.
         if current_value > self._peak_value:
@@ -228,7 +254,7 @@ class PositionManager:
         # Compute dynamic tent boundaries (BS-derived; converge to at-expiry BE as T→0)
         lower_tent: float | None = None
         upper_tent: float | None = None
-        if all([lower_q, center_q, upper_q]) and mins_left > 0:
+        if mins_left > 0:
             t_years = mins_left / (365 * 24 * 60)
             lower_tent, upper_tent = compute_tent_boundaries(
                 candidate, lower_q, center_q, upper_q, t_years
