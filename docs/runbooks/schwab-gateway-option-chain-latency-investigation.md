@@ -133,3 +133,33 @@ stay in sync) plus a new release/tag.
 
 No production config was changed and the gateway was not restarted as part
 of this investigation.
+
+## XSP held-leg omission follow-up (2026-09-10)
+
+The repeated `missing_quotes_for_position` warnings were an application-side
+position-monitoring defect, not evidence of a gateway scheduler failure. The
+gateway-authoritative adapter deliberately excludes individual contracts whose
+freshness is unknown, too old, or marked stale while retaining an otherwise
+usable chain. That behavior preserves the existing contract-level freshness
+gate. The defect was that `PositionManager` treated a missing held leg as a
+successful valuation at the position's peak, so `PositionService` evaluated the
+profit state machine and kept `/ready` at 200.
+
+The monitor now treats any missing held strike as an incomplete valuation. It
+retains the last complete mark only as stale diagnostic evidence and does not
+return a fresh `PositionState`, update valuation metrics, evaluate exits, or
+perform broker writes for that observation. Reporting is bounded to these
+transitions:
+
+- first failure: `position_market_data_degraded` warning;
+- third consecutive failure: `position_market_data_unavailable` error and
+  decision event, with `/ready` returning 503 and reason
+  `market_data_unavailable`;
+- first subsequent observation containing all three usable legs:
+  `position_market_data_recovered`, which clears only that readiness reason.
+
+The threshold applies equally to gateway read errors and chains made incomplete
+by contract-level freshness filtering. No timeout, freshness rule, gateway
+fallback, price synthesis, or gateway service change was introduced. Regression
+replay covers omission and recovery of each of the lower, center, and upper held
+legs and verifies that missing data cannot reach exit execution.

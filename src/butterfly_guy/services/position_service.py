@@ -49,7 +49,11 @@ from butterfly_guy.execution.order_manager import (
     PartialFillError,
     TerminalOrderError,
 )
-from butterfly_guy.position.position_manager import PositionManager, fly_settlement_value
+from butterfly_guy.position.position_manager import (
+    PositionManager,
+    PositionQuotesUnavailableError,
+    fly_settlement_value,
+)
 from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
@@ -313,22 +317,31 @@ class PositionService:
                     )
                 except Exception as market_data_error:
                     market_data_failures += 1
-                    log.error(
-                        "position_market_data_failed",
-                        trade_id=trade.trade_id,
-                        consecutive_failures=market_data_failures,
-                        error=str(market_data_error),
-                    )
-                    if market_data_failures >= MARKET_DATA_FAILURE_THRESHOLD:
+                    failure_details: dict[str, object] = {
+                        "trade_id": trade.trade_id,
+                        "consecutive_failures": market_data_failures,
+                        "error": str(market_data_error),
+                    }
+                    if isinstance(market_data_error, PositionQuotesUnavailableError):
+                        failure_details.update(
+                            {
+                                "missing_strikes": market_data_error.missing_strikes,
+                                "last_known_value": market_data_error.last_known_value,
+                                "last_known_value_is_stale": (
+                                    market_data_error.last_known_value is not None
+                                ),
+                            }
+                        )
+                    if market_data_failures == 1:
+                        log.warning("position_market_data_degraded", **failure_details)
+                    if market_data_failures == MARKET_DATA_FAILURE_THRESHOLD:
                         set_readiness("market_data_unavailable")
+                        log.error("position_market_data_unavailable", **failure_details)
                         if not market_data_alerted:
                             market_data_alerted = True
                             await self.decision_queries.log_event(
                                 "position_market_data_unavailable",
-                                {
-                                    "trade_id": trade.trade_id,
-                                    "consecutive_failures": market_data_failures,
-                                },
+                                failure_details,
                                 underlying=self.config.strategy.underlying,
                             )
                             if self.notifier:
