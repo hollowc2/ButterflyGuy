@@ -36,36 +36,35 @@ def test_only_primary_butterfly_dashboards_remain() -> None:
     }
 
 
-def test_candidate_review_metrics_are_folded_into_performance() -> None:
-    dashboard = _dashboard("performance.json")
-    rows = {panel["title"]: panel for panel in dashboard["panels"]}
+def test_experimental_candidate_fleet_is_absent_from_dashboards() -> None:
+    dashboards = {
+        name: _dashboard(name)
+        for name in (
+            "butterfly_trade_detail.json",
+            "butterfly_trading.json",
+            "performance.json",
+        )
+    }
 
-    assert rows["SPX Candidate Comparison"]["collapsed"] is True
-    assert {
-        "candidate_evaluator_closed_trade_count",
-        "candidate_evaluator_realized_pnl_dollars",
-        "candidate_evaluator_average_pnl_dollars",
-        "candidate_evaluator_win_rate",
-        "candidate_evaluator_profit_factor",
-        "candidate_evaluator_max_drawdown_dollars",
-        "candidate_evaluator_largest_winner_share_ratio",
-        "candidate_evaluator_pnl_without_largest_winner_dollars",
-        "candidate_evaluator_parity_failures",
-        "candidate_evaluator_data_quality_failures",
-    } <= _expressions(dashboard)
-
-
-def test_candidate_runtime_health_is_folded_into_trading() -> None:
-    dashboard = _dashboard("butterfly_trading.json")
-    rows = {panel["title"]: panel for panel in dashboard["panels"]}
-
-    assert rows["SPX Candidate Fleet Health"]["collapsed"] is True
-    assert {
-        'up{job="spx_candidate_evaluator"}',
-        "candidate_feed_sequence",
-        "candidate_feed_snapshot_age_seconds",
-        "candidate_evaluator_open_positions",
-    } <= _expressions(dashboard)
+    assert "SPX Candidate Comparison" not in {
+        panel["title"] for panel in dashboards["performance.json"]["panels"]
+    }
+    assert "SPX Candidate Fleet Health" not in {
+        panel["title"] for panel in dashboards["butterfly_trading.json"]["panels"]
+    }
+    assert "Candidate Strategy Review" not in {
+        panel["title"]
+        for panel in dashboards["butterfly_trade_detail.json"]["panels"]
+    }
+    assert "Trade Accounting Review" in {
+        panel["title"]
+        for panel in dashboards["butterfly_trade_detail.json"]["panels"]
+    }
+    assert all(
+        not expression.startswith(("candidate_evaluator_", "candidate_feed_"))
+        for dashboard in dashboards.values()
+        for expression in _expressions(dashboard)
+    )
 
 
 def test_trading_dashboard_selects_one_strategy_source_without_metric_pollution() -> None:
@@ -77,7 +76,7 @@ def test_trading_dashboard_selects_one_strategy_source_without_metric_pollution(
     assert strategy["label"] == "Source"
     assert strategy["type"] == "datasource"
     assert strategy["query"] == "grafana-postgresql-datasource"
-    assert strategy["regex"] == "/^(TimescaleDB|Candidate .*)$/"
+    assert strategy["regex"] == "/^TimescaleDB$/"
     assert strategy["current"] == {
         "selected": True,
         "text": "TimescaleDB",
@@ -150,7 +149,7 @@ def test_trade_detail_defaults_to_primary_spx_and_selects_strategy_datasource() 
 
     assert strategy["type"] == "datasource"
     assert strategy["query"] == "grafana-postgresql-datasource"
-    assert strategy["regex"] == "/^(TimescaleDB|Candidate .*)$/"
+    assert strategy["regex"] == "/^TimescaleDB$/"
     assert strategy["current"] == {
         "selected": True,
         "text": "TimescaleDB",
@@ -182,33 +181,6 @@ def test_trade_detail_defaults_to_primary_spx_and_selects_strategy_datasource() 
         for target in panel.get("targets", [])
         if "rawSql" in target
     )
-
-
-def test_trade_detail_preserves_candidate_cohort_and_accounting_checks() -> None:
-    dashboard = _dashboard("butterfly_trade_detail.json")
-    review_row = next(
-        panel
-        for panel in dashboard["panels"]
-        if panel["title"] == "Candidate Strategy Review"
-    )
-    queries = [
-        target["rawSql"]
-        for panel in _panels({"panels": review_row["panels"]})
-        for target in panel.get("targets", [])
-        if "rawSql" in target
-    ]
-    trade_queries = [query for query in queries if "butterfly_trades" in query]
-
-    assert review_row["collapsed"] is True
-    assert trade_queries
-    assert all(
-        "metadata->>'paper_fill_model' = 'mark_v1'" in query
-        for query in trade_queries
-    )
-    assert any("largest_winner_share" in query for query in trade_queries)
-    assert any("entry_execution_diagnostics" in query for query in trade_queries)
-    assert any("exit_execution_diagnostics" in query for query in trade_queries)
-    assert any("settlement_feed_blocked" in query for query in queries)
 
 
 def test_trade_detail_uses_selected_trade_monitoring_as_candidate_spot_fallback() -> None:
