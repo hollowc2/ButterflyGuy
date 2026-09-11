@@ -109,6 +109,28 @@ TOKEN_RELOAD_INTERVAL = 300.0
 # three-second Schwab operations before granting it a fresh execution budget.
 GATEWAY_HTTP_TIMEOUT_SECONDS = 12.0
 GATEWAY_READINESS_PROBE_INTERVAL_SECONDS = 60.0
+GATEWAY_RUNTIME_PHASE_PERIOD_SECONDS = 2.0
+GATEWAY_RUNTIME_PHASE_SECONDS = {
+    "SPX": 0.0,
+    "NDX": 2.0 / 3.0,
+    "XSP": 4.0 / 3.0,
+}
+
+
+def gateway_runtime_phase_delay(underlying: str, clock_seconds: float) -> float:
+    """Return a bounded startup delay that spreads gateway PAPER runtimes evenly.
+
+    Linux containers on one host share the same monotonic clock. Aligning each
+    underlying to a distinct phase therefore staggers collector warm-up, entry scans,
+    and any recovered position monitor without changing their established cadence.
+    """
+    phase = GATEWAY_RUNTIME_PHASE_SECONDS.get(underlying.upper(), 0.0)
+    delay = (
+        phase - clock_seconds % GATEWAY_RUNTIME_PHASE_PERIOD_SECONDS
+    ) % GATEWAY_RUNTIME_PHASE_PERIOD_SECONDS
+    if delay < 0.001 or GATEWAY_RUNTIME_PHASE_PERIOD_SECONDS - delay < 0.001:
+        return 0.0
+    return delay
 
 
 async def gateway_market_data_readiness_loop(
@@ -1139,6 +1161,17 @@ async def main() -> None:
         set_readiness(None)
         if isinstance(market_data, GatewayAuthoritativeMarketDataProvider):
             market_data.begin_readiness_tracking()
+            phase_delay = gateway_runtime_phase_delay(
+                underlying,
+                asyncio.get_running_loop().time(),
+            )
+            if phase_delay:
+                log.info(
+                    "gateway_runtime_phase_waiting",
+                    underlying=underlying,
+                    delay_seconds=round(phase_delay, 3),
+                )
+                await asyncio.sleep(phase_delay)
         supervised: list[asyncio.Task[Any]] = []
         try:
             async with asyncio.TaskGroup() as tg:
