@@ -7,11 +7,10 @@ import json
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
-
-from butterfly_guy.data.gateway_order_book import (
-    GatewayOrderBookClient,
-    OrderBookContractError,
-    OrderBookUnavailableError,
+from schwab_gateway_sdk import (
+    GatewayMarketDataClient,
+    GatewayResponseError,
+    GatewayUnavailableError,
 )
 
 
@@ -73,8 +72,10 @@ async def test_recent_authenticates_and_validates_fresh_contract() -> None:
     app = web.Application()
     app.router.add_get("/v1/order-book/recent", recent)
     async with TestServer(app) as server:
-        async with GatewayOrderBookClient(str(server.make_url("/")), "secret") as client:
-            response = await client.recent("aapl", venue="nasdaq", limit=1)
+        async with GatewayMarketDataClient(str(server.make_url("/")), "secret") as client:
+            response = await client.get_recent_order_book(
+                "AAPL", venue="nasdaq", limit=1
+            )
 
     assert response.symbol == "AAPL"
     assert response.stale is False
@@ -95,9 +96,9 @@ async def test_recent_fails_closed_when_gateway_reports_stale_feed() -> None:
     app = web.Application()
     app.router.add_get("/v1/order-book/recent", unavailable)
     async with TestServer(app) as server:
-        async with GatewayOrderBookClient(str(server.make_url("/")), "secret") as client:
-            with pytest.raises(OrderBookUnavailableError):
-                await client.recent("AAPL", venue="NASDAQ")
+        async with GatewayMarketDataClient(str(server.make_url("/")), "secret") as client:
+            with pytest.raises(GatewayUnavailableError):
+                await client.get_recent_order_book("AAPL", venue="NASDAQ")
 
 
 @pytest.mark.asyncio
@@ -111,9 +112,9 @@ async def test_recent_rejects_mismatched_snapshot() -> None:
     app = web.Application()
     app.router.add_get("/v1/order-book/recent", recent)
     async with TestServer(app) as server:
-        async with GatewayOrderBookClient(str(server.make_url("/")), "secret") as client:
-            with pytest.raises(OrderBookContractError, match="mismatched"):
-                await client.recent("AAPL", venue="NASDAQ")
+        async with GatewayMarketDataClient(str(server.make_url("/")), "secret") as client:
+            with pytest.raises(GatewayResponseError, match="invalid market data contract"):
+                await client.get_recent_order_book("AAPL", venue="NASDAQ")
 
 
 @pytest.mark.asyncio
@@ -140,8 +141,11 @@ async def test_stream_authenticates_and_yields_only_requested_contracts() -> Non
     app = web.Application()
     app.router.add_get("/v1/order-book/stream", stream)
     async with TestServer(app) as server:
-        async with GatewayOrderBookClient(str(server.make_url("/")), "secret") as client:
-            snapshots = [snapshot async for snapshot in client.stream(["aapl"], venue="nasdaq")]
+        async with GatewayMarketDataClient(str(server.make_url("/")), "secret") as client:
+            async with client.stream_order_books(
+                ["aapl"], venue="nasdaq"
+            ) as stream:
+                snapshots = [snapshot async for snapshot in stream]
 
     assert len(snapshots) == 1
     assert snapshots[0].asks[0].price == 100.1
@@ -165,14 +169,14 @@ async def test_stream_rejects_an_unrequested_symbol() -> None:
     app = web.Application()
     app.router.add_get("/v1/order-book/stream", stream)
     async with TestServer(app) as server:
-        async with GatewayOrderBookClient(str(server.make_url("/")), "secret") as client:
-            with pytest.raises(OrderBookContractError, match="unrequested"):
-                _ = [
-                    snapshot
-                    async for snapshot in client.stream(["AAPL"], venue="NASDAQ")
-                ]
+        async with GatewayMarketDataClient(str(server.make_url("/")), "secret") as client:
+            with pytest.raises(GatewayResponseError, match="unrequested"):
+                async with client.stream_order_books(
+                    ["AAPL"], venue="NASDAQ"
+                ) as stream:
+                    _ = [snapshot async for snapshot in stream]
 
 
 def test_client_rejects_unsafe_or_ambiguous_inputs() -> None:
     with pytest.raises(ValueError, match="API key"):
-        GatewayOrderBookClient("http://gateway", "")
+        GatewayMarketDataClient("http://gateway", "")

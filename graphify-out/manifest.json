@@ -66,9 +66,9 @@
     "semantic_hash": ""
   },
   "pyproject.toml": {
-    "mtime": 1788567085.6983109,
-    "seen": 1789146275.4036207,
-    "ast_hash": "2e2efbdca74b9539de3aa7d54c224764",
+    "mtime": 1789157086.3267,
+    "seen": 1789157187.8176954,
+    "ast_hash": "3317be77171d42c1c68c80330328d5e7",
     "semantic_hash": ""
   },
   "src/butterfly_guy/__init__.py": {
@@ -1550,9 +1550,9 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_phase7_boundaries.py": {
-    "mtime": 1788567085.7313101,
-    "seen": 1789146275.4038053,
-    "ast_hash": "6f75044f9df832bf752e12e56ae46958",
+    "mtime": 1789157142.5486789,
+    "seen": 1789157187.8240736,
+    "ast_hash": "5097126a926d903897964900a67cf83a",
     "semantic_hash": ""
   },
   "reports/broker_order_statuses_xsp_2026-07-14.json": {
@@ -1579,12 +1579,6 @@
     "ast_hash": "59a5511d803840b745c1c7d55046c422",
     "semantic_hash": ""
   },
-  "src/butterfly_guy/data/gateway_order_book.py": {
-    "mtime": 1788559332.242802,
-    "seen": 1789146275.4036555,
-    "ast_hash": "d2702a4da98d5fcef2f2254b9e90da0e",
-    "semantic_hash": ""
-  },
   "tests/test_gateway_cutover_flatness_audit.py": {
     "mtime": 1788559344.0935888,
     "seen": 1789146275.4038017,
@@ -1598,9 +1592,9 @@
     "semantic_hash": ""
   },
   "tests/test_gateway_order_book.py": {
-    "mtime": 1788559333.5387788,
-    "seen": 1789146275.4038036,
-    "ast_hash": "60a1a28485a74a2a3021324ed58ccc13",
+    "mtime": 1789157142.8256738,
+    "seen": 1789157187.8240716,
+    "ast_hash": "6bf18f3fe4d52316b0ea704f7e8e85f9",
     "semantic_hash": ""
   },
   "tests/test_schwab_gateway_session_soak.py": {
@@ -1634,9 +1628,9 @@
     "semantic_hash": ""
   },
   "docs/gateway-order-books.md": {
-    "mtime": 1788559330.173839,
-    "seen": 1789146275.4039152,
-    "ast_hash": "0fcf400a6796a4c268c9a4986ca9547d",
+    "mtime": 1789157086.712693,
+    "seen": 1789157187.8288944,
+    "ast_hash": "f43842ec8493468a4422d9edb3342895",
     "semantic_hash": ""
   },
   "docs/runbooks/schwab-gateway-soak-health.override.yml": {

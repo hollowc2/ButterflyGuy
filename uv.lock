@@ -279,7 +279,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "schwab-gateway-sdk", git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Fsdk&rev=e04afbdf40f4dcf7d7241dac41c8dd90ce96362a" },
+    { name = "schwab-gateway-sdk", git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Fsdk&rev=f5ed5fc5232d72fdf54cfde6b449aa520e4f2d53" },
     { name = "schwab-py", specifier = ">=1.4.0" },
     { name = "schwab-token-store", git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Ftoken-store&tag=v0.1.0" },
     { name = "scipy", specifier = ">=1.14.0" },
@@ -1948,12 +1948,13 @@ wheels = [
 
 [[package]]
 name = "schwab-gateway-sdk"
-version = "0.4.4"
-source = { git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Fsdk&rev=e04afbdf40f4dcf7d7241dac41c8dd90ce96362a#e04afbdf40f4dcf7d7241dac41c8dd90ce96362a" }
+version = "0.5.0"
+source = { git = "https://github.com/hollowc2/SchwabGateway.git?subdirectory=packages%2Fsdk&rev=f5ed5fc5232d72fdf54cfde6b449aa520e4f2d53#f5ed5fc5232d72fdf54cfde6b449aa520e4f2d53" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "websockets" },
 ]
 
 [[package]]

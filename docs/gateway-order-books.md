@@ -1,13 +1,15 @@
 # SchwabGateway order books
 
-`GatewayOrderBookClient` gives ButterflyGuy a read-only, authenticated consumer for
-SchwabGateway's venue-specific Level II snapshots. It does not place, replace, or cancel
-orders and it does not read Schwab credentials or the shared token file.
+`schwab_gateway_sdk.GatewayMarketDataClient` is the sole typed HTTP and WebSocket
+consumer for SchwabGateway's venue-specific Level II snapshots. ButterflyGuy does not
+maintain a second transport or model implementation. The SDK does not place, replace,
+or cancel orders and it does not read Schwab credentials or the shared token file.
 
 The client treats depth as research data:
 
-- `recent()` accepts only a fresh `stale=false` gateway response;
-- `stream()` validates every WebSocket envelope and rejects unrequested symbols;
+- `get_recent_order_book()` accepts only a fresh `stale=false` gateway response;
+- `stream_order_books()` validates every WebSocket envelope and rejects unrequested
+  symbols;
 - `is_consolidated` must be false, because each feed is NASDAQ- or NYSE-specific;
 - connection and continuity epochs are preserved for downstream gap analysis;
 - authentication, authorization, capacity, feed availability, and contract failures use
@@ -20,15 +22,17 @@ The client treats depth as research data:
 ```python
 import os
 
-from butterfly_guy.data.gateway_order_book import GatewayOrderBookClient
+from schwab_gateway_sdk import GatewayMarketDataClient
 
 
 async def load_recent_aapl():
-    async with GatewayOrderBookClient(
+    async with GatewayMarketDataClient(
         os.environ["SCHWAB_GATEWAY_URL"],
         os.environ["SCHWAB_GATEWAY_API_KEY"],
     ) as client:
-        response = await client.recent("AAPL", venue="NASDAQ", limit=100)
+        response = await client.get_recent_order_book(
+            "AAPL", venue="NASDAQ", limit=100
+        )
         return response.snapshots
 ```
 
@@ -37,17 +41,24 @@ async def load_recent_aapl():
 ```python
 import os
 
-from butterfly_guy.data.gateway_order_book import GatewayOrderBookClient
+from schwab_gateway_sdk import GatewayMarketDataClient
 
 
 async def consume_aapl():
-    async with GatewayOrderBookClient(
+    async with GatewayMarketDataClient(
         os.environ["SCHWAB_GATEWAY_URL"],
         os.environ["SCHWAB_GATEWAY_API_KEY"],
     ) as client:
-        async for snapshot in client.stream(["AAPL"], venue="NASDAQ"):
-            # Hand off to a bounded recorder or research feature pipeline.
-            print(snapshot.gateway_received_at, snapshot.bids[:1], snapshot.asks[:1])
+        async with client.stream_order_books(
+            ["AAPL"], venue="NASDAQ"
+        ) as snapshots:
+            async for snapshot in snapshots:
+                # Hand off to a bounded recorder or research feature pipeline.
+                print(
+                    snapshot.gateway_received_at,
+                    snapshot.bids[:1],
+                    snapshot.asks[:1],
+                )
 ```
 
 The API key must belong to a gateway principal with `market_data:read`. Keep the key in
