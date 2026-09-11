@@ -24,9 +24,9 @@
     "semantic_hash": ""
   },
   "docs/application-architecture.json": {
-    "mtime": 1784824037.028116,
-    "seen": 1789146275.4036117,
-    "ast_hash": "5d813b29dd671cf35116a707bca3b3ed",
+    "mtime": 1789147785.8403835,
+    "seen": 1789147838.612914,
+    "ast_hash": "e7099ed41ad0facd7153aa367473821f",
     "semantic_hash": ""
   },
   "infra/grafana/dashboards-other/hl_engine.json": {
@@ -587,12 +587,6 @@
     "mtime": 1786414933.2605526,
     "seen": 1789146275.4037175,
     "ast_hash": "fcb4ef528ccb1fb70ac688bcffc46f18",
-    "semantic_hash": ""
-  },
-  "src/butterfly_guy/scripts/run_collector.py": {
-    "mtime": 1786060832.6485798,
-    "seen": 1789146275.4037187,
-    "ast_hash": "7de28beaf6b963828cfe0cdc7aa651fd",
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_entry_analysis.py": {
@@ -1214,9 +1208,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1788559330.0068421,
-    "seen": 1789146275.40387,
-    "ast_hash": "70a9cad0f0461793ac8a0869b1e5631a",
+    "mtime": 1789147763.973789,
+    "seen": 1789147838.6220937,
+    "ast_hash": "a14fb09a990b595dcc80d426bd235b83",
     "semantic_hash": ""
   },
   "configs/candidates.yaml": {
@@ -1459,46 +1453,16 @@
     "ast_hash": "90c14e953be0e745d2e6e3257d4bdfd8",
     "semantic_hash": ""
   },
-  "CODEX_STATE.md": {
-    "mtime": 1786398780.3876643,
-    "seen": 1789146275.4038692,
-    "ast_hash": "7a78d658fe3ced279409a2ce28c1b5a0",
-    "semantic_hash": ""
-  },
-  "docs/architecture/current-schwab-integration.md": {
-    "mtime": 1786923391.173868,
-    "seen": 1789146275.403894,
-    "ast_hash": "6ea76fdf608d0cd360cebd80918b8f51",
-    "semantic_hash": ""
-  },
   "docs/architecture/schwab-capability-matrix.md": {
     "mtime": 1786060831.119603,
     "seen": 1789146275.4038963,
     "ast_hash": "fe6f08c5d780c92bc9f13183f13773e5",
     "semantic_hash": ""
   },
-  "docs/architecture/schwab-gateway-local-run.md": {
-    "mtime": 1786923391.419863,
-    "seen": 1789146275.4039032,
-    "ast_hash": "79f6b348e576c4992cf3c915660afea4",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-migration.md": {
-    "mtime": 1786923391.465862,
-    "seen": 1789146275.4039044,
-    "ast_hash": "55ca72974f11a91dfd9503cdc8f575fe",
-    "semantic_hash": ""
-  },
   "docs/architecture/target-trading-platform.md": {
     "mtime": 1786923391.6898575,
     "seen": 1789146275.4039118,
     "ast_hash": "cffc1cb318949d043766e58822ad5587",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-foundation-smoke.md": {
-    "mtime": 1786923391.3748639,
-    "seen": 1789146275.4039016,
-    "ast_hash": "ec34bccb08df6b0cc6bcb0e5dd3bd93c",
     "semantic_hash": ""
   },
   "tests/test_gateway_compose.py": {
@@ -1511,36 +1475,6 @@
     "mtime": 1786463746.0397997,
     "seen": 1789146275.4038084,
     "ast_hash": "dcc037c36d5d527b2dbf399e828e4a0d",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-token-manager.md": {
-    "mtime": 1786923391.6448584,
-    "seen": 1789146275.4039104,
-    "ast_hash": "fd9c08282b765c10fed633df9bdf89ee",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-credential-proof.md": {
-    "mtime": 1786923391.269866,
-    "seen": 1789146275.403899,
-    "ast_hash": "5199281a96b49fdc38e743855a2d37f9",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-multi-consumer.md": {
-    "mtime": 1786923391.509861,
-    "seen": 1789146275.4039056,
-    "ast_hash": "9b26c6133f59a28de9cd8febf67bb410",
-    "semantic_hash": ""
-  },
-  "docs/runbooks/schwab-gateway-after-hours-credential-proof.md": {
-    "mtime": 1786923391.8238547,
-    "seen": 1789146275.4039242,
-    "ast_hash": "4961aecb55ce3a0e8d993a142c270aa9",
-    "semantic_hash": ""
-  },
-  "docs/runbooks/schwab-gateway-credential-proof-evidence-template.md": {
-    "mtime": 1786923391.8678539,
-    "seen": 1789146275.4039254,
-    "ast_hash": "e114e370b871ab100eb6d1a92ccd5846",
     "semantic_hash": ""
   },
   "src/butterfly_guy/gateway_client/shadow.py": {
@@ -1573,42 +1507,6 @@
     "ast_hash": "bc75067663b336f6ae14b276f67b00fe",
     "semantic_hash": ""
   },
-  "docs/architecture/reducing-the-weekly-reauth-cost.md": {
-    "mtime": 1786393973.4979954,
-    "seen": 1789146275.4038954,
-    "ast_hash": "83e40b3c0b7bf2aa65903bafc52d4d80",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-c3-shadow-wiring-plan.md": {
-    "mtime": 1786923391.217867,
-    "seen": 1789146275.4038975,
-    "ast_hash": "2b997cba4aed269c48360f86ab367b7f",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-deployment-options.md": {
-    "mtime": 1786923391.3308647,
-    "seen": 1789146275.4039004,
-    "ast_hash": "1ad1b0fcf32e98bd62dfe81e34050d00",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-option-a-deployment.md": {
-    "mtime": 1786923391.5558603,
-    "seen": 1789146275.4039068,
-    "ast_hash": "5cb66705682536185e6783009f6a1773",
-    "semantic_hash": ""
-  },
-  "docs/runbooks/reauthorization-2026-08-15-checklist.md": {
-    "mtime": 1786923391.7798557,
-    "seen": 1789146275.4039218,
-    "ast_hash": "020d382f79c6f60c756c1ac5265085ec",
-    "semantic_hash": ""
-  },
-  "docs/runbooks/token-reauthorization-and-gateway-enablement.md": {
-    "mtime": 1786417440.2904553,
-    "seen": 1789146275.4039302,
-    "ast_hash": "d049fa0594bb72b78dc2fbeed2dc6743",
-    "semantic_hash": ""
-  },
   "src/butterfly_guy/notify.py": {
     "mtime": 1786379981.0452304,
     "seen": 1789146275.4036815,
@@ -1619,18 +1517,6 @@
     "mtime": 1786414933.6335456,
     "seen": 1789146275.4038892,
     "ast_hash": "2796e2ac4e7171383e3b028aea87840a",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-standalone-extraction-plan.md": {
-    "mtime": 1787432403.6432617,
-    "seen": 1789146275.4039092,
-    "ast_hash": "de609e4e38435ba77fa893a0a0d1e51b",
-    "semantic_hash": ""
-  },
-  "docs/architecture/schwab-gateway-phase-7-execution-prompt.md": {
-    "mtime": 1786831836.4653893,
-    "seen": 1789146275.403908,
-    "ast_hash": "2a4da95b2aa76424f1216f3ce564ec15",
     "semantic_hash": ""
   },
   "reports/exact_sha_deployment_2026-07-15.md": {
@@ -1681,28 +1567,10 @@
     "ast_hash": "fd14103bf167cbb463464c42c4c5910f",
     "semantic_hash": ""
   },
-  "docs/runbooks/reauthorization-2026-08-22-checklist.md": {
-    "mtime": 1787415171.1394603,
-    "seen": 1789146275.403923,
-    "ast_hash": "e0c2ff40dbef7e7930a97499c4730569",
-    "semantic_hash": ""
-  },
   "tests/test_daily_report_card_runner.py": {
     "mtime": 1788559343.577598,
     "seen": 1789146275.4037817,
     "ast_hash": "9aaa26820413a31c96e8c456ba191cab",
-    "semantic_hash": ""
-  },
-  "docs/runbooks/gateway-paper-cutover-2026-08-25.md": {
-    "mtime": 1788559337.7957022,
-    "seen": 1789146275.4039197,
-    "ast_hash": "a28e2c83ab7055335c387bf6eb9fd6e2",
-    "semantic_hash": ""
-  },
-  "docs/runbooks/gateway-paper-cutover-handoff-prompt.md": {
-    "mtime": 1788559338.088697,
-    "seen": 1789146275.4039207,
-    "ast_hash": "127e444e9975f8e2e6753c45d0cce570",
     "semantic_hash": ""
   },
   "infra/docker-compose.gateway-paper-cutover.yml": {
@@ -1753,18 +1621,6 @@
     "ast_hash": "0fba7db6f0adaa0c1d49368cb1fc5d12",
     "semantic_hash": ""
   },
-  "tools/launch_schwab_gateway_session_soak_20260901.sh": {
-    "mtime": 1788559347.1525338,
-    "seen": 1789146275.4038517,
-    "ast_hash": "766a9f3235e90c8086a9f12548193b29",
-    "semantic_hash": ""
-  },
-  "tools/launch_schwab_gateway_session_soak_20260904.sh": {
-    "mtime": 1788559347.475528,
-    "seen": 1789146275.4038534,
-    "ast_hash": "51390e260aaad4e63948af411ba59a13",
-    "semantic_hash": ""
-  },
   "tools/run_equity_universe_refresh_cron.sh": {
     "mtime": 1788842142.713027,
     "seen": 1789146275.4038544,
@@ -1783,28 +1639,10 @@
     "ast_hash": "0fcf400a6796a4c268c9a4986ca9547d",
     "semantic_hash": ""
   },
-  "docs/runbooks/schwab-gateway-option-chain-latency-investigation.md": {
-    "mtime": 1789146313.4458654,
-    "seen": 1789146328.3739302,
-    "ast_hash": "e50b9eb9ce055df16c983d2fa3225861",
-    "semantic_hash": ""
-  },
   "docs/runbooks/schwab-gateway-soak-health.override.yml": {
     "mtime": 1788559338.4016912,
     "seen": 1789146275.4039278,
     "ast_hash": "d7d65845ffa2155981d4a7ebe8824cb5",
-    "semantic_hash": ""
-  },
-  "docs/runbooks/schwab-gateway-v025-session-soak-2026-09-01.md": {
-    "mtime": 1788559338.633687,
-    "seen": 1789146275.403929,
-    "ast_hash": "c0c45b47cb571c9f23972f886ac0d77d",
-    "semantic_hash": ""
-  },
-  "tools/launch_schwab_gateway_readiness_soak_20260909.sh": {
-    "mtime": 1788897766.130128,
-    "seen": 1789146275.4038506,
-    "ast_hash": "9f4d3a91d25b2fd692cb8314314341ef",
     "semantic_hash": ""
   },
   "tools/schwab_gateway_v046_readiness_soak.py": {
@@ -1829,6 +1667,174 @@
     "mtime": 1786491352.617647,
     "seen": 1789146275.403602,
     "ast_hash": "6939e7e1baf1f321867277f61017c7f3",
+    "semantic_hash": ""
+  },
+  "tools/archive/schwab-gateway/launch_schwab_gateway_readiness_soak_20260909.sh": {
+    "mtime": 1788897766.130128,
+    "seen": 1789147838.620999,
+    "ast_hash": "9f4d3a91d25b2fd692cb8314314341ef",
+    "semantic_hash": ""
+  },
+  "tools/archive/schwab-gateway/launch_schwab_gateway_session_soak_20260901.sh": {
+    "mtime": 1788559347.1525338,
+    "seen": 1789147838.621001,
+    "ast_hash": "766a9f3235e90c8086a9f12548193b29",
+    "semantic_hash": ""
+  },
+  "tools/archive/schwab-gateway/launch_schwab_gateway_session_soak_20260904.sh": {
+    "mtime": 1788559347.475528,
+    "seen": 1789147838.6210022,
+    "ast_hash": "51390e260aaad4e63948af411ba59a13",
+    "semantic_hash": ""
+  },
+  "docs/architecture/schwab-gateway-current-status.md": {
+    "mtime": 1789147802.2950783,
+    "seen": 1789147838.622841,
+    "ast_hash": "2341eea0095df28a0dd148f5949602c9",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/CODEX_STATE.md": {
+    "mtime": 1786398780.3876643,
+    "seen": 1789147838.6228807,
+    "ast_hash": "7a78d658fe3ced279409a2ce28c1b5a0",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/README.md": {
+    "mtime": 1789147802.4900746,
+    "seen": 1789147838.6228826,
+    "ast_hash": "3be2690c519ae1b2d96fc52f8031712e",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/current-schwab-integration.md": {
+    "mtime": 1786923391.173868,
+    "seen": 1789147838.6228838,
+    "ast_hash": "6ea76fdf608d0cd360cebd80918b8f51",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/reducing-the-weekly-reauth-cost.md": {
+    "mtime": 1786393973.4979954,
+    "seen": 1789147838.6228848,
+    "ast_hash": "83e40b3c0b7bf2aa65903bafc52d4d80",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-c3-shadow-wiring-plan.md": {
+    "mtime": 1786923391.217867,
+    "seen": 1789147838.6228862,
+    "ast_hash": "2b997cba4aed269c48360f86ab367b7f",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-credential-proof.md": {
+    "mtime": 1786923391.269866,
+    "seen": 1789147838.622887,
+    "ast_hash": "5199281a96b49fdc38e743855a2d37f9",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-deployment-options.md": {
+    "mtime": 1786923391.3308647,
+    "seen": 1789147838.622888,
+    "ast_hash": "1ad1b0fcf32e98bd62dfe81e34050d00",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-foundation-smoke.md": {
+    "mtime": 1786923391.3748639,
+    "seen": 1789147838.6228893,
+    "ast_hash": "ec34bccb08df6b0cc6bcb0e5dd3bd93c",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-local-run.md": {
+    "mtime": 1786923391.419863,
+    "seen": 1789147838.6228902,
+    "ast_hash": "79f6b348e576c4992cf3c915660afea4",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-migration.md": {
+    "mtime": 1786923391.465862,
+    "seen": 1789147838.6228912,
+    "ast_hash": "55ca72974f11a91dfd9503cdc8f575fe",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-multi-consumer.md": {
+    "mtime": 1786923391.509861,
+    "seen": 1789147838.6228926,
+    "ast_hash": "9b26c6133f59a28de9cd8febf67bb410",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-option-a-deployment.md": {
+    "mtime": 1786923391.5558603,
+    "seen": 1789147838.6228933,
+    "ast_hash": "5cb66705682536185e6783009f6a1773",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-phase-7-execution-prompt.md": {
+    "mtime": 1786831836.4653893,
+    "seen": 1789147838.6228943,
+    "ast_hash": "2a4da95b2aa76424f1216f3ce564ec15",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-gateway-standalone-extraction-plan.md": {
+    "mtime": 1787432403.6432617,
+    "seen": 1789147838.6228955,
+    "ast_hash": "de609e4e38435ba77fa893a0a0d1e51b",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/architecture/schwab-token-manager.md": {
+    "mtime": 1786923391.6448584,
+    "seen": 1789147838.6228964,
+    "ast_hash": "fd9c08282b765c10fed633df9bdf89ee",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/gateway-paper-cutover-2026-08-25.md": {
+    "mtime": 1788559337.7957022,
+    "seen": 1789147838.6228974,
+    "ast_hash": "a28e2c83ab7055335c387bf6eb9fd6e2",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/gateway-paper-cutover-handoff-prompt.md": {
+    "mtime": 1788559338.088697,
+    "seen": 1789147838.6228983,
+    "ast_hash": "127e444e9975f8e2e6753c45d0cce570",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/reauthorization-2026-08-15-checklist.md": {
+    "mtime": 1786923391.7798557,
+    "seen": 1789147838.6228993,
+    "ast_hash": "020d382f79c6f60c756c1ac5265085ec",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/reauthorization-2026-08-22-checklist.md": {
+    "mtime": 1787415171.1394603,
+    "seen": 1789147838.6229002,
+    "ast_hash": "e0c2ff40dbef7e7930a97499c4730569",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/schwab-gateway-after-hours-credential-proof.md": {
+    "mtime": 1786923391.8238547,
+    "seen": 1789147838.6229012,
+    "ast_hash": "4961aecb55ce3a0e8d993a142c270aa9",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/schwab-gateway-credential-proof-evidence-template.md": {
+    "mtime": 1786923391.8678539,
+    "seen": 1789147838.6229022,
+    "ast_hash": "e114e370b871ab100eb6d1a92ccd5846",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/schwab-gateway-option-chain-latency-investigation.md": {
+    "mtime": 1789146313.4458654,
+    "seen": 1789147838.6229033,
+    "ast_hash": "e50b9eb9ce055df16c983d2fa3225861",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/schwab-gateway-v025-session-soak-2026-09-01.md": {
+    "mtime": 1788559338.633687,
+    "seen": 1789147838.6229043,
+    "ast_hash": "c0c45b47cb571c9f23972f886ac0d77d",
+    "semantic_hash": ""
+  },
+  "docs/archive/schwab-gateway/runbooks/token-reauthorization-and-gateway-enablement.md": {
+    "mtime": 1786417440.2904553,
+    "seen": 1789147838.6229053,
+    "ast_hash": "d049fa0594bb72b78dc2fbeed2dc6743",
     "semantic_hash": ""
   }
 }

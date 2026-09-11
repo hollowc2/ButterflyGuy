@@ -132,7 +132,7 @@
     {"id": "quant_engine", "path": "src/butterfly_guy/quant_engine", "responsibility": "Black-Scholes pricing, IV skew model, and synthetic option chains", "key_symbols": ["SyntheticChainGenerator"], "depends_on": ["SciPy"]},
     {"id": "equity_scan", "path": "src/butterfly_guy/equity_scan", "responsibility": "Universe maintenance, quote parsing, filters/ranking, volume enrichment, catalysts, and reports", "key_symbols": ["EquityScanSettings", "ScanResults", "fetch_news_impacts", "rank_scan_results"], "depends_on": ["Schwab", "SEC", "Alpha Vantage", "NASDAQ/NYSE lists"]},
     {"id": "reports", "path": "src/butterfly_guy/reports", "responsibility": "Daily account report, live performance HTML, drawdowns, and PNG charts", "key_symbols": ["DailyReportCard", "TradePoint", "ReportStats", "build_equity_trade_chart_png"], "depends_on": ["services", "DB rows", "Schwab payloads", "matplotlib"]},
-    {"id": "scripts", "path": "src/butterfly_guy/scripts", "responsibility": "Operational and research CLI entrypoints", "key_symbols": ["run_live", "run_collector", "run_backtest_db", "run_morning_scan"], "depends_on": ["application modules"]}
+    {"id": "scripts", "path": "src/butterfly_guy/scripts", "responsibility": "Operational and research CLI entrypoints", "key_symbols": ["run_live", "run_backtest_db", "run_morning_scan"], "depends_on": ["application modules"]}
   ],
   "database": {
     "tables": [
@@ -167,7 +167,6 @@
   },
   "entrypoints": [
     {"path": "src/butterfly_guy/scripts/run_live.py", "category": "runtime", "purpose": "Full collector + entry + position orchestration", "risk": "high; may place orders when live guards are enabled"},
-    {"path": "src/butterfly_guy/scripts/run_collector.py", "category": "runtime", "purpose": "Market data collection only", "risk": "Schwab reads and DB writes"},
     {"path": "src/butterfly_guy/scripts/run_backtest_db.py", "category": "research", "purpose": "Preferred config-backed historical replay and sweeps", "risk": "read-heavy DB research"},
     {"path": "src/butterfly_guy/scripts/inspect_entry.py", "category": "research", "purpose": "Explain a historical entry selection", "risk": "read-only analysis"},
     {"path": "src/butterfly_guy/scripts/run_morning_scan.py", "category": "operations", "purpose": "Equity quote/news scan and Discord report", "risk": "external reads and optional notification"},
