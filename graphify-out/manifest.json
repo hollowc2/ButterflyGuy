@@ -596,9 +596,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1789091349.9818635,
-    "seen": 1789146275.4037204,
-    "ast_hash": "ff94885f38e4f46649c4cdd50bff4c65",
+    "mtime": 1789147967.3670182,
+    "seen": 1789148004.808605,
+    "ast_hash": "89ee69c26731cc48c709e09aa42ded5f",
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_morning_scan.py": {
@@ -1058,9 +1058,9 @@
     "semantic_hash": ""
   },
   "tests/test_run_live.py": {
-    "mtime": 1789091350.2288594,
-    "seen": 1789146275.4038284,
-    "ast_hash": "548926eb22411255f8710c8167576a40",
+    "mtime": 1789147967.6000137,
+    "seen": 1789148004.812006,
+    "ast_hash": "e600ea0f909453d56d2265a3c0a34c94",
     "semantic_hash": ""
   },
   "tests/test_run_migrations.py": {

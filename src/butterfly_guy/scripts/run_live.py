@@ -632,7 +632,10 @@ async def broker_reconciler_loop(
         await asyncio.sleep(interval_seconds)
 
 
-def _assert_live_config_supported(config: AppConfig) -> None:
+def _assert_live_config_supported(
+    config: AppConfig,
+    gateway_settings: GatewayClientSettings,
+) -> None:
     def confirmed_float(name: str, expected: float) -> None:
         try:
             value = float(os.getenv(name, ""))
@@ -643,6 +646,11 @@ def _assert_live_config_supported(config: AppConfig) -> None:
 
     if config.execution.paper_trading:
         return
+    if gateway_settings.access_mode == "gateway":
+        raise RuntimeError(
+            "Live trading requires SCHWAB_ACCESS_MODE=direct until the gateway "
+            "provides a separately reviewed force-fresh option-chain contract"
+        )
     if not config.execution.allow_live_trading:
         raise RuntimeError(
             "Live trading requires execution.allow_live_trading=true or ALLOW_LIVE_TRADING=true"
@@ -888,9 +896,9 @@ async def main() -> None:
     config = load_config(args.config)
     setup_logging(config.monitoring.log_level, json_output=True)
 
-    _assert_live_config_supported(config)
     # Validate opt-in gateway settings before opening the DB or direct Schwab client.
     gateway_settings = GatewayClientSettings()
+    _assert_live_config_supported(config, gateway_settings)
 
     log.info(
         "live_trading_starting",

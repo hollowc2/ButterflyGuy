@@ -693,7 +693,38 @@ def test_live_config_rejects_non_spx_live_money(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="SPX/XSP-canary-only"):
-        _assert_live_config_supported(config)
+        _assert_live_config_supported(config, GatewayClientSettings())
+
+
+def test_live_config_rejects_gateway_market_data(monkeypatch):
+    config = AppConfig(
+        strategy=StrategySettings(underlying="SPX"),
+        execution=ExecutionSettings(paper_trading=False, allow_live_trading=True),
+    )
+    gateway_settings = GatewayClientSettings(
+        SCHWAB_ACCESS_MODE="gateway",
+        SCHWAB_GATEWAY_URL="http://gateway:8011",
+        SCHWAB_GATEWAY_API_KEY="internal-key",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="SCHWAB_ACCESS_MODE=direct.*force-fresh option-chain contract",
+    ):
+        _assert_live_config_supported(config, gateway_settings)
+
+
+def test_paper_config_allows_gateway_market_data():
+    config = AppConfig(
+        execution=ExecutionSettings(paper_trading=True),
+    )
+    gateway_settings = GatewayClientSettings(
+        SCHWAB_ACCESS_MODE="gateway",
+        SCHWAB_GATEWAY_URL="http://gateway:8011",
+        SCHWAB_GATEWAY_API_KEY="internal-key",
+    )
+
+    _assert_live_config_supported(config, gateway_settings)
 
 
 def test_live_config_rejects_xsp_without_canary_confirmation(monkeypatch):
@@ -709,7 +740,7 @@ def test_live_config_rejects_xsp_without_canary_confirmation(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="LIVE_XSP_CANARY=true"):
-        _assert_live_config_supported(config)
+        _assert_live_config_supported(config, GatewayClientSettings())
 
 
 def test_live_config_allows_confirmed_xsp_canary(monkeypatch):
@@ -724,7 +755,7 @@ def test_live_config_allows_confirmed_xsp_canary(monkeypatch):
         risk=RiskSettings(max_daily_loss=50.0, max_position_size=1),
     )
 
-    _assert_live_config_supported(config)
+    _assert_live_config_supported(config, GatewayClientSettings())
 
 
 def test_live_config_rejects_spx_live_without_account_confirmation(monkeypatch):
@@ -738,7 +769,7 @@ def test_live_config_rejects_spx_live_without_account_confirmation(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="LIVE_EXPECTED_SCHWAB_ACCOUNT_ID"):
-        _assert_live_config_supported(config)
+        _assert_live_config_supported(config, GatewayClientSettings())
 
 
 def test_live_config_allows_spx_live_when_explicitly_confirmed(monkeypatch):
@@ -752,7 +783,7 @@ def test_live_config_allows_spx_live_when_explicitly_confirmed(monkeypatch):
         risk=RiskSettings(max_daily_loss=500.0),
     )
 
-    _assert_live_config_supported(config)
+    _assert_live_config_supported(config, GatewayClientSettings())
 
 
 @pytest.mark.asyncio
