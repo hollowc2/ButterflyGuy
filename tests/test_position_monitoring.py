@@ -11,12 +11,71 @@ import pytest
 
 from butterfly_guy.core.config import ProfitManagementSettings
 from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
+from butterfly_guy.data.providers import GatewayAuthoritativeMarketDataProvider
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.position.position_manager import PositionManager
 from butterfly_guy.services.position_service import PositionService
 
 EXPIRATION = dt.date(2026, 9, 10)
+TRADE_282_EXPIRATION = dt.date(2026, 9, 11)
 HELD_STRIKES = (746.0, 751.0, 756.0)
+
+
+def _gateway_contract(
+    option_type: str,
+    strike: float,
+    mark: float,
+    *,
+    age_seconds: float = 0.2,
+    stale: bool = False,
+) -> SimpleNamespace:
+    option_code = "C" if option_type == "CALL" else "P"
+    return SimpleNamespace(
+        option_type=option_type,
+        symbol=f"XSP   260911{option_code}{int(strike * 1000):08d}",
+        expiration=TRADE_282_EXPIRATION,
+        strike=strike,
+        bid=max(0.0, mark - 0.01),
+        ask=mark + 0.01,
+        mark=mark,
+        last=mark,
+        total_volume=0,
+        open_interest=0,
+        volatility=0.2,
+        delta=0.0,
+        gamma=0.0,
+        theta=0.0,
+        vega=0.0,
+        bid_size=0,
+        ask_size=0,
+        rho=0.0,
+        intrinsic_value=0.0,
+        time_value=mark,
+        in_the_money=False,
+        days_to_expiration=0,
+        multiplier=100.0,
+        theoretical_option_value=mark,
+        stale=stale,
+        age_seconds=age_seconds,
+        data_quality_flags=("stale",) if stale else (),
+    )
+
+
+def _trade_282_candidate() -> ButterflyCandidate:
+    return ButterflyCandidate(
+        direction="CALL",
+        wing_width=4,
+        center_strike=774.0,
+        lower_strike=770.0,
+        upper_strike=778.0,
+        cost=0.24,
+        max_profit=3.76,
+        reward_risk=15.67,
+        lower_be=770.24,
+        upper_be=777.76,
+        distance_from_spot=0.0,
+        spot_price=774.0,
+    )
 
 
 def _candidate() -> ButterflyCandidate:
@@ -82,6 +141,71 @@ def _service(observations: list[dict[float, OptionQuote]]) -> PositionService:
     service._last_persisted_peak = 0.50
     service._last_profit_state = None
     return service
+
+
+@pytest.mark.asyncio
+async def test_trade_282_uses_gateway_held_leg_when_contract_is_not_stale() -> None:
+    """A quiet 778 quote is usable when the gateway explicitly says it is fresh."""
+    contracts = (
+        _gateway_contract("CALL", 770.0, 0.08),
+        _gateway_contract("CALL", 774.0, 0.03),
+        # Production evidence showed this exact shape: the chain was fresh and
+        # the contract was not stale, but its last event was more than 30s old.
+        _gateway_contract("CALL", 778.0, 0.01, age_seconds=66.5),
+        _gateway_contract("CALL", 760.0, 0.01, age_seconds=120.0, stale=True),
+        _gateway_contract("PUT", 774.0, 0.50),
+    )
+    chain = SimpleNamespace(
+        symbol="$XSP",
+        expiration=TRADE_282_EXPIRATION,
+        underlying_price=774.0,
+        call_contract_count=4,
+        put_contract_count=1,
+        strike_count=4,
+        contracts=contracts,
+        stale=False,
+        age_seconds=3.0,
+        data_quality_flags=("stale_contracts_present",),
+    )
+    gateway = AsyncMock()
+    gateway.get_option_chain.side_effect = (
+        SimpleNamespace(option_chain=chain),
+        asyncio.CancelledError,
+    )
+    provider = GatewayAuthoritativeMarketDataProvider(
+        gateway,
+        max_current_age_seconds=30.0,
+    )
+
+    service = _service([])
+    service.market_data = provider
+    service._extract_quotes = PositionService._extract_quotes.__get__(
+        service,
+        PositionService,
+    )
+    candidate = _trade_282_candidate()
+    trade = TradeRecord(
+        trade_id=282,
+        trade_date=TRADE_282_EXPIRATION,
+        entry_price=0.24,
+    )
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=True
+    ), patch(
+        "butterfly_guy.services.position_service.session_date",
+        return_value=TRADE_282_EXPIRATION,
+    ), patch(
+        "butterfly_guy.services.position_service.get_0dte_expiration",
+        return_value=TRADE_282_EXPIRATION,
+    ), patch(
+        "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
+    ), pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, candidate)
+
+    service.state_machine.evaluate.assert_called_once()
+    assert service.state_machine.evaluate.call_args.args[0].current_value == 0.03
+    service.order_manager.execute_exit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

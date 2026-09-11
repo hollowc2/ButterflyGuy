@@ -330,9 +330,11 @@ class GatewayAuthoritativeMarketDataProvider:
                     f"{','.join(sorted(fatal_flags))}"
                 )
             usable_contract = (
+                # The gateway's ``stale`` field already applies its option-contract
+                # freshness policy. ``age_seconds`` is the time since the last quote
+                # event, so a quiet but explicitly fresh contract must remain usable.
                 not contract.stale
                 and contract.age_seconds is not None
-                and contract.age_seconds <= self._max_current_age_seconds
                 and not (contract_flags & omittable_flags)
             )
             if contract.expiration != expiration:

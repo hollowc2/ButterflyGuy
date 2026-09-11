@@ -164,6 +164,38 @@ fallback, price synthesis, or gateway service change was introduced. Regression
 replay covers omission and recovery of each of the lower, center, and upper held
 legs and verifies that missing data cannot reach exit execution.
 
+## XSP held-leg event-age correction (2026-09-11)
+
+Trade 282 exposed a second, distinct application-side defect. A read-only sample
+of the gateway response contained the expected XSP 778 CALL with the correct
+symbol and expiration, valid bid/ask/mark, `stale=false`, no contract quality
+flags, and `age_seconds` around 66.5. The aggregate chain was fresh. Butterfly
+Guy nevertheless omitted the leg because its adapter independently compared
+every contract's event age with the 30-second aggregate-observation limit.
+
+That comparison was invalid: contract `age_seconds` measures time since the last
+event for that individual strike, so a quiet valid quote can exceed 30 seconds.
+The gateway already applies its option-contract freshness policy and reports the
+result in `contract.stale` and the contract quality flags. The adapter now keeps
+a timestamped contract when the gateway explicitly reports it fresh, while the
+30-second limit continues to gate the aggregate chain observation.
+
+Operationally, diagnose held-leg omissions using the gateway's contract fields:
+
+- `stale=true`, missing `age_seconds`, `stale`, or
+  `missing_event_timestamp` means the contract remains unusable and position
+  exit evaluation must pause;
+- `stale=false` with a known event age and no omittable quality flag is usable,
+  even when the event age exceeds the aggregate chain limit;
+- incomplete observations still cannot emit a fresh position state, update
+  valuation metrics, evaluate an exit, or perform a broker write. Readiness
+  degradation and recovery behavior is unchanged.
+
+The regression fixture reproduces trade 282's 770/774/778 CALL legs, proves that
+the quiet 778 quote reaches valuation, and simultaneously proves that a contract
+the gateway marks stale is still discarded. No request limit, cache TTL,
+strategy, risk, execution, or gateway-service behavior changed.
+
 ## 2026-09-09 runtime follow-up
 
 The first 24 hours of the `v0.4.6` PAPER fleet showed healthy gateway resource
