@@ -262,6 +262,7 @@ def candidate_observation() -> tuple[list[dict[str, str]], list[str]]:
 def http_json(client: httpx.Client, path: str) -> dict[str, Any]:
     started = time.perf_counter()
     attempts: list[dict[str, Any]] = []
+    last_body: dict[str, Any] | None = None
     for attempt in range(1, 4):
         try:
             response = client.get(path)
@@ -275,6 +276,9 @@ def http_json(client: httpx.Client, path: str) -> dict[str, Any]:
                     )
                     if key in body
                 }
+                last_body = body
+            else:
+                last_body = None
             if response.status_code == 200 or response.status_code < 500:
                 return {
                     "status": response.status_code,
@@ -286,11 +290,13 @@ def http_json(client: httpx.Client, path: str) -> dict[str, Any]:
             attempts.append(
                 {"attempt": attempt, "status": None, "error": type(exc).__name__}
             )
+            last_body = None
         if attempt < 3:
             time.sleep(0.5 * (2 ** (attempt - 1)))
     return {
         "status": attempts[-1]["status"],
         "latency_ms": round((time.perf_counter() - started) * 1000, 3),
+        "body": last_body,
         "attempts": attempts,
     }
 
@@ -325,7 +331,7 @@ def endpoint_snapshot() -> tuple[dict[str, Any], list[str]]:
 def preopen_endpoint_violations(
     endpoints: dict[str, Any], violations: list[str]
 ) -> list[str]:
-    """Allow only the documented post-close strategy readiness state."""
+    """Allow only the documented pre-open strategy readiness state."""
     allowed: set[str] = set()
     for container, _port in STRATEGIES.values():
         ready = endpoints.get(container, {}).get("/ready", {})

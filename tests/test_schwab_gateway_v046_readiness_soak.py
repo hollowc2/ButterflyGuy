@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
-from tools.schwab_gateway_v046_readiness_soak import preopen_endpoint_violations
+from tools import schwab_gateway_v046_readiness_soak as soak
+from tools.schwab_gateway_v046_readiness_soak import (
+    http_json,
+    preopen_endpoint_violations,
+)
 
 
 def _endpoints(*, status: int, reason: str) -> dict:
@@ -26,6 +31,42 @@ def test_preopen_allows_documented_after_hours_strategy_readiness() -> None:
         )
         == []
     )
+
+
+def test_preopen_accepts_retried_market_data_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(
+            503,
+            json={
+                "status": "not_ready",
+                "reason": "gateway_market_data_unavailable",
+                "sensitive_detail": "must-not-be-recorded",
+            },
+        )
+
+    monkeypatch.setattr(soak.time, "sleep", lambda _seconds: None)
+    with httpx.Client(
+        base_url="http://test",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        ready = http_json(client, "/ready")
+
+    assert attempts == 3
+    assert ready["status"] == 503
+    assert ready["body"] == {
+        "status": "not_ready",
+        "reason": "gateway_market_data_unavailable",
+    }
+    endpoints = {"butterfly_spx_app": {"/ready": ready}}
+    violations = ["butterfly_spx_app:ready_non_200"]
+
+    assert preopen_endpoint_violations(endpoints, violations) == []
 
 
 @pytest.mark.parametrize(
