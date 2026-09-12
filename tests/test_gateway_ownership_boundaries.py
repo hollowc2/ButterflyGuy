@@ -1,4 +1,4 @@
-"""Phase 7 boundaries after extracting the Schwab gateway from ButterflyGuy."""
+"""Ownership boundaries after extracting the Schwab gateway from ButterflyGuy."""
 
 from __future__ import annotations
 

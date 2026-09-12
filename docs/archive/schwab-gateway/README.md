@@ -9,3 +9,5 @@ record new status in the current document instead.
 
 It includes the extraction ledger, completed execution prompts, the superseded PAPER cutover
 handoff, dated reauthorization/soak records, and obsolete gateway deployment/design runbooks.
+The corresponding dated Python soak harnesses and launchers are under
+`tools/archive/schwab-gateway/`; they are retained as release evidence, not supported commands.

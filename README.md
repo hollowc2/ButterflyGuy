@@ -165,23 +165,33 @@ Metrics ports from the compose file:
 
 The read-only gateway is maintained and deployed from
 [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). Butterfly Guy pins the
-standalone `schwab-gateway-sdk` to the immutable v0.4.4 commit recorded in `pyproject.toml` and
+standalone `schwab-gateway-sdk` 0.5.0 to the immutable commit recorded in `pyproject.toml` and
 `uv.lock`, while `schwab-token-store` remains pinned to `v0.1.0`. Butterfly Guy no longer contains
 the gateway server, operator CLIs, Compose file, or alert rules. The standalone service supports
 history, movers, full option chains, and order books, in addition to bounded quote and spot reads;
 account and order-write surfaces remain outside the gateway.
 
 The deployed PAPER SPX, NDX, and XSP strategies use gateway market data as the authoritative read
-path, including history and option-chain reads. Their direct Schwab client remains authoritative for
+path through the tracked `infra/docker-compose.gateway-paper-cutover.yml` overlay, including history
+and option-chain reads. Their direct Schwab client remains authoritative for
 account, order, transaction, reconciliation, and token operations. The repository's base Compose file
 keeps gateway access opt-in for local/rollback safety; the deployed PAPER overlay enables it with
 `SCHWAB_ACCESS_MODE=gateway` and disables shadow reads. No account operation or order is routed
 through the gateway.
 
+Real-money gateway market data remains prohibited until a separately reviewed force-fresh
+option-chain policy exists.
+
 For the current ownership and deployment status, see
 `docs/architecture/schwab-gateway-current-status.md`. Historical extraction evidence is indexed in
 `docs/archive/schwab-gateway/`; standalone build, deployment, monitoring, and key-management
 instructions live in the SchwabGateway repository.
+
+Butterfly Guy retains only consumer checks: run
+`tools/butterfly_gateway_acceptance.py` for PAPER strategy readiness and environment invariants,
+and `tools/gateway_cutover_flatness_audit.py` for the authenticated broker/DB flatness gate.
+Reusable contract, scheduler, load, TTL-analysis, credential, deployment, monitoring, and rollback
+operations belong to SchwabGateway.
 
 ### 4) Run the live orchestrator directly
 

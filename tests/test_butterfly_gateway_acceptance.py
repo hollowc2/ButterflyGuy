@@ -3,8 +3,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from tools import schwab_gateway_v046_readiness_soak as soak
-from tools.schwab_gateway_v046_readiness_soak import (
+from tools import butterfly_gateway_acceptance as soak
+from tools.butterfly_gateway_acceptance import (
     http_json,
     preopen_endpoint_violations,
 )
@@ -94,3 +94,21 @@ def test_preopen_never_suppresses_other_endpoint_failures() -> None:
         _endpoints(status=503, reason="gateway_market_data_unavailable"),
         [violation],
     ) == [violation]
+
+
+def test_identity_checks_paper_gateway_and_no_shadow_invariants() -> None:
+    identity = {
+        "container": "butterfly_spx_app",
+        "status": "running",
+        "health": "healthy",
+        "environment": dict(soak.EXPECTED_ENV),
+    }
+
+    assert soak.identity_violations(identity) == []
+    identity["environment"]["EXECUTION__ALLOW_LIVE_TRADING"] = "true"
+    identity["environment"]["SCHWAB_ACCESS_MODE"] = "direct"
+
+    assert soak.identity_violations(identity) == [
+        "butterfly_spx_app:execution__allow_live_trading_mismatch",
+        "butterfly_spx_app:schwab_access_mode_mismatch",
+    ]

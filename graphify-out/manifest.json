@@ -1100,9 +1100,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789179071.1642034,
-    "seen": 1789179558.5340354,
-    "ast_hash": "7730f90f966df4d10e97881c0d6fdbde",
+    "mtime": 1789232187.3846235,
+    "seen": 1789232327.553772,
+    "ast_hash": "bcabe7b4c4bb6753739958cfcbf19f64",
     "semantic_hash": ""
   },
   "configs/config.yaml": {
@@ -1375,12 +1375,6 @@
     "ast_hash": "37648d0bbde577ca1ee9f34960277173",
     "semantic_hash": ""
   },
-  "tests/test_gateway_phase7_boundaries.py": {
-    "mtime": 1789176686.1848173,
-    "seen": 1789176922.9576163,
-    "ast_hash": "c9d255244b1a49c7cad26748e8ddb43c",
-    "semantic_hash": ""
-  },
   "reports/broker_order_statuses_xsp_2026-07-14.json": {
     "mtime": 1784824038.5580869,
     "seen": 1789146275.4036224,
@@ -1411,22 +1405,10 @@
     "ast_hash": "94c081511b978f8ca68c8989cf7dba55",
     "semantic_hash": ""
   },
-  "tests/test_gateway_option_chain_ttl_recommendation.py": {
-    "mtime": 1788913716.9417272,
-    "seen": 1789146275.4038026,
-    "ast_hash": "2a1abfd9c6f63383e97e21129a59ce0d",
-    "semantic_hash": ""
-  },
   "tests/test_gateway_order_book.py": {
     "mtime": 1789157142.8256738,
     "seen": 1789157187.8240716,
     "ast_hash": "6bf18f3fe4d52316b0ea704f7e8e85f9",
-    "semantic_hash": ""
-  },
-  "tests/test_schwab_gateway_session_soak.py": {
-    "mtime": 1788899580.6751776,
-    "seen": 1789146275.4038324,
-    "ast_hash": "a20e5d2791fa73e067b480f248d20e22",
     "semantic_hash": ""
   },
   "tools/gateway_cutover_flatness_audit.py": {
@@ -1435,22 +1417,10 @@
     "ast_hash": "054332830c588975245b6c30d502fb75",
     "semantic_hash": ""
   },
-  "tools/gateway_option_chain_ttl_recommendation.py": {
-    "mtime": 1788562775.4633534,
-    "seen": 1789146275.4038482,
-    "ast_hash": "0fba7db6f0adaa0c1d49368cb1fc5d12",
-    "semantic_hash": ""
-  },
   "tools/run_equity_universe_refresh_cron.sh": {
     "mtime": 1788842142.713027,
     "seen": 1789146275.4038544,
     "ast_hash": "69c553624129e8ba9da83ecf1816e184",
-    "semantic_hash": ""
-  },
-  "tools/schwab_gateway_session_soak.py": {
-    "mtime": 1788899569.2793546,
-    "seen": 1789146275.403858,
-    "ast_hash": "f81413486db63d5f35a177793dc688db",
     "semantic_hash": ""
   },
   "docs/gateway-order-books.md": {
@@ -1463,18 +1433,6 @@
     "mtime": 1788559338.4016912,
     "seen": 1789146275.4039278,
     "ast_hash": "d7d65845ffa2155981d4a7ebe8824cb5",
-    "semantic_hash": ""
-  },
-  "tools/schwab_gateway_v046_readiness_soak.py": {
-    "mtime": 1789091350.3308578,
-    "seen": 1789146275.403859,
-    "ast_hash": "3586eeceeded9519eca39bbc88132644",
-    "semantic_hash": ""
-  },
-  "tests/test_schwab_gateway_v046_readiness_soak.py": {
-    "mtime": 1789091350.2848585,
-    "seen": 1789146275.4038334,
-    "ast_hash": "a8482c17033820fcb8d5b117e1f3d0c9",
     "semantic_hash": ""
   },
   "tests/test_position_monitoring.py": {
@@ -1508,9 +1466,9 @@
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-current-status.md": {
-    "mtime": 1789176956.5409112,
-    "seen": 1789179558.5345492,
-    "ast_hash": "e94b4889cc7ba5e2d052f4e148f18e9e",
+    "mtime": 1789232187.195627,
+    "seen": 1789232327.554281,
+    "ast_hash": "9824c5e17193101456e704260b4e8a83",
     "semantic_hash": ""
   },
   "docs/archive/schwab-gateway/CODEX_STATE.md": {
@@ -1520,9 +1478,9 @@
     "semantic_hash": ""
   },
   "docs/archive/schwab-gateway/README.md": {
-    "mtime": 1789147802.4900746,
-    "seen": 1789147838.6228826,
-    "ast_hash": "3be2690c519ae1b2d96fc52f8031712e",
+    "mtime": 1789232154.0632317,
+    "seen": 1789232327.5543764,
+    "ast_hash": "6b83f0b01c609e9713a804adecb39bea",
     "semantic_hash": ""
   },
   "docs/archive/schwab-gateway/architecture/current-schwab-integration.md": {
@@ -1655,6 +1613,36 @@
     "mtime": 1786417440.2904553,
     "seen": 1789147838.6229053,
     "ast_hash": "d049fa0594bb72b78dc2fbeed2dc6743",
+    "semantic_hash": ""
+  },
+  "tests/test_butterfly_gateway_acceptance.py": {
+    "mtime": 1789232153.4192433,
+    "seen": 1789232327.55122,
+    "ast_hash": "6f3e652fb4b529c542308fc423d6ea07",
+    "semantic_hash": ""
+  },
+  "tests/test_gateway_ownership_boundaries.py": {
+    "mtime": 1789232153.666239,
+    "seen": 1789232327.5520904,
+    "ast_hash": "c61ce2b3931c923bebfd41c34aa406a7",
+    "semantic_hash": ""
+  },
+  "tools/archive/schwab-gateway/schwab_gateway_session_soak.py": {
+    "mtime": 1788899569.2793546,
+    "seen": 1789232327.553286,
+    "ast_hash": "f81413486db63d5f35a177793dc688db",
+    "semantic_hash": ""
+  },
+  "tools/archive/schwab-gateway/schwab_gateway_v046_readiness_soak.py": {
+    "mtime": 1789091350.3308578,
+    "seen": 1789232327.5532877,
+    "ast_hash": "3586eeceeded9519eca39bbc88132644",
+    "semantic_hash": ""
+  },
+  "tools/butterfly_gateway_acceptance.py": {
+    "mtime": 1789232138.4445167,
+    "seen": 1789232327.553333,
+    "ast_hash": "1763c8857b3721b25570b4a46243b2ca",
     "semantic_hash": ""
   }
 }

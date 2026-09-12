@@ -1,6 +1,6 @@
 # Schwab gateway current status
 
-Status date: 2026-09-11
+Status date: 2026-09-12
 
 This is the current Butterfly Guy status record for Schwab gateway ownership and deployment. It
 supersedes the former extraction plan, phase prompts, cutover handoffs, and dated transition
@@ -11,12 +11,14 @@ they are not operating instructions.
 
 - The gateway server is maintained and deployed from
   [`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway).
-- Butterfly Guy consumes `schwab-gateway-sdk` v0.4.4 from commit
-  `e04afbdf40f4dcf7d7241dac41c8dd90ce96362a`, as pinned in `pyproject.toml` and `uv.lock`.
+- Butterfly Guy consumes `schwab-gateway-sdk` 0.5.0 from commit
+  `f5ed5fc5232d72fdf54cfde6b449aa520e4f2d53`, as pinned in `pyproject.toml` and `uv.lock`.
   `schwab-token-store` remains pinned to `v0.1.0`.
 - The deployed PAPER SPX, NDX, and XSP strategies use gateway market data as the authoritative
-  read path. The deployment overlay sets `SCHWAB_ACCESS_MODE=gateway` and
-  `SCHWAB_GATEWAY_SHADOW_READS=false`.
+  read path through the tracked `infra/docker-compose.gateway-paper-cutover.yml` overlay. The
+  overlay sets `SCHWAB_ACCESS_MODE=gateway` and `SCHWAB_GATEWAY_SHADOW_READS=false`.
+- Real-money gateway market data is prohibited while option chains can be cache-backed. A live
+  workflow requires a separately reviewed force-fresh policy before gateway access can be enabled.
 - Gateway market-data coverage includes quotes, spot, movers, history/session history, full option
   chains, and order books. The gateway does not own accounts, positions, transactions, or order
   writes.
@@ -32,6 +34,13 @@ they are not operating instructions.
 then selects `GatewayAuthoritativeMarketDataProvider` when `SCHWAB_ACCESS_MODE=gateway`. The
 collector, entry logic, position monitoring, settlement reads, and strategy history reads use that
 provider. Gateway failures fail closed according to the provider freshness and quality checks.
+
+Current Butterfly Guy acceptance tooling is deliberately consumer-specific:
+`tools/butterfly_gateway_acceptance.py` checks SPX/NDX/XSP PAPER readiness and no-fallback
+environment invariants, while `tools/gateway_cutover_flatness_audit.py` checks Butterfly Guy's
+database and authenticated broker state. Wire-contract validation, SDK examples, credential proof,
+server readiness, scheduler/load tests, TTL analysis, deployment, key issuance, monitoring, and
+gateway rollback are maintained in SchwabGateway.
 
 The old standalone `src/butterfly_guy/scripts/run_collector.py` was removed because it had no active
 deployment reference and constructed a direct-only market-data path. Collection is part of the
