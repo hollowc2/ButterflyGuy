@@ -27,8 +27,12 @@ The runtime is split so you can run collection, trading, or the full stack.
 
 This README covers the Butterfly Guy options system only. The repository also
 contains personal equity-research utilities that reuse the local Schwab OAuth
-authentication; they are not part of Butterfly Guy, its strategy, or its
-runtime.
+authentication; they are not part of Butterfly Guy, its strategy, or its runtime.
+Their gateway-backed replacement lives in the separate EquityScanner repository.
+The copies here remain the scheduled reference and rollback path until the candidate,
+notification, and schedule-migration gates pass; see
+[`docs/equity-market-data.md`](docs/equity-market-data.md) for the separately gated raw
+recording migration.
 
 ## Core repo layout
 

@@ -26640,7 +26640,7 @@
       "node_kind": "heading",
       "norm_label": "historical record",
       "source_file": "docs/architecture/schwab-gateway-current-status.md",
-      "source_location": "L53"
+      "source_location": "L57"
     },
     {
       "id": "docs_architecture_schwab_gateway_current_status_runtime_boundaries",
@@ -29472,7 +29472,7 @@
       "node_kind": "heading",
       "norm_label": "backfill candles",
       "source_file": "docs/equity-market-data.md",
-      "source_location": "L27"
+      "source_location": "L34"
     },
     {
       "id": "docs_equity_market_data_equity_candles_and_order_book_recording",
@@ -29496,7 +29496,7 @@
       "node_kind": "heading",
       "norm_label": "historical limitation",
       "source_file": "docs/equity-market-data.md",
-      "source_location": "L7"
+      "source_location": "L14"
     },
     {
       "id": "docs_equity_market_data_operational_caution",
@@ -29508,7 +29508,7 @@
       "node_kind": "heading",
       "norm_label": "operational caution",
       "source_file": "docs/equity-market-data.md",
-      "source_location": "L72"
+      "source_location": "L79"
     },
     {
       "id": "docs_equity_market_data_record_a_future_bmnr_session",
@@ -29520,7 +29520,7 @@
       "node_kind": "heading",
       "norm_label": "record a future bmnr session",
       "source_file": "docs/equity-market-data.md",
-      "source_location": "L44"
+      "source_location": "L51"
     },
     {
       "id": "src_butterfly_guy_data_schemas",
@@ -98606,7 +98606,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/architecture/schwab-gateway-current-status.md",
-      "source_location": "L53",
+      "source_location": "L57",
       "weight": 1.0
     },
     {
@@ -103462,13 +103462,24 @@
     },
     {
       "source": "docs_equity_market_data_equity_candles_and_order_book_recording",
+      "target": "docs_equity_market_data_historical_limitation",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/equity-market-data.md",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "docs_equity_market_data_equity_candles_and_order_book_recording",
       "target": "docs_equity_market_data_backfill_candles",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/equity-market-data.md",
-      "source_location": "L27",
+      "source_location": "L34",
       "weight": 1.0
     },
     {
@@ -103479,18 +103490,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/equity-market-data.md",
-      "source_location": "L44",
-      "weight": 1.0
-    },
-    {
-      "source": "docs_equity_market_data_equity_candles_and_order_book_recording",
-      "target": "docs_equity_market_data_historical_limitation",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "docs/equity-market-data.md",
-      "source_location": "L7",
+      "source_location": "L51",
       "weight": 1.0
     },
     {
@@ -103501,7 +103501,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/equity-market-data.md",
-      "source_location": "L72",
+      "source_location": "L79",
       "weight": 1.0
     },
     {
@@ -141059,5 +141059,5 @@
       "source_file": "infra/grafana/provisioning/datasources/datasources.yml"
     }
   ],
-  "built_at_commit": "3658f72115faab9c57445d2a3a6e932d8df753e6"
+  "built_at_commit": "a568372f706d4756a08ede8469505a17cfdabd73"
 }

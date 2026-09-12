@@ -4,6 +4,13 @@ ButterflyGuy can backfill recent one-minute equity candles from Schwab and can
 record raw Schwab streaming messages for later review. These tools are read-only:
 they do not place, replace, or cancel orders.
 
+These commands are retained only as migration evidence. SchwabGateway now contains the
+standalone replacements: its order-book recorder owns venue Level II,
+`schwab-gateway-capture-equity-streams` owns chart and Level I capture, and
+`schwab-gateway-export-session-history` owns non-overwriting one-minute candle export.
+Do not remove the ButterflyGuy code or historical output until the standalone tools pass
+their supervised runtime proof and the EquityScanner schedule migration succeeds.
+
 ## Historical limitation
 
 Schwab price history can be requested after a session and includes OHLCV candles.

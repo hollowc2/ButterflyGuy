@@ -1100,9 +1100,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1789176685.2928298,
-    "seen": 1789176922.9594498,
-    "ast_hash": "94434f5dfcc8ddd2f7c70bd983fb57ad",
+    "mtime": 1789179071.1642034,
+    "seen": 1789179558.5340354,
+    "ast_hash": "7730f90f966df4d10e97881c0d6fdbde",
     "semantic_hash": ""
   },
   "configs/config.yaml": {
@@ -1178,9 +1178,9 @@
     "semantic_hash": ""
   },
   "docs/equity-market-data.md": {
-    "mtime": 1785169959.7575433,
-    "seen": 1789146275.403914,
-    "ast_hash": "5056e0f86d46327bddc3cb72e2607448",
+    "mtime": 1789178986.1799836,
+    "seen": 1789179558.5357766,
+    "ast_hash": "d1f3d8830ea716bf5e8dab2ca2cea23e",
     "semantic_hash": ""
   },
   "docs/live-runbook.md": {
@@ -1508,9 +1508,9 @@
     "semantic_hash": ""
   },
   "docs/architecture/schwab-gateway-current-status.md": {
-    "mtime": 1789147802.2950783,
-    "seen": 1789147838.622841,
-    "ast_hash": "2341eea0095df28a0dd148f5949602c9",
+    "mtime": 1789176956.5409112,
+    "seen": 1789179558.5345492,
+    "ast_hash": "e94b4889cc7ba5e2d052f4e148f18e9e",
     "semantic_hash": ""
   },
   "docs/archive/schwab-gateway/CODEX_STATE.md": {
