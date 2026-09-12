@@ -58,7 +58,6 @@ logs/
 
 # Docker volumes (don't commit)
 infra/grafana/provisioning/alerting/
-infra/generated/
 .worktrees/
 
 # Local Codex and Graphify runtime artifacts

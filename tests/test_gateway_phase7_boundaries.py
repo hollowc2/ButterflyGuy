@@ -138,7 +138,6 @@ def test_standalone_packages_remain_pinned_and_consumers_import_them_directly() 
     )
     for consumer in (
         "src/butterfly_guy/data/schwab_client.py",
-        "src/butterfly_guy/candidate_fleet/schwab_market_data.py",
         "tools/schwab_token_keepalive.py",
     ):
         assert "from schwab_token_store import" in _source(consumer), consumer

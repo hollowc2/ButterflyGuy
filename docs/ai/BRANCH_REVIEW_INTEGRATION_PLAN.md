@@ -1,5 +1,9 @@
 # Branch Review and Integration Plan
 
+> **Historical evidence:** This frozen 2026-08-08 integration record is not current
+> operational guidance. References to the experimental SPX candidate fleet describe
+> runtime surfaces that were retired from this repository in September 2026.
+
 ## Purpose
 
 Provide one durable, updateable source of truth for reviewing work produced across

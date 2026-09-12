@@ -50,49 +50,6 @@ services:
     ports:
       - "127.0.0.1:8000:8000"  # Prometheus metrics
 
-  app_spx_candidate:
-    profiles: [spx-candidate]
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    container_name: butterfly_spx_candidate
-    # Legacy BEST_RR rollback service; keep it stopped unless explicitly started.
-    restart: "no"
-    command: ["python", "-m", "butterfly_guy.scripts.run_live", "--config", "configs/config_spx_candidate.yaml"]
-    env_file:
-      - ../.env
-    volumes:
-      # Directory bind, read-only: see the note on app_spx. This service only reads.
-      - "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}:${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}:ro"
-      - ../configs/config_spx_candidate.yaml:/app/configs/config_spx_candidate.yaml:ro
-    environment:
-      # Set from the same required variable as the bind above so the two cannot
-      # disagree, and never inherited from ../.env.
-      SCHWAB_TOKEN_PATH: "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}/tokens.json"
-      DATABASE__HOST: timescaledb
-      DATABASE__PORT: 5432
-      DATABASE__NAME: butterfly_guy_spx_candidate
-      DATABASE__USER: butterfly
-      EXECUTION__PAPER_TRADING: "true"
-      EXECUTION__ALLOW_LIVE_TRADING: "false"
-      ALLOW_LIVE_TRADING: "false"
-      DISCORD_WEBHOOK_URL: ""
-      TELEGRAM_BOT_TOKEN: ""
-      TELEGRAM_CHAT_ID: ""
-      ALERTMANAGER_URL: ""
-    read_only: true
-    tmpfs:
-      - /tmp
-      - /app/data/chains
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    networks:
-      - monitoring_net
-    ports:
-      - "127.0.0.1:8005:8000"
-
   app_ndx:
     profiles: [ndx]
     build:

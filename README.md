@@ -41,7 +41,6 @@ runtime.
 | `src/butterfly_guy/risk/` | Daily loss limits, trade caps, and buying-power guards |
 | `src/butterfly_guy/data/` | Schwab client, chain collection, and DB-facing data models |
 | `src/butterfly_guy/backtest/` | DB replay and simulation engine |
-| `src/butterfly_guy/candidate_fleet/` | Shared-feed paper candidate evaluators (see below) |
 | `src/butterfly_guy/core/` | Config loading, logging, and shared settings |
 | `src/butterfly_guy/db/` | TimescaleDB connection pool, migrations, and queries |
 | `src/butterfly_guy/quant_engine/` | Black-Scholes pricer and IV/skew modeling |
@@ -99,8 +98,7 @@ SCHWAB_GATEWAY_TOKEN_DIR=/absolute/path/to/schwab-token-directory
 ```
 
 The directory must be writable by the configured trading/gateway uid because token refresh uses a
-sibling lock and atomic replacement. The candidate feed receives the same directory read-only.
-Compose fails closed while the variable is unset.
+sibling lock and atomic replacement. Compose fails closed while the variable is unset.
 
 ## Live-money readiness gate
 
@@ -158,55 +156,6 @@ Metrics ports from the compose file:
 - SPX: `127.0.0.1:8000`
 - NDX: `127.0.0.1:8001`
 - XSP: `127.0.0.1:8003`
-
-## Shared SPX candidate fleet
-
-The candidate fleet is a separate, paper-only runtime. The primary SPX service
-continues to read Schwab directly and does not depend on the fleet.
-
-`configs/candidates.yaml` is the source of truth for up to ten YAML variants.
-Each enabled candidate has its own container and PostgreSQL database. Slots
-`0` through `9` map to host metrics ports `8100` through `8109`. The existing
-BEST_RR database is registered as `butterfly_guy_spx_candidate`; its preserved
-history now continues under the fleet-native `best-rr` evaluator in slot 0.
-Five additional evaluators are enabled: `vix-center`,
-`target-cost`, `gap-conviction`, `peak-trailer`, and `absolute-stop`. They use
-slots 1–5, isolated databases, and the same shared feed.
-
-Validate and inspect generated runtime changes:
-
-```bash
-uv run candidatectl validate
-uv run candidatectl render
-uv run candidatectl plan
-```
-
-Generated Compose, Prometheus file-discovery, and Grafana datasource files live
-under ignored `infra/generated/`. `apply` creates missing databases and starts
-enabled services; it never drops databases. Disabled containers are stopped
-only when explicitly requested:
-
-```bash
-uv run candidatectl apply
-uv run candidatectl apply --stop-disabled
-```
-
-The shared `spx_candidate_feed` performs candidate-side Schwab reads and keeps a
-full immutable snapshot. It polls every 60 seconds while idle and every two
-seconds while an evaluator has an entry or position lease. Candidate containers
-have no project `.env`, Schwab credentials, token mount, account ID, broker
-client, or live-order executor. Paper entries are accepted only after the feed
-snapshot has been pinned in `butterfly_guy_candidate_market`; position monitors
-request and persist only their three leg quotes.
-Paper fills use the canonical `mark_v1` cohort. At expiration, the shared feed
-serves one cached final regular-session SPX close so evaluators can cash-settle
-without Schwab credentials. Review progress counts only closed `mark_v1` trades,
-with a minimum gate of 20 closed trades per candidate.
-
-All six evaluators use the shared feed and isolated candidate runtime. The
-legacy `app_spx_candidate` Compose profile remains stopped and available for
-one rollback cycle; it must not run concurrently with the fleet-native
-`best-rr` evaluator because both use the preserved BEST_RR database.
 
 ## Schwab gateway (standalone operational service)
 

@@ -108,7 +108,7 @@
       <div class="stat"><b>4,173</b><span>graphify nodes</span></div>
       <div class="stat"><b>6,908</b><span>graphify edges</span></div>
     </div>
-    <div class="notice"><strong>Trading boundary.</strong> SPX is the primary path. The SPX candidate is an isolated paper-only forward test with a separate database and a 20-trade review gate. NDX and XSP are separate experimental tuning paths. Live execution is guarded and reconciled against broker evidence.</div>
+    <div class="notice"><strong>Trading boundary.</strong> SPX is the primary path. NDX and XSP are separate experimental tuning paths. Live execution is guarded and reconciled against broker evidence.</div>
     <h2>The system in one line</h2>
     <div class="flow">
       <div class="node"><strong>Charles Schwab</strong><small>Chains, spot, candles, account, positions, orders, transactions</small></div>
@@ -205,17 +205,16 @@
     <h2>Docker and observability topology</h2>
     <div class="table-wrap"><table><thead><tr><th>Asset service</th><th>Profile</th><th>Config</th><th>Metrics</th><th>Role</th></tr></thead><tbody>
       <tr><td>butterfly_spx_app</td><td>default</td><td>configs/config.yaml</td><td>127.0.0.1:8000</td><td><span class="ok">Primary</span></td></tr>
-      <tr><td>butterfly_spx_candidate</td><td>spx-candidate</td><td>configs/config_spx_candidate.yaml</td><td>127.0.0.1:8005</td><td>Paper-only · separate DB · 20-trade gate</td></tr>
       <tr><td>butterfly_ndx_app</td><td>ndx</td><td>configs/config_ndx.yaml</td><td>127.0.0.1:8001</td><td>Experimental</td></tr>
       <tr><td>butterfly_xsp_app</td><td>xsp</td><td>configs/config_xsp.yaml</td><td>127.0.0.1:8003</td><td>Experimental / canary guarded</td></tr>
     </tbody></table></div>
     <div class="grid" style="margin-top:16px">
       <article class="card"><h3>Network</h3><p>All asset apps attach to the external <code>monitoring_net</code>, where TimescaleDB, Prometheus, Grafana, and Alertmanager are expected to be reachable.</p></article>
       <article class="card"><h3>Container hardening</h3><p>Read-only filesystem, tmpfs at <code>/tmp</code>, no-new-privileges, all capabilities dropped, and explicit mounts for tokens, config, and chain data.</p></article>
-      <article class="card"><h3>Prometheus + Grafana</h3><p>Prometheus scrapes asset and candidate metrics. The candidate dashboard reads its separate TimescaleDB and tracks the 20-trade forward gate.</p></article>
+      <article class="card"><h3>Prometheus + Grafana</h3><p>Prometheus scrapes the SPX, NDX, and XSP runtimes. Grafana provides primary trading, trade-detail, and performance dashboards.</p></article>
       <article class="card"><h3>Configuration boundary</h3><p>Asset behavior lives in YAML; secrets and runtime credentials remain in <code>.env</code> and <code>tokens.json</code>. Never copy their values into reports or this map.</p></article>
       <article class="card"><h3>Notifications</h3><p>SPX can send Discord entry/exit charts. Telegram carries risk/operational warnings. Alertmanager receives critical live reconciliation, ambiguity, and settlement conditions.</p></article>
-      <article class="card"><h3>Runtime command</h3><p><code>docker compose -f infra/docker-compose.yml up -d</code> starts primary SPX. The paper twin requires the explicit <code>spx-candidate</code> profile; NDX and XSP retain their own profiles.</p></article>
+      <article class="card"><h3>Runtime command</h3><p><code>docker compose -f infra/docker-compose.yml up -d</code> starts primary SPX. NDX and XSP retain their own profiles.</p></article>
     </div>
   </section>
 

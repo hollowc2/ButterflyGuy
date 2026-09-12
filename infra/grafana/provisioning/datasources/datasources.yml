@@ -27,22 +27,3 @@ datasources:
       maxIdleConns: 1
       connMaxLifetime: 600
     editable: true
-
-  - name: TimescaleDB SPX Candidate
-    uid: timescaledb-spx-candidate
-    type: postgres
-    access: proxy
-    url: timescaledb:5432
-    database: butterfly_guy_spx_candidate
-    user: butterfly
-    secureJsonData:
-      password: ${DATABASE_PASSWORD}
-    jsonData:
-      sslmode: disable
-      postgresVersion: 1600
-      timescaledb: true
-      database: butterfly_guy_spx_candidate
-      maxOpenConns: 2
-      maxIdleConns: 1
-      connMaxLifetime: 600
-    editable: true

@@ -27,12 +27,8 @@ def test_each_strategy_has_an_independent_default_direct_gateway_toggle() -> Non
             f"${{SCHWAB_GATEWAY_SHADOW_READS_{suffix}:-false}}"
         )
 
-    candidate_environment = services["app_spx_candidate"]["environment"]
-    assert "SCHWAB_ACCESS_MODE" not in candidate_environment
-
-
 def test_default_compose_token_binds_require_the_shared_token_directory() -> None:
-    """All four trading services bind the token document from one required variable."""
+    """All three trading services bind the token document from one required variable."""
     compose = yaml.safe_load(Path("infra/docker-compose.yml").read_text())
     directory = "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}"
 
@@ -42,7 +38,6 @@ def test_default_compose_token_binds_require_the_shared_token_directory() -> Non
     }
     assert binds == {
         "app_spx": [f"{directory}:{directory}"],
-        "app_spx_candidate": [f"{directory}:{directory}:ro"],
         "app_ndx": [f"{directory}:{directory}"],
         "app_xsp": [f"{directory}:{directory}"],
     }

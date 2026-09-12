@@ -39,6 +39,10 @@ gateway-aware `run_live.py` orchestration.
 
 ## Deferred Helios cleanup
 
+The experimental candidate fleet's source and local deployment definitions have been retired from
+this repository. The items below are stopped Helios artifacts retained only for rollback/evidence;
+they are not current Butterfly Guy runtime dependencies.
+
 The following stopped artifacts are retained pending an explicit decision on rollback and evidence
 retention:
 

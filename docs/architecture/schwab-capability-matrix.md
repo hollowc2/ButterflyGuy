@@ -15,7 +15,7 @@ Statuses: `SUPPORTED`, `PARTIALLY_SUPPORTED`, `NOT_SUPPORTED`, `UNVERIFIED`, `ER
 | Extended-hours last/mark/volume | UNVERIFIED | Scanner consumes `extended`; cumulative versus session volume is not established. |
 | Intraday one-minute history | PARTIALLY_SUPPORTED | Multiple callers parse candles. Coverage and truncation require capture. |
 | Extended-hours bars in history | UNVERIFIED | `get_intraday_bars_for_day(..., include_extended_hours=True)` sends the flag; content unverified. |
-| Regular-session final bar | PARTIALLY_SUPPORTED | Candidate session-close logic expects 15:59 ET evidence; verify early-close and late availability. |
+| Regular-session final bar | PARTIALLY_SUPPORTED | Historical candidate-fleet evidence expected a 15:59 ET bar; no current runtime consumes that retired path. Verify early-close and late availability before introducing a new consumer. |
 | Option chains and Greeks | SUPPORTED | Current SPX/NDX/XSP runtime and tests parse expected response shapes; limits/freshness still operational concerns. |
 | Market hours endpoint | UNVERIFIED | No current wrapper method. |
 | Instrument/exchange/status metadata | UNVERIFIED | Needed for AfterHoursLab contract. |

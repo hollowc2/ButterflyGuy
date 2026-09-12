@@ -153,7 +153,6 @@
     "network": "external Docker network monitoring_net",
     "services": [
       {"compose_service": "app_spx", "container": "butterfly_spx_app", "profile": "default", "config": "configs/config.yaml", "status": "primary", "metrics": "127.0.0.1:8000"},
-      {"compose_service": "app_spx_candidate", "container": "butterfly_spx_candidate", "profile": "spx-candidate", "config": "configs/config_spx_candidate.yaml", "status": "isolated paper candidate; 20-trade forward gate", "database": "butterfly_guy_spx_candidate", "metrics": "127.0.0.1:8005"},
       {"compose_service": "app_ndx", "container": "butterfly_ndx_app", "profile": "ndx", "config": "configs/config_ndx.yaml", "status": "experimental", "metrics": "127.0.0.1:8001"},
       {"compose_service": "app_xsp", "container": "butterfly_xsp_app", "profile": "xsp", "config": "configs/config_xsp.yaml", "status": "experimental/canary guarded", "metrics": "127.0.0.1:8003"}
     ],
@@ -179,7 +178,6 @@
   "configuration": {
     "asset_configs": [
       {"asset": "SPX", "path": "configs/config.yaml", "role": "default production research/paper path"},
-      {"asset": "SPX candidate", "path": "configs/config_spx_candidate.yaml", "role": "BEST_RR paper-only forward test with separate DB and notifications disabled"},
       {"asset": "NDX", "path": "configs/config_ndx.yaml", "role": "experimental tuning path"},
       {"asset": "XSP", "path": "configs/config_xsp.yaml", "role": "experimental/canary tuning path"}
     ],
@@ -196,7 +194,6 @@
     "At most one active live entry intent per underlying/date and one active exit intent per trade are enforced in SQL.",
     "At most one OPEN trade per underlying/date is enforced by migration 008.",
     "Paper fill pricing must preserve the project mark-price convention.",
-    "The SPX candidate remains paper-only, uses a separate database, and cannot replace the primary before its 20-trade forward review.",
     "TimescaleDB history plus decision/intents evidence is the audit and replay backbone."
   ],
   "agent_handoff": {

@@ -36,7 +36,7 @@ def test_only_primary_butterfly_dashboards_remain() -> None:
     }
 
 
-def test_experimental_candidate_fleet_is_absent_from_dashboards() -> None:
+def test_retired_experimental_runtime_is_absent_from_dashboards() -> None:
     dashboards = {
         name: _dashboard(name)
         for name in (

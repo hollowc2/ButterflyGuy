@@ -27,9 +27,6 @@ dependencies = [
 schwab-gateway-sdk = { git = "https://github.com/hollowc2/SchwabGateway.git", rev = "f5ed5fc5232d72fdf54cfde6b449aa520e4f2d53", subdirectory = "packages/sdk" }
 schwab-token-store = { git = "https://github.com/hollowc2/SchwabGateway.git", tag = "v0.1.0", subdirectory = "packages/token-store" }
 
-[project.scripts]
-candidatectl = "butterfly_guy.scripts.candidatectl:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
