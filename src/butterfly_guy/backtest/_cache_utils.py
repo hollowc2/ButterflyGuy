@@ -27,6 +27,7 @@ def save_day(day: DayData, path: Path) -> None:
 
     data = {
         "date": day.date.isoformat(),
+        "underlying": day.underlying,
         "vix": day.vix,
         "prev_close": day.prev_close,
         "bars": [_bar_dict(bar) for bar in day.bars],
@@ -56,4 +57,5 @@ def load_day(path: Path) -> DayData:
         prev_close=data["prev_close"],
         bars=bars,
         vix_bars=vix_bars,
+        underlying=data.get("underlying", "SPX"),
     )

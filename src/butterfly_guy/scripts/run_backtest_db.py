@@ -29,7 +29,10 @@ import datetime as dt
 import html
 import itertools
 import math
+import shlex
 import statistics
+import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -479,6 +482,34 @@ def parse_args() -> argparse.Namespace:
             "--profit-strategy must be one of: "
             + ", ".join(sorted(valid_profit_strategies))
         )
+    invalid_directions = [d for d in args.direction if d not in {"CALL", "PUT", "auto"}]
+    if invalid_directions:
+        p.error("--direction must be CALL, PUT, or auto")
+    invalid_methods = [m for m in args.method if m not in {"VIX", "TARGET_COST", "BEST_RR"}]
+    if invalid_methods:
+        p.error("--method must be VIX, TARGET_COST, or BEST_RR")
+    if args.start and args.end and args.start > args.end:
+        p.error("start date must be on or before end date")
+    if args.top < 1:
+        p.error("--top must be at least 1")
+    if args.slippage < 0:
+        p.error("--slippage cannot be negative")
+    if any(value <= 0 for value in args.wing):
+        p.error("--wing values must be positive")
+    if any(value <= 0 for value in args.rr_min):
+        p.error("--rr-min values must be positive")
+    if any(
+        value <= 0 or value > 1
+        for values in (args.morning_dd, args.late_morning_dd, args.afternoon_dd)
+        for value in values
+    ):
+        p.error("drawdown thresholds must be in (0, 1]")
+    if any(value < 0 for value in args.min_hold_minutes):
+        p.error("--min-hold-minutes values cannot be negative")
+    if any(value < 1 for value in args.drawdown_confirmation_polls):
+        p.error("--drawdown-confirmation-polls values must be at least 1")
+    if any(value < 1 for value in args.min_peak_profit_ratio):
+        p.error("--min-peak-profit-ratio values must be at least 1")
 
     return args
 
@@ -709,6 +740,7 @@ def day_with_monitoring_bars(day: DayData, monitoring: ChainDay) -> DayData:
         prev_close=day.prev_close,
         recent_closes=day.recent_closes,
         vix_bars=day.vix_bars,
+        underlying=day.underlying,
     )
 
 
@@ -774,7 +806,7 @@ async def get_prev_close(
     conn: asyncpg.Connection,
     date: dt.date,
     underlying: str,
-) -> float:
+) -> float | None:
     """Return the last spot price at or before 16:00 ET on the previous trading day."""
     row = await conn.fetchval(
         """
@@ -789,7 +821,7 @@ async def get_prev_close(
     )
     if row:
         return float(row)
-    return 5500.0
+    return None
 
 
 async def get_recent_closes(
@@ -807,7 +839,7 @@ async def get_recent_closes(
     return [float(r["close"]) for r in reversed(rows)]
 
 
-async def get_vix_prev_close(conn: asyncpg.Connection, date: dt.date) -> float:
+async def get_vix_prev_close(conn: asyncpg.Connection, date: dt.date) -> float | None:
     """Return VIX daily close strictly before *date* from daily_bars."""
     val = await conn.fetchval(
         """
@@ -819,14 +851,14 @@ async def get_vix_prev_close(conn: asyncpg.Connection, date: dt.date) -> float:
         """,
         date,
     )
-    return float(val) if val is not None else 18.0
+    return float(val) if val is not None else None
 
 
-async def get_vix_at(conn: asyncpg.Connection, at_time: dt.datetime) -> float:
+async def get_vix_at(conn: asyncpg.Connection, at_time: dt.datetime) -> float | None:
     snapshot = await get_vix_snapshot_at(conn, at_time)
     if snapshot is not None:
         return snapshot[0]
-    return 18.0
+    return None
 
 
 async def get_vix_snapshot_at(
@@ -991,10 +1023,10 @@ def _patch_chain_cache(chains: dict, date: dt.date):
     _original_cc_load = _cc.load_chain_day
     _original_se_load = _se.load_chain_day  # type: ignore[attr-defined]
 
-    def _patched(d, cache_dir=None):
+    def _patched(d, cache_dir=None, underlying=None):
         if d == date:
             return chains
-        return _original_cc_load(d, cache_dir) if cache_dir else _original_cc_load(d)
+        return _original_cc_load(d, cache_dir, underlying)
 
     _cc.load_chain_day = _patched  # type: ignore[assignment]
     _se.load_chain_day = _patched  # type: ignore[assignment]
@@ -1016,10 +1048,10 @@ def _force_synthetic_for_date(date: dt.date):
     _original_cc_load = _cc.load_chain_day
     _original_se_load = _se.load_chain_day  # type: ignore[attr-defined]
 
-    def _patched(d, cache_dir=None):
+    def _patched(d, cache_dir=None, underlying=None):
         if d == date:
             return None
-        return _original_cc_load(d, cache_dir) if cache_dir else _original_cc_load(d)
+        return _original_cc_load(d, cache_dir, underlying)
 
     _cc.load_chain_day = _patched  # type: ignore[assignment]
     _se.load_chain_day = _patched  # type: ignore[assignment]
@@ -1054,6 +1086,8 @@ async def load_date_data(
     if not chains or not bars:
         return None
     prev_close = await get_prev_close(conn, date, underlying)
+    if prev_close is None:
+        return None
     direction_bar = select_direction_bar(bars)
     entry_bar = next(
         (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(10, 0)),
@@ -1061,6 +1095,8 @@ async def load_date_data(
     )
     vix = await get_vix_at(conn, entry_bar.ts)
     vix_prev_close = await get_vix_prev_close(conn, date)
+    if vix is None or vix_prev_close is None:
+        return None
     recent_closes = await get_recent_closes(conn, date, underlying)
     return dict(
         date=date,
@@ -1079,6 +1115,7 @@ async def load_date_data(
             vix=vix,
             prev_close=prev_close,
             recent_closes=recent_closes,
+            underlying=underlying,
         ),
     )
 
@@ -1101,12 +1138,43 @@ def _summarize_combo(
         else 0.0
     )
     exit_reasons = [r.exit_reason for _, r in traded]
+    incomplete_days = sum(
+        r is not None and r.exit_reason == "incomplete_data" for _, r in day_results
+    )
+    losses = [p for p in pnls if p < 0]
+    held_minutes = sum(
+        max(0.0, (r.exit_time - r.entry_time).total_seconds() / 60)
+        for _, r in traded
+        if r.entry_time is not None and r.exit_time is not None
+    )
+    loaded_days = len(day_results)
+    evaluated_days = loaded_days - incomplete_days
+    exposure = held_minutes / (evaluated_days * 390) if evaluated_days else 0.0
+    exited_trades = sum(reason != "expired" for reason in exit_reasons)
+    commission_points = (
+        (len(traded) + exited_trades)
+        * 4
+        * combo_label.get("commission_per_contract", 0.0)
+        / 100
+    )
+    slippage_points = (len(traded) + exited_trades) * combo_label.get("slippage", 0.0)
 
-    base = {**combo_label, "trade_count": len(traded)}
+    base = {
+        **combo_label,
+        "loaded_days": loaded_days,
+        "evaluated_days": evaluated_days,
+        "trade_count": len(traded),
+        "incomplete_days": incomplete_days,
+        "trade_day_rate": round(len(traded) / evaluated_days, 4) if evaluated_days else 0.0,
+        "exposure": round(exposure, 4),
+        "estimated_commission": round(commission_points, 4),
+        "estimated_slippage": round(slippage_points, 4),
+    }
     if not traded:
         return {
             **base,
             "win_rate": 0.0, "total_pnl": 0.0, "avg_pnl": 0.0,
+            "expectancy": 0.0, "avg_win": 0.0, "avg_loss": 0.0,
             "median_pnl": 0.0, "top3_win_share": 0.0,
             "sharpe": 0.0, "max_drawdown": 0.0, "profit_factor": 0.0,
             "max_consec_losses": 0,
@@ -1120,6 +1188,9 @@ def _summarize_combo(
         "win_rate": round(wins / len(traded), 4),
         "total_pnl": round(sum(pnls), 4),
         "avg_pnl": round(sum(pnls) / len(traded), 4),
+        "expectancy": round(statistics.mean(pnls), 4),
+        "avg_win": round(statistics.mean(p for p in pnls if p > 0), 4) if wins else 0.0,
+        "avg_loss": round(statistics.mean(losses), 4) if losses else 0.0,
         "median_pnl": round(statistics.median(pnls), 4),
         "top3_win_share": round(top3_win_share, 4),
         "sharpe": round(_sharpe(pnls), 4),
@@ -2056,6 +2127,9 @@ async def run_selection_parity_report(args: argparse.Namespace) -> None:
                 continue
             entry_quotes = nearest_snapshot(d["chains"], entry_bar.ts) or []
             vix_at_entry = await get_vix_at(conn, entry_time)
+            if vix_at_entry is None:
+                print(f"  {trade['id']:>4}  {date!s:>10}  SKIPPED (no VIX at live entry)")
+                continue
 
             selection = select_entry_candidate(
                 quotes=entry_quotes,
@@ -2267,8 +2341,11 @@ async def run_single(args: argparse.Namespace) -> None:
         d = row["data"]
         r = row["result"]
         if not r.traded:
-            print(f"  {d['date']!s:>10}  {d['vix']:>5.1f}  {d['entry_spot']:>7.0f}  "
-                  f"  NO TRADE")
+            status = "INCOMPLETE DATA" if r.exit_reason == "incomplete_data" else "NO TRADE"
+            print(
+                f"  {d['date']!s:>10}  {d['vix']:>5.1f}  {d['entry_spot']:>7.0f}  "
+                f"  {status}"
+            )
             continue
         pnl_ct = r.pnl * 100
         pnls_ct.append(pnl_ct)
@@ -2285,17 +2362,42 @@ async def run_single(args: argparse.Namespace) -> None:
         return
 
     wins = [p for p in pnls_ct if p > 0]
+    losses = [p for p in pnls_ct if p < 0]
+    held_minutes = sum(
+        max(0.0, (row["result"].exit_time - row["result"].entry_time).total_seconds() / 60)
+        for row in day_rows
+        if row["result"].entry_time is not None and row["result"].exit_time is not None
+    )
+    incomplete_days = sum(row["result"].exit_reason == "incomplete_data" for row in day_rows)
+    evaluated_days = len(dates) - incomplete_days
+    exposure = held_minutes / (evaluated_days * 390) if evaluated_days else 0.0
+    exited_trades = sum(
+        row["result"].traded and row["result"].exit_reason != "expired" for row in day_rows
+    )
+    commission_dollars = (
+        (n_traded + exited_trades)
+        * 4
+        * live_config.execution.paper_commission_per_contract
+    )
+    slippage_dollars = (n_traded + exited_trades) * args.slippage * 100
     print(f"\n{'='*90}")
     print(f"  SUMMARY  ({len(day_rows)} days loaded, {n_traded} traded)")
     print(f"{'='*90}")
     print(f"  Win rate    : {len(wins)}/{n_traded}  ({len(wins)/n_traded*100:.0f}%)")
     print(f"  Total PnL   : ${sum(pnls_ct):+.2f} / contract")
     print(f"  Avg PnL     : ${sum(pnls_ct)/n_traded:+.2f} / contract")
+    print(f"  Avg winner  : ${statistics.mean(wins):+.2f}" if wins else "  Avg winner  : n/a")
+    print(f"  Avg loser   : ${statistics.mean(losses):+.2f}" if losses else "  Avg loser   : n/a")
     print(f"  Median PnL  : ${statistics.median(pnls_ct):+.2f} / contract")
     print(f"  Best day    : ${max(pnls_ct):+.2f} / contract")
     print(f"  Worst day   : ${min(pnls_ct):+.2f} / contract")
     print(f"  Sharpe      : {_sharpe([p/100 for p in pnls_ct]):.3f}")
     print(f"  Profit factor: {_profit_factor(pnls_ct):.3f}")
+    print(f"  Exposure    : {exposure * 100:.1f}% of available session time")
+    print(
+        f"  Cost drag   : ${commission_dollars:.2f} commissions + "
+        f"${slippage_dollars:.2f} slippage stress"
+    )
     gross_wins = sum(wins)
     top3_share = sum(sorted(wins, reverse=True)[:3]) / gross_wins if gross_wins else 0.0
     print(f"  Top-3 win share: {top3_share * 100:.1f}%")
@@ -2519,6 +2621,16 @@ async def run_sweep(args: argparse.Namespace) -> None:
         return
 
     print(f"\n  Summarizing {total_combos} combos across {len(usable_dates)} dates...\n")
+    generated_at_utc = dt.datetime.now(dt.timezone.utc).isoformat()
+    try:
+        git_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        git_sha = "unknown"
+    command = shlex.join(sys.argv)
 
     sweep_results: list[dict] = []
     for i, (
@@ -2540,6 +2652,13 @@ async def run_sweep(args: argparse.Namespace) -> None:
         dd_schedule_label = _dd_schedule_label(dd_schedule)
         wing_label = "live" if wing is None else wing
         combo_label = dict(
+            generated_at_utc=generated_at_utc,
+            git_sha=git_sha,
+            command=command,
+            data_source="TimescaleDB",
+            data_start=usable_dates[0].isoformat(),
+            data_end=usable_dates[-1].isoformat(),
+            config_path=str(ASSET_CONFIG_PATHS[args.asset]),
             wing_width=wing_label,
             direction=direction,
             rr_min=rr_min,
@@ -2553,6 +2672,8 @@ async def run_sweep(args: argparse.Namespace) -> None:
             min_peak_profit_ratio=min_peak_profit_ratio,
             method=method,
             entry_time_pst=entry_pst_str,
+            slippage=args.slippage,
+            commission_per_contract=live_config.execution.paper_commission_per_contract,
         )
         row = _summarize_combo(combo_label, combo_day_results[i - 1])
         sweep_results.append(row)
@@ -2611,11 +2732,16 @@ async def run_sweep(args: argparse.Namespace) -> None:
     csv_path = args.csv or results_dir / f"sweep_{args.asset}_{start_str}_{end_str}_{ts_str}.csv"
 
     fieldnames = [
+        "generated_at_utc", "git_sha", "command", "data_source", "data_start", "data_end",
+        "config_path",
         "wing_width", "direction", "method", "profit_strategy", "entry_time_pst", "rr_min",
         "morning_dd", "late_morning_dd", "afternoon_dd",
         "dd_schedule", "min_hold_minutes", "drawdown_confirmation_polls",
-        "min_peak_profit_ratio",
-        "trade_count", "win_rate", "total_pnl", "avg_pnl",
+        "min_peak_profit_ratio", "slippage", "commission_per_contract",
+        "loaded_days", "evaluated_days", "incomplete_days", "trade_count", "trade_day_rate",
+        "exposure",
+        "win_rate", "total_pnl", "avg_pnl", "expectancy", "avg_win", "avg_loss",
+        "estimated_commission", "estimated_slippage",
         "median_pnl", "top3_win_share",
         "sharpe", "max_drawdown", "profit_factor", "max_consec_losses",
         "exit_morning_dd", "exit_late_morning_dd", "exit_afternoon_dd",

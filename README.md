@@ -257,6 +257,28 @@ uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31
 uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
 ```
 
+For hypothesis discovery across the stored option-chain corpus, use the leakage-safe
+discovery runner. It crosses the recorded spread, includes commissions, emits chronological
+train/validation/test results, and writes reproducible artifacts under
+`reports/strategy_discovery/`:
+
+```bash
+uv run python src/butterfly_guy/scripts/discover_options_strategy.py
+```
+
+Research safeguards in the replay paths:
+
+- VIX inputs are limited to values known before or at the simulated decision time.
+- Asset-partitioned chain caches preserve SPX/NDX/XSP identity.
+- Partial sessions ending before 15:00 ET are excluded rather than assigned a fabricated exit.
+- Exit slippage and commissions are applied to end-of-data closes.
+- Sweep CSVs include the Git SHA, exact command, config path, data coverage, exposure,
+  expectancy, average win/loss, and estimated cost drag.
+
+The parameter sweep ranks the same sample it evaluates. Treat that output as hypothesis
+generation only; freeze a candidate and confirm it with chronological holdouts or the discovery
+runner before considering paper-trading review.
+
 The same script also supports `--asset NDX` and `--asset XSP`, but those should be treated as experimental comparison paths rather than the main line.
 
 ## Repository conventions that matter

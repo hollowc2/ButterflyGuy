@@ -24,3 +24,4 @@ class DayData:
     prev_close: float
     vix_bars: list[MinuteBar] = field(default_factory=list)
     recent_closes: list[float] = field(default_factory=list)
+    underlying: str = "SPX"

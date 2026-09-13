@@ -31,6 +31,7 @@ PACIFIC = ZoneInfo("America/Los_Angeles")
 ENTRY_START = dt.time(10, 0)   # PST 7:00 = EST 10:00
 ENTRY_END = dt.time(10, 30)    # PST 7:30 = EST 10:30
 MONITOR_INTERVAL_MINUTES = 10
+MIN_END_OF_DAY_DATA_TIME = dt.time(15, 0)
 
 
 @dataclass
@@ -199,7 +200,7 @@ class SimulationEngine:
             return result
 
         # Load real chain cache for this day (None if not available)
-        real_chains = load_chain_day(day.date)
+        real_chains = load_chain_day(day.date, underlying=day.underlying)
 
         # Find entry bar
         entry_candidate: ButterflyCandidate | None = None
@@ -290,6 +291,7 @@ class SimulationEngine:
 
         # Monitor position until exit
         peak_value = result.entry_price
+        last_value = result.entry_price
         pending_drawdown_reason: str | None = None
         pending_drawdown_count = 0
 
@@ -328,8 +330,9 @@ class SimulationEngine:
 
             if lower_q and center_q and upper_q:
                 current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
+                last_value = current_value
             else:
-                current_value = peak_value
+                current_value = last_value
 
             peak_value = max(peak_value, current_value)
 
@@ -413,7 +416,7 @@ class SimulationEngine:
         if day.bars:
             last_bar = day.bars[-1]
             last_bar_et = last_bar.ts.astimezone(EASTERN)
-            if last_bar_et.time() >= dt.time(10, 30):
+            if last_bar_et.time() >= MIN_END_OF_DAY_DATA_TIME:
                 real_quotes = nearest_snapshot(real_chains, last_bar.ts) if real_chains else None
                 quotes = real_quotes if real_quotes else self.synth.generate_chain(
                     spot=last_bar.close,
@@ -434,19 +437,19 @@ class SimulationEngine:
                 if lower_q and center_q and upper_q:
                     current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
                 else:
-                    current_value = 0.0
+                    current_value = last_value
                 result.exit_time = last_bar.ts
-                result.exit_price = current_value
+                result.exit_price = params.paper_exit_price(current_value)
                 result.exit_reason = "end_of_day"
                 result.peak_value = peak_value
                 result.pnl = result.exit_price - result.entry_price
                 return result
 
-        # Expired worthless (no usable bars after entry)
-        result.exit_reason = "expired"
-        result.exit_price = 0.0
+        # Do not turn a partial session into a hypothetical expiry or early close.
+        result.traded = False
+        result.exit_reason = "incomplete_data"
         result.peak_value = peak_value
-        result.pnl = -result.entry_price
+        result.pnl = 0.0
         return result
 
     def simulate_day_from_entry(
@@ -473,8 +476,12 @@ class SimulationEngine:
         result.wing_width = entry_candidate.wing_width
 
         expiration = day.date
-        real_chains = load_chain_day(day.date)  # None when caller patches it out
+        real_chains = load_chain_day(
+            day.date,
+            underlying=day.underlying,
+        )  # None when caller patches it out
         peak_value = entry_price
+        last_value = entry_price
         pending_drawdown_reason: str | None = None
         pending_drawdown_count = 0
         open_dt = dt.datetime(day.date.year, day.date.month, day.date.day, 9, 30, tzinfo=EASTERN)
@@ -506,8 +513,9 @@ class SimulationEngine:
 
             if lower_q and center_q and upper_q:
                 current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
+                last_value = current_value
             else:
-                current_value = peak_value
+                current_value = last_value
 
             peak_value = max(peak_value, current_value)
 
@@ -585,7 +593,7 @@ class SimulationEngine:
         if day.bars:
             last_bar = day.bars[-1]
             last_bar_et = last_bar.ts.astimezone(EASTERN)
-            if last_bar_et.time() >= dt.time(10, 30):
+            if last_bar_et.time() >= MIN_END_OF_DAY_DATA_TIME:
                 real_quotes = nearest_snapshot(real_chains, last_bar.ts) if real_chains else None
                 quotes = real_quotes if real_quotes else self.synth.generate_chain(
                     spot=last_bar.close,
@@ -606,18 +614,18 @@ class SimulationEngine:
                 if lower_q and center_q and upper_q:
                     current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
                 else:
-                    current_value = 0.0
+                    current_value = last_value
                 result.exit_time = last_bar.ts
-                result.exit_price = current_value
+                result.exit_price = params.paper_exit_price(current_value)
                 result.exit_reason = "end_of_day"
                 result.peak_value = peak_value
                 result.pnl = result.exit_price - result.entry_price
                 return result
 
-        result.exit_reason = "expired"
-        result.exit_price = 0.0
+        result.traded = False
+        result.exit_reason = "incomplete_data"
         result.peak_value = peak_value
-        result.pnl = -result.entry_price
+        result.pnl = 0.0
         return result
 
     def simulate_day_adaptive(

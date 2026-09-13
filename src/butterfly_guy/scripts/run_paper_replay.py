@@ -287,20 +287,20 @@ async def load_bars_from_db(
     return bars
 
 
-def get_prev_close(date: dt.date) -> float:
+def get_prev_close(date: dt.date) -> float | None:
     start = date - dt.timedelta(days=7)
     hist = yf.Ticker("^GSPC").history(start=start, end=date, interval="1d")
     if not hist.empty:
         return float(hist["Close"].iloc[-1])
-    return 5500.0
+    return None
 
 
-def get_vix(date: dt.date) -> float:
-    end = date + dt.timedelta(days=1)
-    hist = yf.Ticker("^VIX").history(start=date, end=end, interval="1d")
+def get_vix(date: dt.date) -> float | None:
+    start = date - dt.timedelta(days=7)
+    hist = yf.Ticker("^VIX").history(start=start, end=date, interval="1d")
     if not hist.empty:
-        return float(hist["Close"].iloc[0])
-    return 18.0
+        return float(hist["Close"].iloc[-1])
+    return None
 
 
 # ─── Entry candidate finder ──────────────────────────────────────────────── #
@@ -696,6 +696,9 @@ async def replay_day(conn: asyncpg.Connection, date: dt.date) -> None:
         asyncio.to_thread(get_prev_close, date),
         asyncio.to_thread(get_vix, date),
     )
+    if prev_close is None or vix is None:
+        print(f"\n  {date}: missing prior SPX/VIX close — skipping")
+        return
 
     sorted_snaps = sorted(chains.items())
     snap_count = len(chains)

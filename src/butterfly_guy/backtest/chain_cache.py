@@ -130,7 +130,7 @@ def load_chain_day(
         quotes = [
             OptionQuote(
                 symbol=q.get("symbol") or f"REAL_{q['type'][0]}{int(q['strike'])}",
-                underlying="SPX",
+                underlying=underlying or "SPX",
                 expiration=date,
                 strike=q["strike"],
                 option_type=q["type"],

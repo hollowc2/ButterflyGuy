@@ -62,6 +62,32 @@ def test_load_chain_day_falls_back_to_partitioned_spx_cache(tmp_path):
     assert list(chains.keys()) == [snapshot_time]
 
 
+def test_load_chain_day_preserves_explicit_underlying(tmp_path):
+    date = dt.date(2026, 5, 6)
+    snapshot_time = dt.datetime(2026, 5, 6, 14, 30, tzinfo=dt.timezone.utc)
+    save_snapshot(
+        date,
+        snapshot_time,
+        28500.0,
+        [
+            {
+                "underlying": "NDX",
+                "strike": 28500.0,
+                "option_type": "CALL",
+                "bid": 1.0,
+                "ask": 1.2,
+                "mark": 1.1,
+            }
+        ],
+        cache_dir=tmp_path,
+    )
+
+    chains = load_chain_day(date, cache_dir=tmp_path, underlying="NDX")
+
+    assert chains is not None
+    assert chains[snapshot_time][0].underlying == "NDX"
+
+
 def test_load_chain_day_skips_corrupt_legacy_cache(tmp_path):
     date = dt.date(2026, 5, 6)
     snapshot_time = dt.datetime(2026, 5, 6, 14, 30, tzinfo=dt.timezone.utc)

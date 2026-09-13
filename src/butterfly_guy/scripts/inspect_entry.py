@@ -100,7 +100,7 @@ def main() -> None:
         spx_path = Path(f"data/{asset.lower()}_1min.csv")
         vix_path = Path("data/vix_1min.csv")
         print(f"\nLoading CSV data for {asset}...")
-        loader = CsvDataLoader(spx_path, vix_path)
+        loader = CsvDataLoader(spx_path, vix_path, underlying=asset)
     else:
         cfg = load_config()
         print(f"\nLoading DB data for {asset} on {date}...")

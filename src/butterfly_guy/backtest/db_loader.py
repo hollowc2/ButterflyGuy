@@ -127,11 +127,20 @@ class DbDataLoader:
                 for row in spot_rows
             ]
 
-            # 2. VIX for the day — prefer daily_bars, fall back to spot_prices
+            # 2. Last known VIX close before this session (never the same-day close)
             vix = await self._get_vix(conn, date)
 
             # 3. Previous trading day's close from daily_bars
             prev_close = await self._get_prev_close(conn, date)
+            if vix is None or prev_close is None:
+                log.warning(
+                    "db_loader_missing_prior_data",
+                    date=str(date),
+                    underlying=self.underlying,
+                    has_vix=vix is not None,
+                    has_prev_close=prev_close is not None,
+                )
+                return None
 
             # 4. Recent 30 closes for bias / trend filters
             recent_closes = await self._get_recent_closes(conn, date, n=30)
@@ -167,39 +176,42 @@ class DbDataLoader:
                 prev_close=prev_close,
                 vix_bars=vix_bars,
                 recent_closes=recent_closes,
+                underlying=self.underlying,
             )
         finally:
             await conn.close()
 
-    async def _get_vix(self, conn: asyncpg.Connection, date: dt.date) -> float:
-        """VIX close for *date*: daily_bars first, then last spot_prices tick."""
+    async def _get_vix(self, conn: asyncpg.Connection, date: dt.date) -> float | None:
+        """Last VIX close strictly before *date*, avoiding morning lookahead."""
         val = await conn.fetchval(
-            "SELECT close FROM daily_bars WHERE underlying = '$VIX' AND date = $1",
+            """
+            SELECT close FROM daily_bars
+            WHERE underlying = '$VIX' AND date < $1
+            ORDER BY date DESC LIMIT 1
+            """,
             date,
         )
         if val is not None:
             return float(val)
 
-        # Fall back to last $VIX spot tick of that ET day
+        # Fall back to the last $VIX tick before this ET day.
         day_start_et = dt.datetime(date.year, date.month, date.day, tzinfo=EASTERN)
-        day_end_et = day_start_et + dt.timedelta(days=1)
         val = await conn.fetchval(
             """
             SELECT price FROM spot_prices
             WHERE  underlying = '$VIX'
-              AND  ts >= $1 AND ts < $2
+              AND  ts < $1
             ORDER  BY ts DESC LIMIT 1
             """,
             day_start_et.astimezone(dt.timezone.utc),
-            day_end_et.astimezone(dt.timezone.utc),
         )
         if val is not None:
             return float(val)
 
         log.warning("db_loader_no_vix", date=str(date))
-        return 18.0  # sensible default
+        return None
 
-    async def _get_prev_close(self, conn: asyncpg.Connection, date: dt.date) -> float:
+    async def _get_prev_close(self, conn: asyncpg.Connection, date: dt.date) -> float | None:
         """Last close from daily_bars strictly before *date*."""
         val = await conn.fetchval(
             """
@@ -229,7 +241,7 @@ class DbDataLoader:
             return float(val)
 
         log.warning("db_loader_no_prev_close", date=str(date))
-        return 5500.0
+        return None
 
     async def _get_recent_closes(
         self, conn: asyncpg.Connection, date: dt.date, n: int = 30
@@ -349,7 +361,7 @@ class DbDataLoader:
         try:
             rows = await conn.fetch(
                 """
-                SELECT DISTINCT ts::date AT TIME ZONE 'America/New_York' AS et_date
+                SELECT DISTINCT (ts AT TIME ZONE 'America/New_York')::date AS et_date
                 FROM   spot_prices
                 WHERE  underlying = $1
                 ORDER  BY et_date

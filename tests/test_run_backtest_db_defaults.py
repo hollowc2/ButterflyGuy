@@ -2,6 +2,8 @@ import datetime as dt
 import sys
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.scripts.run_backtest_db import (
     _find_entry_bar_at,
@@ -83,6 +85,23 @@ def test_backtest_parses_exit_arm_sweep_overrides(monkeypatch):
     assert args.min_hold_minutes == [30.0, 45.0]
     assert args.drawdown_confirmation_polls == [3, 5]
     assert args.min_peak_profit_ratio == [1.0, 1.25]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["run_backtest_db.py", "--direction", "SIDEWAYS"],
+        ["run_backtest_db.py", "--method", "UNKNOWN"],
+        ["run_backtest_db.py", "--slippage", "-0.01"],
+        ["run_backtest_db.py", "--drawdown-confirmation-polls", "0"],
+        ["run_backtest_db.py", "2026-07-02", "2026-07-01"],
+    ],
+)
+def test_backtest_rejects_invalid_research_inputs(monkeypatch, argv):
+    monkeypatch.setattr(sys, "argv", argv)
+
+    with pytest.raises(SystemExit):
+        parse_args()
 
 
 def test_xsp_backtest_drawdown_defaults_match_live_config(monkeypatch):

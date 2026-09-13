@@ -1,7 +1,7 @@
 """Backtest data loader using Schwab (1-min SPY bars) + yfinance (daily data).
 
 Schwab provides real 1-minute SPY bars (up to ~48 days history).
-yfinance provides SPX daily open (for calibration), VIX, and prev close.
+yfinance provides SPX daily open (for calibration), prior VIX close, and SPX prev close.
 
 Calibration:
   ratio = SPX_daily_open / SPY_first_bar_open   (from yfinance + Schwab)
@@ -69,21 +69,21 @@ class SchwabDataLoader:
             return float(hist["Open"].iloc[0])
         return None
 
-    def _yf_vix(self, date: dt.date) -> float:
-        """Fetch VIX daily close from yfinance."""
-        end = date + dt.timedelta(days=1)
-        hist = yf.Ticker(VIX_YF).history(start=date, end=end, interval="1d")
+    def _yf_vix(self, date: dt.date) -> float | None:
+        """Fetch the last VIX close before *date* to avoid lookahead."""
+        start = date - dt.timedelta(days=7)
+        hist = yf.Ticker(VIX_YF).history(start=start, end=date, interval="1d")
         if not hist.empty:
-            return float(hist["Close"].iloc[0])
-        return 18.0
+            return float(hist["Close"].iloc[-1])
+        return None
 
-    def _yf_prev_close(self, date: dt.date) -> float:
+    def _yf_prev_close(self, date: dt.date) -> float | None:
         """Fetch previous trading day's SPX close from yfinance."""
         start = date - dt.timedelta(days=7)
         hist = yf.Ticker(SPX_YF).history(start=start, end=date, interval="1d")
         if not hist.empty:
             return float(hist["Close"].iloc[-1])
-        return 5500.0
+        return None
 
     async def get_spx_minute_bars(self, date: dt.date) -> list[MinuteBar]:
         """Fetch SPY 1-minute bars, scaled to SPX price levels."""
@@ -137,11 +137,11 @@ class SchwabDataLoader:
                  source="SPY*ratio", ratio=round(ratio, 4))
         return bars
 
-    async def get_vix_daily(self, date: dt.date) -> float:
-        """Fetch VIX daily close from yfinance."""
+    async def get_vix_daily(self, date: dt.date) -> float | None:
+        """Fetch the last VIX close known before the session."""
         return await asyncio.to_thread(self._yf_vix, date)
 
-    async def get_prev_close(self, date: dt.date) -> float:
+    async def get_prev_close(self, date: dt.date) -> float | None:
         """Fetch previous trading day's SPX close from yfinance."""
         return await asyncio.to_thread(self._yf_prev_close, date)
 
@@ -152,4 +152,18 @@ class SchwabDataLoader:
             return None
         vix = await self.get_vix_daily(date)
         prev_close = await self.get_prev_close(date)
-        return DayData(date=date, bars=bars, vix=vix, prev_close=prev_close)
+        if vix is None or prev_close is None:
+            log.warning(
+                "schwab_loader_missing_prior_data",
+                date=str(date),
+                has_vix=vix is not None,
+                has_prev_close=prev_close is not None,
+            )
+            return None
+        return DayData(
+            date=date,
+            bars=bars,
+            vix=vix,
+            prev_close=prev_close,
+            underlying="SPX",
+        )

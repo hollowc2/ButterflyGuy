@@ -7,7 +7,7 @@ Reads two CSV files:
 Timestamps in the CSV are naive Eastern Time.  The loader converts them to
 UTC so the simulation engine's astimezone(EASTERN) calls work correctly.
 
-VIX per day: last bar close of that trading day.
+VIX per day: last bar close of the prior trading day (available before entry).
 prev_close: last SPX close of the prior trading day.
 Volume: set to 0 (not in source data).  The bias filter's VWAP signal falls
 back to entry_close when volume is zero — this is handled upstream.
@@ -36,9 +36,15 @@ class CsvDataLoader:
     After that, load_day() is O(1).
     """
 
-    def __init__(self, spx_path: str | Path, vix_path: str | Path) -> None:
+    def __init__(
+        self,
+        spx_path: str | Path,
+        vix_path: str | Path,
+        underlying: str = "SPX",
+    ) -> None:
         spx_path = Path(spx_path)
         vix_path = Path(vix_path)
+        self.underlying = underlying.upper()
         log.info("csv_loader_loading", spx=str(spx_path), vix=str(vix_path))
 
         spx_df = self._read_csv(spx_path)
@@ -46,7 +52,7 @@ class CsvDataLoader:
 
         # Build date-keyed lookups
         self._bars_by_date: dict[dt.date, list[MinuteBar]] = self._build_bars(spx_df)
-        self._vix_by_date: dict[dt.date, float] = self._build_vix(vix_df)
+        self._vix_by_date: dict[dt.date, float] = self._build_prev_close(vix_df)
         self._vix_bars_by_date: dict[dt.date, list[MinuteBar]] = self._build_vix_bars(vix_df)
         self._prev_close: dict[dt.date, float] = self._build_prev_close(spx_df)
         self._recent_closes: dict[dt.date, list[float]] = self._build_recent_closes(spx_df)
@@ -70,8 +76,16 @@ class CsvDataLoader:
         bars = self._bars_by_date.get(date)
         if not bars:
             return None
-        vix = self._vix_by_date.get(date, 18.0)
-        prev_close = self._prev_close.get(date, 5500.0)
+        vix = self._vix_by_date.get(date)
+        prev_close = self._prev_close.get(date)
+        if vix is None or prev_close is None:
+            log.warning(
+                "csv_loader_missing_prior_data",
+                date=str(date),
+                has_vix=vix is not None,
+                has_prev_close=prev_close is not None,
+            )
+            return None
         vix_bars = self._vix_bars_by_date.get(date, [])
         recent_closes = self._recent_closes.get(date, [])
         return DayData(
@@ -81,6 +95,7 @@ class CsvDataLoader:
             prev_close=prev_close,
             vix_bars=vix_bars,
             recent_closes=recent_closes,
+            underlying=self.underlying,
         )
 
     # ------------------------------------------------------------------
@@ -152,12 +167,6 @@ class CsvDataLoader:
             ]
             result[date] = bars
         return result
-
-    @staticmethod
-    def _build_vix(df: pd.DataFrame) -> dict[dt.date, float]:
-        """Last VIX bar close per day as daily VIX proxy."""
-        last = df.sort_values("ts").groupby("et_date")["close"].last()
-        return {date: float(close) for date, close in last.items()}
 
     @staticmethod
     def _build_prev_close(df: pd.DataFrame) -> dict[dt.date, float]:

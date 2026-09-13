@@ -175,7 +175,7 @@ def main() -> None:
         sys.exit(1)
 
     print(f"\nLoading CSV data for {asset} (this takes a few seconds)...")
-    loader = CsvDataLoader(spx_path, VIX_PATH)
+    loader = CsvDataLoader(spx_path, VIX_PATH, underlying=asset)
     all_dates = loader.available_dates()
 
     start = start_arg or all_dates[0]
