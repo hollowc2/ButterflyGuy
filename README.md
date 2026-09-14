@@ -25,20 +25,11 @@ At a high level, the system:
 
 The runtime is split so you can run collection, trading, or the full stack.
 
-This README covers the Butterfly Guy options system only. The repository also
-contains personal equity-research utilities that reuse the local Schwab OAuth
-authentication; they are not part of Butterfly Guy, its strategy, or its runtime.
-Their gateway-backed replacement lives in the separate EquityScanner repository.
-The copies here remain the scheduled reference and rollback path until the candidate,
-notification, and schedule-migration gates pass; see
-[`docs/equity-market-data.md`](docs/equity-market-data.md) for the separately gated raw
-recording migration.
-
 ## Core repo layout
 
 | Path | Purpose |
 |---|---|
-| `src/butterfly_guy/scripts/` | Command-line entrypoints for live trading, collection, scans, reports, and backtests |
+| `src/butterfly_guy/scripts/` | Command-line entrypoints for live trading, collection, reports, and backtests |
 | `src/butterfly_guy/strategy/` | Butterfly selection, width selection, regime logic, and entry filtering |
 | `src/butterfly_guy/execution/` | Order building and retry/ladder execution logic |
 | `src/butterfly_guy/position/` | Position monitoring, profit policy, and exit state machine |
@@ -50,7 +41,6 @@ recording migration.
 | `src/butterfly_guy/quant_engine/` | Black-Scholes pricer and IV/skew modeling |
 | `src/butterfly_guy/services/` | Trade and position service orchestration, notifications |
 | `src/butterfly_guy/reports/` | Report and dashboard generation |
-| `src/butterfly_guy/equity_scan/` | Personal equity-research scanner (not part of the butterfly strategy) |
 | `src/butterfly_guy/gateway_client/` | Default-off shadow comparison around the standalone SchwabGateway SDK |
 | `configs/` | SPX, NDX, and XSP configuration files |
 | `infra/` | Docker compose and observability wiring |
