@@ -1,5 +1,0 @@
-# One ticker per line. Lines starting with # are ignored.
-# Example:
-# TSLA
-# AMD
-# PLTR

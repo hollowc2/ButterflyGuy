@@ -1,5 +1,0 @@
-# Equity morning scan — 6:00 AM Pacific, weekdays.
-# Vixie cron ignores CRON_TZ in user crontabs; use UTC slots + wrapper for DST.
-# Install:
-#   crontab -l 2>/dev/null | grep -v run_morning_scan | grep -v run_morning_scan_cron.sh | cat - infra/cron/equity_morning_scan.cron | crontab -
-0 13,14 * * 1-5 cd /opt/butterflyguy && tools/run_morning_scan_cron.sh >> /opt/butterflyguy/equity_morning_scan.log 2>&1
