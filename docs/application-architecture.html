@@ -83,7 +83,7 @@
     <div>
       <div class="eyebrow">System atlas · refreshed 2026-07-22</div>
       <h1>Butterfly Guy</h1>
-      <p class="lede">One-page visual architecture for the automated 0-DTE butterfly trading, research, equity scanning, reporting, and observability platform.</p>
+      <p class="lede">One-page visual architecture for the automated 0-DTE butterfly trading, research, reporting, and observability platform.</p>
     </div>
     <div class="stamp">PRIMARY&nbsp;&nbsp;SPX<br>EXPERIMENTAL&nbsp;&nbsp;NDX · XSP<br>DEFAULT&nbsp;&nbsp;PAPER TRADING<br>RUNTIME&nbsp;&nbsp;PYTHON 3.12 · ASYNCIO</div>
   </header>
@@ -161,9 +161,8 @@
       <article class="module" data-key="services trade position notifier discord telegram alert chart calendar review"><div class="path">src/butterfly_guy/services/</div><h3>services</h3><p>Trade/position use cases, notifications, chart data, calendars, daily reports, and weekend review.</p><span class="tag">TradeService</span><span class="tag">PositionService</span></article>
       <article class="module" data-key="backtest simulation csv db schwab loader cache metrics"><div class="path">src/butterfly_guy/backtest/</div><h3>backtest</h3><p>Historical loaders/cache, simulation models, drawdown dispatch, and performance metrics.</p><span class="tag">SimulationEngine</span><span class="tag">DbDataLoader</span></article>
       <article class="module" data-key="quant black scholes iv synthetic chain scipy"><div class="path">src/butterfly_guy/quant_engine/</div><h3>quant_engine</h3><p>Black-Scholes pricing, implied-volatility skew, and synthetic option chains.</p><span class="tag">SyntheticChainGenerator</span></article>
-      <article class="module" data-key="equity scan universe news sec alpha volume rvol report"><div class="path">src/butterfly_guy/equity_scan/</div><h3>equity_scan</h3><p>Universe refresh, quotes, volume/RVOL, news catalysts, ranking, and scan reports.</p><span class="tag">ScanResults</span><span class="tag">fetch_news_impacts</span></article>
       <article class="module" data-key="reports performance daily card chart drawdown html matplotlib"><div class="path">src/butterfly_guy/reports/</div><h3>reports</h3><p>Daily account analysis, live performance HTML, weekend stats, and PNG chart rendering.</p><span class="tag">DailyReportCard</span><span class="tag">ReportStats</span></article>
-      <article class="module" data-key="scripts cli runtime research reports operations"><div class="path">src/butterfly_guy/scripts/</div><h3>scripts</h3><p>CLI composition roots for live work, data collection, backtests, scans, audits, and reports.</p><span class="tag">run_live</span><span class="tag">run_backtest_db</span></article>
+      <article class="module" data-key="scripts cli runtime research reports operations"><div class="path">src/butterfly_guy/scripts/</div><h3>scripts</h3><p>CLI composition roots for live work, data collection, backtests, audits, and reports.</p><span class="tag">run_live</span><span class="tag">run_backtest_db</span></article>
     </div>
   </section>
 
@@ -192,7 +191,6 @@
     <div class="grid">
       <article class="card wide"><h3>Preferred live-parity replay</h3><p><code>run_backtest_db.py</code> scans the configured entry window with timestamp-correct VIX, uses collector snapshots for hypothetical sweeps, and calls the same <code>strategy.entry_selection</code> used by live entry. Recorded monitoring legs are reserved for live-pinned replay.</p><span class="tag">DB chain history</span><span class="tag">no future VIX</span><span class="tag">shared selection</span></article>
       <article class="card wide"><h3>Exploratory research</h3><p>CSV/Schwab loaders, chain cache, synthetic chains, parameter sweeps, paper replay, strategy discovery, and regime-classifier sweeps support research. <code>run_entry_analysis.py</code> and <code>SimulationEngine.simulate_day()</code> are explicitly legacy for parity.</p></article>
-      <article class="card"><h3>Morning equity scan</h3><p>Universe files → Schwab quotes/candles → RVOL/prior change → SEC/Alpha Vantage catalysts → rankings → archived text/JSON → Discord.</p></article>
       <article class="card"><h3>Daily report card</h3><p>Schwab balances + orders + transactions + open positions → FIFO round trips/problem detection → equity candle charts → Discord/archive.</p></article>
       <article class="card"><h3>Live performance</h3><p>Trade and decision history → PnL/drawdown/no-trade reasons → standalone HTML and matplotlib charts.</p></article>
       <article class="card"><h3>Audit tools</h3><p>Historical entry inspection, entry-selection parity, exit-mark parity, trade price-ladder traces, and broker-order status inspection.</p></article>

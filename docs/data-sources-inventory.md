@@ -100,8 +100,8 @@ file plus API credentials. The examples show response shape only.
 
 ### 1.4 Batched equity quotes
 
-- Status: **Scheduled/on-demand** for the morning equity scan and liquid-universe
-  refresh.
+- Status: Retained Schwab client capability; no scheduled consumer in this
+  repository (equity scanning moved to the standalone equity-scanner project).
 - Data: regular and extended-hours price, bid/ask, close, percent change, trade
   timestamp, and volume fields for batches of stock symbols.
 - Types: symbol-keyed JSON; floats, integers, epoch milliseconds.
@@ -486,10 +486,10 @@ as accessible shared infrastructure, not ButterflyGuy-owned data.
 ### 5.1 Application YAML configuration
 
 - Files: `configs/config.yaml`, `config_ndx.yaml`, `config_xsp.yaml`,
-  `equity_scan.yaml`, and `daily_report_card.yaml`.
+  and `daily_report_card.yaml`.
 - Data: strategy widths/costs, entry windows, execution mode, paper-fill settings,
   risk limits, collector interval, database connection settings, monitoring port,
-  scan filters, provider settings, and report thresholds.
+  and report thresholds.
 - Types: nested mappings/lists with strings, numbers, booleans, and nulls.
 
 ```yaml
@@ -678,7 +678,6 @@ available for later analysis.
 
 | Output | Format | Example/content |
 |---|---|---|
-| Morning equity scan archive | Markdown plus JSON | human report plus machine-readable focus, catalysts, gainers/losers, market context, counts, and data-quality rejects |
 | Daily report card archive | Markdown | balances, effective daily P&L, trades, transfers, watchlist |
 | Optional raw daily report dump | JSON | redacted account snapshot, transactions, and orders |
 | Live performance report | HTML plus embedded JSON | equity curve, statistics, no-trade days, drawdown series |
@@ -719,7 +718,6 @@ Start: $100,000.00 → End: $100,425.50
 - Current DB schema definitions: `src/butterfly_guy/db/migrations/`,
   `src/butterfly_guy/db/queries.py`
 - Backtest sources/caches: `src/butterfly_guy/backtest/`
-- Equity universes/news: `src/butterfly_guy/equity_scan/`
 - Yahoo analysis paths: `src/butterfly_guy/backtest/schwab_loader.py`,
   `src/butterfly_guy/scripts/run_entry_analysis.py`,
   `src/butterfly_guy/scripts/run_paper_replay.py`,

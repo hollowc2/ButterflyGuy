@@ -66,13 +66,9 @@ but are not consumed by ButterflyGuy code.
 | Source | Used by | Sample |
 |---|---|---|
 | `configs/config*.yaml` | Runtime strategy/execution/risk/collector/database settings | `strategy: {underlying: SPX, wing_widths: [10, 20, 30]}\nexecution: {paper_trading: true}` |
-| `configs/equity_scan.yaml` | Morning equity scan settings and provider enablement | `news: {enabled: true, providers: [sec, alpha_vantage]}\nfilters: {min_price: 10.0}` |
 | `configs/daily_report_card.yaml` | Daily report-card settings | `report_dir: reports/daily_report_cards` |
 | `.env` and environment variables | Credentials, endpoints, feature flags, notification destinations | `SCHWAB_API_KEY=<redacted>\nALLOW_LIVE_TRADING=false` |
 | `tokens.json` | Schwab OAuth client authentication | `<opaque secret OAuth JSON; intentionally not sampled>` |
-| `configs/universes/{sp500,nq100,liquid,custom}.txt` | Equity scan symbol universes | `AAPL\nMSFT\nNVDA` |
-| `configs/universes/sectors.json` | Equity scan sector enrichment | `{"AAPL":"Information Technology","JPM":"Financials"}` |
-| `configs/universes/liquid_meta.json` | Liquid-universe quote/volume provenance | `{"AAPL":{"price":228.15,"avg_volume_20d":51230000.0,"exchange":"NASDAQ"}}` |
 | `data/{spx,ndx,xsp,vix}_1min.csv` | Optional `CsvDataLoader` research input | `ts,open,high,low,close\n2026-07-13 09:30:00,6300.00,6304.25,6298.75,6302.50` |
 | `data/schwab/YYYY-MM-DD.json` | Optional cached Schwab/yfinance backtest day | `{"date":"2026-07-13","vix":17.8,"prev_close":6294.11,"bars":[{"ts":"2026-07-13T13:30:00Z","close":6302.5}]}` |
 | `data/chains/[UNDERLYING/]YYYY-MM-DD.json` | Local option-chain backtest cache | `{"date":"2026-07-13","snapshots":{"2026-07-13T14:30:00Z":{"spot":6312.42,"quotes":[{"strike":6315.0,"type":"CALL","mark":7.25}]}}}` |

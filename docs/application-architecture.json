@@ -104,14 +104,6 @@
       "inspect_entry and parity reports explain historical decisions and live-vs-replay differences",
       "run_entry_analysis and SimulationEngine.simulate_day are legacy research paths, not live-parity evidence"
     ],
-    "equity_morning_scan": [
-      "Weekly refresh seeds NASDAQ/NYSE symbols and validates price and 20-day average volume through Schwab",
-      "Morning scan loads configured universes and batches Schwab equity quotes",
-      "Volume module adds RVOL and prior-session changes",
-      "News module adds SEC and optional Alpha Vantage catalysts",
-      "Scanner filters/ranks movers, opening focus, catalysts, and market context",
-      "Report module archives text/JSON and Discord sends the report"
-    ],
     "reporting": [
       "Daily report card combines Schwab balances, transactions, orders, positions, and candle charts",
       "Live performance reads trade/decision data and renders HTML plus performance charts",
@@ -130,9 +122,8 @@
     {"id": "services", "path": "src/butterfly_guy/services", "responsibility": "Use-case orchestration, notifications, charts, calendars, report delivery, and weekend review", "key_symbols": ["TradeService", "PositionService", "DiscordNotifier", "TelegramNotifier", "AlertmanagerNotifier"], "depends_on": ["all domain modules", "external notification endpoints"]},
     {"id": "backtest", "path": "src/butterfly_guy/backtest", "responsibility": "Historical/synthetic loading, caching, simulation models, and performance metrics", "key_symbols": ["SimulationEngine", "SimulationParams", "DbDataLoader", "CsvDataLoader", "SchwabDataLoader"], "depends_on": ["strategy", "data", "quant_engine", "DB/CSV/cache"]},
     {"id": "quant_engine", "path": "src/butterfly_guy/quant_engine", "responsibility": "Black-Scholes pricing, IV skew model, and synthetic option chains", "key_symbols": ["SyntheticChainGenerator"], "depends_on": ["SciPy"]},
-    {"id": "equity_scan", "path": "src/butterfly_guy/equity_scan", "responsibility": "Universe maintenance, quote parsing, filters/ranking, volume enrichment, catalysts, and reports", "key_symbols": ["EquityScanSettings", "ScanResults", "fetch_news_impacts", "rank_scan_results"], "depends_on": ["Schwab", "SEC", "Alpha Vantage", "NASDAQ/NYSE lists"]},
     {"id": "reports", "path": "src/butterfly_guy/reports", "responsibility": "Daily account report, live performance HTML, drawdowns, and PNG charts", "key_symbols": ["DailyReportCard", "TradePoint", "ReportStats", "build_equity_trade_chart_png"], "depends_on": ["services", "DB rows", "Schwab payloads", "matplotlib"]},
-    {"id": "scripts", "path": "src/butterfly_guy/scripts", "responsibility": "Operational and research CLI entrypoints", "key_symbols": ["run_live", "run_backtest_db", "run_morning_scan"], "depends_on": ["application modules"]}
+    {"id": "scripts", "path": "src/butterfly_guy/scripts", "responsibility": "Operational and research CLI entrypoints", "key_symbols": ["run_live", "run_backtest_db"], "depends_on": ["application modules"]}
   ],
   "database": {
     "tables": [
@@ -159,7 +150,6 @@
     "container_security": ["read-only root filesystem", "tmpfs /tmp", "no-new-privileges", "all Linux capabilities dropped", "tokens/config/chains mounted explicitly"],
     "monitoring": {"prometheus_config": "infra/prometheus.yml", "grafana_dashboards": "infra/grafana/dashboards/", "datasource_provisioning": "infra/grafana/provisioning/"},
     "scheduled_jobs": [
-      {"file": "infra/cron/equity_morning_scan.cron", "purpose": "morning scan workflow"},
       {"file": "infra/cron/daily_report_card.cron", "purpose": "daily account/trade report"},
       {"file": "infra/cron/live_performance.cron", "purpose": "live performance report generation"}
     ]
@@ -168,8 +158,6 @@
     {"path": "src/butterfly_guy/scripts/run_live.py", "category": "runtime", "purpose": "Full collector + entry + position orchestration", "risk": "high; may place orders when live guards are enabled"},
     {"path": "src/butterfly_guy/scripts/run_backtest_db.py", "category": "research", "purpose": "Preferred config-backed historical replay and sweeps", "risk": "read-heavy DB research"},
     {"path": "src/butterfly_guy/scripts/inspect_entry.py", "category": "research", "purpose": "Explain a historical entry selection", "risk": "read-only analysis"},
-    {"path": "src/butterfly_guy/scripts/run_morning_scan.py", "category": "operations", "purpose": "Equity quote/news scan and Discord report", "risk": "external reads and optional notification"},
-    {"path": "src/butterfly_guy/scripts/refresh_equity_universes.py", "category": "operations", "purpose": "Rebuild validated liquid universes", "risk": "network reads and config-universe writes"},
     {"path": "src/butterfly_guy/scripts/generate_live_performance.py", "category": "report", "purpose": "Render performance HTML from DB", "risk": "DB reads and report writes"},
     {"path": "src/butterfly_guy/scripts/report_selection_parity.py", "category": "audit", "purpose": "Compare live selection to replay selection", "risk": "DB reads"},
     {"path": "src/butterfly_guy/scripts/report_exit_mark_parity.py", "category": "audit", "purpose": "Reconstruct exit marks from recorded legs", "risk": "DB reads"},
@@ -182,7 +170,7 @@
       {"asset": "XSP", "path": "configs/config_xsp.yaml", "role": "experimental/canary tuning path"}
     ],
     "sections": ["schwab", "strategy", "entry", "execution", "profit_management", "risk", "collector", "database via environment", "monitoring"],
-    "other_configs": ["configs/equity_scan.yaml", "configs/daily_report_card.yaml", "configs/universes/*"],
+    "other_configs": ["configs/daily_report_card.yaml"],
     "secrets": [".env", "tokens.json"],
     "secret_rule": "Never print, summarize, commit, or rewrite secret values."
   },
@@ -206,7 +194,6 @@
       "risk": ["risk/risk_engine.py", "db/queries.py", "core/config.py", "tests/test_risk_engine.py"],
       "runtime/recovery": ["scripts/run_live.py", "execution/order_manager.py", "services/position_service.py", "tests/test_run_live.py"],
       "backtest parity": ["scripts/run_backtest_db.py", "strategy/entry_selection.py", "strategy/entry_selection_parity.py", "tests/test_simulation_parity.py"],
-      "equity scan": ["equity_scan/", "scripts/run_morning_scan.py", "configs/equity_scan.yaml", "tests/test_equity_scan.py"],
       "observability": ["core/metrics.py", "infra/prometheus.yml", "infra/grafana/", "tests/test_metrics_readiness.py"]
     },
     "verification": {
