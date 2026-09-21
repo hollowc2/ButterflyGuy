@@ -68,8 +68,11 @@ graphify-out/.graphify_labels.json.sig
 graphify-out/cache/
 graphify-out/20??-??-??/
 
-# Local research output (intentionally untracked)
-/reports/
+# Local research output (intentionally untracked), except the prospective cohort
+# ledgers: they are the append-only evidence for a promote/reject decision and
+# must survive disk loss, so they are versioned.
+/reports/*
+!/reports/prospective_execution/
 
 # Credential-proof and runtime-baseline evidence (mode 0600, retained on the host).
 # These are deliberately kept on Helios and must never be committed; a stray `git add -A`
