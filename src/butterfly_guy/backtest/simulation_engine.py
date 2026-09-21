@@ -12,6 +12,7 @@ from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.core.config import ProfitProtectorSettings, StrategySettings, TimeRegime
 from butterfly_guy.core.time_utils import get_time_regime
 from butterfly_guy.data.schemas import ButterflyCandidate, fly_mark_value
+from butterfly_guy.position.position_manager import fly_settlement_value
 from butterfly_guy.position.profit_policy import (
     ProfitManagementStrategy,
     effective_drawdown_threshold,
@@ -76,6 +77,7 @@ class SimulationParams:
     min_hold_minutes: float = 0.0
     profit_management_strategy: ProfitManagementStrategy = "peakvaluetrailer"
     profitprotector: ProfitProtectorSettings = field(default_factory=ProfitProtectorSettings)
+    legacy_end_of_day_mark: bool = False
 
     def paper_entry_commission(self) -> float:
         """Paper trading commission: 4 legs × quantity × rate."""
@@ -124,6 +126,7 @@ class DayResult:
     peak_value: float = 0.0
     center_strike: float = 0.0
     wing_width: int = 0
+    settlement_spot: float | None = None
 
 
 class SimulationEngine:
@@ -189,6 +192,38 @@ class SimulationEngine:
         if drawdown >= threshold:
             return f"drawdown_{drawdown_label}"
         return None
+
+    @staticmethod
+    def _finalize_held_to_close(
+        *,
+        result: DayResult,
+        day: DayData,
+        params: SimulationParams,
+        candidate: ButterflyCandidate,
+        exit_time: dt.datetime,
+        final_mark: float,
+        peak_value: float,
+    ) -> DayResult:
+        """Cash-settle from official evidence or run the named legacy diagnostic."""
+        if params.legacy_end_of_day_mark:
+            result.exit_price = params.paper_exit_price(final_mark)
+            result.exit_reason = "legacy_end_of_day_mark"
+        elif day.settlement_spot is not None:
+            result.exit_price = fly_settlement_value(candidate, day.settlement_spot)
+            result.exit_reason = "cash_settled"
+            result.settlement_spot = day.settlement_spot
+            peak_value = max(peak_value, result.exit_price)
+        else:
+            result.traded = False
+            result.exit_reason = "missing_settlement"
+            result.peak_value = peak_value
+            result.pnl = 0.0
+            return result
+
+        result.exit_time = exit_time
+        result.peak_value = peak_value
+        result.pnl = result.exit_price - result.entry_price
+        return result
 
     def simulate_day(self, day: DayData, params: SimulationParams) -> DayResult:
         """Simulate one trading day."""
@@ -438,12 +473,15 @@ class SimulationEngine:
                     current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
                 else:
                     current_value = last_value
-                result.exit_time = last_bar.ts
-                result.exit_price = params.paper_exit_price(current_value)
-                result.exit_reason = "end_of_day"
-                result.peak_value = peak_value
-                result.pnl = result.exit_price - result.entry_price
-                return result
+                return self._finalize_held_to_close(
+                    result=result,
+                    day=day,
+                    params=params,
+                    candidate=entry_candidate,
+                    exit_time=last_bar.ts,
+                    final_mark=current_value,
+                    peak_value=peak_value,
+                )
 
         # Do not turn a partial session into a hypothetical expiry or early close.
         result.traded = False
@@ -615,12 +653,15 @@ class SimulationEngine:
                     current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
                 else:
                     current_value = last_value
-                result.exit_time = last_bar.ts
-                result.exit_price = params.paper_exit_price(current_value)
-                result.exit_reason = "end_of_day"
-                result.peak_value = peak_value
-                result.pnl = result.exit_price - result.entry_price
-                return result
+                return self._finalize_held_to_close(
+                    result=result,
+                    day=day,
+                    params=params,
+                    candidate=entry_candidate,
+                    exit_time=last_bar.ts,
+                    final_mark=current_value,
+                    peak_value=peak_value,
+                )
 
         result.traded = False
         result.exit_reason = "incomplete_data"

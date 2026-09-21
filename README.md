@@ -261,7 +261,12 @@ Research safeguards in the replay paths:
 - VIX inputs are limited to values known before or at the simulated decision time.
 - Asset-partitioned chain caches preserve SPX/NDX/XSP identity.
 - Partial sessions ending before 15:00 ET are excluded rather than assigned a fabricated exit.
-- Exit slippage and commissions are applied to end-of-data closes.
+- Held-to-close positions use the same intrinsic-value function as the paper runtime and the
+  same-session official index close from `daily_bars`; cash settlement has no exit fill,
+  slippage, or closing commission.
+- A held position with no same-session settlement close is excluded as missing data. The final
+  option mark is never substituted by default; `--legacy-end-of-day-mark` enables that former
+  behavior only as a named diagnostic comparison.
 - Sweep CSVs include the Git SHA, exact command, config path, data coverage, exposure,
   expectancy, average win/loss, and estimated cost drag.
 

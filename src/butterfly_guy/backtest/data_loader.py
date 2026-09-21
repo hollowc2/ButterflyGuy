@@ -25,3 +25,4 @@ class DayData:
     vix_bars: list[MinuteBar] = field(default_factory=list)
     recent_closes: list[float] = field(default_factory=list)
     underlying: str = "SPX"
+    settlement_spot: float | None = None

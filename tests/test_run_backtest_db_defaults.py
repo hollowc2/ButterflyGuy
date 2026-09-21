@@ -46,6 +46,17 @@ def test_spx_backtest_drawdown_defaults_match_live_config(monkeypatch):
     assert args.min_hold_minutes == [0]
     assert args.drawdown_confirmation_polls == [1]
     assert args.min_peak_profit_ratio == [1.0]
+    assert args.legacy_end_of_day_mark is False
+
+
+def test_legacy_end_of_day_mark_requires_explicit_diagnostic_flag(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_backtest_db.py", "--asset", "SPX", "--legacy-end-of-day-mark"],
+    )
+
+    assert parse_args().legacy_end_of_day_mark is True
 
 
 def test_backtest_tracks_explicit_selection_overrides(monkeypatch):

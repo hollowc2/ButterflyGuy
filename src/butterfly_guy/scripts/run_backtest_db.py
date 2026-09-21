@@ -369,6 +369,14 @@ def parse_args() -> argparse.Namespace:
                        "Optional per-spread execution stress applied to entry and exit. "
                        "Default: 0 for mark_v1 paper accounting."
                    ))
+    p.add_argument(
+        "--legacy-end-of-day-mark",
+        action="store_true",
+        help=(
+            "Diagnostic only: value held-to-close positions from the final option mark "
+            "instead of official cash-settlement intrinsic value."
+        ),
+    )
     p.add_argument("--vix-max", type=float, default=None,
                    help="Skip days where VIX at entry exceeds this threshold.")
     p.add_argument("--use-abs-stop", action=argparse.BooleanOptionalAction, default=None,
@@ -741,6 +749,7 @@ def day_with_monitoring_bars(day: DayData, monitoring: ChainDay) -> DayData:
         recent_closes=day.recent_closes,
         vix_bars=day.vix_bars,
         underlying=day.underlying,
+        settlement_spot=day.settlement_spot,
     )
 
 
@@ -852,6 +861,24 @@ async def get_vix_prev_close(conn: asyncpg.Connection, date: dt.date) -> float |
         date,
     )
     return float(val) if val is not None else None
+
+
+async def get_official_settlement_spot(
+    conn: asyncpg.Connection,
+    date: dt.date,
+    underlying: str,
+) -> float | None:
+    """Return the same-session official close used for cash settlement."""
+    value = await conn.fetchval(
+        """
+        SELECT close
+        FROM daily_bars
+        WHERE underlying = $1 AND date = $2
+        """,
+        underlying,
+        date,
+    )
+    return float(value) if value is not None else None
 
 
 async def get_vix_at(conn: asyncpg.Connection, at_time: dt.datetime) -> float | None:
@@ -1098,6 +1125,7 @@ async def load_date_data(
     if vix is None or vix_prev_close is None:
         return None
     recent_closes = await get_recent_closes(conn, date, underlying)
+    settlement_spot = await get_official_settlement_spot(conn, date, underlying)
     return dict(
         date=date,
         chains=chains,
@@ -1116,6 +1144,7 @@ async def load_date_data(
             prev_close=prev_close,
             recent_closes=recent_closes,
             underlying=underlying,
+            settlement_spot=settlement_spot,
         ),
     )
 
@@ -1141,6 +1170,9 @@ def _summarize_combo(
     incomplete_days = sum(
         r is not None and r.exit_reason == "incomplete_data" for _, r in day_results
     )
+    missing_settlement_days = sum(
+        r is not None and r.exit_reason == "missing_settlement" for _, r in day_results
+    )
     losses = [p for p in pnls if p < 0]
     held_minutes = sum(
         max(0.0, (r.exit_time - r.entry_time).total_seconds() / 60)
@@ -1148,9 +1180,9 @@ def _summarize_combo(
         if r.entry_time is not None and r.exit_time is not None
     )
     loaded_days = len(day_results)
-    evaluated_days = loaded_days - incomplete_days
+    evaluated_days = loaded_days - incomplete_days - missing_settlement_days
     exposure = held_minutes / (evaluated_days * 390) if evaluated_days else 0.0
-    exited_trades = sum(reason != "expired" for reason in exit_reasons)
+    exited_trades = sum(reason not in {"expired", "cash_settled"} for reason in exit_reasons)
     commission_points = (
         (len(traded) + exited_trades)
         * 4
@@ -1165,6 +1197,7 @@ def _summarize_combo(
         "evaluated_days": evaluated_days,
         "trade_count": len(traded),
         "incomplete_days": incomplete_days,
+        "missing_settlement_days": missing_settlement_days,
         "trade_day_rate": round(len(traded) / evaluated_days, 4) if evaluated_days else 0.0,
         "exposure": round(exposure, 4),
         "estimated_commission": round(commission_points, 4),
@@ -1180,6 +1213,7 @@ def _summarize_combo(
             "max_consec_losses": 0,
             "exit_morning_dd": 0, "exit_late_morning_dd": 0,
             "exit_afternoon_dd": 0, "exit_eod": 0, "exit_expired": 0,
+            "exit_cash_settled": 0, "exit_legacy_eod_mark": 0,
             "exit_drawdown": 0, "exit_abs_stop": 0,
             "exit_profit_floor": 0, "exit_breakeven_floor": 0,
         }
@@ -1203,6 +1237,8 @@ def _summarize_combo(
         "exit_drawdown": sum(1 for reason in exit_reasons if reason.startswith("drawdown_")),
         "exit_eod": exit_reasons.count("end_of_day"),
         "exit_expired": exit_reasons.count("expired"),
+        "exit_cash_settled": exit_reasons.count("cash_settled"),
+        "exit_legacy_eod_mark": exit_reasons.count("legacy_end_of_day_mark"),
         "exit_abs_stop": exit_reasons.count("absolute_loss_stop"),
         "exit_profit_floor": exit_reasons.count("profitprotector_profit_floor"),
         "exit_breakeven_floor": exit_reasons.count("profitprotector_breakeven_floor"),
@@ -2008,6 +2044,7 @@ async def run_live_pinned_replay(args: argparse.Namespace) -> None:
                 drawdown_schedule=dd_schedule,
                 profit_management_strategy=profit_strategy,
                 profitprotector=live_config.profit_management.profitprotector,
+                legacy_end_of_day_mark=args.legacy_end_of_day_mark,
                 **_sim_parity_fields_from_args(live_config, args),
             )
             restore = _patch_chain_cache(monitoring, date)
@@ -2205,6 +2242,14 @@ async def run_single(args: argparse.Namespace) -> None:
     print(f"  Profit strategy: {profit_strategy}")
     print(f"  Method: {method}  abs_stop: {'ON' if args.use_abs_stop else 'OFF'}  "
           f"slippage: {args.slippage}  vix_max: {args.vix_max or 'none'}")
+    print(
+        "  Held-to-close valuation: "
+        + (
+            "LEGACY FINAL OPTION MARK (diagnostic)"
+            if args.legacy_end_of_day_mark
+            else "official close cash-settlement intrinsic"
+        )
+    )
     print(f"{'='*72}\n")
 
     conn = await asyncpg.connect(resolve_db_dsn())
@@ -2272,6 +2317,7 @@ async def run_single(args: argparse.Namespace) -> None:
                 drawdown_schedule=dd_schedule,
                 profit_management_strategy=profit_strategy,
                 profitprotector=live_config.profit_management.profitprotector,
+                legacy_end_of_day_mark=args.legacy_end_of_day_mark,
                 **_sim_parity_fields_from_args(live_config, args),
             )
 
@@ -2341,7 +2387,10 @@ async def run_single(args: argparse.Namespace) -> None:
         d = row["data"]
         r = row["result"]
         if not r.traded:
-            status = "INCOMPLETE DATA" if r.exit_reason == "incomplete_data" else "NO TRADE"
+            status = {
+                "incomplete_data": "INCOMPLETE DATA",
+                "missing_settlement": "MISSING SETTLEMENT",
+            }.get(r.exit_reason, "NO TRADE")
             print(
                 f"  {d['date']!s:>10}  {d['vix']:>5.1f}  {d['entry_spot']:>7.0f}  "
                 f"  {status}"
@@ -2369,10 +2418,17 @@ async def run_single(args: argparse.Namespace) -> None:
         if row["result"].entry_time is not None and row["result"].exit_time is not None
     )
     incomplete_days = sum(row["result"].exit_reason == "incomplete_data" for row in day_rows)
-    evaluated_days = len(dates) - incomplete_days
+    missing_settlement_dates = [
+        row["data"]["date"]
+        for row in day_rows
+        if row["result"].exit_reason == "missing_settlement"
+    ]
+    evaluated_days = len(dates) - incomplete_days - len(missing_settlement_dates)
     exposure = held_minutes / (evaluated_days * 390) if evaluated_days else 0.0
     exited_trades = sum(
-        row["result"].traded and row["result"].exit_reason != "expired" for row in day_rows
+        row["result"].traded
+        and row["result"].exit_reason not in {"expired", "cash_settled"}
+        for row in day_rows
     )
     commission_dollars = (
         (n_traded + exited_trades)
@@ -2393,6 +2449,15 @@ async def run_single(args: argparse.Namespace) -> None:
     print(f"  Worst day   : ${min(pnls_ct):+.2f} / contract")
     print(f"  Sharpe      : {_sharpe([p/100 for p in pnls_ct]):.3f}")
     print(f"  Profit factor: {_profit_factor(pnls_ct):.3f}")
+    print(f"  Max drawdown : ${_max_drawdown(pnls_ct):.2f}")
+    aggregate_mfe = sum(
+        max(0.0, row["result"].peak_value - row["result"].entry_price) * 100
+        for row in day_rows
+        if row["result"].traded
+    )
+    positive_realized = sum(max(0.0, pnl) for pnl in pnls_ct)
+    mfe_capture = positive_realized / aggregate_mfe if aggregate_mfe else 0.0
+    print(f"  MFE capture  : {mfe_capture * 100:.1f}%")
     print(f"  Exposure    : {exposure * 100:.1f}% of available session time")
     print(
         f"  Cost drag   : ${commission_dollars:.2f} commissions + "
@@ -2403,6 +2468,21 @@ async def run_single(args: argparse.Namespace) -> None:
     print(f"  Top-3 win share: {top3_share * 100:.1f}%")
     print("  Exit reasons: "
           + "  ".join(f"{k}={v}" for k, v in sorted(exit_counts.items())))
+    held_to_close = [
+        row["result"].pnl * 100
+        for row in day_rows
+        if row["result"].traded
+        and row["result"].exit_reason in {"cash_settled", "legacy_end_of_day_mark"}
+    ]
+    print(
+        f"  Held-to-close contribution: {len(held_to_close)} trades, "
+        f"${sum(held_to_close):+.2f}"
+    )
+    if missing_settlement_dates:
+        print(
+            "  Missing-settlement exclusions: "
+            + ", ".join(date.isoformat() for date in missing_settlement_dates)
+        )
     print(f"{'='*90}")
 
     _print_pnl_histogram(pnls_ct)
@@ -2578,6 +2658,7 @@ async def run_sweep(args: argparse.Namespace) -> None:
                         drawdown_schedule=dd_schedule,
                         profit_management_strategy=profit_strategy,
                         profitprotector=live_config.profit_management.profitprotector,
+                        legacy_end_of_day_mark=args.legacy_end_of_day_mark,
                         **{
                             **_sim_parity_fields(live_config),
                             "drawdown_confirmation_polls": drawdown_confirmation_polls,
@@ -2738,14 +2819,16 @@ async def run_sweep(args: argparse.Namespace) -> None:
         "morning_dd", "late_morning_dd", "afternoon_dd",
         "dd_schedule", "min_hold_minutes", "drawdown_confirmation_polls",
         "min_peak_profit_ratio", "slippage", "commission_per_contract",
-        "loaded_days", "evaluated_days", "incomplete_days", "trade_count", "trade_day_rate",
+        "loaded_days", "evaluated_days", "incomplete_days", "missing_settlement_days",
+        "trade_count", "trade_day_rate",
         "exposure",
         "win_rate", "total_pnl", "avg_pnl", "expectancy", "avg_win", "avg_loss",
         "estimated_commission", "estimated_slippage",
         "median_pnl", "top3_win_share",
         "sharpe", "max_drawdown", "profit_factor", "max_consec_losses",
         "exit_morning_dd", "exit_late_morning_dd", "exit_afternoon_dd",
-        "exit_drawdown", "exit_eod", "exit_expired", "exit_abs_stop",
+        "exit_drawdown", "exit_eod", "exit_expired", "exit_cash_settled",
+        "exit_legacy_eod_mark", "exit_abs_stop",
         "exit_profit_floor", "exit_breakeven_floor",
     ]
     with open(csv_path, "w", newline="") as f:

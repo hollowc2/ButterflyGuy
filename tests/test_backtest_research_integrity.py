@@ -131,6 +131,7 @@ def test_end_of_data_exit_applies_exit_slippage_and_commission(monkeypatch):
         hold_to_expiry=True,
         slippage=0.10,
         paper_commission_per_contract=0.65,
+        legacy_end_of_day_mark=True,
     )
 
     result = SimulationEngine().simulate_day_from_entry(
@@ -141,9 +142,83 @@ def test_end_of_data_exit_applies_exit_slippage_and_commission(monkeypatch):
         entry_time=entry_time,
     )
 
-    assert result.exit_reason == "end_of_day"
+    assert result.exit_reason == "legacy_end_of_day_mark"
     assert result.exit_price == pytest.approx(1.874)
     assert result.pnl == pytest.approx(0.874)
+
+
+def test_held_to_close_butterfly_uses_settlement_intrinsic_value(monkeypatch):
+    date = dt.date(2026, 7, 2)
+    entry_time = dt.datetime(2026, 7, 2, 10, 0, tzinfo=simulation_engine.EASTERN)
+    exit_time = dt.datetime(2026, 7, 2, 15, 59, tzinfo=simulation_engine.EASTERN)
+    candidate = ButterflyCandidate(
+        direction="CALL",
+        wing_width=10,
+        center_strike=100.0,
+        lower_strike=90.0,
+        upper_strike=110.0,
+        cost=1.0,
+        ask=1.0,
+        max_profit=9.0,
+        reward_risk=9.0,
+        lower_be=91.0,
+        upper_be=109.0,
+        distance_from_spot=0.0,
+        spot_price=100.0,
+    )
+    quotes = [
+        OptionQuote(
+            symbol=f"C{strike}",
+            underlying="SPX",
+            expiration=date,
+            strike=strike,
+            option_type="CALL",
+            bid=mark,
+            ask=mark,
+            mark=mark,
+        )
+        for strike, mark in ((90.0, 3.0), (100.0, 2.0), (110.0, 3.0))
+    ]
+    monkeypatch.setattr(
+        simulation_engine,
+        "load_chain_day",
+        lambda _date, cache_dir=None, underlying=None: {exit_time: quotes},
+    )
+    day = DayData(
+        date=date,
+        bars=[
+            MinuteBar(entry_time, 100.0, 100.0, 100.0, 100.0, 0),
+            MinuteBar(exit_time, 107.0, 107.0, 107.0, 107.0, 0),
+        ],
+        vix=18.0,
+        prev_close=99.0,
+    )
+    day.settlement_spot = 107.0
+
+    result = SimulationEngine().simulate_day_from_entry(
+        day,
+        SimulationParams(hold_to_expiry=True),
+        entry_candidate=candidate,
+        entry_price=1.0,
+        entry_time=entry_time,
+    )
+
+    assert result.exit_reason == "cash_settled"
+    assert result.exit_price == pytest.approx(3.0)
+    assert result.pnl == pytest.approx(2.0)
+
+    day.settlement_spot = None
+    missing = SimulationEngine().simulate_day_from_entry(
+        day,
+        SimulationParams(hold_to_expiry=True),
+        entry_candidate=candidate,
+        entry_price=1.0,
+        entry_time=entry_time,
+    )
+
+    assert missing.traded is False
+    assert missing.exit_reason == "missing_settlement"
+    assert missing.pnl == 0.0
 
 
 def test_partial_session_is_excluded_instead_of_fabricating_an_exit(monkeypatch):
