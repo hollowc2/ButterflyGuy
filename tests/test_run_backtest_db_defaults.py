@@ -7,6 +7,7 @@ import pytest
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.scripts.run_backtest_db import (
     _find_entry_bar_at,
+    _option_quote_from_row,
     _sim_parity_fields,
     candidate_from_trade_row,
     load_asset_config,
@@ -57,6 +58,46 @@ def test_legacy_end_of_day_mark_requires_explicit_diagnostic_flag(monkeypatch):
     )
 
     assert parse_args().legacy_end_of_day_mark is True
+
+
+def test_execution_accounting_report_is_explicit_and_uses_frozen_baseline(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_backtest_db.py", "--asset", "SPX", "--execution-accounting-report"],
+    )
+
+    args = parse_args()
+
+    assert args.execution_accounting_report is True
+    assert args.slippage == 0.0
+    assert args.legacy_end_of_day_mark is False
+
+
+def test_db_quote_loader_does_not_impute_missing_market_fields():
+    row = {
+        "symbol": "SPXW_TEST",
+        "option_type": "CALL",
+        "strike": 6000,
+        "bid": None,
+        "ask": 1.0,
+        "mark": 0.9,
+        "last": None,
+        "volume": None,
+        "open_interest": None,
+        "iv": None,
+        "delta": None,
+        "gamma": None,
+        "theta": None,
+        "vega": None,
+    }
+
+    assert _option_quote_from_row(row, "SPX", dt.date(2026, 7, 2)) is None
+
+    row["bid"] = 0.0
+    quote = _option_quote_from_row(row, "SPX", dt.date(2026, 7, 2))
+    assert quote is not None
+    assert quote.bid == 0.0
 
 
 def test_backtest_tracks_explicit_selection_overrides(monkeypatch):

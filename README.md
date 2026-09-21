@@ -243,6 +243,11 @@ uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-15 2025-01-15
 # Date range
 uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 --asset SPX
 
+# Freeze strategy decisions, then compare corrected midpoint, executable bid/ask,
+# and executable bid/ask plus $0.05 adverse slippage per option contract leg
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 \
+  --asset SPX --execution-accounting-report
+
 # Sweep parameter space
 uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
 ```
@@ -267,6 +272,11 @@ Research safeguards in the replay paths:
 - A held position with no same-session settlement close is excluded as missing data. The final
   option mark is never substituted by default; `--legacy-end-of-day-mark` enables that former
   behavior only as a named diagnostic comparison.
+- `--execution-accounting-report` leaves strategy decisions on the corrected midpoint model,
+  then prices entry at outer-leg asks and twice the center bid, intraday exit at outer-leg bids
+  and twice the center ask, and charges $0.65 per contract per executed side. Its stress case
+  moves every contract fill $0.05 adversely. Missing or crossed fill markets are reported and
+  excluded at the frozen decision timestamp without lookahead, carry-forward, or midpoint fill.
 - Sweep CSVs include the Git SHA, exact command, config path, data coverage, exposure,
   expectancy, average win/loss, and estimated cost drag.
 

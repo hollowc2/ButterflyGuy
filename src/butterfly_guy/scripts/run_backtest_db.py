@@ -41,6 +41,10 @@ import asyncpg
 
 from butterfly_guy.backtest.chain_cache import ChainDay
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
+from butterfly_guy.backtest.execution_accounting import (
+    ExecutableTrade,
+    price_frozen_trade,
+)
 from butterfly_guy.backtest.metrics import (
     max_consecutive_losses as _max_consecutive_losses,
 )
@@ -377,6 +381,15 @@ def parse_args() -> argparse.Namespace:
             "instead of official cash-settlement intrinsic value."
         ),
     )
+    p.add_argument(
+        "--execution-accounting-report",
+        action="store_true",
+        help=(
+            "Single-config research report: preserve corrected-midpoint decisions and "
+            "compare corrected midpoint with marketable bid/ask accounting and the same "
+            "accounting stressed by $0.05 adverse slippage per contract leg."
+        ),
+    )
     p.add_argument("--vix-max", type=float, default=None,
                    help="Skip days where VIX at entry exceeds this threshold.")
     p.add_argument("--use-abs-stop", action=argparse.BooleanOptionalAction, default=None,
@@ -502,6 +515,12 @@ def parse_args() -> argparse.Namespace:
         p.error("--top must be at least 1")
     if args.slippage < 0:
         p.error("--slippage cannot be negative")
+    if args.execution_accounting_report and args.sweep:
+        p.error("--execution-accounting-report is available only in single-config mode")
+    if args.execution_accounting_report and args.slippage != 0:
+        p.error("--execution-accounting-report requires the corrected midpoint baseline")
+    if args.execution_accounting_report and args.legacy_end_of_day_mark:
+        p.error("--execution-accounting-report requires corrected cash settlement")
     if any(value <= 0 for value in args.wing):
         p.error("--wing values must be positive")
     if any(value <= 0 for value in args.rr_min):
@@ -551,6 +570,30 @@ async def discover_dates(
     return [r["trade_date"] for r in rows]
 
 
+def _option_quote_from_row(row, underlying: str, date: dt.date) -> OptionQuote | None:
+    """Build a quote only when its recorded market fields are complete."""
+    if any(row[field] is None for field in ("bid", "ask", "mark")):
+        return None
+    return OptionQuote(
+        symbol=row["symbol"] or f"DB_{row['option_type'][0]}{int(row['strike'])}",
+        underlying=underlying,
+        expiration=date,
+        strike=float(row["strike"]),
+        option_type=row["option_type"],
+        bid=float(row["bid"]),
+        ask=float(row["ask"]),
+        mark=float(row["mark"]),
+        last=float(row["last"] or 0),
+        volume=int(row["volume"] or 0),
+        open_interest=int(row["open_interest"] or 0),
+        iv=float(row["iv"] or 0),
+        delta=float(row["delta"] or 0),
+        gamma=float(row["gamma"] or 0),
+        theta=float(row["theta"] or 0),
+        vega=float(row["vega"] or 0),
+    )
+
+
 async def load_chains_from_db(
     conn: asyncpg.Connection,
     date: dt.date,
@@ -573,26 +616,9 @@ async def load_chains_from_db(
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
-        chains[ts].append(
-            OptionQuote(
-                symbol=r["symbol"] or f"DB_{r['option_type'][0]}{int(r['strike'])}",
-                underlying=underlying,
-                expiration=date,
-                strike=float(r["strike"]),
-                option_type=r["option_type"],
-                bid=float(r["bid"] or 0),
-                ask=float(r["ask"] or 0),
-                mark=float(r["mark"] or 0),
-                last=float(r["last"] or 0),
-                volume=int(r["volume"] or 0),
-                open_interest=int(r["open_interest"] or 0),
-                iv=float(r["iv"] or 0),
-                delta=float(r["delta"] or 0),
-                gamma=float(r["gamma"] or 0),
-                theta=float(r["theta"] or 0),
-                vega=float(r["vega"] or 0),
-            )
-        )
+        quote = _option_quote_from_row(r, underlying, date)
+        if quote is not None:
+            chains[ts].append(quote)
     return ChainDay(chains)
 
 
@@ -626,26 +652,9 @@ async def load_entry_chains(
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
-        chains[ts].append(
-            OptionQuote(
-                symbol=r["symbol"] or f"DB_{r['option_type'][0]}{int(r['strike'])}",
-                underlying=underlying,
-                expiration=date,
-                strike=float(r["strike"]),
-                option_type=r["option_type"],
-                bid=float(r["bid"] or 0),
-                ask=float(r["ask"] or 0),
-                mark=float(r["mark"] or 0),
-                last=float(r["last"] or 0),
-                volume=int(r["volume"] or 0),
-                open_interest=int(r["open_interest"] or 0),
-                iv=float(r["iv"] or 0),
-                delta=float(r["delta"] or 0),
-                gamma=float(r["gamma"] or 0),
-                theta=float(r["theta"] or 0),
-                vega=float(r["vega"] or 0),
-            )
-        )
+        quote = _option_quote_from_row(r, underlying, date)
+        if quote is not None:
+            chains[ts].append(quote)
     return ChainDay(chains)
 
 
@@ -698,26 +707,9 @@ async def load_monitoring_chains(
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
-        chains[ts].append(
-            OptionQuote(
-                symbol=r["symbol"] or f"DB_{r['option_type'][0]}{int(r['strike'])}",
-                underlying=underlying,
-                expiration=date,
-                strike=float(r["strike"]),
-                option_type=r["option_type"],
-                bid=float(r["bid"] or 0),
-                ask=float(r["ask"] or 0),
-                mark=float(r["mark"] or 0),
-                last=float(r["last"] or 0),
-                volume=int(r["volume"] or 0),
-                open_interest=int(r["open_interest"] or 0),
-                iv=float(r["iv"] or 0),
-                delta=float(r["delta"] or 0),
-                gamma=float(r["gamma"] or 0),
-                theta=float(r["theta"] or 0),
-                vega=float(r["vega"] or 0),
-            )
-        )
+        quote = _option_quote_from_row(r, underlying, date)
+        if quote is not None:
+            chains[ts].append(quote)
     return ChainDay(chains)
 
 
@@ -1243,6 +1235,139 @@ def _summarize_combo(
         "exit_profit_floor": exit_reasons.count("profitprotector_profit_floor"),
         "exit_breakeven_floor": exit_reasons.count("profitprotector_breakeven_floor"),
     }
+
+
+def _accounting_metrics(pnls: list[float], mfes: list[float]) -> dict[str, float | int]:
+    """Return dollar metrics shared by the frozen accounting comparison."""
+    if not pnls:
+        return {
+            "trade_count": 0,
+            "net_pnl": 0.0,
+            "expectancy": 0.0,
+            "profit_factor": 0.0,
+            "win_rate": 0.0,
+            "median_trade": 0.0,
+            "max_drawdown": 0.0,
+            "mfe_capture": 0.0,
+            "top3_concentration": 0.0,
+        }
+    wins = [pnl for pnl in pnls if pnl > 0]
+    gross_wins = sum(wins)
+    aggregate_mfe = sum(max(0.0, mfe) for mfe in mfes)
+    return {
+        "trade_count": len(pnls),
+        "net_pnl": sum(pnls),
+        "expectancy": statistics.mean(pnls),
+        "profit_factor": _profit_factor(pnls),
+        "win_rate": len(wins) / len(pnls),
+        "median_trade": statistics.median(pnls),
+        "max_drawdown": _max_drawdown(pnls),
+        "mfe_capture": gross_wins / aggregate_mfe if aggregate_mfe else 0.0,
+        "top3_concentration": (
+            sum(sorted(wins, reverse=True)[:3]) / gross_wins if gross_wins else 0.0
+        ),
+    }
+
+
+def _accounting_comparison_rows(day_rows: list[dict]) -> list[dict]:
+    """Summarize one frozen decision set under all requested accounting models."""
+    baseline_results = [row["result"] for row in day_rows if row["result"].traded]
+    baseline_pnls = [result.pnl * 100 for result in baseline_results]
+    baseline_mfes = [
+        max(0.0, result.peak_value - result.entry_price) * 100
+        for result in baseline_results
+    ]
+    baseline = {
+        "model": "corrected_midpoint",
+        "eligible_trades": len(baseline_results),
+        "priced_trades": len(baseline_results),
+        "missing_entry_market": 0,
+        "crossed_entry_market": 0,
+        "missing_exit_market": 0,
+        "crossed_exit_market": 0,
+        "path_snapshots": 0,
+        "usable_path_snapshots": 0,
+        "missing_path_snapshots": 0,
+        "crossed_path_snapshots": 0,
+        **_accounting_metrics(baseline_pnls, baseline_mfes),
+    }
+    rows = [baseline]
+
+    for model in ("marketable", "stressed_marketable"):
+        executions: list[ExecutableTrade] = [
+            row["accounting"][model]
+            for row in day_rows
+            if row.get("accounting") and model in row["accounting"]
+        ]
+        priced = [execution for execution in executions if execution.priced]
+        pnls = [execution.pnl * 100 for execution in priced if execution.pnl is not None]
+        mfes = [execution.mfe * 100 for execution in priced if execution.mfe is not None]
+        rows.append(
+            {
+                "model": model,
+                "eligible_trades": len(executions),
+                "priced_trades": len(priced),
+                "missing_entry_market": sum(
+                    execution.status == "missing_entry_market" for execution in executions
+                ),
+                "crossed_entry_market": sum(
+                    execution.status == "crossed_entry_market" for execution in executions
+                ),
+                "missing_exit_market": sum(
+                    execution.status == "missing_exit_market" for execution in executions
+                ),
+                "crossed_exit_market": sum(
+                    execution.status == "crossed_exit_market" for execution in executions
+                ),
+                "path_snapshots": sum(execution.path_snapshots for execution in priced),
+                "usable_path_snapshots": sum(
+                    execution.usable_path_snapshots for execution in priced
+                ),
+                "missing_path_snapshots": sum(
+                    execution.missing_path_snapshots for execution in priced
+                ),
+                "crossed_path_snapshots": sum(
+                    execution.crossed_path_snapshots for execution in priced
+                ),
+                **_accounting_metrics(pnls, mfes),
+            }
+        )
+    return rows
+
+
+def _print_execution_accounting_report(day_rows: list[dict]) -> None:
+    rows = _accounting_comparison_rows(day_rows)
+    print(f"\n{'='*139}")
+    print("  FROZEN-DECISION EXECUTION ACCOUNTING COMPARISON")
+    print(f"{'='*139}")
+    print(
+        f"  {'Model':<23} {'Trades':>7} {'Net P&L':>12} {'Expect':>10} "
+        f"{'PF':>7} {'Win%':>7} {'Median':>10} {'Max DD':>10} "
+        f"{'MFE cap':>8} {'Top-3':>8}"
+    )
+    print("  " + "-" * 137)
+    for row in rows:
+        print(
+            f"  {row['model']:<23} {row['trade_count']:>7} "
+            f"${row['net_pnl']:>+11.2f} ${row['expectancy']:>+9.2f} "
+            f"{row['profit_factor']:>7.3f} {row['win_rate']*100:>6.1f}% "
+            f"${row['median_trade']:>+9.2f} ${row['max_drawdown']:>9.2f} "
+            f"{row['mfe_capture']*100:>7.1f}% {row['top3_concentration']*100:>7.1f}%"
+        )
+    print("\n  Coverage and deterministic exclusions:")
+    for row in rows[1:]:
+        print(
+            f"  {row['model']}: eligible={row['eligible_trades']} "
+            f"priced={row['priced_trades']} "
+            f"missing_entry={row['missing_entry_market']} "
+            f"crossed_entry={row['crossed_entry_market']} "
+            f"missing_exit={row['missing_exit_market']} "
+            f"crossed_exit={row['crossed_exit_market']} "
+            f"path={row['usable_path_snapshots']}/{row['path_snapshots']} usable "
+            f"(missing={row['missing_path_snapshots']}, "
+            f"crossed={row['crossed_path_snapshots']})"
+        )
+    print(f"{'='*139}")
 
 
 # ---------------------------------------------------------------------------
@@ -2331,6 +2456,19 @@ async def run_single(args: argparse.Namespace) -> None:
             )
             restore()
 
+            accounting: dict[str, ExecutableTrade] = {}
+            if args.execution_accounting_report and result.traded:
+                for execution_model in ("marketable", "stressed_marketable"):
+                    accounting[execution_model] = price_frozen_trade(
+                        baseline=result,
+                        candidate=chosen,
+                        chains=full_chains,
+                        model=execution_model,
+                        commission_per_contract=(
+                            live_config.execution.paper_commission_per_contract
+                        ),
+                    )
+
             synth_result = None
             if args.compare_synthetic:
                 restore_synth = _force_synthetic_for_date(date)
@@ -2362,6 +2500,7 @@ async def run_single(args: argparse.Namespace) -> None:
                     "result": result,
                     "synth_result": synth_result,
                     "same_entry_result": same_entry_result,
+                    "accounting": accounting,
                 }
             )
 
@@ -2484,6 +2623,9 @@ async def run_single(args: argparse.Namespace) -> None:
             + ", ".join(date.isoformat() for date in missing_settlement_dates)
         )
     print(f"{'='*90}")
+
+    if args.execution_accounting_report:
+        _print_execution_accounting_report(day_rows)
 
     _print_pnl_histogram(pnls_ct)
 

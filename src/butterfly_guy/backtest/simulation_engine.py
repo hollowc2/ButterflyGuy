@@ -367,7 +367,9 @@ class SimulationEngine:
                 current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
                 last_value = current_value
             else:
-                current_value = last_value
+                # An incomplete recorded market is not an observation. Do not carry a
+                # prior mark into a new decision timestamp or advance exit confirmation.
+                continue
 
             peak_value = max(peak_value, current_value)
 
@@ -553,7 +555,9 @@ class SimulationEngine:
                 current_value = max(0.0, fly_mark_value(lower_q, center_q, upper_q))
                 last_value = current_value
             else:
-                current_value = last_value
+                # An incomplete recorded market is not an observation. Do not carry a
+                # prior mark into a new decision timestamp or advance exit confirmation.
+                continue
 
             peak_value = max(peak_value, current_value)
 

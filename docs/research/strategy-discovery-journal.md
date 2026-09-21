@@ -189,3 +189,118 @@ The bounded corrected-replay overlay was streamed through stdin only because the
 checkout's database password did not match the runtime credential. It changed only
 settlement loading and held-to-close finalization, wrote no remote file, and did not
 modify or restart a service.
+
+## 2026-09-21 — SPX executable-side accounting on the settlement-correct replay
+
+This was an accounting experiment on the settlement-parity implementation from commit
+`3cf2df23224cdd29ad3664d08441f69a69f207b5`, not a strategy optimization. The
+inclusive sample remained 2026-03-13 through 2026-09-18. Signals, entry window,
+direction, VIX-bucket width selection, strikes, reward/risk filter, drawdown thresholds,
+confirmation settings, profit-management policy, and exit timestamps were generated
+once by the corrected-midpoint model and then frozen for both executable comparisons.
+The checkout base was `ef13afb940a95f091f704965ec692200698dd60a`; the changes
+described here were uncommitted. `configs/config.yaml` had SHA-256
+`d120b63fd4e12ed812cc2742d602f9e531a1f5ca38e28c30628ab149f5d1b397`.
+
+### Accounting models and deterministic data rules
+
+- `corrected_midpoint` is the named comparison baseline. Entry and an intraday exit use
+  the recorded composite midpoint with $0.65 per contract per executed side. A held
+  position uses official same-session SPX intrinsic cash settlement, with no fabricated
+  closing fill, closing commission, or slippage.
+- `marketable` buys the lower and upper long contracts at their recorded asks and sells
+  two center contracts at their recorded bid. An intraday exit uses the inverse sides:
+  lower and upper bids and two center asks. Commission is $0.65 on each of the four
+  contracts at entry and, when an exit order exists, on each of the four contracts at
+  exit. Cash settlement remains a settlement event rather than an executable exit.
+- `stressed_marketable` uses the same bid/ask model and moves every contract fill $0.05
+  adversely. That is $20 additional entry cost per butterfly, another $20 reduction on
+  an intraday exit, and no exit stress on cash settlement.
+- Only a snapshot recorded at or before the already-frozen decision timestamp is
+  eligible. No later snapshot is used. If any required leg or bid/ask field is absent,
+  the fill is classified as missing; if any leg has bid greater than ask, it is classified
+  as crossed. Either condition excludes the trade from that executable model at that
+  timestamp. No midpoint, synthetic quote, later quote, or carried value substitutes for
+  an executable fill.
+- An incomplete monitoring observation is skipped: it cannot update MFE, trigger an exit,
+  or advance an exit-confirmation count. The final no-imputation rerun produced the same
+  decisions and aggregate results as the initial comparison.
+
+### Data provenance and coverage
+
+The source was the production TimescaleDB `option_chain_snapshots`, `spot_prices`, and
+`daily_bars` data already used by the SPX database replay. It was read through the
+existing `butterfly_spx_app` container on Helios with a non-persistent in-memory module
+overlay approved for this experiment; no remote file, service, configuration, database,
+or order state was changed. The final log completed at 2026-09-21T05:06:43Z and had
+SHA-256 `d9443466da5c89f2bbed110c19a1949ae69da37de27c877489d4bfec314af8d4`.
+
+- The database-qualified range contained 128 sessions, from 2026-03-13 through
+  2026-09-18. Qualification requires at least 50 same-day 0-DTE chain snapshots.
+- Two sessions, 2026-03-13 and 2026-03-16, lacked the full prerequisite data used by
+  `load_date_data` and were excluded explicitly.
+- Eight sessions had no qualifying entry in the frozen window: 2026-03-18, 2026-04-27,
+  2026-05-04, 2026-05-18, 2026-06-02, 2026-06-12, 2026-08-25, and 2026-09-08.
+- The remaining 118 sessions all traded. There were 96 intraday exits and 22 official
+  cash settlements. All 118 entries and all 96 required executable exits had complete,
+  uncrossed markets: missing entry 0, crossed entry 0, missing exit 0, crossed exit 0.
+- The MFE path contained 21,904 recorded observations. Of those, 21,887 (99.9224%) had
+  all three leg markets, 17 (0.0776%) were missing at least one leg, and zero were
+  crossed. The 17 incomplete observations were skipped rather than imputed.
+
+### Frozen result
+
+| Metric | Corrected midpoint | Marketable | Marketable + $0.05/contract leg |
+|---|---:|---:|---:|
+| Trades | 118 | 118 | 118 |
+| Net P&L | $17,691.60 | $14,170.60 | $9,890.60 |
+| Expectancy | $149.93 | $120.09 | $83.82 |
+| Profit factor | 2.074 | 1.724 | 1.422 |
+| Win rate | 18.6% | 15.3% | 14.4% |
+| Median trade | -$134.20 | -$167.70 | -$207.70 |
+| Maximum drawdown | $3,618.00 | $5,266.00 | $7,566.00 |
+| MFE capture | 50.0% | 52.4% | 54.8% |
+| Top-three-trade concentration | 32.7% | 32.9% | 33.2% |
+
+Crossing the recorded spread reduced net P&L by $3,521.00 relative to corrected
+midpoint. The explicit stress reduced it by another $4,280.00, exactly 856 executed
+contract sides multiplied by $5 adverse slippage per contract. Total commission was
+$556.40 in every model: four contracts on 118 entries and four contracts on 96
+intraday exits.
+
+The result remains highly dependent on settlement outcomes. In the midpoint baseline,
+the 22 cash-settled trades contributed $31,510.80 while the other 96 trades contributed
+-$13,819.20. The negative median, low win rate, larger executable drawdowns, and this
+exit-regime dependence remain material failure modes even though top-three concentration
+is about one-third of gross wins.
+
+### Exact commands and implementation fingerprints
+
+Standard reproduction wherever the configured TimescaleDB is reachable:
+
+```bash
+UV_CACHE_DIR=/tmp/butterfly-execution-uv-cache uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-03-13 2026-09-18 --asset SPX --execution-accounting-report
+UV_CACHE_DIR=/tmp/butterfly-execution-uv-cache uv run pytest tests/test_backtest_research_integrity.py tests/test_run_backtest_db_defaults.py -q
+UV_CACHE_DIR=/tmp/butterfly-execution-uv-cache uv run pytest -q
+UV_CACHE_DIR=/tmp/butterfly-execution-uv-cache uv run ruff check .
+```
+
+The approved Helios evaluation used the same four tested modules as an in-memory overlay:
+
+```bash
+python /tmp/build_execution_overlay.py 2026-03-13 2026-09-18 --asset SPX --execution-accounting-report | ssh -F /dev/null -o BatchMode=yes billy@helios 'docker exec -i butterfly_spx_app python -' | tee /tmp/spx_execution_accounting_20260313_20260918.log
+```
+
+Final source SHA-256 fingerprints:
+
+- `src/butterfly_guy/backtest/data_loader.py`: `ce442a5a99dbfc73b06c8c23cdf1bb6bf0524097d7a9b5d541f615bd8e4516f9`
+- `src/butterfly_guy/backtest/simulation_engine.py`: `b90195072a896f90b4cc7cf325463913dcdaa00ab280e3e9fb04d81188415851`
+- `src/butterfly_guy/backtest/execution_accounting.py`: `247b5182876e21086eb1ab6138704ddd92ddeb8a4aa13cb9a0f688a4da648637`
+- `src/butterfly_guy/scripts/run_backtest_db.py`: `d7ac3c0a4bf3034632164427024af41e7e738ab1ec55357e568a65bd647b4354`
+
+Conclusion: an executable edge remains in this fixed historical sample. It remains
+positive after recorded bid/ask crossing and after the additional $0.05 adverse move on
+every contract fill: $9,890.60 net, $83.82 expectancy, and 1.422 profit factor in the
+stress case. This is not a broad or stable-looking edge—the typical trade loses, drawdown
+more than doubles under stress, and cash-settled outcomes supply all aggregate profit—but
+the requested executable accounting does not eliminate the sampled edge.
