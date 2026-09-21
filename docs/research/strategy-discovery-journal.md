@@ -304,3 +304,144 @@ every contract fill: $9,890.60 net, $83.82 expectancy, and 1.422 profit factor i
 stress case. This is not a broad or stable-looking edge—the typical trade loses, drawdown
 more than doubles under stress, and cash-settled outcomes supply all aggregate profit—but
 the requested executable accounting does not eliminate the sampled edge.
+
+## 2026-09-21 — prospective execution-validation cohort (pre-registration)
+
+The 2026-03-13 → 2026-09-18 executable result above is an in-sample measurement on the
+same history the strategy was developed against. This section pre-registers a
+prospective validation study on genuinely unseen sessions. It is a validation study,
+not a development cycle: no signal, timing, strike, width, confirmation, exit, or
+settlement rule may change while a cohort is open.
+
+### Pre-registered hypothesis
+
+Primary: the frozen SPX strategy will produce positive net P&L and positive expectancy
+over at least 120 untouched prospective trades under stressed-marketable accounting.
+
+Secondary questions, registered before any prospective data exists:
+
+- Does marketable accounting remain profitable in each chronological half of the cohort?
+- Is the prospective edge still concentrated in cash-settled positions?
+- Do three exceptional trades account for an unacceptable share of gross profits?
+- Are quote gaps or crossed markets materially reducing executable coverage?
+
+The primary result is always stressed-marketable. Corrected midpoint is retained only as
+a named comparison baseline.
+
+### Start and stopping rules
+
+The cohort starts on the first complete trading session after its manifest is created;
+`init` refuses an earlier start for a prospective cohort, and `update` refuses any
+session before the recorded start date.
+
+Sixty trades is an early-failure checkpoint, not a passing result. The registered
+endpoint is reached only when all three conditions hold, whichever comes last:
+
+- at least 120 eligible trades;
+- at least 20 cash-settled trades;
+- at least 15 stressed-marketable winners.
+
+At 20 trades, only pipeline integrity and coverage are reviewed; no profitability
+conclusion is drawn. At 60 trades, the cohort is rejected early only if stressed
+marketable is clearly negative and the loss is not attributable to a documented
+temporary data outage.
+
+At the endpoint, an executable edge is declared only if stressed-market net P&L,
+expectancy, and profit factor above 1.0 all hold; marketable P&L is positive in both
+chronological halves; at least 95% of eligible entries are executable without
+imputation; the top three trades contribute no more than 50% of gross profits; and
+maximum drawdown stays under the dollar limit chosen at `init` time. Because the
+historical profit came predominantly from settlement, the report separately classifies
+the outcome as a general executable edge, a settlement-dependent edge only, or no
+executable edge.
+
+### Quote-handling rules
+
+- Every leg and decision uses the latest quote whose timestamp is at or before the
+  simulated decision time; the snapshot timestamp and its age in seconds are recorded
+  per leg. A later quote is never selected.
+- No midpoint, theoretical value, adjacent strike, prior-session data, or carried-forward
+  bid/ask substitutes for a missing executable side.
+- `ask < bid` is crossed. Absent, null, non-finite, or negative required sides are
+  missing/invalid.
+- An unavailable or crossed entry leg makes the trade unpriced and excludes it from P&L
+  while keeping it in coverage.
+- An incomplete or crossed exit observation is skipped and the exit rolls forward to the
+  next recorded monitoring time; the count of skipped observations is recorded on the
+  trade. If no executable exit remains before settlement, the settlement-correct value is
+  used with no invented closing commission.
+- Missing and crossed markets are recorded separately by entry/exit, side, leg, and date.
+
+Note one deliberate change to `execution_accounting.py` relative to the historical study:
+previously an unusable exit snapshot dropped the whole trade from P&L. Roll-forward plus
+settlement fallback replaces that, so exit-side quote gaps no longer silently shrink or
+bias the executable sample. Entry-side gaps still leave the trade unpriced.
+
+### Ledgers and integrity
+
+Each cohort lives in `reports/prospective_execution/<cohort-id>/` with an immutable
+`manifest.json`, append-only `daily_runs.jsonl` and `trades.jsonl`, and regenerated
+`summary.json` / `summary.md`. The manifest freezes the cohort boundaries, Git SHA and
+dirty-worktree status, configuration path and SHA-256, per-file source hashes, every
+resolved strategy parameter, fill-model definitions, commission and stress assumptions,
+decision rules, database tables, quote rules, and the exact init command.
+
+Every `update` validates current sources and configuration against the manifest and
+refuses to append on drift, naming the changed artifact. Trade identity is the SHA-256 of
+cohort ID, session date, decision time, direction, and strikes. Rerunning a recorded date
+either reproduces the identical record and appends nothing, or raises an integrity error;
+it never appends a duplicate. Sessions whose quotes or official settlement are still
+incomplete are deferred rather than recorded, so the later complete run does not have to
+amend history. Corrections for documented data errors must be explicit amendment records.
+
+### Exact commands
+
+```bash
+uv run python src/butterfly_guy/scripts/run_prospective_execution.py init \
+  --asset SPX \
+  --target-trades 120 \
+  --min-cash-settlements 20 \
+  --min-stressed-winners 15 \
+  --max-drawdown MAX_ACCEPTABLE_DOLLAR_DRAWDOWN
+
+uv run python src/butterfly_guy/scripts/run_prospective_execution.py update \
+  --cohort reports/prospective_execution/COHORT_ID \
+  --through YYYY-MM-DD
+
+uv run python src/butterfly_guy/scripts/run_prospective_execution.py report \
+  --cohort reports/prospective_execution/COHORT_ID
+
+uv run python src/butterfly_guy/scripts/run_prospective_execution.py verify \
+  --cohort reports/prospective_execution/COHORT_ID
+
+uv run pytest tests/test_prospective_execution.py tests/test_backtest_research_integrity.py tests/test_run_backtest_db_defaults.py -q
+uv run pytest -q
+uv run ruff check .
+```
+
+The historical plumbing rehearsal uses `init --dry-run-cohort --start <past date>` over
+five already-known dates. Its results verify manifest validation, append-only behavior,
+quote provenance, report generation, and repeat-run idempotency only, and are never
+combined with a prospective sample.
+
+### Implementation fingerprints at pre-registration
+
+- `src/butterfly_guy/backtest/prospective_execution.py`: `a3dfc10d3fba6996527c4cf9070bdcea5a3e2e3c1b3c3ad0672176a5dd16274c`
+- `src/butterfly_guy/backtest/execution_accounting.py`: `24d90f5ff56f9c3da38a6d56f701859c3f6e1814164afd6fc2b69c594be05cdc`
+- `src/butterfly_guy/scripts/run_prospective_execution.py`: `4bb9db87d3d0320c919c0577baac7bd2bd1a3381916ff556b222d63b976c85cb`
+- `tests/test_prospective_execution.py`: `74ff1f9b5e215e4b752f34f964325d9bbac69364995c72e926409ec7fe9d511a`
+
+These hashes describe the pre-registration state. The binding fingerprints for any cohort
+are the ones inside that cohort's own `manifest.json`, recorded at `init` against a
+committed worktree.
+
+### Checkpoint results
+
+- Dry-run rehearsal: not yet run.
+- 20-trade integrity checkpoint: not yet reached.
+- 60-trade early-failure review: not yet reached.
+- Registered endpoint: not yet reached.
+- Coverage statistics: none yet; no prospective session has been recorded.
+
+Conclusion: pending. No prospective session has been evaluated, so this study makes no
+claim yet about whether a stressed executable edge survives out of sample.
