@@ -1,0 +1,158 @@
+{
+  "kind": "baseline",
+  "retrieved_utc": "2026-09-13T01:49:21.611572+00:00",
+  "package_path": "/app/.venv/lib/python3.12/site-packages/butterfly_guy",
+  "config_yaml": "schwab:\n  # token_path is deliberately unset: config.py applies SCHWAB_TOKEN_PATH with\n  # setdefault, so a value here would silently win over the deployment's env var\n  # and pin the token to a path relative to the working directory.\n  max_token_age: 518400  # 6 days in seconds\n\nstrategy:\n  underlying: \"SPX\"\n  wing_widths: [10, 20, 30]      # used for backtest sweeps; ignored at runtime when vix_width_buckets is set\n  vix_width_buckets:\n    - vix_max: 17.0\n      widths: [20, 25, 30]       # Zombieland\n    - vix_max: 24.5\n      widths: [20, 30, 40]       # Goldilocks 1\n    - vix_max: 32.0\n      widths: [40, 45, 50]       # Goldilocks 2\n    - vix_max: 9999.0\n      widths: [50, 55, 65]       # Chaos\n  spot_range: 100\n  rr_min: 8.0\n  max_cost_per_width:\n    10: 1.00\n    20: 2.00\n    25: 2.50\n    30: 3.00\n    35: 3.50\n    40: 4.00\n    45: 4.50\n    50: 5.00\n    55: 5.50\n    65: 6.50\nentry:\n  start_time: \"07:00\"  # PST\n  end_time: \"07:45\"    # PST\n  timezone: \"America/Los_Angeles\"\n  strike_selection_method: \"VIX\"   # anchor center to VIX-implied expected move per width\n  center_tolerance: 15.0 # pts; candidate center must be within this of VIX target\nexecution:\n  price_ladder_step: 0.10\n  price_ladder_steps: 4\n  retry_interval_seconds: 20\n  order_timeout_seconds: 300\n  paper_trading: true\n  paper_fill_buffer: 0.00\nprofit_management:\n  strategy: \"peakvaluetrailer\"\n  profitprotector:\n    breakeven_activation_profit: 1.00\n    breakeven_floor_profit: 0.00\n    profit_lock_activation_profit: 2.00\n    profit_lock_floor_profit: 0.75\n    large_peak_profit_ratio: 2.00\n    large_peak_drawdown_threshold: 0.50\n  regimes:\n    morning:\n      start_minutes_after_open: 0\n      end_minutes_after_open: 120\n      drawdown_threshold: 0.60\n      confirmation_polls: 1\n      min_peak_profit_ratio: 1.0\n    late_morning:\n      start_minutes_after_open: 120\n      end_minutes_after_open: 240\n      drawdown_threshold: 0.90\n      confirmation_polls: 1\n      min_peak_profit_ratio: 1.0\n    afternoon:\n      start_minutes_after_open: 240\n      end_minutes_after_open: 390\n      drawdown_threshold: 0.75\n      confirmation_polls: 1\n      min_peak_profit_ratio: 1.0\n  exit_before_close_minutes: 0\n  max_loss_from_cost: 0.50\n  use_absolute_loss_stop: false\n  quote_quality:\n    enabled: false\n    min_bid_to_mark_ratio: 0.0\n    max_spread_width_ratio: null\nrisk:\n  max_daily_loss: 500.0\n  max_trades_per_day: 1\n  max_position_size: 1\ncollector:\n  snapshot_interval_seconds: 60\nmonitoring:\n  metrics_port: 8000\n  log_level: \"INFO\"\n",
+  "effective": {
+    "strategy": {
+      "underlying": "SPX",
+      "wing_widths": [
+        10,
+        20,
+        30
+      ],
+      "vix_width_buckets": [
+        {
+          "vix_max": 17.0,
+          "widths": [
+            20,
+            25,
+            30
+          ]
+        },
+        {
+          "vix_max": 24.5,
+          "widths": [
+            20,
+            30,
+            40
+          ]
+        },
+        {
+          "vix_max": 32.0,
+          "widths": [
+            40,
+            45,
+            50
+          ]
+        },
+        {
+          "vix_max": 9999.0,
+          "widths": [
+            50,
+            55,
+            65
+          ]
+        }
+      ],
+      "spot_range": 100,
+      "min_debit": 0.05,
+      "rr_min": 8.0,
+      "rr_max": 12.0,
+      "rr_target": 10.0,
+      "max_cost_per_width": {
+        "10": 1.0,
+        "20": 2.0,
+        "25": 2.5,
+        "30": 3.0,
+        "35": 3.5,
+        "40": 4.0,
+        "45": 4.5,
+        "50": 5.0,
+        "55": 5.5,
+        "65": 6.5
+      }
+    },
+    "entry": {
+      "start_time": "07:00",
+      "end_time": "07:45",
+      "timezone": "America/Los_Angeles",
+      "use_bias_filter": false,
+      "strike_selection_method": "VIX",
+      "center_tolerance": 15.0,
+      "max_vix_age_seconds": 300,
+      "max_chain_snapshot_age_seconds": 180,
+      "bull_call_bias": false,
+      "min_gap_pct": null
+    },
+    "execution": {
+      "price_ladder_step": 0.1,
+      "price_ladder_steps": 4,
+      "retry_interval_seconds": 20,
+      "order_timeout_seconds": 300,
+      "paper_trading": true,
+      "paper_fill_buffer": 0.0,
+      "paper_slippage_per_spread": 0.05,
+      "paper_commission_per_contract": 0.65,
+      "paper_min_oi_per_leg": 0,
+      "allow_live_trading": false
+    },
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.9,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": false,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "risk": {
+      "max_daily_loss": 500.0,
+      "max_trades_per_day": 1,
+      "max_position_size": 1,
+      "max_weekly_loss": 1500.0,
+      "max_consecutive_losses": 10,
+      "min_buying_power": 500.0,
+      "fail_safe_on_balance_error": true
+    },
+    "collector": {
+      "snapshot_interval_seconds": 60
+    }
+  }
+}

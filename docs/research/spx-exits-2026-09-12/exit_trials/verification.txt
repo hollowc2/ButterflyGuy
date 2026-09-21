@@ -1,0 +1,44 @@
+Executed September 13, 2026
+
+uv run pytest docs/research/spx-exits-2026-09-12/exit_trials/test_exit_trials.py docs/research/spx-exits-2026-09-12/test_replay.py -q
+20 passed in 6.17 seconds.
+
+.venv/bin/python docs/research/spx-exits-2026-09-12/exit_trials/run_trials.py
+Completed: 33 trades × 10 variants × 5 execution scenarios = 1,650 attempted outcomes.
+All original manifest file hashes and 99 frozen source hashes passed.
+All 33 baseline mark P/L values and reasons matched the ledger.
+All 165 baseline scenario statuses matched the original replay, with exact resolved
+P/L, reason, and exit timestamp matches.
+
+.venv/bin/python docs/research/spx-exits-2026-09-12/exit_trials/build_report.py
+Completed. Key editorial numerical assertions passed.
+
+.venv/bin/ruff check docs/research/spx-exits-2026-09-12/exit_trials
+All checks passed after fixing import ordering and line lengths in new scripts.
+.venv/bin/ruff check .
+All checks passed (repository exclusions retained).
+git diff --check
+Passed.
+
+Independent standard-library output audit:
+1,650 unique variant/stress/trade keys; each variant has 33 mark attempts.
+All manifest input and output SHA-256 hashes still match.
+All report evidence links resolve to local files.
+
+Graph refresh:
+UV_CACHE_DIR=/tmp/butterfly-graphify-uv-cache UV_TOOL_DIR=/tmp/butterfly-uv-tools UV_TOOL_BIN_DIR=/tmp/butterfly-uv-bin uvx --from graphifyy graphify update .
+Completed after final Python edits. Existing SQL-parser dependency is absent;
+10 SQL files were not extracted. No SQL files were changed in this task.
+Existing graph files were already modified before this task; not reverted.
+
+Browser visual QA:
+Browser runtime initialized, but no browser was available. Discovery returned [].
+Visual screenshot verification was not performed. HTML generation and local-link
+checks passed; this limitation does not affect numerical validation.
+
+Not run / unavailable:
+Out-of-sample study: all available study history is examined development data.
+Complete confirmation/latency evaluation: 32 of 33 paired outcomes unavailable.
+Account Sharpe, return, or marked equity drawdown: no account-capital/complete
+calendar/marked-equity series in this extract.
+No new full DB backtest, raw-data acquisition, or live-service operation was run.

@@ -1,0 +1,48 @@
+Executed September 13, 2026
+
+uv run pytest docs/research/spx-exits-2026-09-12/all_history_trials/test_all_history.py docs/research/spx-exits-2026-09-12/exit_trials/test_exit_trials.py docs/research/spx-exits-2026-09-12/test_replay.py -q
+29 passed in 6.49 seconds.
+
+.venv/bin/python docs/research/spx-exits-2026-09-12/all_history_trials/run_all_history.py
+Completed. Every one of 108 entries attempted independently on collector and monitor.
+10 variants × 5 stresses × 108 trades × 2 sources = 10,800 source-specific outcomes.
+5,400 derived fixed-choice rows added; total 16,200 unique scenario/view keys.
+64 entries select monitor, 44 select collector, based only on raw row presence.
+
+Regression and integrity gates inside the runner:
+- All original raw manifest hashes and 99 frozen Python source hashes match.
+- Prior-study input/output hashes match; prior research settings match exactly.
+- All 1,080 original baseline source/stress results reproduced.
+- All 1,650 prior mark_v1 variant/stress results reproduced.
+- All 33 mark_v1 monitoring baselines match ledger P/L/reason/time criteria.
+
+Independent standard-library audit after execution:
+- Every manifest input and output hash matches.
+- 16,200 unique source/view/variant/stress/trade combinations.
+- All 5,400 composite rows exactly equal the fixed selected-source result.
+- All 405 comparison ID intersections, net totals, expectations and paired
+  differences recomputed independently from the output CSV and match JSON.
+
+Lint and report:
+.venv/bin/ruff check .
+All checks passed after fixing long lines in the new report renderer.
+git diff --check
+Passed.
+.venv/bin/python docs/research/spx-exits-2026-09-12/all_history_trials/render_report.py
+Rendered report with key numeric assertions. All local evidence links verified.
+Browser screenshot review not performed: the browser runtime was unavailable
+earlier in this session. Report HTML generation and structural/link checks passed.
+
+Graph:
+UV_CACHE_DIR=/tmp/butterfly-graphify-uv-cache UV_TOOL_DIR=/tmp/butterfly-uv-tools UV_TOOL_BIN_DIR=/tmp/butterfly-uv-bin uvx --from graphifyy graphify update .
+Completed after Python changes. Existing SQL parser dependency warning remains;
+no SQL was modified. Existing unrelated graph changes were not reverted.
+
+Limits:
+98/108 paired mark outcomes for the combined trailer and stop comparisons; only
+39 paired baselines match ledger P/L/reason/time, 53 have P/L errors over $5.
+Confirmation has 18/108 combined paired outcomes. None is a complete validated
+108-trade counterfactual. No missing outcomes were assigned zero P/L.
+No new data acquisition, out-of-sample study, full DB backtest, account-return or
+annualized Sharpe calculation, marked-equity drawdown, live code/config/service
+change, broker API write, or deployment occurred.

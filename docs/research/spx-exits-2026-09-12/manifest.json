@@ -1,0 +1,18 @@
+{
+  "created_utc": "2026-09-13T02:02:06.916728+00:00",
+  "range": [
+    "2026-03-17",
+    "2026-09-11"
+  ],
+  "provider": "Schwab via deployed ButterflyGuy; collector and monitoring tables kept separate",
+  "remote": "billy@helios:/opt/butterflyguy; butterfly_spx_app; TimescaleDB",
+  "entry_prices": "unchanged recorded; embedded mark_v1 entry commission retained",
+  "exit_commission_points": 0.026000000000000002,
+  "legacy_entry_commission": "unknown; extra $2.60/trade sensitivity required",
+  "files": {
+    "raw/checkout-source-hashes.json": "fdae73136cee4d3d67f4c22721b0f057bf9cfba4b79eb908746d72c8511fe2f7",
+    "raw/deployment.txt": "4751ee9c45565c95783ad8bd916bc85d626bfba68ab6ae3d6c8bccea7ac90e37",
+    "raw/export.jsonl": "4d852cf2f318d6a92c05da116344af50dfc887762c7400ff7ec2a71c6e431bd6",
+    "raw/monitor.jsonl": "9e65e03b983fa70bc39954f9cf7cfd104043a1d408ad5a5b6f44e16d8857b3c4"
+  }
+}

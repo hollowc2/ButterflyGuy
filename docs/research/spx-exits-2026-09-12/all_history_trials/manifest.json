@@ -1,0 +1,47 @@
+{
+  "created_utc": "2026-09-13T19:16:48.181814+00:00",
+  "range": [
+    "2026-03-17",
+    "2026-09-11"
+  ],
+  "trades": 108,
+  "provider": "Schwab via deployed ButterflyGuy; collector and monitoring tables kept separate",
+  "original_acquisition_utc": "2026-09-13T02:02:06.916728+00:00",
+  "git_sha": "e2ba77284370b7edc7c7e94d659fe707a226f834",
+  "python": "3.13.13 (main, May 10 2026, 19:26:54) [Clang 22.1.3 ]",
+  "dependency_lock_sha256": "d7d95ccf6347636bb3766d59516cb70def4c0d8767f8219cbcadeacbd5793935",
+  "environment_variables": "none required or overridden",
+  "command": ".venv/bin/python docs/research/spx-exits-2026-09-12/all_history_trials/run_all_history.py",
+  "quote_interval": "irregular observations; see per-source coverage.csv",
+  "timestamps": "UTC-offset source times; session grouping America/New_York",
+  "baseline_scenario_regressions": 1080,
+  "prior_mark_v1_trial_regressions": 1650,
+  "source_choice": "64 monitoring / 44 collector, fixed by raw presence",
+  "account_return_sharpe_marked_drawdown": "unavailable",
+  "input_hashes": {
+    "raw/export.jsonl": "4d852cf2f318d6a92c05da116344af50dfc887762c7400ff7ec2a71c6e431bd6",
+    "raw/monitor.jsonl": "9e65e03b983fa70bc39954f9cf7cfd104043a1d408ad5a5b6f44e16d8857b3c4",
+    "manifest.json": "b170d6bcec6df469e54aebc4e949d1117296e2c2dc50a82d21d9ce37b12ef871",
+    "source-hashes.json": "252a9f2a03c39fc8a2148dab63fc17390e848f6541351cdee982289cf520db32",
+    "replay.py": "411bb0dc384ae12e36356e96726fc3e695cb3df926b7968b1f85dd79c69a2e38",
+    "results/trade_results.csv": "86e52c277f92f4dac0f4d6c210decd6c730b6f47b7ac5c76fee7ad6e075eb9cb",
+    "exit_trials/run_trials.py": "436d6c359e5a1497a01aa9721e49d72ff77db735da0bd44bade03b7c8ba3e382",
+    "exit_trials/configs.json": "b558c8292ff0c220fa7020814592931ac2572373885815f7b68566459d7201fe",
+    "exit_trials/results/trade_results.csv": "93685b9f0279de3028d497997bdd7dab0174c495bf29993baafbf1ded89aa5a0",
+    "all_history_trials/PLAN.md": "8a0805a44fd7dd07d28bf79865b23ba46aaf0d71b3ee3eb32db5adad80d09f24",
+    "all_history_trials/run_all_history.py": "2dc41c5d5af5f839d247d0a1ff8568b18db37fde3fe84c1081dcc8d4e74908ae"
+  },
+  "output_hashes": {
+    "configs.json": "b558c8292ff0c220fa7020814592931ac2572373885815f7b68566459d7201fe",
+    "results/baseline_parity.csv": "9c923cb0499aa31b3742dd4b97c7be5b0a5d6c5287a221f8208e80f1ec5c2795",
+    "results/breakdowns.json": "8fbe14976044d24922e2c553fa7c933316a267ed20edc86499afab7cf91bad64",
+    "results/comparisons.json": "ab8c359b7f1165905800ea63c45d7698d9be0d4e93c836b976c3d985816e88da",
+    "results/coverage.csv": "bd331f344bb37b93a410b1f34fc46303df356a79abc94365f74507c97ff6dabd",
+    "results/focus_winners.csv": "e48490a85f89bc0b23a0d910208fdf3b7af880905ee0dbcfecb813a4dbabb464",
+    "results/parity_summary.json": "c37901b5c7e7aa60dde2b6e6f483ad34bb12618395ef39664a099ab2614742e5",
+    "results/recorded_summary.json": "25ca248922bca49238d89f1b873e2e0975f26cc05ba54e835712fea7c9e5dc4f",
+    "results/recorded_trades.csv": "d803de22594dac2bf8404b220a787e46f1edf7e4d49a581a1b5b04059b50ad7b",
+    "results/source_choices.csv": "8a22c3005978d5e06afb43b2dd822b3d4833825c757c8925b8be5878e110502e",
+    "results/trade_results.csv": "75fad7100931ce9c6e85ae462af65874fec24c2756791018cf2bc03395baecd7"
+  }
+}

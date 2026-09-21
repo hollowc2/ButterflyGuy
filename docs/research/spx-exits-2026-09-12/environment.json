@@ -1,0 +1,10 @@
+{
+  "python": "3.13.13",
+  "packages": {
+    "pydantic": "2.12.5",
+    "structlog": "25.5.0",
+    "scipy": "1.17.1",
+    "pytest": "9.0.2",
+    "PyYAML": "6.0.3"
+  }
+}

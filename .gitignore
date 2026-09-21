@@ -81,3 +81,9 @@ graphify-out/20??-??-??/
 *.json.lock
 .tokens.json.lock
 /evidence/
+
+# Research bulk: raw snapshot dumps and frozen source copies under docs/research are
+# reproducible from the recorded manifests and checksums. Reports, scripts, configs,
+# and derived result tables stay in the repository.
+docs/research/**/raw/*.jsonl
+docs/research/**/frozen/

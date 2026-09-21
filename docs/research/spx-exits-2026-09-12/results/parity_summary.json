@@ -1,0 +1,65 @@
+[
+  {
+    "source": "collector",
+    "cohort": "all",
+    "attempted": 108,
+    "resolved": 95,
+    "exact_pnl": 12,
+    "material_pnl_over_5": 71,
+    "reason_match": 73,
+    "time_within_10s": 13,
+    "absolute_pnl_error": 3988.0,
+    "status_counts": {
+      "exit": 87,
+      "censored_no_exit": 13,
+      "settlement": 8
+    }
+  },
+  {
+    "source": "collector",
+    "cohort": "mark_v1",
+    "attempted": 33,
+    "resolved": 30,
+    "exact_pnl": 4,
+    "material_pnl_over_5": 20,
+    "reason_match": 26,
+    "time_within_10s": 2,
+    "absolute_pnl_error": 716.0,
+    "status_counts": {
+      "exit": 29,
+      "censored_no_exit": 3,
+      "settlement": 1
+    }
+  },
+  {
+    "source": "monitor",
+    "cohort": "all",
+    "attempted": 108,
+    "resolved": 62,
+    "exact_pnl": 37,
+    "material_pnl_over_5": 23,
+    "reason_match": 61,
+    "time_within_10s": 37,
+    "absolute_pnl_error": 784.0,
+    "status_counts": {
+      "censored_no_exit": 46,
+      "exit": 57,
+      "settlement": 5
+    }
+  },
+  {
+    "source": "monitor",
+    "cohort": "mark_v1",
+    "attempted": 33,
+    "resolved": 33,
+    "exact_pnl": 33,
+    "material_pnl_over_5": 0,
+    "reason_match": 33,
+    "time_within_10s": 33,
+    "absolute_pnl_error": 0.0,
+    "status_counts": {
+      "exit": 32,
+      "settlement": 1
+    }
+  }
+]

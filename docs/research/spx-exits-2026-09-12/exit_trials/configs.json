@@ -1,0 +1,592 @@
+{
+  "baseline": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.9,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": false,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 0,
+    "confirmation_max_gap_seconds": 10
+  },
+  "trail_60": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": false,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 0,
+    "confirmation_max_gap_seconds": 10
+  },
+  "trail_50": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.5,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": false,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 0,
+    "confirmation_max_gap_seconds": 10
+  },
+  "trail_70": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.7,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": false,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 0,
+    "confirmation_max_gap_seconds": 10
+  },
+  "stop_50": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.9,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": true,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 0,
+    "confirmation_max_gap_seconds": 10
+  },
+  "stop_40": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.9,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.4,
+      "use_absolute_loss_stop": true,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 0,
+    "confirmation_max_gap_seconds": 10
+  },
+  "stop_60": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.9,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.6,
+      "use_absolute_loss_stop": true,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 0,
+    "confirmation_max_gap_seconds": 10
+  },
+  "confirm_5": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.9,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": false,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 5,
+    "confirmation_max_gap_seconds": 10
+  },
+  "confirm_2": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.9,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": false,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 2,
+    "confirmation_max_gap_seconds": 10
+  },
+  "confirm_10": {
+    "profit_management": {
+      "strategy": "peakvaluetrailer",
+      "regimes": {
+        "morning": {
+          "start_minutes_after_open": 0,
+          "end_minutes_after_open": 120,
+          "drawdown_threshold": 0.6,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "late_morning": {
+          "start_minutes_after_open": 120,
+          "end_minutes_after_open": 240,
+          "drawdown_threshold": 0.9,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        },
+        "afternoon": {
+          "start_minutes_after_open": 240,
+          "end_minutes_after_open": 390,
+          "drawdown_threshold": 0.75,
+          "confirmation_polls": 1,
+          "min_peak_profit_ratio": 1.0,
+          "min_hold_minutes": 0.0
+        }
+      },
+      "exit_before_close_minutes": 0,
+      "max_loss_from_cost": 0.5,
+      "use_absolute_loss_stop": false,
+      "quote_quality": {
+        "enabled": false,
+        "min_bid_to_mark_ratio": 0.0,
+        "max_spread_width_ratio": null,
+        "min_mark_value": 0.0,
+        "max_leg_spread_to_mark_ratio": null,
+        "max_leg_spread_abs": null
+      },
+      "peak_tracking": {
+        "confirmation_polls": 1,
+        "confirmation_tolerance_ratio": 0.05,
+        "require_quote_quality": false,
+        "max_jump_ratio": null,
+        "max_jump_abs": null
+      },
+      "profitprotector": {
+        "breakeven_activation_profit": 1.0,
+        "breakeven_floor_profit": 0.0,
+        "profit_lock_activation_profit": 2.0,
+        "profit_lock_floor_profit": 0.75,
+        "large_peak_profit_ratio": 2.0,
+        "large_peak_drawdown_threshold": 0.5
+      }
+    },
+    "confirmation_seconds": 10,
+    "confirmation_max_gap_seconds": 10
+  }
+}

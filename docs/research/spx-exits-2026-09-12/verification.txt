@@ -1,0 +1,26 @@
+Verification completed September 12, 2026 (America/Los_Angeles).
+
+uv run pytest docs/research/spx-exits-2026-09-12/test_replay.py -q
+6 passed in 7.18s.
+Includes all 33 mark_v1 baseline P/L and exit-reason reproductions.
+
+.venv/bin/ruff check .
+All checks passed. Immutable deployed source archive excluded with its own
+.ruff.toml; none of those evidence files was reformatted or lint-fixed.
+The first uv lint invocation hit a read-only cache; the escalated retry ran.
+Research harness lint errors were corrected before final verification.
+
+git diff --check
+Passed.
+
+All 99 frozen deployed Python-file SHA-256 hashes verified.
+All raw file SHA-256 hashes in manifest.json verified.
+checksums.sha256 covers research scripts, configs, JSON snapshots, and result CSVs.
+
+UV_CACHE_DIR=/tmp/spx-research-uv-cache uvx --from graphifyy graphify update .
+Completed: 5,470 nodes, 12,066 edges, 333 communities.
+SQL extraction warning: tree_sitter_sql is not installed; ten SQL files were
+not newly extracted. Python AST refresh completed. No LLM labeling was run.
+
+No deployed settings, risk limits, broker routing, tokens, or services changed.
+No broker write API called. No full DB backtest run: exit-only confirmation gate failed.

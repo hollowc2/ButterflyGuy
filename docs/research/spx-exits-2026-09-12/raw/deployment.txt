@@ -1,0 +1,3 @@
+929429978a09c153afb5260771eff84386762ce4
+image=sha256:ac6d1e93399b7e4b41ca5e7ac70109eab8987b4506066bcfbb7aed22c08077ac workdir=/app command=["python","-m","butterfly_guy.scripts.run_live"] started=2026-09-12T21:33:14.610340824Z
+revision=

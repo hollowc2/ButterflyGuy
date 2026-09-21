@@ -1,0 +1,35 @@
+a4302ecc1ebeaf32fe5783a7d842c2536d19b7e2 2026-08-24T19:58:16-07:00 Route paper market data through gateway
+99049fa861418c2c95e9840de7ad841404fd3af8 2026-08-08T13:56:53-07:00 Let SCHWAB_TOKEN_PATH reach the live trading configs
+5e3b80feb68b316d352883538c8699b71c865251 2026-07-29T14:40:15-07:00 Share entry price limits with candidates
+14baca139a008217a127e016953b0f7cd0cde0a6 2026-07-29T14:28:22-07:00 Enforce entry debit limits at execution
+7fa4239f401f7929575b1203ebbd50de49c23fb9 2026-07-22T03:21:45Z Use mark fills for paper strategy accounting
+ab5f7dc69b911458e6f086dbdaf751e9ba2e1bb1 2026-07-14T19:41:32Z Consolidate live-readiness safety work
+65f1b2bb6f655f90271c64c0d23a4b5deb7291e5 2026-07-13T18:47:24Z Harden live trading safety and recovery
+d112dcba0a71b5090cf574d08aa7a19ff6eee7c0 2026-07-11T22:24:37Z Harden XSP live canary order handling
+331e6e922be4f00daa747473d61f18dd7b981233 2026-07-11T07:34:13Z Harden nested broker order reconciliation
+cb95d00460b9eb1b35d07c8f815770411a4c26c2 2026-06-25T17:19:12Z Add broker order intent lifecycle safety
+47eacd0a5459e891c04deb248ad6a8ca2efabebb 2026-06-25T16:36:09Z Harden pre-live safety gates
+2a23f941c2827ed4aa0eff92370ff587727d6e9d 2026-06-25T04:16:00Z Add pre-live order safety guards
+ac68ede8d175c95a786a552cfb2f384803c6aed6 2026-06-17T23:16:22Z Use session close for cash settlement
+c967d4c46edfb598cf1083a1bedbaffb17a025fc 2026-06-10T23:24:50Z Fix paper EOD exit fills and refresh live performance site after close.
+db7b67b6834fe5660db963cb2f6938d7a642faa9 2026-06-08T20:08:52Z Fix NDX wing widths for 10-pt strikes and paper fills at ask.
+ad0be47a2e0b49fd858800d7748b1b16dbb428c3 2026-05-14T04:15:06Z Align backtests with live configs
+38e7085788fcda4ca042eed6b4c28bf14dcd370e 2026-05-12T20:48:34Z Add selectable profit protector policy
+c8f20a9d2bc38a17c085d7041414696abaaef9f2 2026-05-07T17:01:20Z Add configurable drawdown exit guards
+1f0a027e2b530655da9a541ba0f374193e9e591b 2026-05-06T17:35:49Z Persist and report ladder traces
+6a87ab18c726f991b04b17756ac72ae072dc4e71 2026-05-04T23:37:16Z Harden trading runtime safety
+5ae1190278de9073ca06d7e0876708f39da6ba10 2026-04-28T03:41:36Z feat: VIX-bucketed wing width selection (Ernie's system)
+85c5afa339abc2b4733eb09a2dda5190fe1b9a28 2026-04-25T05:18:22Z fix: resolve 18 test failures across order_manager, risk_engine, state_machine, and config
+3122f905151f519d3787fb632e1527f52e9c2695 2026-04-20T21:08:11Z refactor(repo): senior engineer simplification pass
+d49d4bb191a8214388b4f3fa450da6d30e9fe55a 2026-04-20T19:41:45Z chore(repo): reorganize root-level files into structured directories
+221046999a02c2bbeaffe63879a68f32c2ab8084 2026-04-14T23:34:54Z feat(position): track bid-side spread data for slippage analysis
+afcad1f40cd87b8eb85882b17549acbf48baf804 2026-04-14T19:21:11Z feat(risk): harden live trading protections for XSP launch
+2cf6dc2a1b02aee997556ab044ce087e9b7cf704 2026-03-27T00:20:04Z feat: improve decision log visibility and fix paper trading fill accuracy
+72ffe2bcb204076560a1fc6e1271cf6897ab8c8e 2026-03-24T16:33:50-07:00 feat: re-scan chain on each entry attempt, price at fly ask not mid
+0589bba29a69d6d40f130b352421dfdf192f39fb 2026-03-23T19:41:08Z fix: recover open trades and metrics on startup
+8bef55e6e6d4203ca4c6d7a628e2e49d1ded42b8 2026-03-23T17:07:33Z feat: improve paper trading simulation accuracy
+0bcf4ffa6da302cd8b32ab6ef094e15e75abdfba 2026-03-22T19:35:15Z fix: anchor exit ladder to bid instead of mark
+32dfa7e2f0311346ff4c010f3d9c04c1ce8176a5 2026-03-21T15:59:26Z feat: add paper trading simulation with ratchet price ladder
+00cba3e1dc4bf87c9aaa6dce334c731850b90fc9 2026-03-20T20:59:47Z feat: add underlying label to all Prometheus metrics, fix NDX port, unify dashboards
+4dd567b62d668f3bb4b74a82cedc99b08430543e 2026-03-14T11:17:12-07:00 fix: wire live trading loop end-to-end for paper trading on Monday
+eb8af6af605a006f7b5daa46c777a9401340b7da 2026-03-10T16:24:09-07:00 Initial implementation: automated 0-DTE butterfly options trading system
