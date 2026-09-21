@@ -305,6 +305,44 @@ stress case. This is not a broad or stable-looking edge—the typical trade lose
 more than doubles under stress, and cash-settled outcomes supply all aggregate profit—but
 the requested executable accounting does not eliminate the sampled edge.
 
+### Reproduction under the roll-forward exit rule
+
+The frozen table above was produced before `execution_accounting.py` began rolling an
+unusable exit observation forward to the next monitoring time with a settlement
+fallback. The whole sample was rerun on committed code
+`b83c2a18427f07dc514841e9fe2957eb4e391d80` with a clean worktree, and every published
+figure reproduced exactly: 118 trades from 128 qualified sessions, 22 cash-settled and
+96 intraday, net P&L $17,691.60 / $14,170.60 / $9,890.60, expectancy $149.93 / $120.09 /
+$83.82, profit factor 2.074 / 1.724 / 1.422, maximum drawdown $3,618 / $5,266 / $7,566,
+MFE capture 50.0% / 52.4% / 54.8%, top-three concentration 32.7% / 32.9% / 33.2%, and
+held-to-close contribution $31,510.80. Exit totals were 47 morning, 15 late-morning, 34
+afternoon, and 22 cash-settled. The ten skipped sessions were unchanged: 2026-03-13 and
+2026-03-16 for missing prerequisite data, and 2026-03-18, 2026-04-27, 2026-05-04,
+2026-05-18, 2026-06-02, 2026-06-12, 2026-08-25, and 2026-09-08 for no qualifying entry.
+
+The rule change is inert on this sample by construction. Roll-forward only engages when
+an exit observation is unusable, and all 96 required executable exits had complete,
+uncrossed markets. Path coverage was again 21,887 of 21,904 observations usable, with 17
+incomplete and none crossed; those 17 fall on monitoring observations, not on exits. The
+historical baseline and the prospective cohort therefore share one code path, which was
+the point of the rerun rather than any expected change in the numbers.
+
+The run log had SHA-256
+`253a8b15431092a6dcd7f058718a9811ca241918a4d4ec432675d8c35b205724`.
+
+### Pre-registered drawdown limit
+
+The stressed-marketable rejection threshold for the first prospective cohort is $12,000
+of drawdown on a single one-lot butterfly, chosen on 2026-09-21 before any prospective
+session existed. It is about 1.6 times the $7,566 historical stressed drawdown. The
+threshold asks whether the strategy degraded, not what loss is tolerable: the historical
+figure is the maximum of one 118-trade path, and a fresh path of similar length drawn
+from the same distribution would exceed it roughly half the time, so a limit set at the
+historical maximum would reject a healthy strategy on sampling variation alone. A 14%
+stressed win rate and a negative median trade make long losing runs the normal texture
+of this strategy rather than evidence of failure.
+
+
 ## 2026-09-21 — prospective execution-validation cohort (pre-registration)
 
 The 2026-03-13 → 2026-09-18 executable result above is an in-sample measurement on the
