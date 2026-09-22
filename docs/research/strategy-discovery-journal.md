@@ -485,11 +485,11 @@ committed worktree.
 `init` derived the current date from UTC and then took the next weekday. Sessions are
 Eastern, so UTC rolls over at 20:00 ET and an evening `init` treated the next morning's
 session as already underway. Initializing at 17:05 PDT on 2026-09-21 produced a start of
-2026-09-23 and silently discarded Monday 2026-09-22, whose opening bell was still about
-thirteen hours away. The date is now resolved in `America/New_York`, the timezone
+2026-09-23 and silently discarded Tuesday 2026-09-22, whose opening bell was still
+about thirteen hours away. The date is now resolved in `America/New_York`, the timezone
 `CohortSpec` already declared and wrote into the manifest; the manifest's own
-`created_at` remains UTC. A regression test pins 2026-09-21 20:05 ET to a Monday start,
-the post-session case to Tuesday, and Friday evening across the weekend. The defective
+`created_at` remains UTC. A regression test pins Monday 2026-09-21 20:05 ET to a Tuesday start,
+the post-session case to Wednesday, and Friday evening across the weekend. The defective
 cohort directory was deleted before any session was recorded; no ledger ever contained a
 record under the old behavior.
 

@@ -654,15 +654,15 @@ def test_summary_reports_endpoint_progress_and_gates(tmp_path):
 def test_default_prospective_start_uses_the_exchange_calendar_not_utc():
     """An evening init must not skip the next morning's session.
 
-    2026-09-21 20:05 ET is already 2026-09-22 in UTC, but Monday's session is
-    still ahead, so Monday is the first prospective session.
+    Monday 2026-09-21 20:05 ET is already 2026-09-22 in UTC, but Tuesday's
+    session is still ahead, so Tuesday is the first prospective session.
     """
-    sunday_evening_et = dt.datetime(2026, 9, 22, 0, 5, tzinfo=dt.timezone.utc)
-    assert default_prospective_start(sunday_evening_et) == dt.date(2026, 9, 22)
+    monday_evening_et = dt.datetime(2026, 9, 22, 0, 5, tzinfo=dt.timezone.utc)
+    assert default_prospective_start(monday_evening_et) == dt.date(2026, 9, 22)
 
-    # Once Monday's session is over, Tuesday is the first prospective session.
-    monday_afternoon_et = dt.datetime(2026, 9, 22, 20, 5, tzinfo=dt.timezone.utc)
-    assert default_prospective_start(monday_afternoon_et) == dt.date(2026, 9, 23)
+    # Once Tuesday's session is over, Wednesday is the first prospective session.
+    tuesday_afternoon_et = dt.datetime(2026, 9, 22, 20, 5, tzinfo=dt.timezone.utc)
+    assert default_prospective_start(tuesday_afternoon_et) == dt.date(2026, 9, 23)
 
     # Friday evening rolls past the weekend to Monday.
     friday_evening_et = dt.datetime(2026, 9, 26, 1, 5, tzinfo=dt.timezone.utc)
