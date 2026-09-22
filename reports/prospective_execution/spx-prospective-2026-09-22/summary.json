@@ -1,0 +1,153 @@
+{
+  "asset": "SPX",
+  "breakdowns": {
+    "corrected_midpoint": {
+      "direction": {},
+      "exit_reason": {},
+      "half": {},
+      "month": {},
+      "settlement": {}
+    },
+    "marketable": {
+      "direction": {},
+      "exit_reason": {},
+      "half": {},
+      "month": {},
+      "settlement": {}
+    },
+    "stressed_marketable": {
+      "direction": {},
+      "exit_reason": {},
+      "half": {},
+      "month": {},
+      "settlement": {}
+    }
+  },
+  "cash_settled_trades": 0,
+  "cohort_id": "spx-prospective-2026-09-22",
+  "eligible_trades": 0,
+  "endpoint": {
+    "conditions": {
+      "cash_settled_trades": {
+        "met": false,
+        "observed": 0,
+        "required": 20
+      },
+      "eligible_trades": {
+        "met": false,
+        "observed": 0,
+        "required": 120
+      },
+      "stressed_winners": {
+        "met": false,
+        "observed": 0,
+        "required": 15
+      }
+    },
+    "reached": false
+  },
+  "gates": {
+    "checks": {
+      "drawdown_within_limit": true,
+      "executable_entry_coverage": false,
+      "marketable_positive_in_both_halves": false,
+      "stressed_expectancy_positive": false,
+      "stressed_net_pnl_positive": false,
+      "stressed_profit_factor_above_one": false,
+      "top3_within_limit": true
+    },
+    "early_failure_review_due": false,
+    "edge_classification": "insufficient_data",
+    "entry_coverage": 0.0,
+    "integrity_checkpoint_due": false,
+    "passed": false
+  },
+  "generated_at": "2026-09-22T00:22:37.101082+00:00",
+  "label": "prospective",
+  "models": {
+    "corrected_midpoint": {
+      "average_mfe": 0.0,
+      "complete_fill_coverage": 0.0,
+      "crossed_entry_markets": 0,
+      "crossed_exit_markets": 0,
+      "crossed_exit_observations": 0,
+      "eligible_signals": 0,
+      "expectancy": 0.0,
+      "gross_pnl": 0,
+      "max_drawdown": 0.0,
+      "median_trade": 0.0,
+      "mfe_capture": 0.0,
+      "missing_entry_markets": 0,
+      "missing_exit_markets": 0,
+      "missing_exit_observations": 0,
+      "model": "corrected_midpoint",
+      "net_pnl": 0.0,
+      "priced_trades": 0,
+      "profit_factor": 0.0,
+      "settlement_fallbacks": 0,
+      "skipped_exit_observations": 0,
+      "top3_concentration": 0.0,
+      "trade_count": 0,
+      "unpriced_trades": 0,
+      "win_rate": 0.0
+    },
+    "marketable": {
+      "average_mfe": 0.0,
+      "complete_fill_coverage": 0.0,
+      "crossed_entry_markets": 0,
+      "crossed_exit_markets": 0,
+      "crossed_exit_observations": 0,
+      "eligible_signals": 0,
+      "expectancy": 0.0,
+      "gross_pnl": 0,
+      "max_drawdown": 0.0,
+      "median_trade": 0.0,
+      "mfe_capture": 0.0,
+      "missing_entry_markets": 0,
+      "missing_exit_markets": 0,
+      "missing_exit_observations": 0,
+      "model": "marketable",
+      "net_pnl": 0.0,
+      "priced_trades": 0,
+      "profit_factor": 0.0,
+      "settlement_fallbacks": 0,
+      "skipped_exit_observations": 0,
+      "top3_concentration": 0.0,
+      "trade_count": 0,
+      "unpriced_trades": 0,
+      "win_rate": 0.0
+    },
+    "stressed_marketable": {
+      "average_mfe": 0.0,
+      "complete_fill_coverage": 0.0,
+      "crossed_entry_markets": 0,
+      "crossed_exit_markets": 0,
+      "crossed_exit_observations": 0,
+      "eligible_signals": 0,
+      "expectancy": 0.0,
+      "gross_pnl": 0,
+      "max_drawdown": 0.0,
+      "median_trade": 0.0,
+      "mfe_capture": 0.0,
+      "missing_entry_markets": 0,
+      "missing_exit_markets": 0,
+      "missing_exit_observations": 0,
+      "model": "stressed_marketable",
+      "net_pnl": 0.0,
+      "priced_trades": 0,
+      "profit_factor": 0.0,
+      "settlement_fallbacks": 0,
+      "skipped_exit_observations": 0,
+      "top3_concentration": 0.0,
+      "trade_count": 0,
+      "unpriced_trades": 0,
+      "win_rate": 0.0
+    }
+  },
+  "primary_model": "stressed_marketable",
+  "prospective_start_date": "2026-09-22",
+  "schema_version": 1,
+  "sessions_recorded": 0,
+  "sessions_with_incomplete_data": 0,
+  "sessions_without_signal": 0
+}
