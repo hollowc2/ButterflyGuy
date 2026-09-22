@@ -1,0 +1,11 @@
+[Unit]
+Description=Append completed sessions to the open Butterfly Guy prospective cohort
+Requires=butterfly-tunnel.service
+After=butterfly-tunnel.service
+
+[Service]
+Type=oneshot
+Environment=SSH_AUTH_SOCK=/run/user/1000/gnupg/S.gpg-agent.ssh
+WorkingDirectory=/mnt/Repos/Trading/Butterflyguy
+ExecStart=/mnt/Repos/Trading/Butterflyguy/tools/cohort_daily_update.sh
+TimeoutStartSec=2400
