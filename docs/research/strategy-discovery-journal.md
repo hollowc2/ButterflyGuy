@@ -536,6 +536,13 @@ tunnel (`ssh -f -N -L 15432:127.0.0.1:5432 billy@helios`) with `DATABASE__PORT` 
 reproduced the container-side figures exactly, confirming the tunnel path is equivalent.
 One session costs about two minutes; rerunning recorded dates costs seconds.
 
+The append is automated rather than run by hand: `tools/cohort_daily_update.sh` under the
+systemd user units in `infra/systemd/` fires weekdays at 18:30 PT, appends every completed
+session, verifies ledger integrity before committing, and treats a failed push as a
+warning so a locked ssh key cannot cost a session. Repeat and catch-up runs are safe
+because recorded sessions are skipped and incomplete ones are deferred. The timer must be
+stopped before any strategy work, since source drift makes `update` refuse to append.
+
 ### Checkpoint results
 
 - Dry-run rehearsal: completed 2026-09-21; every integrity property above demonstrated.
