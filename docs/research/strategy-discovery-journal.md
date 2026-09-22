@@ -466,16 +466,79 @@ combined with a prospective sample.
 
 - `src/butterfly_guy/backtest/prospective_execution.py`: `a3dfc10d3fba6996527c4cf9070bdcea5a3e2e3c1b3c3ad0672176a5dd16274c`
 - `src/butterfly_guy/backtest/execution_accounting.py`: `24d90f5ff56f9c3da38a6d56f701859c3f6e1814164afd6fc2b69c594be05cdc`
-- `src/butterfly_guy/scripts/run_prospective_execution.py`: `4bb9db87d3d0320c919c0577baac7bd2bd1a3381916ff556b222d63b976c85cb`
-- `tests/test_prospective_execution.py`: `74ff1f9b5e215e4b752f34f964325d9bbac69364995c72e926409ec7fe9d511a`
+- `src/butterfly_guy/scripts/run_prospective_execution.py`: `e21f3c1086946d765f1ac83664bd0507ef5d88ff91151a71dea8f8d5387ac7a7`
+- `tests/test_prospective_execution.py`: `b01908e23b055928213935ebf8d393bc7f81450122a3dd8e0984e45563c80a9b`
+
+The runner and its tests were corrected after pre-registration and before any
+cohort existed; their earlier hashes were
+`4bb9db87d3d0320c919c0577baac7bd2bd1a3381916ff556b222d63b976c85cb` and
+`74ff1f9b5e215e4b752f34f964325d9bbac69364995c72e926409ec7fe9d511a`. See the
+start-date correction below. `prospective_execution.py` and
+`execution_accounting.py` are unchanged.
 
 These hashes describe the pre-registration state. The binding fingerprints for any cohort
 are the ones inside that cohort's own `manifest.json`, recorded at `init` against a
 committed worktree.
 
+### Start-date correction before the first cohort
+
+`init` derived the current date from UTC and then took the next weekday. Sessions are
+Eastern, so UTC rolls over at 20:00 ET and an evening `init` treated the next morning's
+session as already underway. Initializing at 17:05 PDT on 2026-09-21 produced a start of
+2026-09-23 and silently discarded Monday 2026-09-22, whose opening bell was still about
+thirteen hours away. The date is now resolved in `America/New_York`, the timezone
+`CohortSpec` already declared and wrote into the manifest; the manifest's own
+`created_at` remains UTC. A regression test pins 2026-09-21 20:05 ET to a Monday start,
+the post-session case to Tuesday, and Friday evening across the weekend. The defective
+cohort directory was deleted before any session was recorded; no ledger ever contained a
+record under the old behavior.
+
+### Dry-run rehearsal
+
+Two rehearsal cohorts were run outside the repository tree under `--root`, starting
+2026-09-14 and 2026-09-17, and were never placed under `reports/`. They recorded five
+and two sessions respectively over already-known history. Demonstrated properties:
+
+- Manifest freeze: sixteen source hashes, the configuration SHA-256, resolved strategy
+  parameters including `drawdown_confirmation_polls = [1]`, fill models, quote rules, and
+  a clean committed SHA with `dirty=False`.
+- Source drift refusal: appending one comment line to `execution_accounting.py` caused
+  `update` to refuse and name the changed file.
+- Tamper detection: mutating a single `net_pnl` field in `trades.jsonl` made `verify`
+  report a record hash mismatch against the affected trade ID.
+- Repeat-run idempotency: rerunning recorded dates appended nothing and left
+  `trades.jsonl` byte-identical, completing in 14 seconds.
+- Start guards: a real cohort refused a past start, and a cohort starting 2026-09-17
+  recorded only 2026-09-17 and 2026-09-18 without reaching back.
+- Report generation: coverage, chronological halves, settlement split, skipped exit
+  observations, and settlement fallbacks all populated.
+
+Rehearsal results are plumbing evidence only and are never combined with a real cohort.
+
+### Registered cohort
+
+- Cohort ID: `spx-prospective-2026-09-22`
+- Manifest SHA-256: `1e6e82978d47d55782f2ae5b45e59fbd7f1eeae8010687e9cc930915c6d7b889`
+- Frozen commit: `6ffbfe7c0884c5c1616b6c226eee586b93ac1be7`, clean worktree, pushed
+- First eligible session: 2026-09-22
+- Endpoint: 120 trades, 20 cash settlements, 15 stressed winners, $12,000 drawdown limit
+
+Daily command:
+
+```bash
+uv run python src/butterfly_guy/scripts/run_prospective_execution.py update \
+  --cohort reports/prospective_execution/spx-prospective-2026-09-22 --through YYYY-MM-DD
+```
+
+The replay database is reachable only from Helios, so research runs go through an SSH
+tunnel (`ssh -f -N -L 15432:127.0.0.1:5432 billy@helios`) with `DATABASE__PORT` and
+`DATABASE_PASSWORD` supplied through the gitignored `.env`. A three-session comparison
+reproduced the container-side figures exactly, confirming the tunnel path is equivalent.
+One session costs about two minutes; rerunning recorded dates costs seconds.
+
 ### Checkpoint results
 
-- Dry-run rehearsal: not yet run.
+- Dry-run rehearsal: completed 2026-09-21; every integrity property above demonstrated.
 - 20-trade integrity checkpoint: not yet reached.
 - 60-trade early-failure review: not yet reached.
 - Registered endpoint: not yet reached.

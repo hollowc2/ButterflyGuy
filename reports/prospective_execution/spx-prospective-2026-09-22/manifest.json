@@ -1,0 +1,137 @@
+{
+  "asset": "SPX",
+  "assumptions": {
+    "commission_per_contract": 0.65,
+    "contract_multiplier": 100.0,
+    "contracts_per_butterfly": 4,
+    "quantity": 1,
+    "stressed_leg_slippage": 0.05
+  },
+  "cohort_id": "spx-prospective-2026-09-22",
+  "config": {
+    "path": "configs/config.yaml",
+    "sha256": "d120b63fd4e12ed812cc2742d602f9e531a1f5ca38e28c30628ab149f5d1b397"
+  },
+  "created_at": "2026-09-22T00:10:00.324852+00:00",
+  "database_tables": [
+    "option_chain_snapshots",
+    "spot_prices",
+    "daily_bars",
+    "monitoring_leg_quotes"
+  ],
+  "decision_rules": {
+    "checkpoint_trades": 20,
+    "early_failure_trades": 60,
+    "max_drawdown": 12000.0,
+    "max_top3_gross_profit_share": 0.5,
+    "min_executable_entry_coverage": 0.95,
+    "min_profit_factor": 1.0,
+    "primary_hypothesis": "the frozen strategy produces positive net P&L and positive expectancy over the registered prospective sample under stressed-marketable accounting",
+    "primary_model": "stressed_marketable"
+  },
+  "endpoint": {
+    "min_cash_settlements": 20,
+    "min_stressed_winners": 15,
+    "rule": "continue until every endpoint condition is met",
+    "target_trades": 120
+  },
+  "fill_models": {
+    "corrected_midpoint": "frozen simulation baseline: midpoint marks, entry commission, settlement-correct close",
+    "marketable": "buy outer legs at ask and sell two center contracts at bid on entry; inverse sides on an intraday exit; no closing order at cash settlement",
+    "stressed_marketable": "marketable plus $0.05 adverse slippage on every executable contract leg"
+  },
+  "git": {
+    "commit": "6ffbfe7c0884c5c1616b6c226eee586b93ac1be7",
+    "dirty": false
+  },
+  "init_command": "run_prospective_execution.py init --asset SPX --target-trades 120 --min-cash-settlements 20 --min-stressed-winners 15 --max-drawdown 12000",
+  "label": "prospective",
+  "prospective_start_date": "2026-09-22",
+  "quote_rules": {
+    "crossed_market": "ask < bid",
+    "entry_gap": "unpriced; excluded from P&L and counted in coverage",
+    "exit_gap": "skip the observation and roll forward to the next monitoring time; fall back to settlement-correct value when no executable exit remains",
+    "missing_market": "absent, null, non-finite, or negative required side",
+    "selection": "latest quote with timestamp <= simulated decision time",
+    "substitution": "never; no midpoint, theoretical, adjacent-strike, or carried quotes"
+  },
+  "schema_version": 1,
+  "source_hashes": {
+    "src/butterfly_guy/backtest/chain_cache.py": "fd4a890d389e65769aa378ba5e50becfe8b825fb62c5bb91dde5ddac4d436245",
+    "src/butterfly_guy/backtest/db_loader.py": "a4d139de915fe2150cf5a6eefab0a947b1b5dd89866101258f2bc7a144368e63",
+    "src/butterfly_guy/backtest/execution_accounting.py": "24d90f5ff56f9c3da38a6d56f701859c3f6e1814164afd6fc2b69c594be05cdc",
+    "src/butterfly_guy/backtest/prospective_execution.py": "a3dfc10d3fba6996527c4cf9070bdcea5a3e2e3c1b3c3ad0672176a5dd16274c",
+    "src/butterfly_guy/backtest/simulation_engine.py": "b90195072a896f90b4cc7cf325463913dcdaa00ab280e3e9fb04d81188415851",
+    "src/butterfly_guy/position/position_manager.py": "5f1e7eeeeb1e696e2d428e15d8c0520bafb9aaabf3af4634efe9708475a40c65",
+    "src/butterfly_guy/position/profit_policy.py": "908fbd4df219fa612c953c0bbc7ecfb33a9139a58d94d5a316a3328393994289",
+    "src/butterfly_guy/scripts/run_backtest_db.py": "d7ac3c0a4bf3034632164427024af41e7e738ab1ec55357e568a65bd647b4354",
+    "src/butterfly_guy/scripts/run_prospective_execution.py": "e21f3c1086946d765f1ac83664bd0507ef5d88ff91151a71dea8f8d5387ac7a7",
+    "src/butterfly_guy/strategy/butterfly_builder.py": "8001f1b71014cc54f18a53fe91256727ab6a2d0af615cc8e0c86b582d74ae719",
+    "src/butterfly_guy/strategy/butterfly_selector.py": "d0ee2bc7ec8b9488cdcb15a97516cea276eb85e31c32aa5e82f209a4efc001e0",
+    "src/butterfly_guy/strategy/direction_filter.py": "caccfc26e84d573216e032c6fc9756ba0bb90982cb93864b8d0f91dd8659fa99",
+    "src/butterfly_guy/strategy/entry_selection.py": "a5e943fdaf471ab4f68ff3c4e51d2baa185e34a92a30753196b40e3d28f398ad",
+    "src/butterfly_guy/strategy/gap_regime_filter.py": "5a08c4106f2b1b08960233b256591aae6a7abdf3e8758dca04333321f1fc9a66",
+    "src/butterfly_guy/strategy/regime_classifier.py": "98953554b37db06b6cbfaa9e92a43264fd445b935b4ecd981f77e98cb1483631",
+    "src/butterfly_guy/strategy/width_selection.py": "9e9c5207f8d59f7c54a1979b5c3ed330e446d7c8156b18249217f6c2451831d9"
+  },
+  "strategy_parameters": {
+    "afternoon_dd": [
+      0.75
+    ],
+    "allow_late_entry_fallback": false,
+    "asset": "SPX",
+    "bull_call_bias": false,
+    "csv": null,
+    "dd_schedule": [
+      null
+    ],
+    "direction": [
+      "auto"
+    ],
+    "drawdown_confirmation_polls": [
+      1
+    ],
+    "entry_time": [
+      "07:00:00"
+    ],
+    "entry_window_minutes": 45,
+    "gap_filter": null,
+    "late_morning_dd": [
+      0.9
+    ],
+    "legacy_end_of_day_mark": false,
+    "method": [
+      "VIX"
+    ],
+    "method_provided": false,
+    "min_gap_pct": null,
+    "min_hold_minutes": [
+      0.0
+    ],
+    "min_peak_profit_ratio": [
+      1.0
+    ],
+    "morning_dd": [
+      0.6
+    ],
+    "profit_strategy": [
+      "peakvaluetrailer"
+    ],
+    "rr_min": [
+      8.0
+    ],
+    "rr_min_provided": false,
+    "slippage": 0.0,
+    "strategy_f": false,
+    "thinkback": false,
+    "use_abs_stop": false,
+    "vix_max": null,
+    "wing": [
+      10,
+      20,
+      30
+    ],
+    "wing_provided": false
+  },
+  "timezone": "America/New_York"
+}
