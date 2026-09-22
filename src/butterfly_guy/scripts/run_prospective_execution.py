@@ -42,6 +42,7 @@ from butterfly_guy.backtest.prospective_execution import (
 )
 from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
 from butterfly_guy.core.logging import get_logger
+from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.scripts.run_backtest_db import (
     ASSET_CONFIG_PATHS,
     _patch_chain_cache,
@@ -317,13 +318,24 @@ def _next_session_after(day: dt.date) -> dt.date:
     return nxt
 
 
+def default_prospective_start(now: dt.datetime | None = None) -> dt.date:
+    """First fully prospective session, resolved on the exchange calendar.
+
+    Sessions are Eastern. Taking "today" from UTC rolls the date over at 20:00 ET
+    and skips the next morning's session, so an evening `init` would silently
+    discard a full trading day.
+    """
+    current = now.astimezone(EASTERN) if now is not None else dt.datetime.now(EASTERN)
+    return _next_session_after(current.date())
+
+
 def cohort_dir_for(cohort_id: str, root: Path) -> Path:
     return root / cohort_id
 
 
 def command_init(args: argparse.Namespace) -> int:
     created = dt.datetime.now(dt.timezone.utc)
-    default_start = _next_session_after(created.date())
+    default_start = default_prospective_start()
     start = args.start or default_start
     label = DRY_RUN_LABEL if args.dry_run_cohort else "prospective"
     if not args.dry_run_cohort and start < default_start:

@@ -29,6 +29,7 @@ from butterfly_guy.backtest.prospective_execution import (
 )
 from butterfly_guy.backtest.simulation_engine import DayResult
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
+from butterfly_guy.scripts.run_prospective_execution import default_prospective_start
 
 COMMISSION = 0.65
 ENTRY_COMMISSION = 4 * COMMISSION
@@ -648,3 +649,21 @@ def test_summary_reports_endpoint_progress_and_gates(tmp_path):
         "top3_within_limit",
         "drawdown_within_limit",
     }
+
+
+def test_default_prospective_start_uses_the_exchange_calendar_not_utc():
+    """An evening init must not skip the next morning's session.
+
+    2026-09-21 20:05 ET is already 2026-09-22 in UTC, but Monday's session is
+    still ahead, so Monday is the first prospective session.
+    """
+    sunday_evening_et = dt.datetime(2026, 9, 22, 0, 5, tzinfo=dt.timezone.utc)
+    assert default_prospective_start(sunday_evening_et) == dt.date(2026, 9, 22)
+
+    # Once Monday's session is over, Tuesday is the first prospective session.
+    monday_afternoon_et = dt.datetime(2026, 9, 22, 20, 5, tzinfo=dt.timezone.utc)
+    assert default_prospective_start(monday_afternoon_et) == dt.date(2026, 9, 23)
+
+    # Friday evening rolls past the weekend to Monday.
+    friday_evening_et = dt.datetime(2026, 9, 26, 1, 5, tzinfo=dt.timezone.utc)
+    assert default_prospective_start(friday_evening_et) == dt.date(2026, 9, 28)
