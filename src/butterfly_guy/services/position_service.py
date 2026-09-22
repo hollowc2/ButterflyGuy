@@ -49,6 +49,7 @@ from butterfly_guy.execution.order_manager import (
     PartialFillError,
     TerminalOrderError,
 )
+from butterfly_guy.notify import send as notify_telegram
 from butterfly_guy.position.position_manager import (
     PositionManager,
     PositionQuotesUnavailableError,
@@ -344,17 +345,20 @@ class PositionService:
                                 failure_details,
                                 underlying=self.config.strategy.underlying,
                             )
+                            alert_text = (
+                                "WARNING: position market data is unavailable "
+                                f"for trade {trade.trade_id}; position remains OPEN."
+                            )
                             if self.notifier:
                                 try:
-                                    await self.notifier._post(
-                                        "WARNING: position market data is unavailable "
-                                        f"for trade {trade.trade_id}; position remains OPEN."
-                                    )
+                                    await self.notifier._post(alert_text)
                                 except Exception as notify_error:
                                     log.warning(
                                         "position_market_data_alert_failed",
                                         error=str(notify_error),
                                     )
+                            if not notify_telegram(alert_text):
+                                log.warning("position_market_data_telegram_alert_failed")
                     await asyncio.sleep(poll_interval)
                     continue
 
@@ -373,6 +377,10 @@ class PositionService:
                         trade_id=trade.trade_id,
                         consecutive_failures=market_data_failures,
                     )
+                    if market_data_alerted:
+                        notify_telegram(
+                            f"OK: position market data recovered for trade {trade.trade_id}."
+                        )
                     market_data_failures = 0
                     market_data_alerted = False
                 chain_fetched_at = now_eastern()
