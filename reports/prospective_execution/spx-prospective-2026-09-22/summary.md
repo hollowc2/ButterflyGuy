@@ -3,7 +3,7 @@
 - Asset: SPX
 - Cohort label: prospective
 - Prospective start: 2026-09-22
-- Generated: 2026-09-22T00:22:37.101082+00:00
+- Generated: 2026-09-23T03:24:33.392714+00:00
 - Primary result: **stressed_marketable** (corrected midpoint is a comparison baseline only)
 
 ## Sessions
