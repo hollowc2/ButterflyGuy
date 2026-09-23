@@ -248,7 +248,11 @@ async def test_intermittent_missing_held_leg_degrades_then_recovers_without_brok
         return_value=EXPIRATION,
     ), patch(
         "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
-    ), patch("butterfly_guy.services.position_service.log") as monitor_log, pytest.raises(
+    ), patch(
+        "butterfly_guy.services.position_service.notify_telegram", return_value=True
+    ) as telegram_notify, patch(
+        "butterfly_guy.services.position_service.log"
+    ) as monitor_log, pytest.raises(
         asyncio.CancelledError
     ):
         await service.monitor_loop(trade, _candidate())
@@ -259,6 +263,7 @@ async def test_intermittent_missing_held_leg_degrades_then_recovers_without_brok
     assert service.state_machine.evaluate.call_count == 2
     service.order_manager.execute_exit.assert_not_awaited()
     assert service.schwab.mock_calls == []
+    assert telegram_notify.call_count == 2
     assert monitor_log.warning.call_count == 1
     assert monitor_log.error.call_count == 1
     set_readiness(None)
