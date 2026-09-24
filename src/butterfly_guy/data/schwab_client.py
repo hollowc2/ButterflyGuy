@@ -211,6 +211,7 @@ class SchwabClientWrapper:
     async def _retry(self, func, *args, endpoint: str = "unknown", **kwargs) -> Any:
         """Execute with exponential backoff retry."""
         last_err: Exception | None = None
+        last_response_body: str | None = None
         for attempt in range(MAX_RETRIES):
             try:
                 schwab_api_calls.labels(endpoint=endpoint).inc()
@@ -225,13 +226,22 @@ class SchwabClientWrapper:
             except Exception as e:
                 schwab_api_errors.labels(endpoint=endpoint).inc()
                 last_err = e
+                error_response = getattr(e, "response", None)
+                response_body = error_response.text[:500] if error_response is not None else None
+                last_response_body = response_body
                 if attempt < MAX_RETRIES - 1:
                     wait = RETRY_BACKOFF[attempt]
                     log.warning(
-                        "api_retry", endpoint=endpoint, attempt=attempt + 1, error=str(e), wait=wait
+                        "api_retry",
+                        endpoint=endpoint,
+                        attempt=attempt + 1,
+                        error=str(e),
+                        response_body=response_body,
+                        wait=wait,
                     )
                     await asyncio.sleep(wait)
-        raise RuntimeError(f"API call failed after {MAX_RETRIES} retries: {last_err}")
+        body_suffix = f" | response_body: {last_response_body}" if last_response_body else ""
+        raise RuntimeError(f"API call failed after {MAX_RETRIES} retries: {last_err}{body_suffix}")
 
     async def get_option_chain(self, symbol: str, expiration: dt.date) -> dict[str, Any]:
         """Fetch option chain for a specific symbol and expiration."""
