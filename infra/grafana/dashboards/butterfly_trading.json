@@ -1203,7 +1203,7 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "WITH samples AS (SELECT ts FROM spot_prices WHERE underlying = '$underlying' AND $__timeFilter(ts) UNION SELECT ts FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND $__timeFilter(ts)), trade AS (SELECT lower_strike, center_strike, upper_strike, entry_price FROM butterfly_trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time LIMIT 1) SELECT samples.ts AS time, (trade.lower_strike + trade.entry_price)::float AS \"lower_be\", trade.center_strike::float AS \"center\", (trade.upper_strike - trade.entry_price)::float AS \"upper_be\" FROM samples CROSS JOIN trade ORDER BY samples.ts",
+          "rawSql": "WITH samples AS (SELECT ts FROM spot_prices WHERE underlying = '$underlying' AND $__timeFilter(ts) UNION SELECT ts FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND $__timeFilter(ts)), trade AS (SELECT lower_strike, center_strike, upper_strike, entry_price FROM butterfly_trades WHERE underlying = '$underlying' AND status != 'CANCELLED' AND entry_time >= $__timeFrom() AND entry_time <= $__timeTo() ORDER BY entry_time LIMIT 1) SELECT samples.ts AS time, (trade.lower_strike + trade.entry_price)::float AS \"lower_be\", trade.center_strike::float AS \"center\", (trade.upper_strike - trade.entry_price)::float AS \"upper_be\" FROM samples CROSS JOIN trade ORDER BY samples.ts",
           "format": "time_series"
         },
         {
@@ -1212,7 +1212,7 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT t.entry_time AS time, COALESCE(sp.price, NULLIF(t.metadata->>'entry_spot', '')::numeric, q.spot_price)::float AS \"Entry\" FROM butterfly_trades t LEFT JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp ON TRUE LEFT JOIN LATERAL (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = t.id AND spot_price IS NOT NULL ORDER BY ts LIMIT 1) q ON TRUE WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' ORDER BY t.entry_time LIMIT 1",
+          "rawSql": "SELECT t.entry_time AS time, COALESCE(sp.price, NULLIF(t.metadata->>'entry_spot', '')::numeric, q.spot_price)::float AS \"Entry\" FROM butterfly_trades t LEFT JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp ON TRUE LEFT JOIN LATERAL (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = t.id AND spot_price IS NOT NULL ORDER BY ts LIMIT 1) q ON TRUE WHERE t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.entry_time >= $__timeFrom() AND t.entry_time <= $__timeTo() ORDER BY t.entry_time LIMIT 1",
           "format": "time_series"
         },
         {
@@ -1221,7 +1221,7 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT t.exit_time AS time, COALESCE(sp.price, q.spot_price)::float AS \"Exit\" FROM butterfly_trades t LEFT JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1) sp ON TRUE LEFT JOIN LATERAL (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = t.id AND spot_price IS NOT NULL AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1) q ON TRUE WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL ORDER BY t.entry_time LIMIT 1",
+          "rawSql": "SELECT t.exit_time AS time, COALESCE(sp.price, q.spot_price)::float AS \"Exit\" FROM butterfly_trades t LEFT JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1) sp ON TRUE LEFT JOIN LATERAL (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = t.id AND spot_price IS NOT NULL AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1) q ON TRUE WHERE t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL AND t.entry_time >= $__timeFrom() AND t.entry_time <= $__timeTo() ORDER BY t.entry_time LIMIT 1",
           "format": "time_series"
         },
         {
@@ -1411,5 +1411,5 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "America/New_York"
+  "timezone": "America/Los_Angeles"
 }
