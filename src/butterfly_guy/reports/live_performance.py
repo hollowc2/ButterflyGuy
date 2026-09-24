@@ -452,6 +452,9 @@ def _render_trade_row(trade: TradePoint) -> str:
     )
 
 
+_SOURCE_URL = "https://github.com/hollowc2/ButterflyGuy"
+
+
 def render_placeholder_html(*, underlying: str, generated_at: dt.datetime) -> str:
     stamp = generated_at.astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z")
     return f"""<!doctype html>
@@ -466,7 +469,10 @@ def render_placeholder_html(*, underlying: str, generated_at: dt.datetime) -> st
 </head>
 <body>
 <main>
-  <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
+  <nav class="site-nav">
+    <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
+    <a class="site-link" href="{_SOURCE_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub<span aria-hidden="true">↗</span></a>
+  </nav>
 
   <h1>Butterfly Guy — {html.escape(underlying)} Paper Performance</h1>
   <div class="sub">Paper trading · Static snapshot, last built {html.escape(stamp)}</div>
@@ -523,7 +529,10 @@ def render_report_html(
 </head>
 <body>
 <main>
-  <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
+  <nav class="site-nav">
+    <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
+    <a class="site-link" href="{_SOURCE_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub<span aria-hidden="true">↗</span></a>
+  </nav>
 
   <header class="hero">
     <div>
@@ -981,11 +990,16 @@ main { max-width: 1320px; margin: 0 auto; padding: 28px 24px 48px; }
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
 .site-link {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 20px;
   padding: 6px 13px 6px 11px;
   background: #121212;
   border: 1px solid var(--border);

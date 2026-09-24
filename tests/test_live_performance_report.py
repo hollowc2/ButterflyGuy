@@ -223,6 +223,7 @@ def test_render_placeholder_html() -> None:
     assert "Paper Performance" in html_doc
     assert "Live Performance" not in html_doc
     assert '<a class="site-link" href="/">' in html_doc
+    assert 'href="https://github.com/hollowc2/ButterflyGuy"' in html_doc
     assert "/assets/fonts.css" in html_doc
     for origin in ("fonts.googleapis.com", "fonts.gstatic.com", "cdn.jsdelivr.net"):
         assert origin not in html_doc
