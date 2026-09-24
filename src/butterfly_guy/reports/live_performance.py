@@ -471,7 +471,7 @@ def render_placeholder_html(*, underlying: str, generated_at: dt.datetime) -> st
 <main>
   <nav class="site-nav">
     <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
-    <a class="site-link" href="{_SOURCE_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub<span aria-hidden="true">↗</span></a>
+    <a class="site-link" href="{_SOURCE_URL}" target="_blank" rel="noopener noreferrer">source on GitHub<span aria-hidden="true">↗</span></a>
   </nav>
 
   <h1>Butterfly Guy — {html.escape(underlying)} Paper Performance</h1>
@@ -531,7 +531,7 @@ def render_report_html(
 <main>
   <nav class="site-nav">
     <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
-    <a class="site-link" href="{_SOURCE_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub<span aria-hidden="true">↗</span></a>
+    <a class="site-link" href="{_SOURCE_URL}" target="_blank" rel="noopener noreferrer">source on GitHub<span aria-hidden="true">↗</span></a>
   </nav>
 
   <header class="hero">
