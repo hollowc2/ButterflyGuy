@@ -1,0 +1,5 @@
+# Exploratory research scripts: inherit repo lint settings, relax style rules only.
+extend = "../../../pyproject.toml"
+
+[lint]
+ignore = ["E501", "E701", "E702", "F403", "F405", "N806"]

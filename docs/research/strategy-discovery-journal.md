@@ -553,3 +553,149 @@ stopped before any strategy work, since source drift makes `update` refuse to ap
 
 Conclusion: pending. No prospective session has been evaluated, so this study makes no
 claim yet about whether a stressed executable edge survives out of sample.
+
+## 2026-09-25 — SPX idea sweep and low-VIX diagnosis (development data only)
+
+This is exploratory development research on already-seen history, not a change to the
+frozen strategy and not evidence about the open prospective cohort. No tracked source,
+configuration, service, or cohort ledger was modified; the cohort's source hashes are
+untouched. Base commit `f918c08c9f44a59597a2c6ec68cf113dc83cb54b`.
+
+### Data and harness
+
+A read-only, after-hours export from the Helios `butterfly_guy` database: SPX 0-DTE
+`option_chain_snapshots` rows 09:30–16:00 ET with `abs(strike − spot_price) ≤ 200`
+(8,152,966 rows, 133 sessions), `spot_prices` for SPX and `$VIX`, and `daily_bars` for SPX
+and `$VIX`. SHA-256: chain `470169466260d009f748bbb74fcc4aea7aaf562a0aaa1876b017e219c08a0332`,
+spot `8757f19f989061a15b1c4b294c61e1b74e48c3646266b76d47771ca1f7cf4862`, daily
+`cb4247a0f190a29c89adc1aca747baca699f2f356b6afcb20a229f55e346b74d`.
+
+A standalone numpy replay reimplements the frozen entry (gap direction, VIX bucket widths
+and sigma anchors, ±15 center tolerance, RR ≥ 8, cost caps, first qualifying snapshot in
+10:00–10:45 ET) and the 60/90/75% peak trailer. It uses the chain snapshot as its decision
+clock rather than `spot_prices` bars. Accounting matches the 2026-09-21 models: midpoint;
+marketable (outer asks, twice the center bid; inverse on exit); and stressed (+$0.05 per
+contract per executed side), with $0.65 per contract and free cash settlement against the
+official close. Parity against the frozen 2026-03-13 → 2026-09-18 replay: 118 trades
+(22 settled, 96 trailed), midpoint $17,634.60 vs published $17,691.60, stressed $9,830.60 vs
+$9,890.60. The residual (0.3%) is attributed to the decision-clock difference.
+
+Sample for the sweep: 132 sessions, 2026-03-13 → 2026-09-24. Halves: H1 through
+2026-06-18 (67 sessions), H2 from 2026-06-19 (65 sessions). The variant list was written
+before any variant was run. Round 2 was written after round 1 and is labeled post-hoc.
+
+### Sweep results (stressed net P&L)
+
+| Variant | Trades | Net | H1 | H2 |
+|---|---:|---:|---:|---:|
+| E0 baseline replica | 122 | $10,424 | $17,031 | −$6,607 |
+| X1 hold to settlement | 122 | $5,051 | $14,344 | −$9,293 |
+| X2 / X3 take profit 3× / 2×, else settle | 122 | −$2,574 / −$3,079 | −$1,143 / −$2,431 | −$1,431 / −$647 |
+| X4 50% stop, else settle | 122 | −$625 | $7,489 | −$8,114 |
+| X5 trailer, flat at 15:00 | 122 | −$4,044 | $3,448 | −$7,493 |
+| D1 opening-momentum direction | 123 | $2,505 | $11,208 | −$8,703 |
+| D2 gap-fade direction | 123 | −$7,244 | −$2,416 | −$4,827 |
+| D3 call and put fly daily | 245 | $3,181 | $14,615 | −$11,434 |
+| D4 ATM fly, settle | 123 | −$19,272 | −$11,377 | −$7,895 |
+| K1 skip wide entry spread (H1-median gate) | 48 | $11,560 | $15,474 | −$3,914 |
+| G1 prior-session EV selector, any fly, settle | 112 | $12,221 | −$346 | $12,567 |
+| G2 G1 at 13:00 | 112 | $10,084 | −$16,122 | $26,206 |
+| R1 (post-hoc) skip VIX < 17 | 67 | $12,722 | $17,086 | −$4,364 |
+| R3 E0 candidates ranked by EV, trailer | 106 | $4,617 | $10,193 | −$5,577 |
+
+No variant met the registered bar of beating the baseline in both halves. The peak trailer
+beat every simpler exit, and gap direction beat momentum and fade. Straddle-anchored centers
+(C1/C2) and 11:30/13:00/14:30 entries (T1–T6) produced one to four trades each. This is
+structural: the chain-implied remaining-session σ (1.25 × the 10:00 ATM straddle) is about
+0.4× the VIX daily move, and RR ≥ 8 exists only about 1.5–2 σ out of the money. G1's total
+is not comparable: it chose 50-point flies at about $860 of debit (about 4× baseline risk),
+returned 12% on stressed debit versus the baseline's 25%, and its highest-EV quartile lost
+$9,740. Hypothesis 2 of `SHARPE_RESEARCH.md` (rank by expected payoff) failed as R3.
+
+### Low-VIX diagnosis
+
+The baseline's stressed P&L by entry VIX: < 17, −$2,578 over 56 trades; 17–24.5, +$8,061
+over 55; > 24.5, +$4,941 over 11. This is mostly confounded with time. In an OLS of
+stressed dollars per trade on a VIX < 17 indicator and an H2 indicator, the VIX < 17
+coefficient is −$54 (t −0.29) and the H2 coefficient is −$368 (t −2.00). 43 of the 56
+low-VIX trades fall in H2, and within H2 the 17–24.5 bucket did worse per trade (−$218)
+than VIX < 17 (−$52).
+
+Ruled out: placement differs by regime (mean center distance 1.58 / 1.56 / 1.64 σ, width
+0.88 / 0.89 / 0.92 σ), and low-VIX sessions moving less than priced (mean |close − 10:00
+spot| of 0.79 / 0.79 / 0.76 σ). A market-wide grid of 10:00 flies at 0–2 σ on both sides
+varies more between halves than between VIX buckets.
+
+Two mechanisms remain:
+
+- Cost drag is about flat per fly ($66.8 / $65.3 / $67.8 per trade), so it is 28.8% of a
+  low-VIX debit versus 21.9% and 15.0%. Low-VIX midpoint expectancy is only +$20.8 per
+  trade; costs flip it negative.
+- At VIX < 17, favorable excursion after 10:00 is smaller upward than downward in both
+  halves (up minus down −0.34 σ in H1, n = 14; −0.17 σ in H2, n = 45; both bootstrap 90%
+  intervals include zero). It is the opposite at 17–24.5 (+0.11, +0.13). Low-VIX call flies
+  lost in both halves (−$1,617 over 8 trades; −$3,633 over 27). Low-VIX put flies won in both
+  (+$1,282 over 5; +$1,390 over 16).
+
+### Hypothesis registered for a future forward cohort (not applied)
+
+H-LV1: with every other frozen rule unchanged, skipping CALL-direction entries when entry VIX
+is below 17.0 improves stressed-marketable expectancy relative to the frozen baseline on
+untouched sessions. It was derived post-hoc from 13 H1 and 43 H2 low-VIX trades, 21 of them
+puts, and is not validated. It must not be added to the open cohort
+`spx-prospective-2026-09-22`. A separate test must begin after that cohort's endpoint, or
+run in parallel as a shadow comparison from shared entries without touching the cohort's
+source hashes.
+
+### Why the baseline fails in H2
+
+Every component except settlement landings is unchanged between halves: trailed-exit P&L
+(−$10,539 H1, −$10,841 H2), average loss (−$253, −$213), cost drag ($66.1, $66.3 per trade),
+entry spread (6.0%, 6.5% of mid debit), center distance (1.579 σ in both), calls share (59%,
+60%), and direction accuracy (54%, 59%). The difference is settlement:
+15 settled trades netting +$27,570 in H1 against 8 netting +$4,234 in H2. Wins over $1,000:
+11 versus 3; average win $2,651 versus $760. The market-implied payout proxy (mid debit ÷
+width) was 0.091 and 0.089. Realized settlement value ÷ width was 0.160 in H1 and 0.059 in
+H2, so H1 flies paid 1.76× their price and H2 flies paid 0.66×.
+
+The H1–H2 expectancy difference of $394 per trade has a one-sided permutation p = 0.007.
+A 63-trade resample from the full-sample trade distribution nets −$6,607 or worse 3.2% of the
+time. This is larger than ordinary lottery variance but is not yet a structural break.
+
+Across all 130 sessions with a 10:00 straddle, measured after 10:00 in chain-implied σ units:
+
+| | H1 | H2 |
+|---|---:|---:|
+| Mean entry VIX | 19.9 | 16.5 |
+| RMS realized move ÷ implied | 1.02 | 0.92 |
+| Mean \|move\| | 0.84 σ | 0.74 σ |
+| Sessions with \|move\| > 1 σ | 38.5% | 23.1% |
+| Rest of day follows the gap | 53.8% | 61.5% |
+| corr(gap sign, move after 10:00) | 0.11 | 0.25 |
+| Close lands 0.9–2.3 σ in the gap direction | 23.1% (15/65) | 12.3% (8/65) |
+| Long ATM straddle held to close, mean points | +1.55 | −2.79 |
+
+The strategy is a directional bet on tail realized volatility. It pays when the close lands
+about 1–2.3 σ in the gap direction, which needs realized movement at or above what the
+chain prices. H2's direction signal was better, but the moves were smaller than implied, so
+fewer closes reached the tent and those that did landed near the wings. H1 was the half in
+which realized movement slightly exceeded implied (a long straddle made money). Index
+options usually carry a positive variance premium, so the H1 conditions may be the favorable
+exception rather than the norm. The landing-rate difference alone is not significant
+(Fisher p = 0.167); the P&L gap also reflects winners landing near the wings.
+
+No pre-entry predictor was found. Squared daily realized/implied moves have lag-one
+autocorrelation −0.002. Trailing 5-, 10- and 20-session realized/implied and trailing
+landing rates had Spearman correlations with next-trade stressed P&L of −0.07 to −0.17
+(no p below 0.08). Their H1 and H2 signs disagreed or were negative, and tercile P&L was
+non-monotonic. A "trade only after high realized vol" filter is not supported.
+
+Implication for the open cohort: its outcome depends mainly on whether realized 0-DTE
+movement after 10:00 matches or exceeds the chain's price during the cohort window. H2's
+regime produced a stressed loss of $105 per trade. The registered endpoint's 20-settlement
+minimum is the right guard: fewer settlements are the failure mode. Nothing here changes
+the cohort's rules.
+
+Artifacts and reproduction: `docs/research/spx-idea-sweep-2026-09-25/` (harness, registry,
+result JSON, and the export commands; data is re-exported, not committed). The analysis ran
+with the project's locked `.venv`, and `uv run ruff check .` passes.
