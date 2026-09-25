@@ -472,6 +472,7 @@ def render_placeholder_html(*, underlying: str, generated_at: dt.datetime) -> st
   <nav class="site-nav">
     <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
     <a class="site-link" href="{_SOURCE_URL}" target="_blank" rel="noopener noreferrer">source on GitHub<span aria-hidden="true">↗</span></a>
+    <a class="site-link site-link-feature" href="strategy/">strategy explained<span aria-hidden="true">→</span></a>
   </nav>
 
   <h1>Butterfly Guy — {html.escape(underlying)} Paper Performance</h1>
@@ -532,6 +533,7 @@ def render_report_html(
   <nav class="site-nav">
     <a class="site-link" href="/"><span aria-hidden="true">←</span>billybitcoin.cloud</a>
     <a class="site-link" href="{_SOURCE_URL}" target="_blank" rel="noopener noreferrer">source on GitHub<span aria-hidden="true">↗</span></a>
+    <a class="site-link site-link-feature" href="strategy/">strategy explained<span aria-hidden="true">→</span></a>
   </nav>
 
   <header class="hero">
@@ -1017,6 +1019,17 @@ main { max-width: 1320px; margin: 0 auto; padding: 28px 24px 48px; }
   border-color: rgba(200, 146, 42, 0.45);
 }
 .site-link span { color: var(--accent); }
+.site-link-feature {
+  color: var(--accent);
+  background: rgba(200, 146, 42, 0.1);
+  border-color: rgba(200, 146, 42, 0.4);
+}
+.site-link-feature:hover,
+.site-link-feature:focus-visible {
+  color: var(--text);
+  background: rgba(200, 146, 42, 0.18);
+  border-color: var(--accent);
+}
 h1 { font-size: 28px; margin: 0 0 8px; font-weight: 600; }
 h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
 .sub { color: var(--muted); font-size: 14px; }

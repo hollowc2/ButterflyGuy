@@ -28,8 +28,16 @@ from butterfly_guy.reports.live_performance import (
     render_report_html,
     trade_point_from_row,
 )
+from butterfly_guy.reports.strategy_page import (
+    STRATEGY_SCRIPT_NAME,
+    best_trade,
+    reference_spot,
+    render_strategy_html,
+    strategy_script,
+)
 
 DEFAULT_OUTPUT = Path("/var/www/billybitcoin.cloud/html/butterfly-spx/index.html")
+DEFAULT_STRATEGY_CONFIG = Path("configs/config.yaml")
 
 
 async def fetch_closed_trades(conn: asyncpg.Connection, underlying: str) -> list[TradePoint]:
@@ -123,7 +131,9 @@ def write_html_atomic(path: Path, content: str) -> None:
     tmp_path.replace(path)
 
 
-async def generate(*, underlying: str, output: Path) -> None:
+async def generate(
+    *, underlying: str, output: Path, strategy_config: Path = DEFAULT_STRATEGY_CONFIG
+) -> None:
     generated_at = now_pacific()
     conn = await asyncpg.connect(load_config().database.dsn)
     try:
@@ -143,18 +153,39 @@ async def generate(*, underlying: str, output: Path) -> None:
 
     write_html_atomic(output, html_doc)
 
+    # The explainer is static apart from config values and the best trade; the
+    # script lands first so the page never references a file that isn't there.
+    # load_config() silently falls back to defaults for a missing file, which
+    # would publish the wrong rules, so require the file explicitly.
+    if not strategy_config.exists():
+        raise FileNotFoundError(f"strategy config not found: {strategy_config}")
+    config = load_config(strategy_config)
+    strategy_dir = output.parent / "strategy"
+    write_html_atomic(strategy_dir / STRATEGY_SCRIPT_NAME, strategy_script())
+    write_html_atomic(
+        strategy_dir / "index.html",
+        render_strategy_html(config, spot=reference_spot(trades), best=best_trade(trades)),
+    )
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate Butterfly Guy live performance site")
     parser.add_argument("--underlying", default="SPX")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--strategy-config", type=Path, default=DEFAULT_STRATEGY_CONFIG)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        asyncio.run(generate(underlying=args.underlying, output=args.output))
+        asyncio.run(
+            generate(
+                underlying=args.underlying,
+                output=args.output,
+                strategy_config=args.strategy_config,
+            )
+        )
     except Exception as exc:
         print(f"generate_live_performance failed: {exc}", file=sys.stderr)
         return 1

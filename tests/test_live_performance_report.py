@@ -148,6 +148,7 @@ def test_render_report_html_contains_sections() -> None:
     assert "Fit curve" in html_doc
     assert "hideNoTradesToggle" in html_doc
     assert "<details class=\"panel trade-log-panel\" open>" in html_doc
+    assert 'href="strategy/"' in html_doc
     assert "max_trades_reached (1)" in html_doc
 
 
@@ -224,6 +225,7 @@ def test_render_placeholder_html() -> None:
     assert "Live Performance" not in html_doc
     assert '<a class="site-link" href="/">' in html_doc
     assert 'href="https://github.com/hollowc2/ButterflyGuy"' in html_doc
+    assert 'href="strategy/"' in html_doc
     assert "/assets/fonts.css" in html_doc
     for origin in ("fonts.googleapis.com", "fonts.gstatic.com", "cdn.jsdelivr.net"):
         assert origin not in html_doc
