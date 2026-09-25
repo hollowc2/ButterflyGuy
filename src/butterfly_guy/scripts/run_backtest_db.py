@@ -431,6 +431,9 @@ def parse_args() -> argparse.Namespace:
                         ">= MIN_PCT "
                         "(e.g. 0.0 = any gap up, 0.0025 = gap up >=0.25%%). "
                         "Days below the threshold are skipped entirely.")
+    p.add_argument("--direction-ma", type=int, default=None, metavar="N",
+                   help="CALL if entry-time spot >= N-day SMA of prior daily closes, else "
+                        "PUT. Days with fewer than N prior closes are skipped.")
     p.add_argument("--strategy-f", action="store_true",
                    help="Strategy F: all three filters must pass to enter a CALL butterfly — "
                         "(1) regime=BULL, (2) VIX at entry < VIX prev close, (3) SPX gap >=0.25%%.")
@@ -943,6 +946,15 @@ async def find_entry_in_window(
         direction = (
             "CALL" if data["open_spot"] >= data["prev_close"] else "PUT"
         ) if direction_arg == "auto" else direction_arg
+        if args.direction_ma is not None:
+            if "ma_closes" not in data:
+                data["ma_closes"] = await get_recent_closes(
+                    conn, date, asset, n=args.direction_ma
+                )
+            if len(data["ma_closes"]) < args.direction_ma:
+                return None
+            sma = sum(data["ma_closes"]) / args.direction_ma
+            direction = "CALL" if bar.close >= sma else "PUT"
         gap_pct = (data["open_spot"] - data["prev_close"]) / data["prev_close"]
         if args.gap_filter is not None:
             if gap_pct < args.gap_filter:

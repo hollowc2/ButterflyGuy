@@ -88,6 +88,7 @@ async def test_entry_window_skips_stale_vix_and_uses_first_fresh_snapshot(monkey
         strategy_f=False,
         bull_call_bias=False,
         min_gap_pct=None,
+        direction_ma=None,
     )
     config = SimpleNamespace(
         entry=SimpleNamespace(
@@ -118,6 +119,75 @@ async def test_entry_window_skips_stale_vix_and_uses_first_fresh_snapshot(monkey
     )
 
     assert entry == (bars[1], 20.0, "CALL", candidate)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("closes", "expected"),
+    [([90.0, 110.0], "CALL"), ([100.0, 110.0], "PUT"), ([100.0], None)],
+)
+async def test_entry_window_direction_ma_uses_sma_of_prior_closes(
+    monkeypatch, closes, expected
+):
+    eastern = ZoneInfo("America/New_York")
+    bar = MinuteBar(
+        ts=dt.datetime(2026, 7, 20, 10, 0, tzinfo=eastern),
+        open=100.0,
+        high=100.0,
+        low=100.0,
+        close=100.0,
+        volume=0,
+    )
+
+    async def fake_vix(_conn, at_time):
+        return 20.0, at_time
+
+    async def fake_closes(_conn, _date, _underlying, n):
+        return closes[-n:]
+
+    monkeypatch.setattr(run_backtest_db, "get_vix_snapshot_at", fake_vix)
+    monkeypatch.setattr(run_backtest_db, "get_recent_closes", fake_closes)
+    monkeypatch.setattr(
+        run_backtest_db,
+        "select_entry_candidate",
+        lambda **kwargs: SimpleNamespace(candidate=kwargs["direction"]),
+    )
+    args = SimpleNamespace(
+        entry_window_minutes=45,
+        vix_max=None,
+        gap_filter=None,
+        strategy_f=False,
+        bull_call_bias=False,
+        min_gap_pct=None,
+        direction_ma=2,
+    )
+    config = SimpleNamespace(
+        entry=SimpleNamespace(strike_selection_method="VIX", max_vix_age_seconds=300),
+        strategy=SimpleNamespace(vix_width_buckets=[object()]),
+    )
+    data = {
+        "bars": [bar],
+        "chains": ChainDay({bar.ts: [object()]}),
+        # Gap-up open: gap direction would say CALL regardless of the MA.
+        "open_spot": 101.0,
+        "prev_close": 100.0,
+        "vix_prev_close": 21.0,
+        "day": SimpleNamespace(recent_closes=[]),
+    }
+
+    entry = await run_backtest_db.find_entry_in_window(
+        object(),
+        data=data,
+        date=bar.ts.date(),
+        asset="SPX",
+        direction_arg="auto",
+        entry_pst=dt.time(7, 0),
+        args=args,
+        config=config,
+        wing_widths=None,
+    )
+
+    assert (entry[2] if entry else None) == expected
 
 
 @pytest.mark.asyncio
