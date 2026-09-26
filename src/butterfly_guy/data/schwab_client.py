@@ -209,7 +209,11 @@ class SchwabClientWrapper:
         return self._account_hash
 
     async def _retry(self, func, *args, endpoint: str = "unknown", **kwargs) -> Any:
-        """Execute with exponential backoff retry."""
+        """Execute with exponential backoff retry.
+
+        Retries 429, 5xx, and transport errors. Other 4xx responses are not
+        retryable and fail immediately.
+        """
         last_err: Exception | None = None
         last_response_body: str | None = None
         for attempt in range(MAX_RETRIES):
@@ -219,6 +223,8 @@ class SchwabClientWrapper:
                 if resp.status_code == 429:
                     wait = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
                     log.warning("rate_limited", endpoint=endpoint, wait=wait)
+                    last_err = RuntimeError(f"HTTP 429 rate limited on {endpoint}")
+                    last_response_body = None
                     await asyncio.sleep(wait)
                     continue
                 resp.raise_for_status()
@@ -229,6 +235,12 @@ class SchwabClientWrapper:
                 error_response = getattr(e, "response", None)
                 response_body = error_response.text[:500] if error_response is not None else None
                 last_response_body = response_body
+                status = getattr(error_response, "status_code", None)
+                if isinstance(status, int) and 400 <= status < 500:
+                    body_suffix = f" | response_body: {response_body}" if response_body else ""
+                    raise RuntimeError(
+                        f"API call failed with non-retryable HTTP {status}: {e}{body_suffix}"
+                    ) from e
                 if attempt < MAX_RETRIES - 1:
                     wait = RETRY_BACKOFF[attempt]
                     log.warning(

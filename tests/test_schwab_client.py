@@ -7,6 +7,7 @@ import os
 import stat
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from butterfly_guy.core.config import SchwabSettings
@@ -299,3 +300,60 @@ async def test_unreadable_marker_is_adopted_rather_than_forcing_a_rebuild(monkey
     assert await schwab.reload_if_reauthorized() is False
     assert schwab._creation_timestamp == 1000
     assert len(handed_out) == 1
+
+
+def _http_response(status: int, text: str = "") -> httpx.Response:
+    return httpx.Response(
+        status, text=text, request=httpx.Request("GET", "https://api.example/v1/x")
+    )
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    sleep = AsyncMock()
+    monkeypatch.setattr("butterfly_guy.data.schwab_client.asyncio.sleep", sleep)
+    return sleep
+
+
+@pytest.mark.asyncio
+async def test_retry_does_not_retry_non_retryable_4xx(no_sleep):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    func = AsyncMock(return_value=_http_response(400, "bad symbol"))
+
+    with pytest.raises(RuntimeError, match="(?s)non-retryable HTTP 400.*bad symbol"):
+        await schwab._retry(func, endpoint="get_quote")
+
+    assert func.await_count == 1
+    no_sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first", [500, 503, 429])
+async def test_retry_retries_5xx_and_429_then_succeeds(no_sleep, first):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    ok = _http_response(200)
+    func = AsyncMock(side_effect=[_http_response(first), ok])
+
+    assert await schwab._retry(func, endpoint="get_quote") is ok
+    assert func.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_retry_retries_transport_errors(no_sleep):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    ok = _http_response(200)
+    func = AsyncMock(side_effect=[httpx.ConnectError("boom"), ok])
+
+    assert await schwab._retry(func, endpoint="get_quote") is ok
+    assert func.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_retry_exhausted_on_429_reports_rate_limit(no_sleep):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    func = AsyncMock(return_value=_http_response(429))
+
+    with pytest.raises(RuntimeError, match="after 3 retries: HTTP 429 rate limited"):
+        await schwab._retry(func, endpoint="get_quote")
+
+    assert func.await_count == 3
