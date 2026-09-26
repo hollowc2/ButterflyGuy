@@ -24,6 +24,7 @@ from butterfly_guy.core.time_utils import (
     MARKET_OPEN,
     get_0dte_expiration,
     is_market_open,
+    is_trading_day,
     market_close_time,
     now_eastern,
     session_date,
@@ -214,6 +215,14 @@ def broker_cash_settlement_from_transactions(
         net_pnl_dollars=round(net_pnl_dollars, 2),
         evidence={"status": "SETTLED", "transactions": evidence_transactions},
     )
+
+
+def _settlement_pending_alert_time(trade_date: dt.date) -> dt.datetime:
+    """Return the next trading session's open after *trade_date*, in Eastern time."""
+    day = trade_date + dt.timedelta(days=1)
+    while not is_trading_day(day):
+        day += dt.timedelta(days=1)
+    return dt.datetime.combine(day, MARKET_OPEN, tzinfo=EASTERN)
 
 
 def final_regular_session_close_from_candles(
@@ -842,7 +851,13 @@ class PositionService:
         self,
         trade: TradeRecord,
     ) -> BrokerCashSettlement:
-        """Wait for Schwab to post all opening and expiration transactions."""
+        """Wait for Schwab to post all opening and expiration transactions.
+
+        Keeps waiting indefinitely, but alerts once if settlement is still
+        pending at the next trading session's open.
+        """
+        alert_at = _settlement_pending_alert_time(trade.trade_date)
+        pending_alerted = False
         while True:
             today = session_date()
             try:
@@ -859,6 +874,10 @@ class PositionService:
                         settlement_value=settlement.settlement_value,
                         net_pnl_dollars=settlement.net_pnl_dollars,
                     )
+                    if pending_alerted:
+                        notify_telegram(
+                            f"OK: broker cash settlement posted for trade {trade.trade_id}."
+                        )
                     return settlement
             except SettlementEvidenceError:
                 raise
@@ -869,6 +888,29 @@ class PositionService:
                     error=str(e),
                 )
             log.debug("broker_cash_settlement_pending", trade_id=trade.trade_id)
+            if not pending_alerted and now_eastern() >= alert_at:
+                pending_alerted = True
+                log.error(
+                    "broker_cash_settlement_overdue",
+                    trade_id=trade.trade_id,
+                    trade_date=str(trade.trade_date),
+                    alert_at=alert_at.isoformat(),
+                )
+                alert_text = (
+                    f"WARNING: broker cash settlement for trade {trade.trade_id} "
+                    f"({trade.trade_date}) is still not posted; trade remains OPEN "
+                    "and settlement polling continues."
+                )
+                if self.notifier:
+                    try:
+                        await self.notifier._post(alert_text)
+                    except Exception as notify_error:
+                        log.warning(
+                            "broker_cash_settlement_alert_failed",
+                            error=str(notify_error),
+                        )
+                if not notify_telegram(alert_text):
+                    log.warning("broker_cash_settlement_telegram_alert_failed")
             await asyncio.sleep(300)
 
     async def _settlement_spot_price(

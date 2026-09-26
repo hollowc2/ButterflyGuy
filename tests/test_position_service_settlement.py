@@ -17,6 +17,7 @@ from butterfly_guy.services.position_service import (
     BrokerCashSettlement,
     PositionService,
     SettlementEvidenceError,
+    _settlement_pending_alert_time,
     broker_cash_settlement_from_transactions,
     final_regular_session_close_from_candles,
 )
@@ -752,6 +753,64 @@ async def test_restart_with_recovered_peak_keeps_drawdown_exit(
         assert reason.startswith("drawdown")
     else:
         service.order_manager.execute_exit.assert_not_awaited()
+
+
+def test_settlement_pending_alert_time_is_next_session_open() -> None:
+    # Friday -> Monday, and 2026-09-04 is the Friday before Labor Day.
+    assert _settlement_pending_alert_time(dt.date(2026, 7, 17)) == dt.datetime(
+        2026, 7, 20, 9, 30, tzinfo=EASTERN
+    )
+    assert _settlement_pending_alert_time(dt.date(2026, 9, 4)) == dt.datetime(
+        2026, 9, 8, 9, 30, tzinfo=EASTERN
+    )
+
+
+@pytest.mark.asyncio
+async def test_overdue_broker_settlement_alerts_once_and_keeps_waiting() -> None:
+    service = PositionService.__new__(PositionService)
+    service.schwab = AsyncMock()
+    service.schwab.get_transactions_for_day.return_value = []
+    service.notifier = MagicMock(_post=AsyncMock())
+    trade = TradeRecord(trade_id=9, trade_date=dt.date(2026, 7, 13), entry_price=1.0)
+    settled = BrokerCashSettlement(
+        settlement_value=1.0,
+        settlement_spot=None,
+        processing_time=dt.datetime(2026, 7, 14, tzinfo=dt.timezone.utc),
+        entry_net_amount=-100.0,
+        settlement_net_amount=100.0,
+        net_pnl_dollars=0.0,
+        evidence={},
+    )
+    clock = iter(
+        [
+            dt.datetime(2026, 7, 13, 20, 0, tzinfo=EASTERN),
+            dt.datetime(2026, 7, 14, 9, 30, tzinfo=EASTERN),
+            dt.datetime(2026, 7, 14, 9, 35, tzinfo=EASTERN),
+        ]
+    )
+
+    with patch(
+        "butterfly_guy.services.position_service.session_date",
+        return_value=dt.date(2026, 7, 14),
+    ), patch(
+        "butterfly_guy.services.position_service.now_eastern",
+        side_effect=lambda: next(clock),
+    ), patch(
+        "butterfly_guy.services.position_service.broker_cash_settlement_from_transactions",
+        side_effect=[None, None, None, settled],
+    ), patch(
+        "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
+    ), patch(
+        "butterfly_guy.services.position_service.notify_telegram", return_value=True
+    ) as telegram:
+        result = await service._wait_for_broker_cash_settlement(trade)
+
+    assert result is settled
+    service.notifier._post.assert_awaited_once()
+    messages = [c.args[0] for c in telegram.call_args_list]
+    assert len(messages) == 2
+    assert messages[0].startswith("WARNING") and "trade 9" in messages[0]
+    assert messages[1].startswith("OK:")
 
 
 @pytest.mark.asyncio
