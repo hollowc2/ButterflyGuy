@@ -701,11 +701,9 @@ async def entry_loop(
         )
 
     while True:
-        if not is_market_open():
-            await asyncio.sleep(30)
-            continue
-
-        # Check if monitor task has finished — reset active_trade so we can re-enter
+        # Check if monitor task has finished — reset active_trade so we can re-enter.
+        # This runs before the market-hours gate so a failure raised after the
+        # close (e.g. missing settlement evidence) alerts now, not at the next open.
         if monitor_task is not None and monitor_task.done():
             exc = monitor_task.exception()
             if exc:
@@ -732,6 +730,10 @@ async def entry_loop(
                     return
             active_trade = None
             monitor_task = None
+
+        if not is_market_open():
+            await asyncio.sleep(30)
+            continue
 
         # If no active position, try entry
         if active_trade is None:

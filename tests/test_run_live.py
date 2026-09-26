@@ -678,6 +678,41 @@ async def test_entry_loop_alerts_after_monitor_safety_error(
     set_readiness(None)
 
 
+@pytest.mark.asyncio
+async def test_entry_loop_alerts_monitor_failure_after_market_close(monkeypatch):
+    trade_service = Mock(attempt_entry=AsyncMock())
+    position_service = Mock()
+    position_service.monitor_loop.return_value = _never_awaited()
+    monitor_task = Mock()
+    monitor_task.done.return_value = True
+    monitor_task.exception.return_value = SettlementEvidenceError("missing evidence")
+
+    def create_task(coro, **_kwargs):
+        coro.close()
+        return monitor_task
+
+    async def fail_if_waiting_for_open(_):
+        raise AssertionError("monitor failure was deferred until the market opens")
+
+    monkeypatch.setattr(asyncio, "create_task", create_task)
+    monkeypatch.setattr(asyncio, "sleep", fail_if_waiting_for_open)
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: False)
+
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    await entry_loop(
+        trade_service,
+        position_service,
+        recovered_trade=Mock(trade_id=7),
+        recovered_candidate=Mock(),
+        critical_notifier=critical_notifier,
+    )
+
+    trade_service.attempt_entry.assert_not_awaited()
+    critical_notifier.notify_critical.assert_awaited_once_with("settlement_failure")
+    assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
 async def _never_awaited():
     pass
 
