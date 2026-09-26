@@ -150,7 +150,7 @@ class ProfitManagementSettings(ConfigModel):
 class RiskSettings(ConfigModel):
     max_daily_loss: float = 500.0
     max_trades_per_day: int = 1
-    max_position_size: int = 1
+    max_position_size: int = 1  # upper-bound check only; entries always trade quantity 1
     max_weekly_loss: float | None = 1500.0  # None disables the weekly entry halt
     max_consecutive_losses: int = 10        # warn after N consecutive losing trades (0 = disabled)
     min_buying_power: float = 500.0        # minimum buying power required to enter
