@@ -357,3 +357,27 @@ async def test_retry_exhausted_on_429_reports_rate_limit(no_sleep):
         await schwab._retry(func, endpoint="get_quote")
 
     assert func.await_count == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("quote", "expected", "warned"),
+    [
+        ({"lastPrice": 6600.5, "closePrice": 6500.0}, 6600.5, False),
+        ({"lastPrice": 0, "closePrice": 6500.0}, 6500.0, True),
+    ],
+)
+async def test_spot_price_warns_when_falling_back_to_close(
+    monkeypatch, quote, expected, warned
+):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    schwab._client = MagicMock()
+    response = MagicMock()
+    response.json.return_value = {"$SPX": {"quote": quote}}
+    schwab._retry = AsyncMock(return_value=response)
+    log = MagicMock()
+    monkeypatch.setattr("butterfly_guy.data.schwab_client.log", log)
+
+    assert await schwab.get_spot_price("$SPX") == expected
+    events = [c.args[0] for c in log.warning.call_args_list]
+    assert ("spot_price_close_fallback" in events) is warned

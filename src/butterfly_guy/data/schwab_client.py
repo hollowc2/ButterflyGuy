@@ -276,7 +276,11 @@ class SchwabClientWrapper:
         quote = data.get(symbol, data.get(symbol.lstrip("$"), {}))
         if "quote" in quote:
             quote = quote["quote"]
-        price = quote.get("lastPrice") or quote.get("mark") or quote.get("closePrice")
+        price = quote.get("lastPrice") or quote.get("mark")
+        if not price:
+            price = quote.get("closePrice")
+            if price:
+                log.warning("spot_price_close_fallback", symbol=symbol, close_price=price)
         if not price:
             raise ValueError(f"Could not extract spot price from response for {symbol}")
         return float(price)
