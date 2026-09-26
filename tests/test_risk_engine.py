@@ -200,7 +200,8 @@ async def test_weekly_pnl_query_converts_points_and_quantity_to_dollars():
     )
     sql = db.pool.fetchval.await_args.args[0]
     assert "pnl * 100 * quantity" in sql
-    assert "trade_date >= $2" in sql
+    # Exclusive cutoff: the window is session_date and the six days before it.
+    assert "trade_date > $2" in sql
 
 
 @pytest.mark.asyncio
