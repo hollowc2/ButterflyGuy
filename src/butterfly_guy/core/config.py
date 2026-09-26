@@ -140,7 +140,10 @@ class DatabaseSettings(ConfigModel):
 
     @property
     def dsn(self) -> str:
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        from urllib.parse import quote
+
+        password = quote(self.password, safe="")
+        return f"postgresql://{self.user}:{password}@{self.host}:{self.port}/{self.name}"
 
 
 class MonitoringSettings(ConfigModel):

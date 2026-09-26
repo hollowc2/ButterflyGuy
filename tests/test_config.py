@@ -53,6 +53,18 @@ def test_database_dsn():
     assert "butterfly_guy" in dsn
 
 
+def test_database_dsn_encodes_password():
+    from urllib.parse import unquote, urlsplit
+
+    password = "p@ss:w/rd #1+%"
+    config = AppConfig(database={"password": password})
+    parts = urlsplit(config.database.dsn)
+    assert parts.hostname == "localhost"
+    assert parts.port == 5432
+    assert parts.path == "/butterfly_guy"
+    assert unquote(parts.password) == password
+
+
 def test_config_rejects_unknown_keys():
     with pytest.raises(ValidationError, match="extra_forbidden"):
         AppConfig(risk={"max_daily_los": 500})

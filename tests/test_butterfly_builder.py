@@ -1,6 +1,7 @@
 """Tests for the butterfly builder scanner."""
 
 import datetime as dt
+from dataclasses import replace
 
 from butterfly_guy.core.config import StrategySettings, VixWidthBucket
 from butterfly_guy.data.schemas import OptionQuote
@@ -129,6 +130,41 @@ def test_builder_respects_configured_min_debit():
     candidates = builder.build_candidates(quotes, 5500.0, "CALL")
 
     assert candidates == []
+
+
+def _single_fly_quotes(upper_bid: float, upper_ask: float) -> list[OptionQuote]:
+    upper = replace(make_quote(5520, "CALL", 0.3), bid=upper_bid, ask=upper_ask)
+    return [make_quote(5500, "CALL", 3.0), make_quote(5510, "CALL", 1.2), upper]
+
+
+def _quote_filter_settings() -> StrategySettings:
+    return StrategySettings(
+        wing_widths=[10],
+        spot_range=50,
+        min_debit=0.05,
+        rr_min=0.1,
+        max_cost_per_width={10: 10.0},
+    )
+
+
+def test_builder_rejects_crossed_leg_quote():
+    builder = ButterflyBuilder(_quote_filter_settings())
+
+    assert builder.build_candidates(_single_fly_quotes(0.5, 0.4), 5505.0, "CALL") == []
+
+
+def test_builder_rejects_negative_leg_bid():
+    builder = ButterflyBuilder(_quote_filter_settings())
+
+    assert builder.build_candidates(_single_fly_quotes(-0.1, 0.4), 5505.0, "CALL") == []
+
+
+def test_builder_accepts_zero_bid_leg():
+    builder = ButterflyBuilder(_quote_filter_settings())
+
+    candidates = builder.build_candidates(_single_fly_quotes(0.0, 0.4), 5505.0, "CALL")
+
+    assert [c.center_strike for c in candidates] == [5510.0]
 
 
 def test_builder_cost_positive():

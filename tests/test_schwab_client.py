@@ -6,7 +6,9 @@ import json
 import os
 import stat
 from unittest.mock import AsyncMock, MagicMock
+from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from butterfly_guy.core.config import SchwabSettings
@@ -299,3 +301,106 @@ async def test_unreadable_marker_is_adopted_rather_than_forcing_a_rebuild(monkey
     assert await schwab.reload_if_reauthorized() is False
     assert schwab._creation_timestamp == 1000
     assert len(handed_out) == 1
+
+
+def _http_response(status: int, text: str = "") -> httpx.Response:
+    return httpx.Response(
+        status, text=text, request=httpx.Request("GET", "https://api.example/v1/x")
+    )
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    sleep = AsyncMock()
+    monkeypatch.setattr("butterfly_guy.data.schwab_client.asyncio.sleep", sleep)
+    return sleep
+
+
+@pytest.mark.asyncio
+async def test_retry_does_not_retry_non_retryable_4xx(no_sleep):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    func = AsyncMock(return_value=_http_response(400, "bad symbol"))
+
+    with pytest.raises(RuntimeError, match="(?s)non-retryable HTTP 400.*bad symbol"):
+        await schwab._retry(func, endpoint="get_quote")
+
+    assert func.await_count == 1
+    no_sleep.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first", [500, 503, 429])
+async def test_retry_retries_5xx_and_429_then_succeeds(no_sleep, first):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    ok = _http_response(200)
+    func = AsyncMock(side_effect=[_http_response(first), ok])
+
+    assert await schwab._retry(func, endpoint="get_quote") is ok
+    assert func.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_retry_retries_transport_errors(no_sleep):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    ok = _http_response(200)
+    func = AsyncMock(side_effect=[httpx.ConnectError("boom"), ok])
+
+    assert await schwab._retry(func, endpoint="get_quote") is ok
+    assert func.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_retry_exhausted_on_429_reports_rate_limit(no_sleep):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    func = AsyncMock(return_value=_http_response(429))
+
+    with pytest.raises(RuntimeError, match="after 3 retries: HTTP 429 rate limited"):
+        await schwab._retry(func, endpoint="get_quote")
+
+    assert func.await_count == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("quote", "expected", "warned"),
+    [
+        ({"lastPrice": 6600.5, "closePrice": 6500.0}, 6600.5, False),
+        ({"lastPrice": 0, "closePrice": 6500.0}, 6500.0, True),
+    ],
+)
+async def test_spot_price_warns_when_falling_back_to_close(
+    monkeypatch, quote, expected, warned
+):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    schwab._client = MagicMock()
+    response = MagicMock()
+    response.json.return_value = {"$SPX": {"quote": quote}}
+    schwab._retry = AsyncMock(return_value=response)
+    log = MagicMock()
+    monkeypatch.setattr("butterfly_guy.data.schwab_client.log", log)
+
+    assert await schwab.get_spot_price("$SPX") == expected
+    events = [c.args[0] for c in log.warning.call_args_list]
+    assert ("spot_price_close_fallback" in events) is warned
+
+
+@pytest.mark.asyncio
+async def test_intraday_bars_uses_eastern_session_date(monkeypatch):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    schwab._client = MagicMock()
+    response = MagicMock()
+    response.json.return_value = {"candles": []}
+    schwab._retry = AsyncMock(return_value=response)
+    monkeypatch.setattr(
+        "butterfly_guy.data.schwab_client.session_date", lambda: dt.date(2026, 9, 25)
+    )
+
+    await schwab.get_intraday_bars("$SPX", days_back=1)
+
+    kwargs = schwab._retry.await_args.kwargs
+    eastern = ZoneInfo("America/New_York")
+    assert kwargs["start_datetime"] == dt.datetime(2026, 9, 24, tzinfo=eastern)
+    assert kwargs["end_datetime"] == dt.datetime.combine(
+        dt.date(2026, 9, 25), dt.time.max, tzinfo=eastern
+    )
+    assert kwargs["start_datetime"].tzinfo is not None
