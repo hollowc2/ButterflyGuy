@@ -202,4 +202,4 @@ New to the code? Read these in order:
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
