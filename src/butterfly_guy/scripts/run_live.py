@@ -101,7 +101,7 @@ from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
-from butterfly_guy.strategy.regime_classifier import RegimeClassifier
+from butterfly_guy.strategy.regime_classifier import Regime, RegimeClassifier
 
 log = get_logger("run_live")
 
@@ -898,8 +898,42 @@ async def eod_chart_loop(position_service: PositionService) -> None:
             log.info("eod_chart_batch_complete", sent=sent, trade_date=str(now.date()))
 
 
-async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
-    """Reset daily risk state at market open."""
+# After the collector's first-snapshot daily-bar refresh at the 09:30 open, and
+# before the entry window opens.
+REGIME_RECLASSIFY_TIME = dt.time(9, 45)
+
+
+async def classify_market_regime(
+    daily_bar_queries: DailyBarQueries, underlying: str
+) -> Regime:
+    """Classify the market regime from stored daily closes and the latest VIX close."""
+    regime_classifier = RegimeClassifier()
+    recent_closes = await daily_bar_queries.get_recent_closes(
+        underlying, days=regime_classifier.lookback_days + 5
+    )
+    vix_closes = await daily_bar_queries.get_recent_closes("$VIX", days=1)
+    vix_level = vix_closes[0] if vix_closes else 0.0
+    regime = regime_classifier.classify(recent_closes, vix_level)
+    log.info(
+        "regime_classified",
+        regime=regime.value,
+        spx_bars=len(recent_closes),
+        vix=vix_level,
+    )
+    return regime
+
+
+async def daily_reset_loop(
+    risk_queries: RiskQueries,
+    underlying: str,
+    trade_service: TradeService | None = None,
+    daily_bar_queries: DailyBarQueries | None = None,
+) -> None:
+    """Reset daily risk state at midnight, then reclassify the regime before entry.
+
+    Containers run for weeks, so the regime is refreshed each trading day instead of
+    only at startup. A failed reclassification keeps the previous regime.
+    """
     while True:
         now = now_eastern()
         # Sleep until next day
@@ -914,6 +948,19 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         trades_active.labels(underlying=underlying).set(0)
         daily_pnl.labels(underlying=underlying).set(0)
         log.info("daily_risk_reset", date=str(today))
+
+        if trade_service is None or daily_bar_queries is None or not is_trading_day(today):
+            continue
+        now = now_eastern()
+        reclassify_at = dt.datetime.combine(today, REGIME_RECLASSIFY_TIME, tzinfo=now.tzinfo)
+        if reclassify_at > now:
+            await asyncio.sleep((reclassify_at - now).total_seconds())
+        try:
+            trade_service.regime = await classify_market_regime(daily_bar_queries, underlying)
+        except Exception as e:
+            log.error(
+                "regime_reclassify_failed", error=str(e), regime=trade_service.regime.value
+            )
 
 
 async def token_reload_loop(
@@ -1041,21 +1088,9 @@ async def main() -> None:
             else None
         )
 
-        # Classify today's market regime (must precede TradeService construction)
-        regime_classifier = RegimeClassifier()
-        lookback = regime_classifier.lookback_days
-        recent_spx = await daily_bar_q.get_recent_closes(
-            config.strategy.underlying, days=lookback + 5
-        )
-        vix_closes = await daily_bar_q.get_recent_closes("$VIX", days=1)
-        vix_level = vix_closes[0] if vix_closes else 0.0
-        regime = regime_classifier.classify(recent_spx, vix_level)
-        log.info(
-            "regime_classified",
-            regime=regime.value,
-            spx_bars=len(recent_spx),
-            vix=vix_level,
-        )
+        # Classify today's market regime (must precede TradeService construction);
+        # daily_reset_loop refreshes it each trading day.
+        regime = await classify_market_regime(daily_bar_q, config.strategy.underlying)
 
         gap_regime_filter = GapRegimeFilter(
             bull_call_bias=config.entry.bull_call_bias,
@@ -1289,7 +1324,13 @@ async def main() -> None:
                     )
                 supervised.append(
                     tg.create_task(
-                        daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset"
+                        daily_reset_loop(
+                            risk_q,
+                            config.strategy.underlying,
+                            trade_service,
+                            daily_bar_q,
+                        ),
+                        name="daily_reset",
                     )
                 )
                 supervised.append(

@@ -41,6 +41,7 @@ from butterfly_guy.scripts.run_live import (
     _reconcile_broker_state,
     _sync_startup_risk_pnl,
     broker_reconciler_loop,
+    daily_reset_loop,
     entry_loop,
     gateway_market_data_readiness_loop,
     gateway_runtime_phase_delay,
@@ -48,6 +49,7 @@ from butterfly_guy.scripts.run_live import (
     token_reload_loop,
 )
 from butterfly_guy.services.position_service import SettlementEvidenceError
+from butterfly_guy.strategy.regime_classifier import Regime
 
 LOWER = "SPXW  260625C06000000"
 CENTER = "SPXW  260625C06050000"
@@ -748,6 +750,70 @@ async def test_entry_loop_registers_recovered_monitor_for_reconciler(monkeypatch
     assert active_monitor.trade_id == 7
     monitor_task.done.return_value = True
     assert active_monitor.trade_id is None
+
+
+def _run_daily_reset_once(monkeypatch, today, classify, sleeps_before_stop=2):
+    """Drive one daily_reset_loop pass: midnight reset, then regime reclassification."""
+    et = dt.timezone(dt.timedelta(hours=-4))
+    clock = iter([
+        dt.datetime.combine(today - dt.timedelta(days=1), dt.time(23, 0), tzinfo=et),
+        dt.datetime.combine(today, dt.time(0, 0), tzinfo=et),
+        dt.datetime.combine(today, dt.time(23, 0), tzinfo=et),
+    ])
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) > sleeps_before_stop:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.now_eastern", lambda: next(clock))
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.session_date", lambda: today)
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.classify_market_regime", classify)
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    return sleeps
+
+
+@pytest.mark.asyncio
+async def test_daily_reset_reclassifies_regime_before_entry(monkeypatch):
+    classify = AsyncMock(return_value=Regime.BULL)
+    sleeps = _run_daily_reset_once(monkeypatch, dt.date(2026, 9, 28), classify)
+    trade_service = Mock(regime=Regime.UNKNOWN)
+    daily_bars = Mock()
+
+    with pytest.raises(asyncio.CancelledError):
+        await daily_reset_loop(Mock(get_or_create=AsyncMock()), "SPX", trade_service, daily_bars)
+
+    assert trade_service.regime == Regime.BULL
+    classify.assert_awaited_once_with(daily_bars, "SPX")
+    # Waits from the midnight reset until 09:45 ET, after the 09:30 daily-bar refresh.
+    assert sleeps[1] == 9 * 3600 + 45 * 60
+
+
+@pytest.mark.asyncio
+async def test_daily_reset_skips_regime_on_non_trading_day(monkeypatch):
+    classify = AsyncMock(return_value=Regime.BULL)
+    # Saturday: the midnight sleep, then straight to the next midnight sleep.
+    _run_daily_reset_once(monkeypatch, dt.date(2026, 9, 26), classify, sleeps_before_stop=1)
+    trade_service = Mock(regime=Regime.CHOP)
+
+    with pytest.raises(asyncio.CancelledError):
+        await daily_reset_loop(Mock(get_or_create=AsyncMock()), "SPX", trade_service, Mock())
+
+    classify.assert_not_awaited()
+    assert trade_service.regime == Regime.CHOP
+
+
+@pytest.mark.asyncio
+async def test_daily_reset_keeps_regime_when_reclassification_fails(monkeypatch):
+    classify = AsyncMock(side_effect=RuntimeError("db down"))
+    _run_daily_reset_once(monkeypatch, dt.date(2026, 9, 28), classify)
+    trade_service = Mock(regime=Regime.CHOP)
+
+    with pytest.raises(asyncio.CancelledError):
+        await daily_reset_loop(Mock(get_or_create=AsyncMock()), "SPX", trade_service, Mock())
+
+    assert trade_service.regime == Regime.CHOP
 
 
 async def _never_awaited():
