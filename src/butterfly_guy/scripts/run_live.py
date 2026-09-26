@@ -77,6 +77,12 @@ from butterfly_guy.execution.order_manager import (
     parse_broker_fill,
     walk_orders,
 )
+from butterfly_guy.execution.order_manager import (
+    broker_option_positions as _broker_option_positions,
+)
+from butterfly_guy.execution.order_manager import (
+    matches_underlying as _matches_underlying,
+)
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
@@ -210,30 +216,6 @@ async def _close_runtime_resources(
                     await schwab.close()
             finally:
                 await db.close()
-
-
-def _matches_underlying(symbol: str, underlying: str) -> bool:
-    normalized = symbol.upper().lstrip("$")
-    return normalized.startswith(underlying.upper())
-
-
-def _broker_option_positions(
-    account_snapshot: dict[str, Any], underlying: str
-) -> dict[str, float]:
-    acct = account_snapshot.get("securitiesAccount", account_snapshot)
-    positions: dict[str, float] = {}
-    for pos in acct.get("positions") or []:
-        instrument = pos.get("instrument") or {}
-        if instrument.get("assetType") != "OPTION":
-            continue
-        symbol = str(instrument.get("symbol") or "")
-        underlier = str(instrument.get("underlyingSymbol") or "")
-        if _matches_underlying(symbol, underlying) or _matches_underlying(underlier, underlying):
-            quantity = float(pos.get("longQuantity") or 0) - float(
-                pos.get("shortQuantity") or 0
-            )
-            positions[symbol] = positions.get(symbol, 0) + quantity
-    return {symbol: quantity for symbol, quantity in positions.items() if quantity}
 
 
 def _order_symbols(order: dict[str, Any]) -> set[str]:
@@ -413,6 +395,7 @@ async def _assert_broker_state_matches_db(
     intent_queries: OrderIntentQueries | None = None,
     trade_queries: TradeQueries | None = None,
     trade_date: dt.date | None = None,
+    allow_entry_repair: bool = True,
 ) -> None:
     today = trade_date or session_date()
     account_snapshot = await schwab.get_account_snapshot()
@@ -497,6 +480,14 @@ async def _assert_broker_state_matches_db(
             and intent.get("status") == "FILLED"
             and not intent.get("trade_id")
         ]
+        if len(filled_entries) == 1 and not allow_entry_repair:
+            # Repair is startup-only: a trade row created here would have no
+            # monitor, no risk trade count, and no settlement close.
+            raise RuntimeError(
+                f"Broker has {len(broker_positions)} {underlying} option position(s) "
+                f"from filled entry intent {filled_entries[0]['id']} with no OPEN "
+                "trade; restart to repair and adopt it"
+            )
         if trade_queries is not None and len(filled_entries) == 1:
             repaired = await _repair_filled_entry_intent(
                 filled_entries[0],
@@ -578,6 +569,7 @@ async def _reconcile_broker_state(
     trade_queries: TradeQueries | None,
     critical_notifier: AlertmanagerNotifier | None,
     trade_date: dt.date | None = None,
+    allow_entry_repair: bool = True,
 ) -> None:
     try:
         if open_rows is None:
@@ -591,11 +583,38 @@ async def _reconcile_broker_state(
             intent_queries,
             trade_queries,
             trade_date,
+            allow_entry_repair,
         )
     except Exception:
         if critical_notifier:
             await critical_notifier.notify_critical("reconciliation_failure")
         raise
+
+
+async def _sync_startup_risk_pnl(
+    risk_engine: RiskEngine,
+    realized_pnl: float,
+    recovered_trade: TradeRecord | None,
+    today: dt.date,
+) -> None:
+    """Restore realized P&L; hold an open trade's entry cost as committed exposure.
+
+    The entry cost is the worst-case loss while the trade is open, so it counts
+    against the daily loss limit, but it is kept out of realized_pnl because the
+    trade's full P&L is added via record_pnl when it closes.
+    """
+    await risk_engine.sync_realized_pnl(realized_pnl, today)
+    if recovered_trade is not None and recovered_trade.trade_date == today:
+        open_trade_entry = trade_pnl_dollars(
+            recovered_trade.entry_price, recovered_trade.quantity
+        )
+        risk_engine.set_committed_exposure(open_trade_entry, today)
+        log.info(
+            "startup_pnl_sync_with_open_trade",
+            realized_pnl=realized_pnl,
+            open_trade_entry=open_trade_entry,
+            worst_case_pnl=realized_pnl - open_trade_entry,
+        )
 
 
 async def broker_reconciler_loop(
@@ -616,6 +635,7 @@ async def broker_reconciler_loop(
                 intent_queries,
                 trade_queries,
                 critical_notifier,
+                allow_entry_repair=False,
             )
             if critical_notifier:
                 await critical_notifier.retry_pending_resolutions()
@@ -707,11 +727,9 @@ async def entry_loop(
         )
 
     while True:
-        if not is_market_open():
-            await asyncio.sleep(30)
-            continue
-
-        # Check if monitor task has finished — reset active_trade so we can re-enter
+        # Check if monitor task has finished — reset active_trade so we can re-enter.
+        # This runs before the market-hours gate so a failure raised after the
+        # close (e.g. missing settlement evidence) alerts now, not at the next open.
         if monitor_task is not None and monitor_task.done():
             exc = monitor_task.exception()
             if exc:
@@ -738,6 +756,10 @@ async def entry_loop(
                     return
             active_trade = None
             monitor_task = None
+
+        if not is_market_open():
+            await asyncio.sleep(30)
+            continue
 
         # If no active position, try entry
         if active_trade is None:
@@ -1130,22 +1152,7 @@ async def main() -> None:
             if t.get("pnl") is not None
         )
 
-        # Sync risk state PnL — if an open trade was recovered, include its entry cost as
-        # worst-case committed exposure so the daily loss budget is correctly consumed.
-        if recovered_trade is not None and recovered_trade.trade_date == today:
-            open_trade_entry = trade_pnl_dollars(
-                recovered_trade.entry_price, recovered_trade.quantity
-            )
-            worst_case_pnl = realized_pnl - open_trade_entry
-            await risk_engine.sync_realized_pnl(worst_case_pnl, today)
-            log.info(
-                "startup_pnl_sync_with_open_trade",
-                realized_pnl=realized_pnl,
-                open_trade_entry=open_trade_entry,
-                worst_case_pnl=worst_case_pnl,
-            )
-        else:
-            await risk_engine.sync_realized_pnl(realized_pnl, today)
+        await _sync_startup_risk_pnl(risk_engine, realized_pnl, recovered_trade, today)
 
         daily_pnl.labels(underlying=underlying).set(realized_pnl)
         broker_gate = BrokerStateGate()

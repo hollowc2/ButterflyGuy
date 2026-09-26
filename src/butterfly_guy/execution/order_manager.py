@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 from collections.abc import Iterator
-from typing import NamedTuple
+from time import monotonic
+from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.core.entry_pricing import entry_fill_within_limit
@@ -48,6 +49,30 @@ def order_ids(order: dict) -> set[str]:
 
 def order_statuses(order: dict) -> set[str]:
     return {str(node["status"]) for node in walk_orders(order) if node.get("status")}
+
+
+def matches_underlying(symbol: str, underlying: str) -> bool:
+    normalized = symbol.upper().lstrip("$")
+    return normalized.startswith(underlying.upper())
+
+
+def broker_option_positions(
+    account_snapshot: dict[str, Any], underlying: str
+) -> dict[str, float]:
+    acct = account_snapshot.get("securitiesAccount", account_snapshot)
+    positions: dict[str, float] = {}
+    for pos in acct.get("positions") or []:
+        instrument = pos.get("instrument") or {}
+        if instrument.get("assetType") != "OPTION":
+            continue
+        symbol = str(instrument.get("symbol") or "")
+        underlier = str(instrument.get("underlyingSymbol") or "")
+        if matches_underlying(symbol, underlying) or matches_underlying(underlier, underlying):
+            quantity = float(pos.get("longQuantity") or 0) - float(
+                pos.get("shortQuantity") or 0
+            )
+            positions[symbol] = positions.get(symbol, 0) + quantity
+    return {symbol: quantity for symbol, quantity in positions.items() if quantity}
 
 
 class PartialFillError(RuntimeError):
@@ -362,6 +387,39 @@ class OrderManager:
             },
         }
 
+    async def _mark_intent_unknown(self, intent_id: int | None, error: str) -> None:
+        """Best-effort bookkeeping: a DB fault here must not mask the ambiguity."""
+        if intent_id is None or self.intent_queries is None:
+            return
+        try:
+            await self.intent_queries.mark_unknown(intent_id, error)
+        except Exception as e:
+            log.error("intent_mark_unknown_failed", intent_id=intent_id, error=str(e))
+
+    async def _assert_broker_flat_before_entry(self) -> bool:
+        """Return False if broker positions cannot be read; raise if any exist.
+
+        Defense in depth for live entries: with no active trade, any option
+        position in this underlying means an earlier order filled without being
+        recorded, so submitting another entry could double the position.
+        """
+        try:
+            snapshot = await self.schwab.get_account_snapshot()
+        except Exception as e:
+            log.warning("entry_position_check_failed", error=str(e))
+            return False
+        positions = broker_option_positions(snapshot, self.underlying)
+        if positions:
+            log.error(
+                "entry_blocked_broker_positions_exist",
+                symbols=sorted(positions),
+            )
+            raise AmbiguousOrderError(
+                f"Broker already holds {len(positions)} {self.underlying} option "
+                "position(s) before entry; reconcile broker state"
+            )
+        return True
+
     async def _entry_blocked_by_working_orders(
         self, exclude_intent_id: int | None = None
     ) -> bool:
@@ -454,6 +512,9 @@ class OrderManager:
             )
             return None
 
+        if not await self._assert_broker_flat_before_entry():
+            return None
+
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
         if intent_id is None and self.intent_queries is not None:
             intent_id = await self.intent_queries.create_intent(
@@ -509,95 +570,11 @@ class OrderManager:
         except (BrokerFillError, PartialFillError, TerminalOrderError):
             raise
         except Exception as e:
-            if intent_id is not None and self.intent_queries is not None:
-                await self.intent_queries.mark_unknown(intent_id, str(e))
             log.error("entry_attempt_failed", error=str(e))
+            await self._mark_intent_unknown(intent_id, str(e))
             raise AmbiguousOrderError("entry order outcome is unknown") from e
 
         return None
-
-    async def execute_entry(
-        self, candidate: ButterflyCandidate, quantity: int = 1
-    ) -> dict | None:
-        """
-        Execute entry at mark in paper mode, or use the live price ladder.
-        """
-        step = self.settings.price_ladder_step
-        max_steps = self.settings.price_ladder_steps
-        retry_interval = self.settings.retry_interval_seconds
-        timeout = self.settings.order_timeout_seconds
-
-        if self.settings.paper_trading:
-            return await self.execute_single_attempt(candidate, candidate.cost, quantity)
-
-        if await self._entry_blocked_by_working_orders():
-            return None
-
-        deadline = now_utc() + dt.timedelta(seconds=timeout)
-        mid_price = candidate.cost
-
-        while True:
-            if now_utc() >= deadline:
-                log.warning("entry_timeout", candidate_center=candidate.center_strike)
-                return None
-
-            for i in range(max_steps):
-                if now_utc() >= deadline:
-                    log.warning("entry_timeout", candidate_center=candidate.center_strike)
-                    return None
-
-                live_spread = await self._fetch_live_spread(candidate)
-                if live_spread is None:
-                    log.error(
-                        "live_entry_blocked_market_data_unavailable",
-                        center=candidate.center_strike,
-                    )
-                    return None
-                mid_price = live_spread.mark
-
-                limit_price = round(mid_price + i * step, 2)
-                log.debug("entry_ladder_step", step=i, price=limit_price, mid_price=mid_price)
-
-                order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
-                orders_placed.labels(underlying=self.underlying, order_type="entry").inc()
-                start_time = now_utc()
-
-                try:
-                    order_id = await self.schwab.place_order(order_spec)
-                    fill = await self._wait_for_fill(
-                        order_id, retry_interval, requested_quantity=quantity
-                    )
-
-                    if fill:
-                        _assert_entry_fill_within_limit(
-                            fill.net_fill_price, limit_price
-                        )
-                        elapsed = (now_utc() - start_time).total_seconds()
-                        order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
-                        orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
-                        log.info(
-                            "entry_filled", order_id=order_id,
-                            price=fill.net_fill_price, step=i,
-                        )
-                        return _fill_result(fill)
-
-                    await self.schwab.cancel_order(order_id)
-                    log.debug("entry_step_cancelled", step=i, price=limit_price)
-                    post_fill = await self._check_post_cancel_fill(
-                        order_id,
-                        quantity,
-                        limit_price=limit_price,
-                    )
-                    if post_fill:
-                        return post_fill
-
-                except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
-                    raise
-                except Exception as e:
-                    log.error("entry_step_failed", step=i, error=str(e))
-                    raise AmbiguousOrderError("entry order outcome is unknown") from e
-
-            log.info("entry_ladder_exhausted_repricing", candidate_center=candidate.center_strike)
 
     async def execute_exit(
         self,
@@ -744,9 +721,8 @@ class OrderManager:
                 except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
                     raise
                 except Exception as e:
-                    if intent_id is not None and self.intent_queries is not None:
-                        await self.intent_queries.mark_unknown(intent_id, str(e))
                     log.error("exit_step_failed", step=i, error=str(e))
+                    await self._mark_intent_unknown(intent_id, str(e))
                     raise AmbiguousOrderError("exit order outcome is unknown") from e
 
             log.warning("exit_ladder_exhausted")
@@ -802,8 +778,7 @@ class OrderManager:
             ):
                 raise
             log.warning("post_cancel_check_failed", error=str(e))
-            if intent_id is not None and self.intent_queries is not None:
-                await self.intent_queries.mark_unknown(intent_id, str(e))
+            await self._mark_intent_unknown(intent_id, str(e))
             raise AmbiguousOrderError("post-cancel broker state is unknown") from e
         return None
 
@@ -815,10 +790,11 @@ class OrderManager:
         requested_quantity: int = 1,
     ) -> BrokerFill | None:
         """Poll order status until filled or timeout."""
-        elapsed = 0
+        # Monotonic deadline so broker request latency counts against the timeout.
+        deadline = monotonic() + timeout
         poll_interval = 2
 
-        while elapsed < timeout:
+        while monotonic() < deadline:
             try:
                 status = await self.schwab.get_order_status(order_id)
                 order_status = status.get("status", "")
@@ -855,6 +831,5 @@ class OrderManager:
                 log.warning("order_poll_error", error=str(e))
 
             await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
 
         return False

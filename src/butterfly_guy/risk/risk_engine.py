@@ -39,6 +39,10 @@ class RiskEngine:
         self.underlying = underlying
         self.notifier = notifier
         self._consecutive_loss_alerted_for: set[dt.date] = set()
+        # Worst-case loss of an open trade recovered at startup, held against the
+        # daily loss limit until the trade's realized P&L is recorded. Kept apart
+        # from realized_pnl so the entry cost is not counted twice on close.
+        self._committed_exposure: dict[dt.date, float] = {}
 
     async def can_trade(
         self,
@@ -78,6 +82,19 @@ class RiskEngine:
             log.warning("max_daily_loss_hit", pnl=state["realized_pnl"])
             await self.risk_queries.set_halted(today, self.underlying)
             return False, f"max_daily_loss ({state['realized_pnl']})"
+
+        committed = self._committed_exposure.get(today, 0.0)
+        with_exposure = float(state["realized_pnl"]) - committed
+        if committed and with_exposure <= -self.settings.max_daily_loss:
+            log.warning(
+                "max_daily_loss_with_open_exposure",
+                pnl=state["realized_pnl"],
+                committed_exposure=committed,
+            )
+            return False, (
+                f"max_daily_loss_with_open_exposure ({state['realized_pnl']}, "
+                f"committed {committed})"
+            )
 
         # Buying power guard
         if buying_power is not None:
@@ -135,6 +152,7 @@ class RiskEngine:
         """Record realized dollar PnL."""
         today = trade_date or session_date()
         await self.risk_queries.update_pnl(today, pnl, self.underlying)
+        self._committed_exposure.pop(today, None)
 
         # Check if we just hit max loss
         state = await self.risk_queries.get_or_create(today, self.underlying)
@@ -142,10 +160,21 @@ class RiskEngine:
             await self.risk_queries.set_halted(today, self.underlying)
             log.warning("max_daily_loss_triggered", pnl=state["realized_pnl"])
 
+    def set_committed_exposure(
+        self, amount: float, trade_date: dt.date | None = None
+    ) -> None:
+        """Hold an open trade's worst-case dollar loss against the daily loss limit.
+
+        Cleared when that day's realized P&L is next recorded via record_pnl.
+        """
+        today = trade_date or session_date()
+        self._committed_exposure[today] = amount
+        log.info("committed_exposure_set", amount=amount, underlying=self.underlying)
+
     async def sync_realized_pnl(self, pnl: float, trade_date: dt.date | None = None) -> None:
         """
         Overwrite dollar realized_pnl in risk state (SET, not ADD).
-        Used at startup to restore correct state, including worst-case open trade exposure.
+        Used at startup to restore correct state from closed trades.
         """
         today = trade_date or session_date()
         await self.risk_queries.get_or_create(today, self.underlying)
