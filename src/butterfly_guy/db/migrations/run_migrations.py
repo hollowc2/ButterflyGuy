@@ -11,6 +11,9 @@ from butterfly_guy.db.connection import DatabasePool
 log = get_logger(__name__)
 MIGRATIONS_DIR = Path(__file__).parent
 MIGRATION_LOCK_ID = 810_770_001
+# Migrations may wait on another service's advisory lock or rewrite a large
+# table, so they override the pool's short default command_timeout.
+MIGRATION_TIMEOUT_SECONDS = 3600.0
 CREATE_LEDGER_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version TEXT PRIMARY KEY,
@@ -25,12 +28,17 @@ async def run_migrations(db: DatabasePool) -> None:
     sql_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
 
     async with db.pool.acquire() as conn:
-        await conn.execute("SELECT pg_advisory_lock($1)", MIGRATION_LOCK_ID)
+        await conn.execute(
+            "SELECT pg_advisory_lock($1)", MIGRATION_LOCK_ID, timeout=MIGRATION_TIMEOUT_SECONDS
+        )
         try:
-            await conn.execute(CREATE_LEDGER_SQL)
+            await conn.execute(CREATE_LEDGER_SQL, timeout=MIGRATION_TIMEOUT_SECONDS)
             applied = {
                 row["version"]: row["checksum"]
-                for row in await conn.fetch("SELECT version, checksum FROM schema_migrations")
+                for row in await conn.fetch(
+                    "SELECT version, checksum FROM schema_migrations",
+                    timeout=MIGRATION_TIMEOUT_SECONDS,
+                )
             }
             for sql_file in sql_files:
                 sql = sql_file.read_text()
@@ -42,15 +50,20 @@ async def run_migrations(db: DatabasePool) -> None:
                 log.info("running_migration", file=sql_file.name)
                 try:
                     async with conn.transaction():
-                        await conn.execute(sql)
+                        await conn.execute(sql, timeout=MIGRATION_TIMEOUT_SECONDS)
                         await conn.execute(
                             "INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)",
                             sql_file.name,
                             checksum,
+                            timeout=MIGRATION_TIMEOUT_SECONDS,
                         )
                     log.info("migration_complete", file=sql_file.name)
                 except Exception as e:
                     log.error("migration_failed", file=sql_file.name, error=str(e))
                     raise
         finally:
-            await conn.execute("SELECT pg_advisory_unlock($1)", MIGRATION_LOCK_ID)
+            await conn.execute(
+                "SELECT pg_advisory_unlock($1)",
+                MIGRATION_LOCK_ID,
+                timeout=MIGRATION_TIMEOUT_SECONDS,
+            )

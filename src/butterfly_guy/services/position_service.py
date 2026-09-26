@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from collections.abc import Awaitable
 from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import AppConfig
@@ -23,6 +24,7 @@ from butterfly_guy.core.time_utils import (
     MARKET_OPEN,
     get_0dte_expiration,
     is_market_open,
+    is_trading_day,
     market_close_time,
     now_eastern,
     session_date,
@@ -67,6 +69,8 @@ from butterfly_guy.strategy.exit_mark_parity import (
 
 log = get_logger(__name__)
 MARKET_DATA_FAILURE_THRESHOLD = 3
+# Consecutive failures of one best-effort DB telemetry write before alerting.
+TELEMETRY_FAILURE_THRESHOLD = 5
 
 
 class SettlementEvidenceError(RuntimeError):
@@ -213,6 +217,14 @@ def broker_cash_settlement_from_transactions(
     )
 
 
+def _settlement_pending_alert_time(trade_date: dt.date) -> dt.datetime:
+    """Return the next trading session's open after *trade_date*, in Eastern time."""
+    day = trade_date + dt.timedelta(days=1)
+    while not is_trading_day(day):
+        day += dt.timedelta(days=1)
+    return dt.datetime.combine(day, MARKET_OPEN, tzinfo=EASTERN)
+
+
 def final_regular_session_close_from_candles(
     candles: list[dict],
     session_date: dt.date,
@@ -287,7 +299,17 @@ class PositionService:
             recovered_peak if (recovered_peak and recovered_peak > 0) else trade.entry_price
         )
         self.state_machine.reset()
+        # reset() forgets that the position was ever at or above entry; a recovered
+        # peak is only persisted once it exceeds entry, so it restores that fact.
+        self.state_machine._ever_in_profit = (
+            recovered_peak is not None and recovered_peak >= trade.entry_price
+        )
         self._last_profit_state = None
+        self._telemetry_trade_id = trade.trade_id
+        self._telemetry_failures: dict[str, int] = {}
+        self._telemetry_alerted: set[str] = set()
+        self._background_tasks: set[asyncio.Task] = set()
+        peak_write_pending = False
         poll_interval = 2
 
         log.info("position_monitor_started", trade_id=trade.trade_id)
@@ -340,10 +362,13 @@ class PositionService:
                         log.error("position_market_data_unavailable", **failure_details)
                         if not market_data_alerted:
                             market_data_alerted = True
-                            await self.decision_queries.log_event(
-                                "position_market_data_unavailable",
-                                failure_details,
-                                underlying=self.config.strategy.underlying,
+                            await self._best_effort(
+                                "position_market_data_unavailable_event",
+                                self.decision_queries.log_event(
+                                    "position_market_data_unavailable",
+                                    failure_details,
+                                    underlying=self.config.strategy.underlying,
+                                ),
                             )
                             alert_text = (
                                 "WARNING: position market data is unavailable "
@@ -364,13 +389,16 @@ class PositionService:
 
                 if market_data_failures:
                     clear_readiness("market_data_unavailable")
-                    await self.decision_queries.log_event(
-                        "position_market_data_recovered",
-                        {
-                            "trade_id": trade.trade_id,
-                            "consecutive_failures": market_data_failures,
-                        },
-                        underlying=self.config.strategy.underlying,
+                    await self._best_effort(
+                        "position_market_data_recovered_event",
+                        self.decision_queries.log_event(
+                            "position_market_data_recovered",
+                            {
+                                "trade_id": trade.trade_id,
+                                "consecutive_failures": market_data_failures,
+                            },
+                            underlying=self.config.strategy.underlying,
+                        ),
                     )
                     log.info(
                         "position_market_data_recovered",
@@ -392,69 +420,10 @@ class PositionService:
                         / 60.0,
                     )
 
-                if self.monitoring_leg_queries is not None:
-                    await self._record_monitoring_leg_quotes(
-                        trade=trade,
-                        candidate=candidate,
-                        expiration=expiration,
-                        quotes=quotes,
-                        ts=chain_fetched_at,
-                        pos_state=pos_state,
-                        spot_price=_chain_spot_price(chain_data),
-                    )
-
-                if pos_state.peak_update_rejected:
-                    await self.decision_queries.log_event(
-                        "peak_update_rejected",
-                        {
-                            "trade_id": trade.trade_id,
-                            "reason": pos_state.peak_rejection_reason,
-                            "raw_mark": pos_state.current_value,
-                            "accepted_peak": pos_state.peak_value,
-                            "pending_peak": pos_state.pending_peak_value,
-                            "pending_confirmation_count": (
-                                pos_state.pending_peak_confirmation_count
-                            ),
-                            "spread_bid": pos_state.spread_bid,
-                            "spread_ask": pos_state.spread_ask,
-                            "bid_to_mark_ratio": pos_state.bid_to_mark_ratio,
-                            "max_leg_spread_to_mark_ratio": (
-                                pos_state.max_leg_spread_to_mark_ratio
-                            ),
-                            "max_leg_spread_abs": pos_state.max_leg_spread_abs,
-                        },
-                        underlying=self.config.strategy.underlying,
-                    )
-
-                # Persist new peak to DB so it survives a restart
-                if pos_state.peak_value > self._last_persisted_peak:
-                    self._last_persisted_peak = pos_state.peak_value
-                    await self.trade_queries.update_peak_value(trade.trade_id, pos_state.peak_value)
-
-                # Persist tent boundaries for Grafana visualization
-                await self.tent_queries.insert(
-                    ts=now_eastern(),
-                    underlying=self.config.strategy.underlying,
-                    lower_tent=pos_state.lower_tent,
-                    upper_tent=pos_state.upper_tent,
-                )
-
-                # Evaluate state machine
+                # Value -> evaluate -> act -> record: DB telemetry is written only
+                # after the exit decision has been acted on, and it never raises.
                 signal = self.state_machine.evaluate(pos_state)
-
-                # Log profit state transitions
                 current_profit_state = self.state_machine.state.name
-                if current_profit_state != self._last_profit_state:
-                    await self.decision_queries.log_event("profit_state_transition", {
-                        "trade_id": trade.trade_id,
-                        "from": self._last_profit_state,
-                        "to": current_profit_state,
-                        "mark_value": pos_state.current_value,
-                        "peak_value": pos_state.peak_value,
-                        "pnl": pos_state.pnl,
-                        "regime": pos_state.time_regime,
-                    }, underlying=self.config.strategy.underlying)
-                    self._last_profit_state = current_profit_state
 
                 if signal:
                     log.info(
@@ -464,42 +433,26 @@ class PositionService:
                         value=pos_state.current_value,
                     )
 
-                    exit_mark_parity = await self._exit_mark_parity_report(
-                        candidate=candidate,
-                        quotes=quotes,
-                        pos_state=pos_state,
-                        exit_reason=signal.reason,
-                        chain_fetched_at=chain_fetched_at,
+                    # Persist the pending exit while the exit order works, so a slow
+                    # or failing DB cannot delay the broker write.
+                    pending_exit_task = asyncio.create_task(
+                        self._best_effort(
+                            "pending_exit_metadata",
+                            self.trade_queries.merge_metadata(
+                                trade.trade_id,
+                                {
+                                    "pending_exit": {
+                                        "reason": signal.reason,
+                                        "signal_time": now_eastern().isoformat(),
+                                        "mark_at_signal": pos_state.current_value,
+                                    }
+                                },
+                            ),
+                        )
                     )
-                    exit_mark_parity["trade_id"] = trade.trade_id
-                    await self.decision_queries.log_event(
-                        "exit_mark_parity",
-                        exit_mark_parity,
-                        underlying=self.config.strategy.underlying,
-                    )
-
-                    await self.decision_queries.log_event("exit_signal_fired", {
-                        "trade_id": trade.trade_id,
-                        "reason": signal.reason,
-                        "urgency": signal.urgency,
-                        "mark_value": pos_state.current_value,
-                        "peak_value": pos_state.peak_value,
-                        "drawdown_pct": round(pos_state.drawdown_from_peak * 100, 1),
-                        "regime": pos_state.time_regime,
-                        "entry_price": pos_state.entry_price,
-                        "exit_mark_parity": exit_mark_parity,
-                    }, underlying=self.config.strategy.underlying)
-
-                    await self.trade_queries.merge_metadata(
-                        trade.trade_id,
-                        {
-                            "pending_exit": {
-                                "reason": signal.reason,
-                                "signal_time": now_eastern().isoformat(),
-                                "mark_at_signal": pos_state.current_value,
-                            }
-                        },
-                    )
+                    # Keep a reference so the task survives an execute_exit error.
+                    self._background_tasks.add(pending_exit_task)
+                    pending_exit_task.add_done_callback(self._background_tasks.discard)
 
                     fill = await self.order_manager.execute_exit(
                         candidate,
@@ -507,6 +460,44 @@ class PositionService:
                         trade.quantity,
                         exit_reason=signal.reason,
                         trade_id=trade.trade_id,
+                    )
+                    await pending_exit_task
+
+                    parity_ok, exit_mark_parity = await self._best_effort(
+                        "exit_mark_parity_report",
+                        self._exit_mark_parity_report(
+                            candidate=candidate,
+                            quotes=quotes,
+                            pos_state=pos_state,
+                            exit_reason=signal.reason,
+                            chain_fetched_at=chain_fetched_at,
+                        ),
+                    )
+                    if not parity_ok:
+                        exit_mark_parity = {"status": "unavailable"}
+                    exit_mark_parity["trade_id"] = trade.trade_id
+                    await self._best_effort(
+                        "exit_mark_parity_event",
+                        self.decision_queries.log_event(
+                            "exit_mark_parity",
+                            exit_mark_parity,
+                            underlying=self.config.strategy.underlying,
+                        ),
+                    )
+
+                    await self._best_effort(
+                        "exit_signal_fired_event",
+                        self.decision_queries.log_event("exit_signal_fired", {
+                            "trade_id": trade.trade_id,
+                            "reason": signal.reason,
+                            "urgency": signal.urgency,
+                            "mark_value": pos_state.current_value,
+                            "peak_value": pos_state.peak_value,
+                            "drawdown_pct": round(pos_state.drawdown_from_peak * 100, 1),
+                            "regime": pos_state.time_regime,
+                            "entry_price": pos_state.entry_price,
+                            "exit_mark_parity": exit_mark_parity,
+                        }, underlying=self.config.strategy.underlying),
                     )
 
                     if fill is None:
@@ -517,11 +508,14 @@ class PositionService:
                             reason=signal.reason,
                             current_value=pos_state.current_value,
                         )
-                        await self.decision_queries.log_event("exit_order_failed", {
-                            "trade_id": trade.trade_id,
-                            "reason": signal.reason,
-                            "current_value": pos_state.current_value,
-                        }, underlying=self.config.strategy.underlying)
+                        await self._best_effort(
+                            "exit_order_failed_event",
+                            self.decision_queries.log_event("exit_order_failed", {
+                                "trade_id": trade.trade_id,
+                                "reason": signal.reason,
+                                "current_value": pos_state.current_value,
+                            }, underlying=self.config.strategy.underlying),
+                        )
                         if self.notifier:
                             await self.notifier._post(
                                 f"WARNING: EXIT ORDER FAILED for trade {trade.trade_id} "
@@ -625,6 +619,84 @@ class PositionService:
                             reason=signal.reason,
                         )
 
+                if self.monitoring_leg_queries is not None:
+                    await self._record_monitoring_leg_quotes(
+                        trade=trade,
+                        candidate=candidate,
+                        expiration=expiration,
+                        quotes=quotes,
+                        ts=chain_fetched_at,
+                        pos_state=pos_state,
+                        spot_price=_chain_spot_price(chain_data),
+                    )
+
+                if pos_state.peak_update_rejected:
+                    await self._best_effort(
+                        "peak_update_rejected_event",
+                        self.decision_queries.log_event(
+                            "peak_update_rejected",
+                            {
+                                "trade_id": trade.trade_id,
+                                "reason": pos_state.peak_rejection_reason,
+                                "raw_mark": pos_state.current_value,
+                                "accepted_peak": pos_state.peak_value,
+                                "pending_peak": pos_state.pending_peak_value,
+                                "pending_confirmation_count": (
+                                    pos_state.pending_peak_confirmation_count
+                                ),
+                                "spread_bid": pos_state.spread_bid,
+                                "spread_ask": pos_state.spread_ask,
+                                "bid_to_mark_ratio": pos_state.bid_to_mark_ratio,
+                                "max_leg_spread_to_mark_ratio": (
+                                    pos_state.max_leg_spread_to_mark_ratio
+                                ),
+                                "max_leg_spread_abs": pos_state.max_leg_spread_abs,
+                            },
+                            underlying=self.config.strategy.underlying,
+                        ),
+                    )
+
+                # Persist new peak to DB so it survives a restart. The in-memory
+                # peak advances regardless; a failed write is retried next poll.
+                if pos_state.peak_value > self._last_persisted_peak:
+                    self._last_persisted_peak = pos_state.peak_value
+                    peak_write_pending = True
+                if peak_write_pending:
+                    peak_written, _ = await self._best_effort(
+                        "update_peak_value",
+                        self.trade_queries.update_peak_value(
+                            trade.trade_id, self._last_persisted_peak
+                        ),
+                    )
+                    peak_write_pending = not peak_written
+
+                # Persist tent boundaries for Grafana visualization
+                await self._best_effort(
+                    "tent_insert",
+                    self.tent_queries.insert(
+                        ts=now_eastern(),
+                        underlying=self.config.strategy.underlying,
+                        lower_tent=pos_state.lower_tent,
+                        upper_tent=pos_state.upper_tent,
+                    ),
+                )
+
+                # Log profit state transitions
+                if current_profit_state != self._last_profit_state:
+                    await self._best_effort(
+                        "profit_state_transition_event",
+                        self.decision_queries.log_event("profit_state_transition", {
+                            "trade_id": trade.trade_id,
+                            "from": self._last_profit_state,
+                            "to": current_profit_state,
+                            "mark_value": pos_state.current_value,
+                            "peak_value": pos_state.peak_value,
+                            "pnl": pos_state.pnl,
+                            "regime": pos_state.time_regime,
+                        }, underlying=self.config.strategy.underlying),
+                    )
+                    self._last_profit_state = current_profit_state
+
             except (
                 AmbiguousOrderError,
                 BrokerFillError,
@@ -709,6 +781,12 @@ class PositionService:
                 settlement_ts = None
                 try:
                     expiration = get_0dte_expiration()
+                    if trade.trade_date != expiration:
+                        # Today's chain cannot value a fly that expired on an
+                        # earlier session.
+                        raise SettlementEvidenceError(
+                            f"chain fallback cannot value trade from {trade.trade_date}"
+                        )
                     chain_data = await self.market_data.get_option_chain(
                         SCHWAB_CHAIN_SYMBOLS.get(
                             self.config.strategy.underlying,
@@ -779,7 +857,13 @@ class PositionService:
         self,
         trade: TradeRecord,
     ) -> BrokerCashSettlement:
-        """Wait for Schwab to post all opening and expiration transactions."""
+        """Wait for Schwab to post all opening and expiration transactions.
+
+        Keeps waiting indefinitely, but alerts once if settlement is still
+        pending at the next trading session's open.
+        """
+        alert_at = _settlement_pending_alert_time(trade.trade_date)
+        pending_alerted = False
         while True:
             today = session_date()
             try:
@@ -796,6 +880,10 @@ class PositionService:
                         settlement_value=settlement.settlement_value,
                         net_pnl_dollars=settlement.net_pnl_dollars,
                     )
+                    if pending_alerted:
+                        notify_telegram(
+                            f"OK: broker cash settlement posted for trade {trade.trade_id}."
+                        )
                     return settlement
             except SettlementEvidenceError:
                 raise
@@ -806,6 +894,29 @@ class PositionService:
                     error=str(e),
                 )
             log.debug("broker_cash_settlement_pending", trade_id=trade.trade_id)
+            if not pending_alerted and now_eastern() >= alert_at:
+                pending_alerted = True
+                log.error(
+                    "broker_cash_settlement_overdue",
+                    trade_id=trade.trade_id,
+                    trade_date=str(trade.trade_date),
+                    alert_at=alert_at.isoformat(),
+                )
+                alert_text = (
+                    f"WARNING: broker cash settlement for trade {trade.trade_id} "
+                    f"({trade.trade_date}) is still not posted; trade remains OPEN "
+                    "and settlement polling continues."
+                )
+                if self.notifier:
+                    try:
+                        await self.notifier._post(alert_text)
+                    except Exception as notify_error:
+                        log.warning(
+                            "broker_cash_settlement_alert_failed",
+                            error=str(notify_error),
+                        )
+                if not notify_telegram(alert_text):
+                    log.warning("broker_cash_settlement_telegram_alert_failed")
             await asyncio.sleep(300)
 
     async def _settlement_spot_price(
@@ -929,6 +1040,64 @@ class PositionService:
             exit_reason=row.get("exit_reason"),
         )
         return summarize_exit_chart(spec, candles, full_session=full_session)
+
+    async def _best_effort(self, name: str, operation: Awaitable[Any]) -> tuple[bool, Any]:
+        """Await non-critical DB telemetry; log and count failures, never raise.
+
+        Alerts once when one operation fails TELEMETRY_FAILURE_THRESHOLD times in
+        a row, and clears the readiness flag when every alerted operation recovers.
+        """
+        try:
+            result = await operation
+        except Exception as error:
+            failures = self._telemetry_failures.get(name, 0) + 1
+            self._telemetry_failures[name] = failures
+            log.warning(
+                "position_telemetry_failed",
+                trade_id=self._telemetry_trade_id,
+                operation=name,
+                consecutive_failures=failures,
+                error=str(error),
+            )
+            if failures == TELEMETRY_FAILURE_THRESHOLD:
+                self._telemetry_alerted.add(name)
+                set_readiness("position_telemetry_unavailable")
+                log.error(
+                    "position_telemetry_unavailable",
+                    trade_id=self._telemetry_trade_id,
+                    operation=name,
+                    consecutive_failures=failures,
+                )
+                alert_text = (
+                    f"WARNING: position DB writes ({name}) are failing for trade "
+                    f"{self._telemetry_trade_id}; exits remain active, telemetry "
+                    "is being dropped."
+                )
+                if self.notifier:
+                    try:
+                        await self.notifier._post(alert_text)
+                    except Exception as notify_error:
+                        log.warning(
+                            "position_telemetry_alert_failed",
+                            error=str(notify_error),
+                        )
+                if not notify_telegram(alert_text):
+                    log.warning("position_telemetry_telegram_alert_failed")
+            return False, None
+
+        if self._telemetry_failures.pop(name, 0) and name in self._telemetry_alerted:
+            self._telemetry_alerted.discard(name)
+            log.info(
+                "position_telemetry_recovered",
+                trade_id=self._telemetry_trade_id,
+                operation=name,
+            )
+            if not self._telemetry_alerted:
+                clear_readiness("position_telemetry_unavailable")
+                notify_telegram(
+                    f"OK: position DB writes recovered for trade {self._telemetry_trade_id}."
+                )
+        return True, result
 
     async def _exit_mark_parity_report(
         self,
