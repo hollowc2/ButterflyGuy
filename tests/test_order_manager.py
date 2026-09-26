@@ -317,7 +317,7 @@ async def test_live_entry_blocks_when_open_orders_check_fails():
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     schwab.get_todays_orders = AsyncMock(side_effect=RuntimeError("orders unavailable"))
 
-    result = await om.execute_entry(candidate, quantity=1)
+    result = await om.execute_single_attempt(candidate, limit_price=2.50)
 
     assert result is None
     schwab.place_order.assert_not_called()
@@ -667,107 +667,6 @@ async def test_fetch_live_spread_rejects_invalid_leg_quotes(
     )
 
     assert await om._fetch_live_spread(candidate) is None
-
-
-# ---------------------------------------------------------------------------
-# execute_entry live mark repricing
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_entry_uses_live_mark_not_candidate_cost():
-    settings = make_settings(price_ladder_steps=4)
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-    live_mark = 2.75
-
-    spread = LiveSpread(bid=2.60, mark=live_mark, ask=2.90)
-    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
-        result = await om.execute_entry(candidate, quantity=1)
-
-    assert result is not None
-    limit_price_used = om.builder.build_butterfly_open.call_args[0][1]
-    assert limit_price_used == live_mark
-
-
-@pytest.mark.asyncio
-async def test_entry_steps_up_from_live_mark():
-    settings = make_settings(price_ladder_steps=4)
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-    live_mark = 2.75
-
-    spread = LiveSpread(bid=2.60, mark=live_mark, ask=2.90)
-    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
-         patch.object(
-             om, "_wait_for_fill", new=AsyncMock(side_effect=[False, broker_fill()])
-         ):
-        result = await om.execute_entry(candidate, quantity=1)
-
-    assert result is not None
-    calls = om.builder.build_butterfly_open.call_args_list
-    assert len(calls) == 2
-    assert calls[0][0][1] == pytest.approx(live_mark)
-    assert calls[1][0][1] == pytest.approx(live_mark + 0.05)
-
-
-@pytest.mark.asyncio
-async def test_live_entry_blocks_instead_of_using_candidate_cost_when_fetch_fails():
-    settings = make_settings(price_ladder_steps=4)
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-
-    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
-        result = await om.execute_entry(candidate, quantity=1)
-
-    assert result is None
-    om.builder.build_butterfly_open.assert_not_called()
-    schwab.place_order.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_entry_reprice_called_per_step():
-    settings = make_settings(price_ladder_steps=4)
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-
-    fetch_mock = AsyncMock(return_value=LiveSpread(bid=2.60, mark=2.75, ask=2.90))
-    # Fill on the last step so we traverse all 4 steps
-    wait_mock = AsyncMock(side_effect=[False, False, False, broker_fill()])
-
-    with patch.object(om, "_fetch_live_spread", new=fetch_mock), \
-         patch.object(om, "_wait_for_fill", new=wait_mock):
-        await om.execute_entry(candidate, quantity=1)
-
-    assert fetch_mock.call_count == 4
-
-
-@pytest.mark.asyncio
-async def test_entry_returns_none_on_timeout():
-    settings = make_settings(order_timeout_seconds=0)
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-
-    result = await om.execute_entry(candidate, quantity=1)
-
-    assert result is None
-
-
-@pytest.mark.asyncio
-async def test_entry_does_not_mutate_candidate_cost():
-    settings = make_settings(price_ladder_steps=4)
-    om, schwab = make_order_manager(settings)
-    candidate = make_candidate(5900, 5950, 6000, 2.50)
-    original_cost = candidate.cost
-    live_mark = 2.75
-
-    spread = LiveSpread(bid=2.60, mark=live_mark, ask=2.90)
-    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
-         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
-        await om.execute_entry(candidate, quantity=1)
-
-    assert candidate.cost == original_cost
 
 
 # ---------------------------------------------------------------------------
