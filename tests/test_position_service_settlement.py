@@ -6,11 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from butterfly_guy.core.config import ProfitManagementSettings, TimeRegime
 from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
 from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.data.schemas import TradeRecord
 from butterfly_guy.execution import order_manager as order_manager_module
 from butterfly_guy.position.position_manager import PositionState
+from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.services.position_service import (
     BrokerCashSettlement,
     PositionService,
@@ -713,6 +715,43 @@ async def test_telemetry_recovery_clears_readiness() -> None:
     assert sum("WARNING" in m for m in messages) == 1
     assert sum(m.startswith("OK:") for m in messages) == 1
     set_readiness(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("recovered_peak", "expect_exit"),
+    [(3.0, True), (None, False)],
+)
+async def test_restart_with_recovered_peak_keeps_drawdown_exit(
+    recovered_peak: float | None, expect_exit: bool
+) -> None:
+    """Entry 1.00, peak 3.00, current 0.90: a restart must still exit on drawdown."""
+    service = _telemetry_service(None)
+    service.position_manager.update_position_value.return_value = _pos_state(0.90, 3.0)
+    service.state_machine = ProfitStateMachine(
+        ProfitManagementSettings(
+            regimes={
+                "morning": TimeRegime(
+                    start_minutes_after_open=0,
+                    end_minutes_after_open=120,
+                    drawdown_threshold=0.50,
+                )
+            }
+        )
+    )
+    service.state_machine._ever_in_profit = True  # must be reset by monitor_loop
+    trade = TradeRecord(trade_id=7, trade_date=dt.date(2026, 7, 14), entry_price=1.0)
+
+    p = _monitor_patches(trade, AsyncMock(side_effect=asyncio.CancelledError))
+    with p[0], p[1], p[2], p[3], p[4], pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock(), recovered_peak=recovered_peak)
+
+    if expect_exit:
+        service.order_manager.execute_exit.assert_awaited_once()
+        reason = service.order_manager.execute_exit.await_args.kwargs["exit_reason"]
+        assert reason.startswith("drawdown")
+    else:
+        service.order_manager.execute_exit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
