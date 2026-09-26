@@ -298,11 +298,10 @@ class PositionService:
         self._last_persisted_peak = (
             recovered_peak if (recovered_peak and recovered_peak > 0) else trade.entry_price
         )
-        self.state_machine.reset()
-        # reset() forgets that the position was ever at or above entry; a recovered
-        # peak is only persisted once it exceeds entry, so it restores that fact.
-        self.state_machine._ever_in_profit = (
-            recovered_peak is not None and recovered_peak >= trade.entry_price
+        # A recovered peak is only persisted once it exceeds entry, so it restores
+        # that the position was ever at or above entry.
+        self.state_machine.reset(
+            ever_in_profit=recovered_peak is not None and recovered_peak >= trade.entry_price
         )
         self._last_profit_state = None
         self._telemetry_trade_id = trade.trade_id

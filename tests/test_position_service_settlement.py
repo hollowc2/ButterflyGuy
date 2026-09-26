@@ -735,10 +735,15 @@ async def test_restart_with_recovered_peak_keeps_drawdown_exit(
     service.state_machine = ProfitStateMachine(
         ProfitManagementSettings(
             regimes={
-                "morning": TimeRegime(
-                    start_minutes_after_open=0,
-                    end_minutes_after_open=120,
+                name: TimeRegime(
+                    start_minutes_after_open=start,
+                    end_minutes_after_open=end,
                     drawdown_threshold=0.50,
+                )
+                for name, start, end in (
+                    ("morning", 0, 120),
+                    ("late_morning", 120, 240),
+                    ("afternoon", 240, 390),
                 )
             }
         )

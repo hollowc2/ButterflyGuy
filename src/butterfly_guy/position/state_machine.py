@@ -261,8 +261,12 @@ class ProfitStateMachine:
         if self._state != ProfitState.LOSS:
             self._ever_in_profit = True
 
-    def reset(self) -> None:
-        """Reset state machine for a new position."""
+    def reset(self, ever_in_profit: bool = False) -> None:
+        """Reset state machine for a new position.
+
+        ``ever_in_profit`` restores, after a restart, that the position was already
+        at or above entry, so drawdown exits stay armed.
+        """
         self._state = ProfitState.LOSS
-        self._ever_in_profit = False
+        self._ever_in_profit = ever_in_profit
         self._reset_pending_drawdown()
