@@ -125,6 +125,14 @@ def is_trading_day(d: dt.date | None = None) -> bool:
     return True
 
 
+def previous_trading_day(d: dt.date) -> dt.date:
+    """Most recent trading day strictly before *d*."""
+    prev = d - dt.timedelta(days=1)
+    while not is_trading_day(prev):
+        prev -= dt.timedelta(days=1)
+    return prev
+
+
 def time_in_window(
     start: str, end: str, tz: str = "US/Pacific", at: dt.datetime | None = None
 ) -> bool:

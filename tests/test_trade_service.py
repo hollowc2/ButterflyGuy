@@ -13,7 +13,6 @@ from butterfly_guy.core.config import (
 from butterfly_guy.execution.order_manager import AmbiguousOrderError, TerminalOrderError
 from butterfly_guy.services.trade_service import (
     TradeService,
-    _previous_trading_day,
     _session_open_from_intraday_candles,
     now_eastern,
 )
@@ -376,12 +375,6 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
     service._release_entry_lock.assert_awaited_once()
 
 
-def test_previous_trading_day_skips_weekends_and_holidays():
-    assert _previous_trading_day(dt.date(2026, 9, 24)) == dt.date(2026, 9, 23)
-    # Monday -> Friday
-    assert _previous_trading_day(dt.date(2026, 9, 28)) == dt.date(2026, 9, 25)
-    # Tuesday after Labor Day (2026-09-07) -> Friday
-    assert _previous_trading_day(dt.date(2026, 9, 8)) == dt.date(2026, 9, 4)
 
 
 def _prev_close_service(fetchrow: AsyncMock) -> tuple[TradeService, MagicMock]:

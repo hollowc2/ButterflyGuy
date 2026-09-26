@@ -13,6 +13,7 @@ from butterfly_guy.core.time_utils import (
     market_close_time,
     minutes_since_open,
     minutes_to_close,
+    previous_trading_day,
     session_date,
     time_in_window,
 )
@@ -155,3 +156,11 @@ def test_get_time_regime_uses_configured_bounds():
     assert get_time_regime(90, regimes) == "late_morning"
     assert get_time_regime(299, regimes) == "late_morning"
     assert get_time_regime(300, regimes) == "afternoon"
+
+
+def test_previous_trading_day_skips_weekends_and_holidays():
+    assert previous_trading_day(dt.date(2026, 9, 24)) == dt.date(2026, 9, 23)
+    # Monday -> Friday
+    assert previous_trading_day(dt.date(2026, 9, 28)) == dt.date(2026, 9, 25)
+    # Tuesday after Labor Day (2026-09-07) -> Friday
+    assert previous_trading_day(dt.date(2026, 9, 8)) == dt.date(2026, 9, 4)

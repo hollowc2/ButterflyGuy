@@ -41,6 +41,7 @@ import asyncpg
 
 from butterfly_guy.backtest.chain_cache import ChainDay
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
+from butterfly_guy.backtest.db_loader import fetch_prev_close
 from butterfly_guy.backtest.execution_accounting import (
     ExecutableTrade,
     price_frozen_trade,
@@ -807,43 +808,6 @@ async def load_bars_from_db(
     return bars
 
 
-async def get_prev_close(
-    conn: asyncpg.Connection,
-    date: dt.date,
-    underlying: str,
-) -> float | None:
-    """Return the previous session's official close, as live uses for gap direction.
-
-    Falls back to the last spot price at or before 16:00 ET on the previous
-    trading day when no daily bar is stored.
-    """
-    official = await conn.fetchval(
-        """
-        SELECT close FROM daily_bars
-        WHERE underlying = $1 AND date < $2
-        ORDER BY date DESC
-        LIMIT 1
-        """,
-        underlying, date,
-    )
-    if official is not None:
-        return float(official)
-    row = await conn.fetchval(
-        """
-        SELECT price FROM spot_prices
-        WHERE underlying = $1
-          AND (ts AT TIME ZONE 'America/New_York')::date < $2
-          AND (ts AT TIME ZONE 'America/New_York')::time <= '16:00:00'
-        ORDER BY ts DESC
-        LIMIT 1
-        """,
-        underlying, date,
-    )
-    if row:
-        return float(row)
-    return None
-
-
 async def get_official_open(
     conn: asyncpg.Connection,
     date: dt.date,
@@ -1148,8 +1112,9 @@ async def load_date_data(
     bars = await load_bars_from_db(conn, date, underlying)
     if not chains or not bars:
         return None
-    prev_close = await get_prev_close(conn, date, underlying)
-    if prev_close is None:
+    prev_close, skip_reason = await fetch_prev_close(conn, underlying, date)
+    if skip_reason is not None:
+        log.info("backtest_day_skipped", date=str(date), underlying=underlying, reason=skip_reason)
         return None
     direction_bar = select_direction_bar(bars)
     open_spot = await get_official_open(conn, date, underlying)

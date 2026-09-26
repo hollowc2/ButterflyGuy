@@ -30,8 +30,8 @@ from butterfly_guy.core.time_utils import (
     EASTERN,
     MARKET_OPEN,
     get_0dte_expiration,
-    is_trading_day,
     now_eastern,
+    previous_trading_day,
     session_date,
     time_in_window,
 )
@@ -80,14 +80,6 @@ def _age_seconds(ts: dt.datetime, now: dt.datetime) -> float:
     if now.tzinfo is None:
         now = now.replace(tzinfo=dt.timezone.utc)
     return (now.astimezone(dt.timezone.utc) - ts.astimezone(dt.timezone.utc)).total_seconds()
-
-
-def _previous_trading_day(d: dt.date) -> dt.date:
-    """Most recent trading day strictly before *d*."""
-    prev = d - dt.timedelta(days=1)
-    while not is_trading_day(prev):
-        prev -= dt.timedelta(days=1)
-    return prev
 
 
 def _session_open_from_intraday_candles(
@@ -833,7 +825,7 @@ class TradeService:
         self, underlying: str, trade_date: dt.date
     ) -> float | None:
         """Return the previous trading day's close, or log a block and return None."""
-        expected_date = _previous_trading_day(trade_date)
+        expected_date = previous_trading_day(trade_date)
         try:
             row = await self.chain_queries.db.pool.fetchrow(
                 """

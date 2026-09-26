@@ -7,6 +7,7 @@ import pytest
 import butterfly_guy.scripts.run_backtest_db as run_backtest_db
 from butterfly_guy.backtest.chain_cache import ChainDay
 from butterfly_guy.backtest.data_loader import MinuteBar
+from butterfly_guy.backtest.db_loader import fetch_prev_close
 
 
 def test_resolve_db_dsn_uses_config_even_if_database_url_is_set(monkeypatch):
@@ -218,10 +219,19 @@ async def test_hypothetical_monitoring_load_uses_collector_only():
 class _DailyBarConnection:
     """Answers the daily_bars / spot_prices lookups used for gap direction."""
 
-    def __init__(self, *, daily_close=None, daily_open=None, spot_close=None):
+    def __init__(
+        self, *, daily_close=None, daily_close_date=None, daily_open=None, spot_close=None
+    ):
         self.daily_close = daily_close
+        self.daily_close_date = daily_close_date
         self.daily_open = daily_open
         self.spot_close = spot_close
+
+    async def fetchrow(self, query, *_args):
+        assert "FROM daily_bars" in query and "SELECT date, close" in query, query
+        if self.daily_close is None:
+            return None
+        return {"date": self.daily_close_date, "close": self.daily_close}
 
     async def fetchval(self, query, *_args):
         if "FROM daily_bars" in query and "SELECT close" in query:
@@ -234,17 +244,55 @@ class _DailyBarConnection:
 
 
 @pytest.mark.asyncio
-async def test_prev_close_prefers_official_daily_close():
-    conn = _DailyBarConnection(daily_close=7440.43, spot_close=7442.25)
+async def test_prev_close_uses_previous_trading_day_daily_close():
+    conn = _DailyBarConnection(
+        daily_close=7440.43, daily_close_date=dt.date(2026, 6, 29), spot_close=7442.25
+    )
 
-    assert await run_backtest_db.get_prev_close(conn, dt.date(2026, 6, 30), "SPX") == 7440.43
+    assert await fetch_prev_close(conn, "SPX", dt.date(2026, 6, 30)) == (7440.43, None)
 
 
 @pytest.mark.asyncio
-async def test_prev_close_falls_back_to_spot_tick_without_daily_bar():
+async def test_prev_close_without_daily_bar_is_unavailable_not_spot_fallback():
     conn = _DailyBarConnection(spot_close=7442.25)
 
-    assert await run_backtest_db.get_prev_close(conn, dt.date(2026, 6, 30), "SPX") == 7442.25
+    assert await fetch_prev_close(conn, "SPX", dt.date(2026, 6, 30)) == (
+        None,
+        "prev_close_unavailable",
+    )
+
+
+@pytest.mark.asyncio
+async def test_prev_close_from_an_older_session_is_stale():
+    conn = _DailyBarConnection(daily_close=7440.43, daily_close_date=dt.date(2026, 6, 26))
+
+    assert await fetch_prev_close(conn, "SPX", dt.date(2026, 6, 30)) == (
+        None,
+        "prev_close_stale",
+    )
+
+
+@pytest.mark.asyncio
+async def test_prev_close_across_a_holiday_weekend_is_fresh():
+    # Tuesday after Labor Day: the previous trading day is Friday 2026-09-04.
+    conn = _DailyBarConnection(daily_close=6500.0, daily_close_date=dt.date(2026, 9, 4))
+
+    assert await fetch_prev_close(conn, "SPX", dt.date(2026, 9, 8)) == (6500.0, None)
+
+
+@pytest.mark.asyncio
+async def test_load_date_data_skips_day_without_fresh_prev_close(monkeypatch):
+    async def fake_chains(*_args):
+        return {"snapshot": []}
+
+    async def fake_bars(*_args):
+        return [object()]
+
+    monkeypatch.setattr(run_backtest_db, "load_entry_chains", fake_chains)
+    monkeypatch.setattr(run_backtest_db, "load_bars_from_db", fake_bars)
+    conn = _DailyBarConnection(daily_close=7440.43, daily_close_date=dt.date(2026, 6, 26))
+
+    assert await run_backtest_db.load_date_data(conn, dt.date(2026, 6, 30), "SPX") is None
 
 
 @pytest.mark.asyncio
