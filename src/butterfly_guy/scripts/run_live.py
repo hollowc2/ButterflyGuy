@@ -395,6 +395,7 @@ async def _assert_broker_state_matches_db(
     intent_queries: OrderIntentQueries | None = None,
     trade_queries: TradeQueries | None = None,
     trade_date: dt.date | None = None,
+    allow_entry_repair: bool = True,
 ) -> None:
     today = trade_date or session_date()
     account_snapshot = await schwab.get_account_snapshot()
@@ -479,6 +480,14 @@ async def _assert_broker_state_matches_db(
             and intent.get("status") == "FILLED"
             and not intent.get("trade_id")
         ]
+        if len(filled_entries) == 1 and not allow_entry_repair:
+            # Repair is startup-only: a trade row created here would have no
+            # monitor, no risk trade count, and no settlement close.
+            raise RuntimeError(
+                f"Broker has {len(broker_positions)} {underlying} option position(s) "
+                f"from filled entry intent {filled_entries[0]['id']} with no OPEN "
+                "trade; restart to repair and adopt it"
+            )
         if trade_queries is not None and len(filled_entries) == 1:
             repaired = await _repair_filled_entry_intent(
                 filled_entries[0],
@@ -560,6 +569,7 @@ async def _reconcile_broker_state(
     trade_queries: TradeQueries | None,
     critical_notifier: AlertmanagerNotifier | None,
     trade_date: dt.date | None = None,
+    allow_entry_repair: bool = True,
 ) -> None:
     try:
         if open_rows is None:
@@ -573,6 +583,7 @@ async def _reconcile_broker_state(
             intent_queries,
             trade_queries,
             trade_date,
+            allow_entry_repair,
         )
     except Exception:
         if critical_notifier:
@@ -598,6 +609,7 @@ async def broker_reconciler_loop(
                 intent_queries,
                 trade_queries,
                 critical_notifier,
+                allow_entry_repair=False,
             )
             if critical_notifier:
                 await critical_notifier.retry_pending_resolutions()
