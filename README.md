@@ -2,52 +2,19 @@
 
 ![Butterfly Guy Logo](data/images/butterflyguy_logo2.png)
 
-Butterfly Guy is an automated 0-DTE butterfly options trading system and research platform for Schwab + TimescaleDB.
+Butterfly Guy is an automated 0-DTE butterfly options trading system and research platform, built on the Charles Schwab API and TimescaleDB.
 
-It can also consume freshness-gated, venue-specific Level II snapshots from
-SchwabGateway over authenticated HTTP and WebSocket connections. See
-[`docs/gateway-order-books.md`](docs/gateway-order-books.md).
+- **SPX** is the primary product.
+- **NDX** and **XSP** are experimental. Each has its own configuration and tuning; none of them simply copies SPX.
+- **Paper trading** is the default. Live trading requires an explicit guard.
 
-SPX is the primary product and the main runtime path.
+## What it does
 
-NDX and XSP are experimental. Treat them as separate tuning paths, not as production parity with SPX.
-
-## What this repo does
-
-At a high level, the system:
-
-- collects option-chain and spot snapshots into TimescaleDB,
-- selects 0-DTE butterfly entries using configurable width, regime, and risk rules,
-- manages open positions with profit and drawdown logic,
-- supports paper trading and controlled live trading,
-- replays historical data for backtests and parity checks,
-- publishes metrics and dashboards for monitoring.
-
-The runtime is split so you can run collection, trading, or the full stack.
-
-## Core repo layout
-
-| Path | Purpose |
-|---|---|
-| `src/butterfly_guy/scripts/` | Command-line entrypoints for live trading, collection, reports, and backtests |
-| `src/butterfly_guy/strategy/` | Butterfly selection, width selection, regime logic, and entry filtering |
-| `src/butterfly_guy/execution/` | Order building and retry/ladder execution logic |
-| `src/butterfly_guy/position/` | Position monitoring, profit policy, and exit state machine |
-| `src/butterfly_guy/risk/` | Daily loss limits, trade caps, and buying-power guards |
-| `src/butterfly_guy/data/` | Schwab client, chain collection, and DB-facing data models |
-| `src/butterfly_guy/backtest/` | DB replay and simulation engine |
-| `src/butterfly_guy/core/` | Config loading, logging, and shared settings |
-| `src/butterfly_guy/db/` | TimescaleDB connection pool, migrations, and queries |
-| `src/butterfly_guy/quant_engine/` | Black-Scholes pricer and IV/skew modeling |
-| `src/butterfly_guy/services/` | Trade and position service orchestration, notifications |
-| `src/butterfly_guy/reports/` | Report and dashboard generation |
-| `src/butterfly_guy/gateway_client/` | Default-off shadow comparison around the standalone SchwabGateway SDK |
-| `configs/` | SPX, NDX, and XSP configuration files |
-| `infra/` | Docker compose and observability wiring |
-| `docs/architecture/`, `docs/runbooks/` | Design notes, migration plans, and operational runbooks |
-| `tests/` | Focused test coverage |
-
-## Architecture at a glance
+- Collects option-chain and spot snapshots into TimescaleDB.
+- Selects 0-DTE butterfly entries using width, regime, and risk rules.
+- Manages open positions with profit and drawdown exits.
+- Replays stored data for backtests and live-parity checks.
+- Publishes metrics, dashboards, and notifications.
 
 ```text
 Schwab API
@@ -57,261 +24,181 @@ Schwab API
                                    └────────────> risk engine + metrics + notifications
 ```
 
-## How the product is organized
+The live orchestrator, `run_live.py`, runs collection, entry and order management, and position monitoring together.
 
-SPX is the default operational path.
+## Quick start
 
-XSP and NDX are separate configurations, not just smaller or larger SPX clones. They have their own widths, tolerances, quote-quality rules, and risk behavior. Treat them as experimental until you have enough real data to justify changing that label.
+```bash
+uv sync                      # install dependencies
+cp .env.example .env         # then fill in credentials
+uv run pytest                # tests
+uv run ruff check .          # lint
+```
 
-The live orchestrator runs three things together:
+### Run with Docker
 
-1. option-chain collection,
-2. entry selection and order management,
-3. open-position monitoring.
+SPX starts by default. NDX and XSP are opt-in profiles.
 
-That orchestration is what lives in `run_live.py`.
+```bash
+docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml --profile ndx --profile xsp up -d
+docker compose -f infra/docker-compose.yml ps
+```
 
-## Configuration files
+| Asset | Container | Metrics |
+|---|---|---|
+| SPX | `butterfly_spx_app` | `127.0.0.1:8000` |
+| NDX | `butterfly_ndx_app` | `127.0.0.1:8001` |
+| XSP | `butterfly_xsp_app` | `127.0.0.1:8003` |
+
+Check logs with `docker logs --tail 100 <container>`.
+
+### Run on the host
+
+```bash
+uv run python src/butterfly_guy/scripts/run_live.py --config configs/config.yaml
+uv run python src/butterfly_guy/scripts/run_live.py --config configs/config_ndx.yaml
+uv run python src/butterfly_guy/scripts/run_live.py --config configs/config_xsp.yaml
+```
+
+## Configuration
 
 | File | Role |
 |---|---|
-| `configs/config.yaml` | SPX default configuration |
-| `configs/config_ndx.yaml` | NDX experimental configuration |
-| `configs/config_xsp.yaml` | XSP experimental configuration |
+| `configs/config.yaml` | SPX (default) |
+| `configs/config_ndx.yaml` | NDX (experimental) |
+| `configs/config_xsp.yaml` | XSP (experimental) |
 
-Default runtime settings are paper-trading oriented. Live trading requires the explicit live-trading guard to be enabled.
+Credentials live in `.env` and `tokens.json`. Never commit them.
 
-Secrets and runtime credentials live in `.env` and `tokens.json`. Do not commit those values. Copy `.env.example` to `.env` to start.
-
-Docker Compose also requires `SCHWAB_GATEWAY_TOKEN_DIR` in its interpolation environment (normally
-`infra/.env`). Set it to an absolute, dedicated host directory containing `tokens.json`, not to the
-repository root and not to the token document itself:
+Docker Compose also needs `SCHWAB_GATEWAY_TOKEN_DIR`, normally set in `infra/.env`. Point it to a dedicated host directory that contains `tokens.json`. Don't point it at the repository root or at the token file itself.
 
 ```dotenv
 SCHWAB_GATEWAY_TOKEN_DIR=/absolute/path/to/schwab-token-directory
 ```
 
-The directory must be writable by the configured trading/gateway uid because token refresh uses a
-sibling lock and atomic replacement. Compose fails closed while the variable is unset.
+The trading/gateway uid must be able to write to this directory, because token refresh uses a sibling lock file and an atomic replace. Compose refuses to start while the variable is unset.
 
-## Live-money readiness gate
+## Before trading real money
 
-Treat SPX, NDX, and XSP as paper-only unless the owner explicitly authorizes a supervised live
-canary. Before any restart, deploy, or live pilot, follow `docs/live-runbook.md`, which requires
-zero `OPEN` trades in the database, no working/unknown Schwab orders, and broker/DB reconciliation.
+All three assets are paper-only unless the owner explicitly authorizes a supervised live canary. Before any restart, deploy, or live pilot, follow [`docs/live-runbook.md`](docs/live-runbook.md). The runbook requires:
 
-## Typical workflow
+- zero `OPEN` trades in the database,
+- no working or unknown Schwab orders,
+- a clean broker/database reconciliation.
 
-### 1) Install dependencies
+## Schwab gateway
 
-```bash
-uv sync
-```
+Market data comes through the standalone, read-only [SchwabGateway](https://github.com/hollowc2/SchwabGateway) service. Butterfly Guy pins `schwab-gateway-sdk` 0.5.0 and `schwab-token-store` v0.1.0 in `pyproject.toml` and `uv.lock`.
 
-### 2) Run the test and lint pass
+| Path | Market data | Accounts, orders, tokens |
+|---|---|---|
+| Deployed paper strategies (`infra/docker-compose.gateway-paper-cutover.yml` overlay) | Gateway | Direct Schwab client |
+| Base Compose file (local use and rollback) | Direct Schwab client (gateway is opt-in) | Direct Schwab client |
 
-```bash
-uv run pytest
-uv run ruff check .
-```
+The gateway never routes orders or account operations. Real-money trading may not use gateway market data until a reviewed force-fresh option-chain policy exists.
 
-### 3) Start the SPX stack in Docker
+This repo keeps two consumer-side checks:
 
-SPX is the default service. The compose file starts it without needing a profile.
+- `tools/butterfly_gateway_acceptance.py` checks paper-strategy readiness and environment invariants.
+- `tools/gateway_cutover_flatness_audit.py` runs the authenticated broker/database flatness gate.
 
-```bash
-docker compose -f infra/docker-compose.yml up -d
-docker compose -f infra/docker-compose.yml ps
-```
+Everything else about the gateway (building, deploying, monitoring, keys, rollback) lives in the SchwabGateway repo. For the current status, see [`docs/architecture/schwab-gateway-current-status.md`](docs/architecture/schwab-gateway-current-status.md). For history, see [`docs/archive/schwab-gateway/`](docs/archive/schwab-gateway/). For Level II order books, see [`docs/gateway-order-books.md`](docs/gateway-order-books.md).
 
-If you want the experimental containers too:
+## Backtesting and research
+
+`run_backtest_db.py` replays TimescaleDB history through the same strategy components the live system uses.
 
 ```bash
-docker compose -f infra/docker-compose.yml --profile ndx --profile xsp up -d
-docker compose -f infra/docker-compose.yml ps
-```
+# One day, or a date range
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-15 2025-01-15 --asset SPX
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 --asset SPX
 
-Container names:
+# Compare midpoint, executable bid/ask, and bid/ask plus $0.05 slippage
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 \
+  --asset SPX --execution-accounting-report
 
-- `butterfly_spx_app`
-- `butterfly_ndx_app`
-- `butterfly_xsp_app`
+# Parameter sweep
+uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
 
-Useful health checks:
-
-```bash
-docker logs --tail 100 butterfly_spx_app
-docker logs --tail 100 butterfly_ndx_app
-docker logs --tail 100 butterfly_xsp_app
-```
-
-Metrics ports from the compose file:
-
-- SPX: `127.0.0.1:8000`
-- NDX: `127.0.0.1:8001`
-- XSP: `127.0.0.1:8003`
-
-## Schwab gateway (standalone operational service)
-
-The read-only gateway is maintained and deployed from
-[`hollowc2/SchwabGateway`](https://github.com/hollowc2/SchwabGateway). Butterfly Guy pins the
-standalone `schwab-gateway-sdk` 0.5.0 to the immutable commit recorded in `pyproject.toml` and
-`uv.lock`, while `schwab-token-store` remains pinned to `v0.1.0`. Butterfly Guy no longer contains
-the gateway server, operator CLIs, Compose file, or alert rules. The standalone service supports
-history, movers, full option chains, and order books, in addition to bounded quote and spot reads;
-account and order-write surfaces remain outside the gateway.
-
-The deployed PAPER SPX, NDX, and XSP strategies use gateway market data as the authoritative read
-path through the tracked `infra/docker-compose.gateway-paper-cutover.yml` overlay, including history
-and option-chain reads. Their direct Schwab client remains authoritative for
-account, order, transaction, reconciliation, and token operations. The repository's base Compose file
-keeps gateway access opt-in for local/rollback safety; the deployed PAPER overlay enables it with
-`SCHWAB_ACCESS_MODE=gateway` and disables shadow reads. No account operation or order is routed
-through the gateway.
-
-Real-money gateway market data remains prohibited until a separately reviewed force-fresh
-option-chain policy exists.
-
-For the current ownership and deployment status, see
-`docs/architecture/schwab-gateway-current-status.md`. Historical extraction evidence is indexed in
-`docs/archive/schwab-gateway/`; standalone build, deployment, monitoring, and key-management
-instructions live in the SchwabGateway repository.
-
-Butterfly Guy retains only consumer checks: run
-`tools/butterfly_gateway_acceptance.py` for PAPER strategy readiness and environment invariants,
-and `tools/gateway_cutover_flatness_audit.py` for the authenticated broker/DB flatness gate.
-Reusable contract, scheduler, load, TTL-analysis, credential, deployment, monitoring, and rollback
-operations belong to SchwabGateway.
-
-### 4) Run the live orchestrator directly
-
-The live runner starts collection, entry logic, and position monitoring together.
-
-```bash
-uv run python src/butterfly_guy/scripts/run_live.py --config configs/config.yaml
-```
-
-For the experimental configurations:
-
-```bash
-uv run python src/butterfly_guy/scripts/run_live.py --config configs/config_ndx.yaml
-uv run python src/butterfly_guy/scripts/run_live.py --config configs/config_xsp.yaml
-```
-
-### 5) Smoke-test the backtest from Docker
-
-```bash
+# Same backtest inside the running container
 docker exec butterfly_spx_app python -m butterfly_guy.scripts.run_backtest_db 2026-05-05 2026-05-05 --asset SPX
 ```
 
-Host equivalent:
+`--asset NDX` and `--asset XSP` also work, but treat them as experimental.
+
+> `run_entry_analysis.py` and `SimulationEngine.simulate_day()` are legacy paths with their own defaults. They are not live-parity evidence. Use `run_backtest_db.py` instead.
+
+### Safeguards against misleading results
+
+- **No lookahead.** VIX inputs are limited to values known at the simulated decision time.
+- **Asset identity.** Chain caches are partitioned by asset, so SPX, NDX, and XSP data never mix.
+- **Incomplete sessions.** Sessions that end before 15:00 ET are excluded rather than given a made-up exit.
+- **Cash settlement.** Positions held to the close settle at intrinsic value against the official index close, using the same function as the paper runtime. Settlement has no exit fill, slippage, or closing commission.
+- **Missing settlement.** A held position with no same-session close is excluded. `--legacy-end-of-day-mark` restores the old final-mark fallback, for diagnostic comparison only.
+- **Execution accounting.** `--execution-accounting-report` keeps decisions on the midpoint model, then:
+  - prices entries at the outer-leg asks and twice the center bid,
+  - prices exits at the outer-leg bids and twice the center ask,
+  - charges $0.65 per contract per side.
+
+  The stress case moves every fill $0.05 against you. Missing or crossed markets are reported and excluded, never filled at the midpoint.
+- **Reproducibility.** Sweep CSVs record the Git SHA, command, config, data coverage, exposure, expectancy, average win and loss, and cost drag.
+
+A sweep ranks the same sample it evaluates, so treat its winners as hypotheses. Freeze a candidate and confirm it on chronological holdouts before considering it for paper trading.
+
+The discovery runner handles that holdout step. It crosses the recorded spread, includes commissions, reports train, validation, and test splits in chronological order, and writes reproducible artifacts to `reports/strategy_discovery/`:
 
 ```bash
-uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-05-05 2026-05-05 --asset SPX
+uv run python src/butterfly_guy/scripts/discover_options_strategy.py
 ```
 
-### 6) Inspect a historical entry decision
+### Inspection and reports
 
 ```bash
 uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03
 uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --method VIX
-```
-
-### 7) Generate or compare reports
-
-```bash
 uv run python src/butterfly_guy/scripts/report_trade_ladders.py 2026-05-20 --underlying SPX
 uv run python src/butterfly_guy/scripts/report_selection_parity.py 2026-05-15 2026-05-29 --asset SPX
 uv run python src/butterfly_guy/scripts/report_exit_mark_parity.py --trade-id 87
 uv run python src/butterfly_guy/scripts/generate_live_performance.py
 ```
 
-## Backtesting
+## Repository layout
 
-> `run_entry_analysis.py` and `SimulationEngine.simulate_day()` are legacy research paths
-> with independent asset/selection defaults. Do not treat their output as live-parity
-> evidence; use `run_backtest_db.py` for config-backed shared entry selection.
+| Path | Purpose |
+|---|---|
+| `src/butterfly_guy/scripts/` | Command-line entry points |
+| `src/butterfly_guy/strategy/` | Butterfly and width selection, regimes, entry filters |
+| `src/butterfly_guy/execution/` | Order building and price-ladder retries |
+| `src/butterfly_guy/position/` | Position monitoring and exit state machine |
+| `src/butterfly_guy/risk/` | Loss limits, trade caps, buying-power guards |
+| `src/butterfly_guy/data/` | Schwab client, chain collection, data models |
+| `src/butterfly_guy/backtest/` | Replay and simulation engine |
+| `src/butterfly_guy/core/` | Config, logging, shared settings |
+| `src/butterfly_guy/db/` | TimescaleDB pool, migrations, queries |
+| `src/butterfly_guy/quant_engine/` | Black-Scholes pricing and IV/skew modeling |
+| `src/butterfly_guy/services/` | Trade and position orchestration, notifications |
+| `src/butterfly_guy/reports/` | Reports and published pages |
+| `src/butterfly_guy/gateway_client/` | Default-off shadow comparison against SchwabGateway |
+| `configs/` | Per-asset configuration |
+| `infra/` | Docker Compose and observability |
+| `docs/` | Architecture notes, runbooks, research |
+| `tests/` | Tests |
 
-`run_backtest_db.py` replays historical data from TimescaleDB using the same strategy components the live system uses.
-
-Examples:
-
-```bash
-# Single day
-uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-15 2025-01-15 --asset SPX
-
-# Date range
-uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 --asset SPX
-
-# Freeze strategy decisions, then compare corrected midpoint, executable bid/ask,
-# and executable bid/ask plus $0.05 adverse slippage per option contract leg
-uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 \
-  --asset SPX --execution-accounting-report
-
-# Sweep parameter space
-uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
-```
-
-For hypothesis discovery across the stored option-chain corpus, use the leakage-safe
-discovery runner. It crosses the recorded spread, includes commissions, emits chronological
-train/validation/test results, and writes reproducible artifacts under
-`reports/strategy_discovery/`:
-
-```bash
-uv run python src/butterfly_guy/scripts/discover_options_strategy.py
-```
-
-Research safeguards in the replay paths:
-
-- VIX inputs are limited to values known before or at the simulated decision time.
-- Asset-partitioned chain caches preserve SPX/NDX/XSP identity.
-- Partial sessions ending before 15:00 ET are excluded rather than assigned a fabricated exit.
-- Held-to-close positions use the same intrinsic-value function as the paper runtime and the
-  same-session official index close from `daily_bars`; cash settlement has no exit fill,
-  slippage, or closing commission.
-- A held position with no same-session settlement close is excluded as missing data. The final
-  option mark is never substituted by default; `--legacy-end-of-day-mark` enables that former
-  behavior only as a named diagnostic comparison.
-- `--execution-accounting-report` leaves strategy decisions on the corrected midpoint model,
-  then prices entry at outer-leg asks and twice the center bid, intraday exit at outer-leg bids
-  and twice the center ask, and charges $0.65 per contract per executed side. Its stress case
-  moves every contract fill $0.05 adversely. Missing or crossed fill markets are reported and
-  excluded at the frozen decision timestamp without lookahead, carry-forward, or midpoint fill.
-- Sweep CSVs include the Git SHA, exact command, config path, data coverage, exposure,
-  expectancy, average win/loss, and estimated cost drag.
-
-The parameter sweep ranks the same sample it evaluates. Treat that output as hypothesis
-generation only; freeze a candidate and confirm it with chronological holdouts or the discovery
-runner before considering paper-trading review.
-
-The same script also supports `--asset NDX` and `--asset XSP`, but those should be treated as experimental comparison paths rather than the main line.
-
-## Repository conventions that matter
-
-- SPX is the primary asset.
-- XSP and NDX are experimental.
-- Paper trading is the default.
-- Backtests should be run against the same config family as the asset you are comparing.
-- Docker is the normal way to run the app services.
-- TimescaleDB is the historical source of truth for replay and parity work.
-
-## If you are changing the code
-
-Keep changes surgical. The repo is large enough that broad refactors usually buy less than they cost.
-
-When changing behavior:
-
-- update or add focused tests,
-- verify the narrowest useful command,
-- avoid touching unrelated configs or assets.
-
-If you are only trying to understand the system, start with:
+New to the code? Read these in order:
 
 1. `configs/config.yaml`
 2. `src/butterfly_guy/scripts/run_live.py`
 3. `src/butterfly_guy/strategy/`
 4. `src/butterfly_guy/execution/`
 5. `src/butterfly_guy/position/`
+
+## Contributing
+
+- Keep changes small and focused. Broad refactors rarely pay off here.
+- Add or update focused tests for behavior changes, and run the narrowest useful check.
+- Compare backtests against the config for the same asset.
+- Leave unrelated configs and assets alone.
 
 ## License
 

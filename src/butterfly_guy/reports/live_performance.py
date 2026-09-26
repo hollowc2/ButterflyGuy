@@ -541,7 +541,7 @@ def render_report_html(
       <h1>Butterfly Guy — {html.escape(underlying)} Paper Performance</h1>
       <div class="sub">
         <span class="badge">Paper Trading</span>
-        Entire history · {stats.trade_count} trades · Paper results through {date_end} · Static snapshot regenerated after each session, last built {html.escape(stamp)}
+        Entire history · {stats.trade_count} trades · Paper results through {date_end} · Updated after each session, last built {html.escape(stamp)}
       </div>
     </div>
   </header>
@@ -573,10 +573,8 @@ def render_report_html(
     <canvas id="drawdownChart" height="90" role="img" aria-label="{html.escape(drawdown_desc)}"></canvas>
     <p class="chart-note">
       <b id="drawdownNoteFigures"></b>
-      This is drawdown against the highest cumulative <em>paper profit</em> reached, not against
-      account capital — the equity series starts at zero and tracks PnL only. A figure here means
-      giving back that share of accumulated open gains; it does not mean losing that share of an
-      account.
+      Measured from the highest cumulative <em>paper profit</em>, not from account capital. A figure
+      here is the share of accumulated gains given back, not a loss of that share of an account.
     </p>
   </section>
 

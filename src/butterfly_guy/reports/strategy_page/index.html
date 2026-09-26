@@ -443,8 +443,8 @@ table.chain tr.spot td:last-child { text-align: left; color: var(--muted); white
       <div>
         <div class="eyebrow">Try it</div>
         <h2 id="lab-title" class="lab-title">Build today's butterfly</h2>
-        <p class="lab-sub">Pick the opening gap and the VIX. The lab runs the bot's own selection rules on a modeled 0-DTE chain
-          and shows what it would buy — or why it would sit out.</p>
+        <p class="lab-sub">Pick the opening gap and the VIX. The lab applies the bot's selection rules to a modeled 0-DTE chain
+          and shows what it would buy, or why it would sit out.</p>
       </div>
       <div class="controls">
         <div>
@@ -479,8 +479,8 @@ table.chain tr.spot td:last-child { text-align: left; color: var(--muted); white
         <dl class="ticket" id="ticket"></dl>
       </div>
     </div>
-    <p class="fine">Prices are modeled (Black-Scholes, time left from the entry window to the close, flat vol scaled from the VIX) to show
-      the mechanics — not live quotes, and real skew shifts them. The selection mirrors the bot: center within ±<span id="tolOut"></span> pts of the
+    <p class="fine">Prices are modeled to show the mechanics (Black-Scholes, time from the entry window to the close, flat vol scaled
+      from the VIX). They are not live quotes, and real skew shifts them. The selection mirrors the bot: center within ±<span id="tolOut"></span> pts of the
       VIX target, cost under the per-width cap, reward:risk of at least __RR_MIN__:1, closest to __RR_TARGET__:1, wider wing on ties.</p>
   </section>
 
@@ -510,8 +510,8 @@ table.chain tr.spot td:last-child { text-align: left; color: var(--muted); white
   </ol>
 __CASE_STUDY__
 
-  <p class="disclaimer">Paper trading only — no real money is behind these trades. The rules and limits on this page are read from the bot's
-    live configuration each time the page is built. This explains a trading experiment; it is not investment advice.</p>
+  <p class="disclaimer">Paper trading only: no real money is behind these trades. Rules and limits are read from the bot's live
+    configuration each time this page is built. This describes a trading experiment and is not investment advice.</p>
 </main>
 <!-- Strategy parameters for the lab. A non-executable data block, so CSP
      script-src does not apply and regenerating it never breaks a hash. -->
