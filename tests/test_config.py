@@ -107,6 +107,11 @@ def test_profit_management_regimes():
                 end_minutes_after_open=120,
                 drawdown_threshold=0.50,
             ),
+            "late_morning": TimeRegime(
+                start_minutes_after_open=120,
+                end_minutes_after_open=240,
+                drawdown_threshold=0.40,
+            ),
             "afternoon": TimeRegime(
                 start_minutes_after_open=240,
                 end_minutes_after_open=390,
@@ -116,6 +121,71 @@ def test_profit_management_regimes():
     )
     assert settings.regimes["morning"].drawdown_threshold == 0.50
     assert settings.regimes["afternoon"].drawdown_threshold == 0.30
+
+
+def _regimes(morning=(0, 120), late_morning=(120, 240), afternoon=(240, 390)):
+    return {
+        name: {
+            "start_minutes_after_open": start,
+            "end_minutes_after_open": end,
+            "drawdown_threshold": 0.5,
+        }
+        for name, (start, end) in (
+            ("morning", morning),
+            ("late_morning", late_morning),
+            ("afternoon", afternoon),
+        )
+    }
+
+
+def test_profit_management_rejects_typoed_regime_name():
+    from butterfly_guy.core.config import ProfitManagementSettings
+
+    regimes = _regimes()
+    regimes["mornin"] = regimes.pop("morning")
+    with pytest.raises(ValidationError, match="regimes keys must be exactly"):
+        ProfitManagementSettings(regimes=regimes)
+
+
+def test_profit_management_rejects_missing_regime():
+    from butterfly_guy.core.config import ProfitManagementSettings
+
+    regimes = _regimes()
+    del regimes["late_morning"]
+    with pytest.raises(ValidationError, match="regimes keys must be exactly"):
+        ProfitManagementSettings(regimes=regimes)
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"morning": (10, 120)},  # does not start at 0
+        {"late_morning": (130, 240)},  # gap after morning
+        {"afternoon": (230, 390)},  # overlaps late_morning
+        {"late_morning": (120, 120), "afternoon": (120, 390)},  # empty window
+    ],
+)
+def test_profit_management_rejects_non_contiguous_regimes(bounds):
+    from butterfly_guy.core.config import ProfitManagementSettings
+
+    with pytest.raises(ValidationError, match="profit_management.regimes"):
+        ProfitManagementSettings(regimes=_regimes(**bounds))
+
+
+def test_profit_management_allows_unconfigured_regimes():
+    from butterfly_guy.core.config import ProfitManagementSettings
+
+    assert ProfitManagementSettings().regimes == {}
+
+
+@pytest.mark.parametrize(
+    "path", ["configs/config.yaml", "configs/config_ndx.yaml", "configs/config_xsp.yaml"]
+)
+def test_checked_in_configs_keep_default_regime_bounds(path):
+    regimes = load_config(config_path=path).profit_management.regimes
+    assert list(regimes) == ["morning", "late_morning", "afternoon"]
+    assert regimes["morning"].end_minutes_after_open == 120
+    assert regimes["late_morning"].end_minutes_after_open == 240
 
 
 def test_profit_management_strategy_defaults_to_peak_value_trailer():

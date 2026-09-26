@@ -2,9 +2,11 @@
 
 import datetime as dt
 
+from butterfly_guy.core.config import ProfitManagementSettings, TimeRegime
 from butterfly_guy.core.time_utils import (
     EASTERN,
     get_0dte_expiration,
+    get_time_regime,
     get_us_market_early_closes,
     is_market_open,
     is_trading_day,
@@ -124,3 +126,32 @@ def test_session_date_uses_eastern_across_utc_midnight():
     assert session_date(dt.datetime(2026, 7, 13, 0, 0, tzinfo=dt.timezone.utc)) == dt.date(
         2026, 7, 12
     )
+
+
+def test_get_time_regime_defaults_to_120_and_240_minute_bounds():
+    assert get_time_regime(119.9) == "morning"
+    assert get_time_regime(120) == "late_morning"
+    assert get_time_regime(239.9) == "late_morning"
+    assert get_time_regime(240) == "afternoon"
+
+
+def test_get_time_regime_uses_configured_bounds():
+    regimes = ProfitManagementSettings(
+        regimes={
+            name: TimeRegime(
+                start_minutes_after_open=start,
+                end_minutes_after_open=end,
+                drawdown_threshold=0.5,
+            )
+            for name, start, end in (
+                ("morning", 0, 90),
+                ("late_morning", 90, 300),
+                ("afternoon", 300, 390),
+            )
+        }
+    ).regimes
+
+    assert get_time_regime(89, regimes) == "morning"
+    assert get_time_regime(90, regimes) == "late_morning"
+    assert get_time_regime(299, regimes) == "late_morning"
+    assert get_time_regime(300, regimes) == "afternoon"

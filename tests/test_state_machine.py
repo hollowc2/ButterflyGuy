@@ -1,5 +1,7 @@
 """Tests for the profit management state machine."""
 
+from structlog.testing import capture_logs
+
 from butterfly_guy.core.config import ProfitManagementSettings, QuoteQualitySettings, TimeRegime
 from butterfly_guy.position.position_manager import PositionState
 from butterfly_guy.position.state_machine import ProfitState, ProfitStateMachine
@@ -59,6 +61,21 @@ def make_pos(
         position_age_minutes=position_age_minutes,
         max_leg_spread_to_mark_ratio=max_leg_spread_to_mark_ratio,
         max_leg_spread_abs=max_leg_spread_abs,
+    )
+
+
+def test_unconfigured_regime_logs_warning():
+    sm = ProfitStateMachine(make_settings())
+    pos = make_pos(entry=1.0, current=1.0, peak=2.0, drawdown=0.5, regime="mornin")
+
+    with capture_logs() as logs:
+        assert sm.evaluate(pos) is None
+
+    assert any(
+        entry["event"] == "time_regime_not_configured"
+        and entry["log_level"] == "warning"
+        and entry["regime"] == "mornin"
+        for entry in logs
     )
 
 

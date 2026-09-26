@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Mapping
+from typing import Any
 from zoneinfo import ZoneInfo
 
 EASTERN = ZoneInfo("America/New_York")
@@ -168,11 +170,20 @@ def get_us_market_early_closes(year: int) -> set[dt.date]:
     return early_closes
 
 
-def get_time_regime(minutes_since_open: float) -> str:
-    """Classify minutes since open into a named time regime."""
-    if minutes_since_open < 120:
+def get_time_regime(
+    minutes_since_open: float, regimes: Mapping[str, Any] | None = None
+) -> str:
+    """Classify minutes since open into a named time regime.
+
+    With configured ``regimes`` (validated contiguous morning/late_morning/afternoon),
+    the morning and late_morning ``end_minutes_after_open`` bounds are used;
+    otherwise the defaults of 120 and 240 minutes apply.
+    """
+    morning_end = regimes["morning"].end_minutes_after_open if regimes else 120
+    late_morning_end = regimes["late_morning"].end_minutes_after_open if regimes else 240
+    if minutes_since_open < morning_end:
         return "morning"
-    if minutes_since_open < 240:
+    if minutes_since_open < late_morning_end:
         return "late_morning"
     return "afternoon"
 

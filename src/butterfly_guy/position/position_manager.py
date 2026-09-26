@@ -248,7 +248,7 @@ class PositionManager:
 
         # Determine time regime
         mins_open = minutes_since_open()
-        regime = get_time_regime(mins_open)
+        regime = get_time_regime(mins_open, self._profit_settings.regimes)
         mins_left = minutes_to_close()
 
         # Compute dynamic tent boundaries (BS-derived; converge to at-expiry BE as T→0)
