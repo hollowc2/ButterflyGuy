@@ -6,6 +6,7 @@ import json
 import os
 import stat
 from unittest.mock import AsyncMock, MagicMock
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -381,3 +382,25 @@ async def test_spot_price_warns_when_falling_back_to_close(
     assert await schwab.get_spot_price("$SPX") == expected
     events = [c.args[0] for c in log.warning.call_args_list]
     assert ("spot_price_close_fallback" in events) is warned
+
+
+@pytest.mark.asyncio
+async def test_intraday_bars_uses_eastern_session_date(monkeypatch):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    schwab._client = MagicMock()
+    response = MagicMock()
+    response.json.return_value = {"candles": []}
+    schwab._retry = AsyncMock(return_value=response)
+    monkeypatch.setattr(
+        "butterfly_guy.data.schwab_client.session_date", lambda: dt.date(2026, 9, 25)
+    )
+
+    await schwab.get_intraday_bars("$SPX", days_back=1)
+
+    kwargs = schwab._retry.await_args.kwargs
+    eastern = ZoneInfo("America/New_York")
+    assert kwargs["start_datetime"] == dt.datetime(2026, 9, 24, tzinfo=eastern)
+    assert kwargs["end_datetime"] == dt.datetime.combine(
+        dt.date(2026, 9, 25), dt.time.max, tzinfo=eastern
+    )
+    assert kwargs["start_datetime"].tzinfo is not None

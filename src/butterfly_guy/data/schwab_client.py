@@ -334,9 +334,7 @@ class SchwabClientWrapper:
         self, symbol: str = "$SPX", days_back: int = 1
     ) -> list[dict]:
         """Fetch 1-minute bars for today (and optionally prior days) from Schwab."""
-        import datetime as dt
-
-        today = dt.date.today()
+        today = session_date()
         start = today - dt.timedelta(days=days_back)
         resp = await self._retry(
             self.client.get_price_history,
@@ -345,8 +343,8 @@ class SchwabClientWrapper:
             period=days_back,
             frequency_type=self.client.PriceHistory.FrequencyType.MINUTE,
             frequency=self.client.PriceHistory.Frequency.EVERY_MINUTE,
-            start_datetime=dt.datetime.combine(start, dt.time.min),
-            end_datetime=dt.datetime.combine(today, dt.time.max),
+            start_datetime=dt.datetime.combine(start, dt.time.min, tzinfo=EASTERN),
+            end_datetime=dt.datetime.combine(today, dt.time.max, tzinfo=EASTERN),
             endpoint="get_price_history",
         )
         data = resp.json()
