@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 import asyncpg
 
+from butterfly_guy.data.chain_utils import select_pm_settled_rows
 from butterfly_guy.scripts.run_backtest_db import resolve_db_dsn
 
 EASTERN = ZoneInfo("America/New_York")
@@ -416,7 +417,8 @@ async def load_asset(
         exit_time,
     )
     snapshots: dict[dt.date, dict[str, list[Quote]]] = defaultdict(lambda: defaultdict(list))
-    for row in rows:
+    contract_key = ("trade_date", "label", "strike", "option_type")
+    for row in select_pm_settled_rows(rows, contract_key):
         snapshots[row["trade_date"]][row["label"]].append(
             Quote(
                 symbol=row["symbol"] or f"{row['option_type']}_{row['strike']}",

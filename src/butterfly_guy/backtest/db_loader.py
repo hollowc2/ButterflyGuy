@@ -19,6 +19,7 @@ import asyncpg
 
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.core.logging import get_logger
+from butterfly_guy.data.chain_utils import select_pm_settled_rows
 from butterfly_guy.data.schemas import OptionQuote
 
 log = get_logger(__name__)
@@ -315,7 +316,7 @@ class DbDataLoader:
                 return int(v) if v is not None else default
 
             quotes: list[OptionQuote] = []
-            for r in rows:
+            for r in select_pm_settled_rows(rows):
                 quotes.append(OptionQuote(
                     symbol=r["symbol"] or "",
                     underlying=underlying,

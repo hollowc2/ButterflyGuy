@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
+from butterfly_guy.data.chain_utils import select_pm_settled_rows
 from butterfly_guy.data.schemas import OptionQuote
 
 
@@ -14,9 +15,9 @@ def rows_to_option_quotes(
     underlying: str,
     expiration: dt.date,
 ) -> list[OptionQuote]:
-    """Build OptionQuote list from option_chain_snapshots query rows."""
+    """Build OptionQuote list from option_chain_snapshots rows, one contract per strike."""
     quotes: list[OptionQuote] = []
-    for row in rows:
+    for row in select_pm_settled_rows(rows):
         quotes.append(
             OptionQuote(
                 symbol=row.get("symbol") or "",

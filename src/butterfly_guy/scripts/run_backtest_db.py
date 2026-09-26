@@ -64,6 +64,7 @@ from butterfly_guy.backtest.simulation_engine import (
 )
 from butterfly_guy.core.config import AppConfig, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
+from butterfly_guy.data.chain_utils import select_pm_settled_rows
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.entry_selection import (
     entry_selection_config,
@@ -615,7 +616,7 @@ async def load_chains_from_db(
         underlying, date,
     )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
-    for r in rows:
+    for r in select_pm_settled_rows(rows):
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
@@ -651,7 +652,7 @@ async def load_entry_chains(
         underlying, date, start_utc, end_utc,
     )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
-    for r in rows:
+    for r in select_pm_settled_rows(rows):
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
@@ -706,7 +707,7 @@ async def load_monitoring_chains(
             underlying, date, strikes, option_types, trade_id,
         )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
-    for r in [*collector_rows, *monitor_rows]:
+    for r in [*select_pm_settled_rows(collector_rows), *monitor_rows]:
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
