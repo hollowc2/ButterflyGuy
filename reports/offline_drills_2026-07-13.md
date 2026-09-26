@@ -78,6 +78,11 @@ or broker/DB state is not reconciled.
   peak persistence cannot reach exit submission; cash-settlement close failure
   makes exactly one DB attempt; startup/runtime authentication failures fail
   closed.
+  > **Note (2026-09-26):** superseded for peak persistence. Under H3 of the
+  > 2026-09-25 code review (fixed in #27, c0b229e), `monitor_loop` now evaluates
+  > and submits the exit before recording telemetry, and a failed peak write is
+  > logged best-effort instead of blocking the exit. The drill result above
+  > records what was true on 2026-07-13.
 - The real keepalive script passes mocked near-expiry and expired-token cases
   using only an in-memory synthetic token, fake clock, fake broker response, and
   fake Telegram sender.
