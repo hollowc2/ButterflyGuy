@@ -699,3 +699,150 @@ the cohort's rules.
 Artifacts and reproduction: `docs/research/spx-idea-sweep-2026-09-25/` (harness, registry,
 result JSON, and the export commands; data is re-exported, not committed). The analysis ran
 with the project's locked `.venv`, and `uv run ruff check .` passes.
+
+## 2026-09-25 — direction-rule tests, live/backtest selection parity, and gap-input fix (development data only)
+
+Everything here was chosen after seeing the data. It is exploratory, not a registered test,
+and nothing in it touches the open cohort `spx-prospective-2026-09-22`.
+
+### Setup and accounting
+
+Runs use `src/butterfly_guy/scripts/run_backtest_db.py` single-config mode with the live SPX
+config (VIX-bucket widths, VIX anchor, 07:00–07:45 PT window, peak-value trailer), over
+2026-03-13 → 2026-09-25 (all sessions with a recorded chain; 123–124 trades per run). P&L is
+the script's default per-contract figure: entry at mark plus the configured paper
+commission, no slippage. It is **not** the stressed-marketable accounting used in the idea
+sweep above, and is more optimistic than it.
+
+Two options were added:
+
+- `--direction-ma N` (commit `deb32dd`): CALL if entry-time spot ≥ the N-day SMA of prior
+  daily closes, else PUT; sessions without N prior closes are skipped.
+- Official gap inputs (commit `67ba7ce`, see below).
+
+SPX `daily_bars` starts 2026-03-02, too short for MA100–MA200. Earlier closes came from FRED
+series `SP500`, injected by a scratch wrapper that replaces `get_recent_closes` (no DB
+writes). FRED matched `daily_bars` on all 144 overlapping sessions and the Schwab gateway's
+`/v1/history` daily bars on all 250 of its sessions (2025-09-26 → 2026-09-24) to the cent.
+The gateway rejects `days_back` above 250, so May–Sept 2025 closes rest on FRED alone.
+
+### Moving-average direction versus the gap rule
+
+The MA rules do not read the open or prior close, so the gap-input fix does not change them.
+The gap-rule row was rebuilt with official inputs by taking each session's call or put trade
+from the runs above; a full rerun to confirm it was in progress when this was written.
+
+| Rule | Trades | Total | Avg | Win% | Max DD | Calls/Puts | Side ≠ gap rule | Before 06-15 | From 06-15 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Gap rule, snapshot inputs (old) | 123 | +18,459 | +150 | 20% | −3,739 | 73/50 | 5 | +19,100 | −641 |
+| Gap rule, official inputs | 123 | +22,720 | +185 | 20% | −3,911 | 72/51 | — | +21,393 | +1,327 |
+| MA20 | 124 | +14,266 | +115 | 19% | −7,817 | 81/43 | 51 | +20,150 | −5,883 |
+| MA50 | 123 | +16,117 | +131 | 20% | −7,669 | 98/25 | 48 | +23,786 | −7,669 |
+| MA100 | 123 | +14,574 | +118 | 20% | −6,933 | 107/16 | 53 | +21,507 | −6,933 |
+| MA150 | 123 | +16,853 | +137 | 21% | −6,933 | 109/14 | 51 | +23,786 | −6,933 |
+| MA200 | 123 | +15,279 | +124 | 20% | −6,933 | 111/12 | 49 | +22,212 | −6,933 |
+
+Every MA rule trails the gap rule and roughly doubles its drawdown. Longer MAs are close to
+"always CALL" in this sample. The MA rules led before mid-June and gave it back afterwards.
+Each run's top three winners supply about $10.6–11.2k, so differences among MA lengths are
+noise.
+
+### Call-only entry filters
+
+On any session the rule chooses CALL, the entry logic picks the same call fly regardless of
+which rule chose it (verified: no conflicts across the six runs). So call-only filters were
+evaluated on one pool of call trades: the six runs plus eight single-session `--direction
+CALL` runs for sessions no run had traded as calls. All conditions use only information
+available at entry. Gap here uses the old snapshot inputs, except the last row.
+
+| Buy a call fly only if… | Trades | Total | Avg | Win% | Max DD | Without top 3 | Before 06-15 | From 06-15 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| every session | 123 | +16,129 | +131 | 20% | −6,933 | +6,203 | +23,062 | −6,933 |
+| gap up | 73 | +15,824 | +217 | 26% | −3,170 | +5,898 | +18,994 | −3,170 |
+| gap up ≥ 0.25% | 46 | +14,648 | +318 | 30% | −1,378 | +4,722 | +15,739 | −1,091 |
+| up since open at entry | 73 | +15,689 | +215 | 25% | −3,705 | +6,419 | +19,393 | −3,705 |
+| gap up & up since open | 40 | +12,299 | +307 | 30% | −1,447 | +3,028 | +13,433 | −1,134 |
+| VIX below prior close | 62 | +17,358 | +280 | 24% | −4,521 | +7,433 | +21,879 | −4,521 |
+| up since open & VIX below prior close | 39 | +15,588 | +400 | 28% | −2,848 | +6,318 | +18,436 | −2,848 |
+| above MA20 & gap up | 50 | +12,683 | +254 | 28% | −1,971 | +3,929 | +14,114 | −1,431 |
+| above MA50 & gap up | 61 | +14,047 | +230 | 26% | −2,935 | +4,665 | +16,981 | −2,935 |
+| prior day down | 60 | +9,698 | +162 | 18% | −5,276 | −227 | +14,973 | −5,276 |
+| above MA50 & 5-day return < 0 | 34 | +4,190 | +123 | 21% | −2,975 | −4,295 | +7,128 | −2,938 |
+| VIX ≥ 17 | 69 | +18,790 | +272 | 25% | −2,666 | +8,864 | +21,455 | −2,666 |
+| VIX ≥ 17 & gap up | 40 | +18,294 | +457 | 35% | −1,223 | +8,369 | +19,518 | −1,223 |
+| VIX < 17 | 54 | −2,661 | −49 | 15% | −4,358 | −6,288 | +1,607 | −4,268 |
+| VIX ≥ 17 & gap up (official gap inputs) | 40 | +20,368 | +509 | 35% | −1,361 | +10,443 | +21,729 | −1,361 |
+
+Eighteen conditions on about 25 winning trades: the best row is expected to be flattering.
+Two consistent observations: low-VIX calls lose in total (agreeing with H-LV1 above), and
+dip-buying conditions are the weakest. Every condition is negative from mid-June. The
+official-input improvement of VIX ≥ 17 & gap up (+$2,074) is almost entirely one session
+(2026-04-09, +$2,211) that the fix reclassified as a gap up.
+
+Applied to actual live paper fills (`butterfly_trades`, SPX, closed; `pnl` × 100), the
+filter's sessions made more than all sessions overall but less since mid-June:
+
+| Live paper | Trades | Total | Avg | Win% | Max DD | Without top 3 | From 06-15 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| all trades | 118 | +1,625 | +14 | 19% | −4,504 | −5,138 | +17 |
+| VIX ≥ 17 & gap-up sessions only | 37 | +2,539 | +69 | 24% | −2,440 | −3,093 | −1,442 |
+
+This is a variant of H-LV1 on the same development data. It is not validated and must not be
+applied to the open cohort.
+
+### Why the backtest and live paper disagree
+
+On the 116 shared sessions the backtest's gap rule made +$16,897 and live paper +$2,013.
+Causes, largest dollar effect first:
+
+1. **Config drift before June.** The backtest applies today's config to every session. Live
+   traded fixed 10/20/30-point wings until VIX buckets arrived (`5ae1190`, 2026-04-28), the
+   buckets changed on 2026-05-14 (`ad0be47`), and live and backtest selection were unified on
+   2026-05-29/30 (`a71a2cd`, `e47bf0a`). Before that, live centers could sit outside the
+   current ±15-point tolerance (2026-05-15: 30 points from today's target). The backtest's
+   large March–May winners were wide flies live never held. From 06-15 the two agree in
+   total: live +$17, backtest −$539 over 67 sessions.
+2. **Knife-edge width choice.** Width is the one whose reward/risk is closest to 10. On 51
+   live sessions with at least two widths, a mark change on the winning fly under $0.05
+   would flip the choice 41% of the time, and under $0.10 69% of the time. Live's own
+   `entry_selection_parity` events show a median per-fly mark difference between the live
+   chain and the DB snapshot of $0.09 when the snapshot is under 10 s old and $0.13 at 30–60
+   s. Width matched on 39/63 events. Replaying at the live entry time, direction and VIX
+   (`--selection-parity-report`) reproduced live's fly on only 16 of 61 sessions, about
+   25–35% per month even after unification. When the same fly was chosen, P&L agreed
+   closely (since 2026-05-15: live −$2,828 vs backtest −$2,530 over 35 sessions).
+3. **Different candidate sets.** The same price noise moves flies across the
+   reward/risk, cost-cap and center-tolerance cutoffs, so the two sides sometimes see
+   different widths (2026-07-08: live one width, DB three).
+4. **Direction inputs (fixed).** The backtest compared the first chain snapshot's spot after
+   09:30 with the last spot tick before 16:00. Live compares Schwab's 09:30 candle open with
+   the `daily_bars` close. The snapshot open differed by up to about $5 and the tick close by
+   about $2. That flipped direction on 4 of 83 live sessions since 2026-05-15. `daily_bars.open`
+   equals the gateway's 09:30 candle open to the cent on every session checked
+   (2026-09-21 → 09-24). Commit `67ba7ce` reads both inputs from `daily_bars`, with the old
+   values as fallback. After it, the backtest's direction matched live on all 73 sessions
+   since 2026-05-30, and 2026-06-22 reproduces live's exact fly (live +$2,258, backtest
+   +$2,010).
+
+Implication: apart from item 4, neither side is wrong. The selector chooses among two or
+three near-equivalent flies by noise, so a single backtest run samples one realization of
+each session. Rule comparisons that differ by a few thousand dollars on about 120 trades,
+including the MA and filter results above, are within that noise. A robustness check that
+scores every near-tied fly per session, or a less brittle width rule, would be needed before
+any selection change is judged.
+
+### Reproduction
+
+```bash
+# MA runs (MA100+ need the FRED-close wrapper described above for pre-March history)
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-03-13 2026-09-25 --asset SPX --direction-ma 50
+# gap-rule baseline and call-only gap-up pool
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-03-13 2026-09-25 --asset SPX
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-03-13 2026-09-25 --asset SPX --direction CALL --gap-filter 0.0
+# selection parity
+uv run python src/butterfly_guy/scripts/report_selection_parity.py 2026-05-15 2026-09-25 --asset SPX
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-05-15 2026-09-25 --asset SPX --selection-parity-report
+```
+
+Filter evaluation and the live comparison were scratch scripts over these runs' per-session
+output; they were not committed.
