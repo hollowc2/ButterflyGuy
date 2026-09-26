@@ -88,6 +88,11 @@ class ProfitStateMachine:
         # Get drawdown threshold for current regime
         regime_config = self.settings.regimes.get(pos.time_regime)
         if not regime_config:
+            log.warning(
+                "time_regime_not_configured",
+                regime=pos.time_regime,
+                configured=sorted(self.settings.regimes),
+            )
             return None
 
         threshold = effective_drawdown_threshold(
@@ -256,8 +261,12 @@ class ProfitStateMachine:
         if self._state != ProfitState.LOSS:
             self._ever_in_profit = True
 
-    def reset(self) -> None:
-        """Reset state machine for a new position."""
+    def reset(self, ever_in_profit: bool = False) -> None:
+        """Reset state machine for a new position.
+
+        ``ever_in_profit`` restores, after a restart, that the position was already
+        at or above entry, so drawdown exits stay armed.
+        """
         self._state = ProfitState.LOSS
-        self._ever_in_profit = False
+        self._ever_in_profit = ever_in_profit
         self._reset_pending_drawdown()

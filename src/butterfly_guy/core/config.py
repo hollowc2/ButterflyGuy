@@ -70,6 +70,10 @@ class ExecutionSettings(ConfigModel):
     allow_live_trading: bool = False
 
 
+# Ordered earliest to latest; the live regime clock depends on these exact names.
+REGIME_NAMES = ("morning", "late_morning", "afternoon")
+
+
 class TimeRegime(ConfigModel):
     start_minutes_after_open: int
     end_minutes_after_open: int
@@ -116,6 +120,32 @@ class ProfitManagementSettings(ConfigModel):
     peak_tracking: PeakTrackingSettings = Field(default_factory=PeakTrackingSettings)
     profitprotector: ProfitProtectorSettings = Field(default_factory=ProfitProtectorSettings)
 
+    @model_validator(mode="after")
+    def _validate_regimes(self) -> ProfitManagementSettings:
+        # Empty regimes is the unconfigured default (no regime drawdown exits).
+        if not self.regimes:
+            return self
+        if set(self.regimes) != set(REGIME_NAMES):
+            raise ValueError(
+                f"profit_management.regimes keys must be exactly {list(REGIME_NAMES)}, "
+                f"got {sorted(self.regimes)}"
+            )
+        expected_start = 0
+        for name in REGIME_NAMES:
+            regime = self.regimes[name]
+            if regime.start_minutes_after_open != expected_start:
+                raise ValueError(
+                    f"profit_management.regimes.{name} must start at {expected_start} "
+                    f"(regimes must be contiguous from 0), "
+                    f"got {regime.start_minutes_after_open}"
+                )
+            if regime.end_minutes_after_open <= regime.start_minutes_after_open:
+                raise ValueError(
+                    f"profit_management.regimes.{name} must end after it starts"
+                )
+            expected_start = regime.end_minutes_after_open
+        return self
+
 
 class RiskSettings(ConfigModel):
     max_daily_loss: float = 500.0
@@ -140,7 +170,10 @@ class DatabaseSettings(ConfigModel):
 
     @property
     def dsn(self) -> str:
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        from urllib.parse import quote
+
+        password = quote(self.password, safe="")
+        return f"postgresql://{self.user}:{password}@{self.host}:{self.port}/{self.name}"
 
 
 class MonitoringSettings(ConfigModel):

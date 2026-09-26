@@ -56,12 +56,16 @@ def _contract(symbol: str) -> dict[str, Any]:
 
 # --- Shared synthetic fixtures -------------------------------------------------------
 
-# Two contracts at one strike, which the row parser expands and the trading parser
-# collapses to the first entry.
+# Two contracts at one strike (AM-settled SPX listed before PM-settled SPXW, as on a
+# monthly expiration), which the row parser expands and the trading parser collapses
+# to the PM-settled entry.
 MULTI_CONTRACT_AT_ONE_STRIKE: dict[str, Any] = {
     "callExpDateMap": {
         "2026-03-10:0": {
-            "5500.0": [_contract("C5500-a"), _contract("C5500-b")],
+            "5500.0": [
+                _contract("SPX   260310C05500000"),
+                _contract("SPXW  260310C05500000"),
+            ],
             "5510.0": [_contract("C5510")],
         }
     },
@@ -204,7 +208,7 @@ def test_a_strike_with_an_empty_option_list_is_excluded_by_all_three() -> None:
 
 
 def test_multiple_contracts_at_one_strike_expand_for_rows_but_not_for_strikes() -> None:
-    """The row parser expands duplicates; the trading parser takes only options[0]."""
+    """The row parser expands duplicates; the trading parser takes the PM-settled one."""
     fields = extract_chain_metadata(MULTI_CONTRACT_AT_ONE_STRIKE, EXPIRATION)
     rows = _parse_rows(MULTI_CONTRACT_AT_ONE_STRIKE, EXPIRATION)
 
@@ -216,8 +220,8 @@ def test_multiple_contracts_at_one_strike_expand_for_rows_but_not_for_strikes() 
     calls = [opt for _, option_type, opt in iter_chain_options(
         MULTI_CONTRACT_AT_ONE_STRIKE, EXPIRATION, direction="CALL"
     )]
-    # Only the first contract at 5500 is tradeable through iter_chain_options.
-    assert [opt["symbol"] for opt in calls] == ["C5500-a", "C5510"]
+    # Only the PM-settled SPXW contract at 5500 is tradeable through iter_chain_options.
+    assert [opt["symbol"] for opt in calls] == ["SPXW  260310C05500000", "C5510"]
 
 
 @pytest.mark.parametrize("expiration", [EXPIRATION, OTHER_EXPIRATION])

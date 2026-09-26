@@ -6,14 +6,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from butterfly_guy.core.config import ProfitManagementSettings, TimeRegime
 from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
 from butterfly_guy.core.time_utils import EASTERN
 from butterfly_guy.data.schemas import TradeRecord
 from butterfly_guy.execution import order_manager as order_manager_module
+from butterfly_guy.position.position_manager import PositionState
+from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.services.position_service import (
     BrokerCashSettlement,
     PositionService,
     SettlementEvidenceError,
+    _settlement_pending_alert_time,
     broker_cash_settlement_from_transactions,
     final_regular_session_close_from_candles,
 )
@@ -569,47 +573,281 @@ async def test_settlement_failure_keeps_trade_open() -> None:
     set_readiness(None)
 
 
-@pytest.mark.asyncio
-async def test_peak_db_failure_cannot_reach_broker_exit() -> None:
+def _telemetry_service(db_error: Exception | None) -> PositionService:
+    """Service whose non-critical DB telemetry all fails with *db_error*."""
     service = PositionService.__new__(PositionService)
     service.config = MagicMock()
     service.config.strategy.underlying = "SPX"
-    service.schwab = AsyncMock()
-    service.schwab.get_option_chain.return_value = {}
+    service.market_data = AsyncMock()
+    service.market_data.get_option_chain.return_value = {}
     service.order_manager = AsyncMock()
+    service.order_manager.execute_exit.return_value = None
+
+    def failing() -> AsyncMock:
+        return AsyncMock(side_effect=db_error)
+
     service.trade_queries = MagicMock(
-        update_peak_value=AsyncMock(side_effect=RuntimeError("db unavailable"))
+        update_peak_value=failing(), merge_metadata=failing(), close_trade=AsyncMock()
     )
-    service.decision_queries = MagicMock(log_event=AsyncMock())
+    service.decision_queries = MagicMock(log_event=failing())
+    service.chain_queries = MagicMock(get_nearest_snapshot_chain=failing())
     service.monitoring_leg_queries = None
-    service.tent_queries = MagicMock(insert=AsyncMock())
+    service.tent_queries = MagicMock(insert=failing())
+    service.notifier = None
     service.position_manager = MagicMock()
-    service.position_manager.update_position_value.return_value = MagicMock(
-        peak_update_rejected=False,
-        peak_value=2.0,
-        current_value=1.5,
+    service._extract_quotes = MagicMock(return_value={})
+    return service
+
+
+def _pos_state(current: float, peak: float, entry: float = 1.0) -> PositionState:
+    return PositionState(
+        entry_price=entry,
+        current_value=current,
+        peak_value=peak,
+        pnl=current - entry,
+        drawdown_from_peak=(peak - current) / peak if peak else 0.0,
+        time_regime="morning",
+        minutes_to_close=300.0,
+        minutes_since_open=30.0,
     )
+
+
+def _monitor_patches(trade: TradeRecord, sleep: AsyncMock):
+    return (
+        patch("butterfly_guy.services.position_service.is_market_open", return_value=True),
+        patch(
+            "butterfly_guy.services.position_service.session_date",
+            return_value=trade.trade_date,
+        ),
+        patch(
+            "butterfly_guy.services.position_service.get_0dte_expiration",
+            return_value=trade.trade_date,
+        ),
+        patch("butterfly_guy.services.position_service.asyncio.sleep", new=sleep),
+        patch(
+            "butterfly_guy.services.position_service.notify_telegram",
+            new=AsyncMock(return_value=True),
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_telemetry_db_failure_still_reaches_broker_exit() -> None:
+    set_readiness(None)
+    service = _telemetry_service(RuntimeError("db unavailable"))
+    service.position_manager.update_position_value.return_value = _pos_state(1.5, 2.0)
     service.state_machine = MagicMock()
-    trade = TradeRecord(
-        trade_id=7,
-        trade_date=dt.date(2026, 7, 14),
-        entry_price=1.0,
+    service.state_machine.state.name = "LOSS"
+    service.state_machine.evaluate.return_value = MagicMock(
+        reason="drawdown_morning", urgency="normal"
+    )
+    trade = TradeRecord(trade_id=7, trade_date=dt.date(2026, 7, 14), entry_price=1.0)
+
+    p = _monitor_patches(trade, AsyncMock(side_effect=asyncio.CancelledError))
+    with p[0], p[1], p[2], p[3], p[4], pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock())
+
+    service.order_manager.execute_exit.assert_awaited_once()
+    assert service.order_manager.execute_exit.await_args.kwargs["exit_reason"] == (
+        "drawdown_morning"
+    )
+    # The peak still advances in memory even though the DB write failed.
+    assert service._last_persisted_peak == 2.0
+    service.trade_queries.update_peak_value.assert_awaited_once_with(7, 2.0)
+    assert service._telemetry_failures["update_peak_value"] == 1
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_failed_peak_write_is_retried_and_repeated_failures_alert_once() -> None:
+    set_readiness(None)
+    service = _telemetry_service(RuntimeError("db unavailable"))
+    service.position_manager.update_position_value.return_value = _pos_state(1.5, 2.0)
+    service.state_machine = MagicMock()
+    service.state_machine.state.name = "LOSS"
+    service.state_machine.evaluate.return_value = None
+    trade = TradeRecord(trade_id=7, trade_date=dt.date(2026, 7, 14), entry_price=1.0)
+    polls = 0
+
+    async def sleep(_seconds: float) -> None:
+        nonlocal polls
+        polls += 1
+        if polls == 8:
+            raise asyncio.CancelledError
+
+    p = _monitor_patches(trade, AsyncMock(side_effect=sleep))
+    with p[0], p[1], p[2], p[3], p[4] as telegram, pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock())
+
+    assert service.state_machine.evaluate.call_count == 8
+    assert service.trade_queries.update_peak_value.await_count == 8
+    alerts = [c for c in telegram.call_args_list if "WARNING" in c.args[0]]
+    # Both update_peak_value and tent_insert cross the threshold once each.
+    assert len(alerts) == 2
+    assert readiness_snapshot() == (False, "position_telemetry_unavailable")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_telemetry_recovery_clears_readiness() -> None:
+    set_readiness(None)
+    service = _telemetry_service(None)
+    service.tent_queries.insert = AsyncMock(
+        side_effect=[RuntimeError("db unavailable")] * 5 + [None, None]
+    )
+    service.position_manager.update_position_value.return_value = _pos_state(1.5, 1.0)
+    service.state_machine = MagicMock()
+    service.state_machine.state.name = "LOSS"
+    service.state_machine.evaluate.return_value = None
+    trade = TradeRecord(trade_id=7, trade_date=dt.date(2026, 7, 14), entry_price=1.0)
+    polls = 0
+
+    async def sleep(_seconds: float) -> None:
+        nonlocal polls
+        polls += 1
+        if polls == 5:
+            assert readiness_snapshot() == (False, "position_telemetry_unavailable")
+        if polls == 6:
+            assert readiness_snapshot() == (True, None)
+            raise asyncio.CancelledError
+
+    p = _monitor_patches(trade, AsyncMock(side_effect=sleep))
+    with p[0], p[1], p[2], p[3], p[4] as telegram, pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock())
+
+    messages = [c.args[0] for c in telegram.call_args_list]
+    assert sum("WARNING" in m for m in messages) == 1
+    assert sum(m.startswith("OK:") for m in messages) == 1
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("recovered_peak", "expect_exit"),
+    [(3.0, True), (None, False)],
+)
+async def test_restart_with_recovered_peak_keeps_drawdown_exit(
+    recovered_peak: float | None, expect_exit: bool
+) -> None:
+    """Entry 1.00, peak 3.00, current 0.90: a restart must still exit on drawdown."""
+    service = _telemetry_service(None)
+    service.position_manager.update_position_value.return_value = _pos_state(0.90, 3.0)
+    service.state_machine = ProfitStateMachine(
+        ProfitManagementSettings(
+            regimes={
+                name: TimeRegime(
+                    start_minutes_after_open=start,
+                    end_minutes_after_open=end,
+                    drawdown_threshold=0.50,
+                )
+                for name, start, end in (
+                    ("morning", 0, 120),
+                    ("late_morning", 120, 240),
+                    ("afternoon", 240, 390),
+                )
+            }
+        )
+    )
+    service.state_machine._ever_in_profit = True  # must be reset by monitor_loop
+    trade = TradeRecord(trade_id=7, trade_date=dt.date(2026, 7, 14), entry_price=1.0)
+
+    p = _monitor_patches(trade, AsyncMock(side_effect=asyncio.CancelledError))
+    with p[0], p[1], p[2], p[3], p[4], pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, MagicMock(), recovered_peak=recovered_peak)
+
+    if expect_exit:
+        service.order_manager.execute_exit.assert_awaited_once()
+        reason = service.order_manager.execute_exit.await_args.kwargs["exit_reason"]
+        assert reason.startswith("drawdown")
+    else:
+        service.order_manager.execute_exit.assert_not_awaited()
+
+
+def test_settlement_pending_alert_time_is_next_session_open() -> None:
+    # Friday -> Monday, and 2026-09-04 is the Friday before Labor Day.
+    assert _settlement_pending_alert_time(dt.date(2026, 7, 17)) == dt.datetime(
+        2026, 7, 20, 9, 30, tzinfo=EASTERN
+    )
+    assert _settlement_pending_alert_time(dt.date(2026, 9, 4)) == dt.datetime(
+        2026, 9, 8, 9, 30, tzinfo=EASTERN
+    )
+
+
+@pytest.mark.asyncio
+async def test_overdue_broker_settlement_alerts_once_and_keeps_waiting() -> None:
+    service = PositionService.__new__(PositionService)
+    service.schwab = AsyncMock()
+    service.schwab.get_transactions_for_day.return_value = []
+    service.notifier = MagicMock(_post=AsyncMock())
+    trade = TradeRecord(trade_id=9, trade_date=dt.date(2026, 7, 13), entry_price=1.0)
+    settled = BrokerCashSettlement(
+        settlement_value=1.0,
+        settlement_spot=None,
+        processing_time=dt.datetime(2026, 7, 14, tzinfo=dt.timezone.utc),
+        entry_net_amount=-100.0,
+        settlement_net_amount=100.0,
+        net_pnl_dollars=0.0,
+        evidence={},
+    )
+    clock = iter(
+        [
+            dt.datetime(2026, 7, 13, 20, 0, tzinfo=EASTERN),
+            dt.datetime(2026, 7, 14, 9, 30, tzinfo=EASTERN),
+            dt.datetime(2026, 7, 14, 9, 35, tzinfo=EASTERN),
+        ]
     )
 
     with patch(
-        "butterfly_guy.services.position_service.is_market_open", return_value=True
-    ), patch(
         "butterfly_guy.services.position_service.session_date",
-        return_value=trade.trade_date,
+        return_value=dt.date(2026, 7, 14),
     ), patch(
-        "butterfly_guy.services.position_service.get_0dte_expiration"
+        "butterfly_guy.services.position_service.now_eastern",
+        side_effect=lambda: next(clock),
     ), patch(
-        "butterfly_guy.services.position_service.asyncio.sleep",
-        new=AsyncMock(side_effect=asyncio.CancelledError),
-    ), pytest.raises(asyncio.CancelledError):
+        "butterfly_guy.services.position_service.broker_cash_settlement_from_transactions",
+        side_effect=[None, None, None, settled],
+    ), patch(
+        "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
+    ), patch(
+        "butterfly_guy.services.position_service.notify_telegram", new=AsyncMock(return_value=True)
+    ) as telegram:
+        result = await service._wait_for_broker_cash_settlement(trade)
+
+    assert result is settled
+    service.notifier._post.assert_awaited_once()
+    messages = [c.args[0] for c in telegram.call_args_list]
+    assert len(messages) == 2
+    assert messages[0].startswith("WARNING") and "trade 9" in messages[0]
+    assert messages[1].startswith("OK:")
+
+
+@pytest.mark.asyncio
+async def test_paper_chain_fallback_refuses_past_dated_trade() -> None:
+    set_readiness(None)
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.execution.paper_trading = True
+    service.config.strategy.underlying = "SPX"
+    service.market_data = AsyncMock()
+    service.trade_queries = MagicMock(close_trade=AsyncMock())
+    service.position_manager = MagicMock()
+    service.state_machine = MagicMock()
+    service._settlement_spot_price = AsyncMock(side_effect=RuntimeError("bars unavailable"))
+    service._last_persisted_peak = 0.0
+    trade = TradeRecord(trade_id=9, trade_date=dt.date(2026, 7, 13), entry_price=1.0)
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=False
+    ), patch(
+        "butterfly_guy.services.position_service.get_0dte_expiration",
+        return_value=dt.date(2026, 7, 14),
+    ), pytest.raises(SettlementEvidenceError, match="open trade 9"):
         await service.monitor_loop(trade, MagicMock())
 
-    service.order_manager.execute_exit.assert_not_awaited()
+    service.market_data.get_option_chain.assert_not_awaited()
+    service.trade_queries.close_trade.assert_not_awaited()
+    assert readiness_snapshot() == (False, "settlement_evidence_unavailable")
+    set_readiness(None)
 
 
 @pytest.mark.asyncio

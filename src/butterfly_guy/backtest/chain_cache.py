@@ -1,22 +1,18 @@
-"""Real option chain cache — per-day JSON snapshots from the live collector.
+"""Real option chain cache — per-day snapshots from the live collector.
 
-Format: data/chains/YYYY-MM-DD.json
-  {
-    "date": "2026-03-10",
-    "snapshots": {
-      "2026-03-10T14:30:00+00:00": {
-        "spot": 6803.88,
-        "quotes": [
-          {"strike": 6800, "type": "CALL", "bid": 5.2, "ask": 5.4, "mark": 5.3,
-           "iv": 0.15, "delta": 0.85, "gamma": 0.02, "symbol": "SPXW..."},
-          ...
-        ]
-      },
-      ...
-    }
-  }
+Format: data/chains/<UNDERLYING>/YYYY-MM-DD.jsonl, one snapshot per line:
+  {"ts": "2026-03-10T14:30:00+00:00", "spot": 6803.88,
+   "quotes": [{"strike": 6800, "type": "CALL", "bid": 5.2, "ask": 5.4, "mark": 5.3,
+               "iv": 0.15, "delta": 0.85, "gamma": 0.02, "symbol": "SPXW..."}, ...]}
 
-As the collector runs each day it appends snapshots to today's file.
+The collector appends one line per snapshot, so a write never rewrites earlier
+snapshots, and a crash mid-append can only damage the last line, which the
+loader skips.
+
+Legacy days use data/chains/[<UNDERLYING>/]YYYY-MM-DD.json:
+  {"date": "2026-03-10", "snapshots": {"<ts>": {"spot": ..., "quotes": [...]}}}
+The loader reads both and merges them.
+
 Simulation uses real quotes when available, falls back to synthetic otherwise.
 """
 
@@ -52,6 +48,14 @@ def chain_cache_path(
     return cache_dir / f"{date.isoformat()}.json"
 
 
+def chain_journal_path(
+    date: dt.date,
+    cache_dir: Path = CHAIN_CACHE_DIR,
+    underlying: str | None = None,
+) -> Path:
+    return chain_cache_path(date, cache_dir, underlying).with_suffix(".jsonl")
+
+
 def save_snapshot(
     date: dt.date,
     snapshot_time: dt.datetime,
@@ -60,20 +64,16 @@ def save_snapshot(
     cache_dir: Path = CHAIN_CACHE_DIR,
     underlying: str | None = None,
 ) -> None:
-    """Append one chain snapshot to the day's cache file.
+    """Append one chain snapshot to the day's JSONL cache file.
 
-    Called by the collector after each successful chain fetch.
-    rows is the list of parsed option rows (same format as bulk_insert_snapshot).
+    Called by the collector after each successful chain fetch (off the event
+    loop). rows is the list of parsed option rows (same format as
+    bulk_insert_snapshot).
     """
     if underlying is None and rows:
         underlying = rows[0].get("underlying")
-    path = chain_cache_path(date, cache_dir, underlying)
+    path = chain_journal_path(date, cache_dir, underlying)
     path.parent.mkdir(parents=True, exist_ok=True)
-
-    if path.exists():
-        data = json.loads(path.read_text(encoding="utf-8"))
-    else:
-        data = {"date": date.isoformat(), "snapshots": {}}
 
     quotes = [
         {
@@ -91,8 +91,37 @@ def save_snapshot(
         }
         for r in rows
     ]
-    data["snapshots"][snapshot_time.isoformat()] = {"spot": spot, "quotes": quotes}
-    path.write_text(json.dumps(data), encoding="utf-8")
+    line = json.dumps({"ts": snapshot_time.isoformat(), "spot": spot, "quotes": quotes})
+    with path.open("a+b") as f:
+        # If a previous append was cut off, start on a fresh line so only the
+        # damaged snapshot is lost.
+        if f.tell() > 0:
+            f.seek(-1, 2)
+            if f.read(1) != b"\n":
+                f.write(b"\n")
+        f.write(line.encode("utf-8") + b"\n")
+
+
+def _read_snapshots(json_path: Path) -> dict[str, dict] | None:
+    """Read legacy JSON and JSONL snapshots for one day; None if neither is readable."""
+    snapshots: dict[str, dict] | None = None
+    if json_path.exists():
+        try:
+            snapshots = dict(json.loads(json_path.read_text(encoding="utf-8"))["snapshots"])
+        except json.JSONDecodeError:
+            pass
+
+    journal = json_path.with_suffix(".jsonl")
+    if journal.exists():
+        snapshots = snapshots or {}
+        with journal.open(encoding="utf-8") as f:
+            for raw in f:
+                try:
+                    snap = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue  # truncated line from an interrupted append
+                snapshots[snap["ts"]] = snap
+    return snapshots
 
 
 def load_chain_day(
@@ -110,22 +139,16 @@ def load_chain_day(
     if underlying is None:
         paths.append(chain_cache_path(date, cache_dir, "SPX"))
 
-    data = None
+    snapshots = None
     for path in paths:
-        if not path.exists():
-            continue
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+        snapshots = _read_snapshots(path)
+        if snapshots is not None:
             break
-        except json.JSONDecodeError:
-            if underlying is not None:
-                return None
-            continue
-    if data is None:
+    if snapshots is None:
         return None
     result: dict[dt.datetime, list[OptionQuote]] = {}
 
-    for ts_str, snap in data["snapshots"].items():
+    for ts_str, snap in snapshots.items():
         ts = dt.datetime.fromisoformat(ts_str)
         quotes = [
             OptionQuote(

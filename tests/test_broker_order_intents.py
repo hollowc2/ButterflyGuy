@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+import asyncio
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
 from butterfly_guy.scripts.run_live import (
     BrokerStateGate,
     _assert_broker_state_matches_db,
     _repair_filled_entry_intent,
+    broker_reconciler_loop,
 )
 
 
@@ -299,6 +302,99 @@ async def test_filled_entry_intent_repairs_open_trade_only_with_matching_legs_an
 
     trades.insert_trade.assert_awaited_once()
     intents.link_trade.assert_awaited_once_with(1, 99)
+
+
+def _filled_entry_without_trade() -> tuple[AsyncMock, AsyncMock, AsyncMock]:
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = {
+        "securitiesAccount": {
+            "positions": [
+                {
+                    "longQuantity": 1,
+                    "instrument": {"assetType": "OPTION", "symbol": "SPXW  260625C06000000"},
+                },
+                {
+                    "shortQuantity": 2,
+                    "instrument": {"assetType": "OPTION", "symbol": "SPXW  260625C06050000"},
+                },
+                {
+                    "longQuantity": 1,
+                    "instrument": {"assetType": "OPTION", "symbol": "SPXW  260625C06100000"},
+                },
+            ]
+        }
+    }
+    schwab.get_todays_orders.return_value = [{**broker_fill_payload(), "orderId": "BOT1"}]
+    intents = AsyncMock()
+    intents.intents_for_day.return_value = [
+        {
+            "id": 1,
+            "underlying": "SPX",
+            "trade_date": "2026-06-25",
+            "side": "ENTRY",
+            "status": "SUBMITTED",
+            "broker_order_id": "BOT1",
+            "trade_id": None,
+            "quantity": 1,
+            "candidate_snapshot": {
+                "direction": "CALL",
+                "wing_width": 50,
+                "center_strike": 6050.0,
+                "lower_strike": 6000.0,
+                "upper_strike": 6100.0,
+                "lower_symbol": "SPXW  260625C06000000",
+                "center_symbol": "SPXW  260625C06050000",
+                "upper_symbol": "SPXW  260625C06100000",
+            },
+        }
+    ]
+    trades = AsyncMock()
+    trades.get_open_trades.return_value = []
+    trades.insert_trade.return_value = 99
+    return schwab, intents, trades
+
+
+@pytest.mark.asyncio
+async def test_filled_entry_intent_repair_can_be_disabled():
+    schwab, intents, trades = _filled_entry_without_trade()
+
+    with pytest.raises(RuntimeError, match="restart to repair"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [], intents, trades, allow_entry_repair=False
+        )
+
+    trades.insert_trade.assert_not_awaited()
+    intents.link_trade.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_runtime_reconciler_does_not_repair_filled_entry(monkeypatch):
+    schwab, intents, trades = _filled_entry_without_trade()
+    gate = BrokerStateGate()
+    critical_notifier = Mock(notify_critical=AsyncMock(return_value=False))
+
+    async def stop_after_one_iteration(_):
+        raise asyncio.CancelledError
+
+    set_readiness(None)
+    monkeypatch.setattr(asyncio, "sleep", stop_after_one_iteration)
+    with pytest.raises(asyncio.CancelledError):
+        await broker_reconciler_loop(
+            schwab,
+            "SPX",
+            trades,
+            intents,
+            gate,
+            critical_notifier=critical_notifier,
+        )
+
+    trades.insert_trade.assert_not_awaited()
+    intents.link_trade.assert_not_awaited()
+    assert gate.unsafe
+    assert "restart to repair" in gate.reason
+    assert readiness_snapshot() == (False, "broker_reconciliation_unsafe")
+    critical_notifier.notify_critical.assert_awaited_once_with("reconciliation_failure")
+    set_readiness(None)
 
 
 @pytest.mark.asyncio

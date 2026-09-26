@@ -209,7 +209,11 @@ class SchwabClientWrapper:
         return self._account_hash
 
     async def _retry(self, func, *args, endpoint: str = "unknown", **kwargs) -> Any:
-        """Execute with exponential backoff retry."""
+        """Execute with exponential backoff retry.
+
+        Retries 429, 5xx, and transport errors. Other 4xx responses are not
+        retryable and fail immediately.
+        """
         last_err: Exception | None = None
         last_response_body: str | None = None
         for attempt in range(MAX_RETRIES):
@@ -219,6 +223,8 @@ class SchwabClientWrapper:
                 if resp.status_code == 429:
                     wait = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
                     log.warning("rate_limited", endpoint=endpoint, wait=wait)
+                    last_err = RuntimeError(f"HTTP 429 rate limited on {endpoint}")
+                    last_response_body = None
                     await asyncio.sleep(wait)
                     continue
                 resp.raise_for_status()
@@ -229,6 +235,12 @@ class SchwabClientWrapper:
                 error_response = getattr(e, "response", None)
                 response_body = error_response.text[:500] if error_response is not None else None
                 last_response_body = response_body
+                status = getattr(error_response, "status_code", None)
+                if isinstance(status, int) and 400 <= status < 500:
+                    body_suffix = f" | response_body: {response_body}" if response_body else ""
+                    raise RuntimeError(
+                        f"API call failed with non-retryable HTTP {status}: {e}{body_suffix}"
+                    ) from e
                 if attempt < MAX_RETRIES - 1:
                     wait = RETRY_BACKOFF[attempt]
                     log.warning(
@@ -264,7 +276,11 @@ class SchwabClientWrapper:
         quote = data.get(symbol, data.get(symbol.lstrip("$"), {}))
         if "quote" in quote:
             quote = quote["quote"]
-        price = quote.get("lastPrice") or quote.get("mark") or quote.get("closePrice")
+        price = quote.get("lastPrice") or quote.get("mark")
+        if not price:
+            price = quote.get("closePrice")
+            if price:
+                log.warning("spot_price_close_fallback", symbol=symbol, close_price=price)
         if not price:
             raise ValueError(f"Could not extract spot price from response for {symbol}")
         return float(price)
@@ -318,9 +334,7 @@ class SchwabClientWrapper:
         self, symbol: str = "$SPX", days_back: int = 1
     ) -> list[dict]:
         """Fetch 1-minute bars for today (and optionally prior days) from Schwab."""
-        import datetime as dt
-
-        today = dt.date.today()
+        today = session_date()
         start = today - dt.timedelta(days=days_back)
         resp = await self._retry(
             self.client.get_price_history,
@@ -329,8 +343,8 @@ class SchwabClientWrapper:
             period=days_back,
             frequency_type=self.client.PriceHistory.FrequencyType.MINUTE,
             frequency=self.client.PriceHistory.Frequency.EVERY_MINUTE,
-            start_datetime=dt.datetime.combine(start, dt.time.min),
-            end_datetime=dt.datetime.combine(today, dt.time.max),
+            start_datetime=dt.datetime.combine(start, dt.time.min, tzinfo=EASTERN),
+            end_datetime=dt.datetime.combine(today, dt.time.max, tzinfo=EASTERN),
             endpoint="get_price_history",
         )
         data = resp.json()
