@@ -217,3 +217,23 @@ async def test_notify_exit_formats_contract_pnl_as_dollars():
         )
 
     assert "P&L: **+$300.00** (+75%)" in posted[0]
+
+
+@pytest.mark.asyncio
+async def test_telegram_send_async_runs_blocking_send_off_loop(monkeypatch):
+    import threading
+
+    import butterfly_guy.notify as notify
+
+    loop_thread = threading.get_ident()
+    seen = []
+
+    def send(message):
+        seen.append((message, threading.get_ident()))
+        return True
+
+    monkeypatch.setattr(notify, "send", send)
+
+    assert await notify.send_async("hello") is True
+    assert seen[0][0] == "hello"
+    assert seen[0][1] != loop_thread

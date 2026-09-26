@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import json
 from typing import Any
 
 from butterfly_guy.backtest.chain_cache import save_snapshot
@@ -24,7 +23,7 @@ from butterfly_guy.core.time_utils import (
 from butterfly_guy.data.providers import CollectorMarketDataProvider
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS
 from butterfly_guy.db.queries import ChainQueries, DailyBarQueries, SpotQueries
-from butterfly_guy.notify import send as notify
+from butterfly_guy.notify import send_async as notify
 
 log = get_logger(__name__)
 
@@ -182,14 +181,15 @@ class OptionChainCollector:
                 chain_snapshots_total.labels(underlying=underlying).inc()
                 chain_snapshot_rows.labels(underlying=underlying).set(count)
                 try:
-                    save_snapshot(
+                    await asyncio.to_thread(
+                        save_snapshot,
                         expiration,
                         snapshot_time,
                         spot_price,
                         rows,
                         underlying=underlying,
                     )
-                except (OSError, json.JSONDecodeError) as e:
+                except OSError as e:
                     log.warning("chain_cache_write_failed", error=str(e))
                 log.info("snapshot_collected", rows=count, spot=spot_price)
                 return count
@@ -216,14 +216,14 @@ class OptionChainCollector:
                 await self.collect_daily_bars()
                 await self.collect_snapshot()
                 if alert_sent:
-                    notify(f"✅ {underlying} data collection recovered.")
+                    await notify(f"✅ {underlying} data collection recovered.")
                     alert_sent = False
                 consecutive_failures = 0
             except Exception as e:
                 log.error("snapshot_failed", error=str(e))
                 consecutive_failures += 1
                 if consecutive_failures >= 3 and not alert_sent:
-                    notify(
+                    await notify(
                         f"⚠️ {underlying} data collection has failed "
                         f"{consecutive_failures} times in a row. Last error: {e}"
                     )
