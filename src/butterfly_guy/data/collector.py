@@ -19,6 +19,7 @@ from butterfly_guy.core.time_utils import (
     get_0dte_expiration,
     is_market_open,
     now_eastern,
+    session_date,
 )
 from butterfly_guy.data.providers import CollectorMarketDataProvider
 from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SCHWAB_SPOT_SYMBOLS
@@ -97,10 +98,15 @@ class OptionChainCollector:
         return rows
 
     async def collect_daily_bars(self) -> None:
-        """Fetch and store daily OHLCV bars for SPX and VIX. Runs once per calendar day."""
+        """Fetch and store daily OHLCV bars for SPX and VIX.
+
+        Runs once per Eastern session date. Today's in-progress candle is never
+        stored, and a failed symbol leaves the refresh pending so the next
+        snapshot retries it.
+        """
         if self.daily_bar_queries is None:
             return
-        today = dt.date.today()
+        today = session_date()
         if self._daily_bars_date == today:
             return
 
@@ -111,31 +117,39 @@ class OptionChainCollector:
         if underlying == "SPX":
             symbols_to_fetch.append(("$VIX", "$VIX"))
 
+        all_succeeded = True
         for symbol, label in symbols_to_fetch:
             try:
                 candles = await self.schwab.get_daily_bars(symbol)
-                rows = [
-                    {
-                        "date": dt.datetime.fromtimestamp(
-                            c["datetime"] / 1000,
-                            tz=dt.timezone.utc,
-                        ).date(),
+                rows = []
+                for c in candles:
+                    if c.get("close") is None:
+                        continue
+                    bar_date = dt.datetime.fromtimestamp(
+                        c["datetime"] / 1000,
+                        tz=dt.timezone.utc,
+                    ).date()
+                    if bar_date >= today:
+                        # Today's candle is still in progress; storing it would
+                        # leave an intraday price as this date's "close".
+                        continue
+                    rows.append({
+                        "date": bar_date,
                         "underlying": label,
                         "open": c.get("open"),
                         "high": c.get("high"),
                         "low": c.get("low"),
                         "close": c["close"],
                         "volume": c.get("volume", 0),
-                    }
-                    for c in candles
-                    if c.get("close") is not None
-                ]
+                    })
                 count = await self.daily_bar_queries.bulk_upsert(rows)
                 log.info("daily_bars_collected", symbol=label, rows=count)
             except Exception as e:
+                all_succeeded = False
                 log.warning("daily_bars_fetch_failed", symbol=label, error=str(e))
 
-        self._daily_bars_date = today
+        if all_succeeded:
+            self._daily_bars_date = today
 
     async def collect_snapshot(self) -> int:
         """Fetch current chain and store snapshot. Returns row count."""
