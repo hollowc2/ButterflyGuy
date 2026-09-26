@@ -8,6 +8,9 @@ from prometheus_client import Gauge
 from butterfly_guy.core.logging import get_logger
 
 log = get_logger(__name__)
+# Fail a hung query fast instead of stalling the caller (e.g. the position
+# monitor) indefinitely on a lock wait or a starved server.
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 10.0
 
 database_pool_size = Gauge(
     "butterfly_database_pool_size",
@@ -29,17 +32,27 @@ database_pool_max = Gauge(
 class DatabasePool:
     """Manages an asyncpg connection pool for TimescaleDB."""
 
-    def __init__(self, dsn: str, min_size: int = 2, max_size: int = 10) -> None:
+    def __init__(
+        self,
+        dsn: str,
+        min_size: int = 2,
+        max_size: int = 10,
+        command_timeout: float | None = DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    ) -> None:
         self.dsn = dsn
         self.min_size = min_size
         self.max_size = max_size
+        self.command_timeout = command_timeout
         self._pool: asyncpg.Pool | None = None
         self._database_label = dsn.rsplit("/", 1)[-1].split("?", 1)[0]
 
     async def initialize(self) -> None:
         """Create the connection pool."""
         self._pool = await asyncpg.create_pool(
-            self.dsn, min_size=self.min_size, max_size=self.max_size
+            self.dsn,
+            min_size=self.min_size,
+            max_size=self.max_size,
+            command_timeout=self.command_timeout,
         )
         database_pool_max.labels(database=self._database_label).set(self.max_size)
         database_pool_size.labels(database=self._database_label).set_function(
