@@ -814,6 +814,35 @@ async def test_overdue_broker_settlement_alerts_once_and_keeps_waiting() -> None
 
 
 @pytest.mark.asyncio
+async def test_paper_chain_fallback_refuses_past_dated_trade() -> None:
+    set_readiness(None)
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.execution.paper_trading = True
+    service.config.strategy.underlying = "SPX"
+    service.market_data = AsyncMock()
+    service.trade_queries = MagicMock(close_trade=AsyncMock())
+    service.position_manager = MagicMock()
+    service.state_machine = MagicMock()
+    service._settlement_spot_price = AsyncMock(side_effect=RuntimeError("bars unavailable"))
+    service._last_persisted_peak = 0.0
+    trade = TradeRecord(trade_id=9, trade_date=dt.date(2026, 7, 13), entry_price=1.0)
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=False
+    ), patch(
+        "butterfly_guy.services.position_service.get_0dte_expiration",
+        return_value=dt.date(2026, 7, 14),
+    ), pytest.raises(SettlementEvidenceError, match="open trade 9"):
+        await service.monitor_loop(trade, MagicMock())
+
+    service.market_data.get_option_chain.assert_not_awaited()
+    service.trade_queries.close_trade.assert_not_awaited()
+    assert readiness_snapshot() == (False, "settlement_evidence_unavailable")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
 async def test_cash_settlement_db_failure_stops_after_one_close_attempt() -> None:
     service = PositionService.__new__(PositionService)
     service.config = MagicMock()

@@ -781,6 +781,12 @@ class PositionService:
                 settlement_ts = None
                 try:
                     expiration = get_0dte_expiration()
+                    if trade.trade_date != expiration:
+                        # Today's chain cannot value a fly that expired on an
+                        # earlier session.
+                        raise SettlementEvidenceError(
+                            f"chain fallback cannot value trade from {trade.trade_date}"
+                        )
                     chain_data = await self.market_data.get_option_chain(
                         SCHWAB_CHAIN_SYMBOLS.get(
                             self.config.strategy.underlying,
