@@ -471,6 +471,7 @@ class TradeService:
             limit_price = capped_entry_limit(
                 unconstrained_limit,
                 max_entry_price,
+                underlying,
             )
             attempt_record = {
                 "step": step,

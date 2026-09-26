@@ -9,7 +9,7 @@ from time import monotonic
 from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
-from butterfly_guy.core.entry_pricing import entry_fill_within_limit
+from butterfly_guy.core.entry_pricing import entry_fill_within_limit, round_credit_limit
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import (
     order_fill_duration,
@@ -628,7 +628,9 @@ class OrderManager:
                     bid_floor = spread.bid if bid_floor is None else min(bid_floor, spread.bid)
                 mid_price = bid_floor if bid_floor is not None else current_value
 
-                limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
+                limit_price = round_credit_limit(
+                    max(0.05, mid_price + (max_steps - 1 - i) * step), self.underlying
+                )
                 log.debug("exit_ladder_step", step=i, price=limit_price, mid_price=mid_price)
                 step_trace.append({
                     "step": i,

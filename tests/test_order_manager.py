@@ -882,6 +882,26 @@ async def test_exit_steps_down_from_live_bid():
     assert calls[1][0][1] == pytest.approx(live_bid + 2 * 0.05)
 
 
+@pytest.mark.parametrize(
+    ("underlying", "expected"),
+    [("SPX", [3.40, 3.35]), ("XSP", [3.36, 3.31])],
+)
+@pytest.mark.asyncio
+async def test_exit_limits_round_up_to_the_underlyings_increment(underlying, expected):
+    settings = make_settings(price_ladder_steps=4)
+    om, _ = make_order_manager(settings, underlying=underlying)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    live_spread = LiveSpread(bid=3.21, mark=3.40, ask=3.60)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=live_spread)), \
+         patch.object(
+             om, "_wait_for_fill", new=AsyncMock(side_effect=[False, broker_fill()])
+         ):
+        await om.execute_exit(candidate, current_value=2.50, quantity=1)
+
+    limits = [c[0][1] for c in om.builder.build_butterfly_close.call_args_list]
+    assert limits == pytest.approx(expected)
+
+
 @pytest.mark.asyncio
 async def test_exit_detects_post_cancel_fill():
     settings = make_settings(price_ladder_steps=1, retry_interval_seconds=0)
