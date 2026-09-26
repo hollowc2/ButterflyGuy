@@ -213,3 +213,45 @@ async def test_hypothetical_monitoring_load_uses_collector_only():
     )
 
     assert conn.fetch_calls == 1
+
+
+class _DailyBarConnection:
+    """Answers the daily_bars / spot_prices lookups used for gap direction."""
+
+    def __init__(self, *, daily_close=None, daily_open=None, spot_close=None):
+        self.daily_close = daily_close
+        self.daily_open = daily_open
+        self.spot_close = spot_close
+
+    async def fetchval(self, query, *_args):
+        if "FROM daily_bars" in query and "SELECT close" in query:
+            return self.daily_close
+        if "FROM daily_bars" in query and "SELECT open" in query:
+            return self.daily_open
+        if "FROM spot_prices" in query:
+            return self.spot_close
+        raise AssertionError(query)
+
+
+@pytest.mark.asyncio
+async def test_prev_close_prefers_official_daily_close():
+    conn = _DailyBarConnection(daily_close=7440.43, spot_close=7442.25)
+
+    assert await run_backtest_db.get_prev_close(conn, dt.date(2026, 6, 30), "SPX") == 7440.43
+
+
+@pytest.mark.asyncio
+async def test_prev_close_falls_back_to_spot_tick_without_daily_bar():
+    conn = _DailyBarConnection(spot_close=7442.25)
+
+    assert await run_backtest_db.get_prev_close(conn, dt.date(2026, 6, 30), "SPX") == 7442.25
+
+
+@pytest.mark.asyncio
+async def test_official_open_reads_same_day_daily_bar():
+    conn = _DailyBarConnection(daily_open=7500.44)
+
+    assert await run_backtest_db.get_official_open(conn, dt.date(2026, 6, 22), "SPX") == 7500.44
+    assert await run_backtest_db.get_official_open(
+        _DailyBarConnection(), dt.date(2026, 6, 22), "SPX"
+    ) is None

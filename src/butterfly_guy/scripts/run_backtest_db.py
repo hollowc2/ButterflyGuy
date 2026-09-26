@@ -811,7 +811,22 @@ async def get_prev_close(
     date: dt.date,
     underlying: str,
 ) -> float | None:
-    """Return the last spot price at or before 16:00 ET on the previous trading day."""
+    """Return the previous session's official close, as live uses for gap direction.
+
+    Falls back to the last spot price at or before 16:00 ET on the previous
+    trading day when no daily bar is stored.
+    """
+    official = await conn.fetchval(
+        """
+        SELECT close FROM daily_bars
+        WHERE underlying = $1 AND date < $2
+        ORDER BY date DESC
+        LIMIT 1
+        """,
+        underlying, date,
+    )
+    if official is not None:
+        return float(official)
     row = await conn.fetchval(
         """
         SELECT price FROM spot_prices
@@ -826,6 +841,22 @@ async def get_prev_close(
     if row:
         return float(row)
     return None
+
+
+async def get_official_open(
+    conn: asyncpg.Connection,
+    date: dt.date,
+    underlying: str,
+) -> float | None:
+    """Return the session's official open (the 09:30 candle open live uses)."""
+    value = await conn.fetchval(
+        """
+        SELECT open FROM daily_bars
+        WHERE underlying = $1 AND date = $2
+        """,
+        underlying, date,
+    )
+    return float(value) if value is not None else None
 
 
 async def get_recent_closes(
@@ -1099,7 +1130,7 @@ def _force_synthetic_for_date(date: dt.date):
 # ---------------------------------------------------------------------------
 
 def select_direction_bar(bars: list[MinuteBar]) -> MinuteBar:
-    """Use the first regular-session snapshot for gap direction."""
+    """First regular-session snapshot; its open is the fallback when no official open is stored."""
     return next(
         (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(9, 30)),
         bars[0],
@@ -1120,6 +1151,9 @@ async def load_date_data(
     if prev_close is None:
         return None
     direction_bar = select_direction_bar(bars)
+    open_spot = await get_official_open(conn, date, underlying)
+    if open_spot is None:
+        open_spot = direction_bar.open
     entry_bar = next(
         (b for b in bars if b.ts.astimezone(EASTERN).time() >= dt.time(10, 0)),
         bars[0],
@@ -1136,7 +1170,7 @@ async def load_date_data(
         bars=bars,
         prev_close=prev_close,
         direction_bar=direction_bar,
-        open_spot=direction_bar.open,
+        open_spot=open_spot,
         entry_bar=entry_bar,
         entry_spot=entry_bar.close,
         vix=vix,
