@@ -88,6 +88,11 @@ class ProfitStateMachine:
         # Get drawdown threshold for current regime
         regime_config = self.settings.regimes.get(pos.time_regime)
         if not regime_config:
+            log.warning(
+                "time_regime_not_configured",
+                regime=pos.time_regime,
+                configured=sorted(self.settings.regimes),
+            )
             return None
 
         threshold = effective_drawdown_threshold(
