@@ -77,6 +77,12 @@ from butterfly_guy.execution.order_manager import (
     parse_broker_fill,
     walk_orders,
 )
+from butterfly_guy.execution.order_manager import (
+    broker_option_positions as _broker_option_positions,
+)
+from butterfly_guy.execution.order_manager import (
+    matches_underlying as _matches_underlying,
+)
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
@@ -210,30 +216,6 @@ async def _close_runtime_resources(
                     await schwab.close()
             finally:
                 await db.close()
-
-
-def _matches_underlying(symbol: str, underlying: str) -> bool:
-    normalized = symbol.upper().lstrip("$")
-    return normalized.startswith(underlying.upper())
-
-
-def _broker_option_positions(
-    account_snapshot: dict[str, Any], underlying: str
-) -> dict[str, float]:
-    acct = account_snapshot.get("securitiesAccount", account_snapshot)
-    positions: dict[str, float] = {}
-    for pos in acct.get("positions") or []:
-        instrument = pos.get("instrument") or {}
-        if instrument.get("assetType") != "OPTION":
-            continue
-        symbol = str(instrument.get("symbol") or "")
-        underlier = str(instrument.get("underlyingSymbol") or "")
-        if _matches_underlying(symbol, underlying) or _matches_underlying(underlier, underlying):
-            quantity = float(pos.get("longQuantity") or 0) - float(
-                pos.get("shortQuantity") or 0
-            )
-            positions[symbol] = positions.get(symbol, 0) + quantity
-    return {symbol: quantity for symbol, quantity in positions.items() if quantity}
 
 
 def _order_symbols(order: dict[str, Any]) -> set[str]:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 from collections.abc import Iterator
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.core.entry_pricing import entry_fill_within_limit
@@ -48,6 +48,30 @@ def order_ids(order: dict) -> set[str]:
 
 def order_statuses(order: dict) -> set[str]:
     return {str(node["status"]) for node in walk_orders(order) if node.get("status")}
+
+
+def matches_underlying(symbol: str, underlying: str) -> bool:
+    normalized = symbol.upper().lstrip("$")
+    return normalized.startswith(underlying.upper())
+
+
+def broker_option_positions(
+    account_snapshot: dict[str, Any], underlying: str
+) -> dict[str, float]:
+    acct = account_snapshot.get("securitiesAccount", account_snapshot)
+    positions: dict[str, float] = {}
+    for pos in acct.get("positions") or []:
+        instrument = pos.get("instrument") or {}
+        if instrument.get("assetType") != "OPTION":
+            continue
+        symbol = str(instrument.get("symbol") or "")
+        underlier = str(instrument.get("underlyingSymbol") or "")
+        if matches_underlying(symbol, underlying) or matches_underlying(underlier, underlying):
+            quantity = float(pos.get("longQuantity") or 0) - float(
+                pos.get("shortQuantity") or 0
+            )
+            positions[symbol] = positions.get(symbol, 0) + quantity
+    return {symbol: quantity for symbol, quantity in positions.items() if quantity}
 
 
 class PartialFillError(RuntimeError):
@@ -362,6 +386,39 @@ class OrderManager:
             },
         }
 
+    async def _mark_intent_unknown(self, intent_id: int | None, error: str) -> None:
+        """Best-effort bookkeeping: a DB fault here must not mask the ambiguity."""
+        if intent_id is None or self.intent_queries is None:
+            return
+        try:
+            await self.intent_queries.mark_unknown(intent_id, error)
+        except Exception as e:
+            log.error("intent_mark_unknown_failed", intent_id=intent_id, error=str(e))
+
+    async def _assert_broker_flat_before_entry(self) -> bool:
+        """Return False if broker positions cannot be read; raise if any exist.
+
+        Defense in depth for live entries: with no active trade, any option
+        position in this underlying means an earlier order filled without being
+        recorded, so submitting another entry could double the position.
+        """
+        try:
+            snapshot = await self.schwab.get_account_snapshot()
+        except Exception as e:
+            log.warning("entry_position_check_failed", error=str(e))
+            return False
+        positions = broker_option_positions(snapshot, self.underlying)
+        if positions:
+            log.error(
+                "entry_blocked_broker_positions_exist",
+                symbols=sorted(positions),
+            )
+            raise AmbiguousOrderError(
+                f"Broker already holds {len(positions)} {self.underlying} option "
+                "position(s) before entry; reconcile broker state"
+            )
+        return True
+
     async def _entry_blocked_by_working_orders(
         self, exclude_intent_id: int | None = None
     ) -> bool:
@@ -454,6 +511,9 @@ class OrderManager:
             )
             return None
 
+        if not await self._assert_broker_flat_before_entry():
+            return None
+
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
         if intent_id is None and self.intent_queries is not None:
             intent_id = await self.intent_queries.create_intent(
@@ -509,9 +569,8 @@ class OrderManager:
         except (BrokerFillError, PartialFillError, TerminalOrderError):
             raise
         except Exception as e:
-            if intent_id is not None and self.intent_queries is not None:
-                await self.intent_queries.mark_unknown(intent_id, str(e))
             log.error("entry_attempt_failed", error=str(e))
+            await self._mark_intent_unknown(intent_id, str(e))
             raise AmbiguousOrderError("entry order outcome is unknown") from e
 
         return None
@@ -661,9 +720,8 @@ class OrderManager:
                 except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
                     raise
                 except Exception as e:
-                    if intent_id is not None and self.intent_queries is not None:
-                        await self.intent_queries.mark_unknown(intent_id, str(e))
                     log.error("exit_step_failed", step=i, error=str(e))
+                    await self._mark_intent_unknown(intent_id, str(e))
                     raise AmbiguousOrderError("exit order outcome is unknown") from e
 
             log.warning("exit_ladder_exhausted")
@@ -719,8 +777,7 @@ class OrderManager:
             ):
                 raise
             log.warning("post_cancel_check_failed", error=str(e))
-            if intent_id is not None and self.intent_queries is not None:
-                await self.intent_queries.mark_unknown(intent_id, str(e))
+            await self._mark_intent_unknown(intent_id, str(e))
             raise AmbiguousOrderError("post-cancel broker state is unknown") from e
         return None
 

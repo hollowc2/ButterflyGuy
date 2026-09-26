@@ -97,6 +97,9 @@ def make_order_manager(settings: ExecutionSettings, underlying: str = "SPX"):
     schwab.cancel_order = AsyncMock()
     schwab.get_order_status = AsyncMock(return_value={"status": "WORKING"})
     schwab.get_todays_orders = AsyncMock(return_value=[])
+    schwab.get_account_snapshot = AsyncMock(
+        return_value={"securitiesAccount": {"positions": []}}
+    )
 
     builder = MagicMock()
     builder.build_butterfly_open = MagicMock(return_value={})
@@ -588,6 +591,130 @@ async def test_single_attempt_ambiguous_submit_leaves_unsafe_intent_without_retr
 
     schwab.place_order.assert_awaited_once()
     om.intent_queries.mark_unknown.assert_awaited_once_with(42, "missing Location")
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_raises_ambiguous_when_mark_unknown_also_fails():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    om.intent_queries.mark_broker_order_id.side_effect = RuntimeError("db down")
+    om.intent_queries.mark_unknown.side_effect = RuntimeError("db still down")
+
+    with pytest.raises(AmbiguousOrderError, match="outcome is unknown"):
+        await om.execute_single_attempt(
+            make_candidate(5900, 5950, 6000, 2.50), limit_price=2.50
+        )
+
+    schwab.place_order.assert_awaited_once()
+    om.intent_queries.mark_unknown.assert_awaited_once_with(42, "db down")
+
+
+@pytest.mark.asyncio
+async def test_exit_raises_ambiguous_when_mark_unknown_also_fails():
+    om, schwab = make_order_manager(
+        make_settings(paper_trading=False, price_ladder_steps=2)
+    )
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    om.intent_queries.mark_broker_order_id.side_effect = RuntimeError("db down")
+    om.intent_queries.mark_unknown.side_effect = RuntimeError("db still down")
+
+    with patch.object(
+        om, "_fetch_live_spread", new=AsyncMock(return_value=None)
+    ), pytest.raises(AmbiguousOrderError, match="outcome is unknown"):
+        await om.execute_exit(
+            make_candidate(5900, 5950, 6000, 2.50),
+            current_value=3.00,
+            trade_id=7,
+        )
+
+    schwab.place_order.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_raises_ambiguous_when_mark_unknown_also_fails():
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    om.intent_queries.mark_unknown.side_effect = RuntimeError("db down")
+    schwab.get_order_status.side_effect = RuntimeError("status unavailable")
+
+    with pytest.raises(AmbiguousOrderError, match="post-cancel"):
+        await om._check_post_cancel_fill("ORD1", 1, intent_id=42)
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_refuses_live_entry_when_broker_holds_positions():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    schwab.get_account_snapshot.return_value = {
+        "securitiesAccount": {
+            "positions": [
+                {
+                    "instrument": {
+                        "assetType": "OPTION",
+                        "symbol": "SPXW  260321P05950000",
+                        "underlyingSymbol": "$SPX",
+                    },
+                    "longQuantity": 0,
+                    "shortQuantity": 2,
+                }
+            ]
+        }
+    }
+
+    with pytest.raises(AmbiguousOrderError, match="option position"):
+        await om.execute_single_attempt(
+            make_candidate(5900, 5950, 6000, 2.50), limit_price=2.50
+        )
+
+    om.intent_queries.create_intent.assert_not_awaited()
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_blocks_live_entry_when_position_check_fails():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    schwab.get_account_snapshot.side_effect = RuntimeError("account unavailable")
+
+    result = await om.execute_single_attempt(
+        make_candidate(5900, 5950, 6000, 2.50), limit_price=2.50
+    )
+
+    assert result is None
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_ignores_other_underlying_positions():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    schwab.get_account_snapshot.return_value = {
+        "securitiesAccount": {
+            "positions": [
+                {
+                    "instrument": {
+                        "assetType": "OPTION",
+                        "symbol": "NDXP  260321P20000000",
+                        "underlyingSymbol": "$NDX",
+                    },
+                    "longQuantity": 1,
+                    "shortQuantity": 0,
+                }
+            ]
+        }
+    }
+    schwab.get_order_status = AsyncMock(return_value=filled_order())
+
+    result = await om.execute_single_attempt(
+        make_candidate(5900, 5950, 6000, 2.50), limit_price=2.50
+    )
+
+    assert result is not None
+    schwab.place_order.assert_awaited_once()
 
 
 @pytest.mark.asyncio
