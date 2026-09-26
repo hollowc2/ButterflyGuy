@@ -1,4 +1,9 @@
-"""Single-day simulation engine using synthetic option chains."""
+"""Single-day simulation engine using synthetic option chains.
+
+Direction here comes from the entry bar's close versus the previous close, not the
+session open that live trading and run_backtest_db use, so research run through this
+engine (classifier sweep, entry analysis) is not direction-parity with live.
+"""
 
 from __future__ import annotations
 
@@ -265,6 +270,8 @@ class SimulationEngine:
                         bars=bars_so_far, prev_close=day.prev_close, entry_close=bar.close
                     )
                 else:
+                    # Not live parity: live and run_backtest_db compare the session
+                    # open to the previous close; this uses the entry bar's close.
                     direction = self.direction_filter.get_direction(bar.close, day.prev_close)
 
                 if direction is None:
