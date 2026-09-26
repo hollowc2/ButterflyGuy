@@ -19,6 +19,13 @@ flock -n 9 || { echo "$(date -Is) SKIP: another update is running" >>"$LOG"; exi
 
 echo "$(date -Is) === update start ===" >>"$LOG"
 
+# Ledgers belong on main only; never commit or push onto a feature branch.
+BRANCH=$(git symbolic-ref --short -q HEAD)
+if [ "$BRANCH" != "main" ]; then
+    echo "$(date -Is) SKIP: checkout is on '${BRANCH:-detached HEAD}', not main" >>"$LOG"
+    exit 0
+fi
+
 if ! timeout 1800 "$UV" run python src/butterfly_guy/scripts/run_prospective_execution.py \
         update --cohort "$COHORT" >>"$LOG" 2>&1; then
     echo "$(date -Is) FAILED: update returned non-zero" >>"$LOG"
@@ -37,7 +44,7 @@ if [ -n "$(git status --porcelain -- "$COHORT")" ]; then
     git commit -q -m "Record prospective cohort sessions through $(date +%F)" \
                   -m "Automated append by cohort_daily_update.sh. Ledger verified before commit." \
         >>"$LOG" 2>&1 || echo "$(date -Is) WARN: commit failed" >>"$LOG"
-    if git push -q origin HEAD >>"$LOG" 2>&1; then
+    if git push -q origin HEAD:main >>"$LOG" 2>&1; then
         echo "$(date -Is) committed and pushed" >>"$LOG"
     else
         echo "$(date -Is) WARN: push failed (commit is local; ssh key may be locked)" >>"$LOG"
