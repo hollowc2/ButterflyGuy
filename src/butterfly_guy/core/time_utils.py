@@ -14,23 +14,6 @@ PREMARKET_OPEN = dt.time(4, 0)
 AFTERHOURS_CLOSE = dt.time(20, 0)
 EARLY_CLOSE = dt.time(13, 0)
 
-# US market holidays (2026) — extend as needed
-HOLIDAYS_2026 = {
-    dt.date(2026, 1, 1),   # New Year's Day
-    dt.date(2026, 1, 19),  # MLK Day
-    dt.date(2026, 2, 16),  # Presidents' Day
-    dt.date(2026, 4, 3),   # Good Friday
-    dt.date(2026, 5, 25),  # Memorial Day
-    dt.date(2026, 7, 3),   # Independence Day (observed)
-    dt.date(2026, 9, 7),   # Labor Day
-    dt.date(2026, 11, 26), # Thanksgiving
-    dt.date(2026, 12, 25), # Christmas
-}
-
-EARLY_CLOSES_2026 = {
-    dt.date(2026, 11, 27),  # NYSE day after Thanksgiving
-    dt.date(2026, 12, 24),  # NYSE Christmas Eve
-}
 
 def _observed_date(holiday: dt.date) -> dt.date:
     if holiday.weekday() == 5:
@@ -175,9 +158,14 @@ def market_close_time(d: dt.date | None = None) -> dt.time:
 
 
 def get_us_market_early_closes(year: int) -> set[dt.date]:
-    if year == 2026:
-        return set(EARLY_CLOSES_2026)
-    return set()
+    """NYSE 1:00 PM ET early closes: day after Thanksgiving, and Jul 3 / Dec 24
+    when each is a weekday that is not itself an observed holiday."""
+    holidays = get_us_market_holidays(year)
+    early_closes = {_nth_weekday(year, 11, 3, 4) + dt.timedelta(days=1)}
+    for candidate in (dt.date(year, 7, 3), dt.date(year, 12, 24)):
+        if candidate.weekday() < 5 and candidate not in holidays:
+            early_closes.add(candidate)
+    return early_closes
 
 
 def get_time_regime(minutes_since_open: float) -> str:

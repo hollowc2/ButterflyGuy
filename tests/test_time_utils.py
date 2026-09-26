@@ -5,6 +5,7 @@ import datetime as dt
 from butterfly_guy.core.time_utils import (
     EASTERN,
     get_0dte_expiration,
+    get_us_market_early_closes,
     is_market_open,
     is_trading_day,
     market_close_time,
@@ -35,6 +36,39 @@ def test_market_closed_after_early_close():
     assert market_close_time(dt.date(2026, 11, 27)) == dt.time(13, 0)
     assert not is_market_open(at=et(2026, 11, 27, 13, 1))
     assert minutes_to_close(at=et(2026, 11, 27, 12, 30)) == 30.0
+
+
+def test_early_closes_reproduce_previous_2026_set():
+    assert get_us_market_early_closes(2026) == {
+        dt.date(2026, 11, 27),
+        dt.date(2026, 12, 24),
+    }
+
+
+def test_early_close_day_after_thanksgiving():
+    assert market_close_time(dt.date(2027, 11, 26)) == dt.time(13, 0)
+    assert dt.date(2025, 11, 28) in get_us_market_early_closes(2025)
+
+
+def test_early_close_christmas_eve_weekday_only_when_not_observed_holiday():
+    assert dt.date(2025, 12, 24) in get_us_market_early_closes(2025)  # Wednesday
+    # 2027: Christmas falls on Saturday, so Friday Dec 24 is the observed holiday.
+    assert dt.date(2027, 12, 24) not in get_us_market_early_closes(2027)
+    # 2022: Dec 24 is a Saturday.
+    assert dt.date(2022, 12, 24) not in get_us_market_early_closes(2022)
+
+
+def test_early_close_july_3_weekday_only_when_not_observed_holiday():
+    assert dt.date(2025, 7, 3) in get_us_market_early_closes(2025)  # Thursday
+    assert market_close_time(dt.date(2029, 7, 3)) == dt.time(13, 0)  # Tuesday
+    # 2026: July 4 is a Saturday, so Friday July 3 is the observed holiday.
+    assert dt.date(2026, 7, 3) not in get_us_market_early_closes(2026)
+    # 2027: July 3 is a Saturday.
+    assert dt.date(2027, 7, 3) not in get_us_market_early_closes(2027)
+
+
+def test_regular_close_on_ordinary_day():
+    assert market_close_time(dt.date(2027, 11, 24)) == dt.time(16, 0)
 
 
 def test_market_closed_on_weekend():
