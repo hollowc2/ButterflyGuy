@@ -778,7 +778,7 @@ async def test_overdue_broker_settlement_alerts_once_and_keeps_waiting() -> None
     service = PositionService.__new__(PositionService)
     service.schwab = AsyncMock()
     service.schwab.get_transactions_for_day.return_value = []
-    service.notifier = MagicMock(_post=AsyncMock())
+    service.notifier = MagicMock(notify_text=AsyncMock())
     trade = TradeRecord(trade_id=9, trade_date=dt.date(2026, 7, 13), entry_price=1.0)
     settled = BrokerCashSettlement(
         settlement_value=1.0,
@@ -814,7 +814,7 @@ async def test_overdue_broker_settlement_alerts_once_and_keeps_waiting() -> None
         result = await service._wait_for_broker_cash_settlement(trade)
 
     assert result is settled
-    service.notifier._post.assert_awaited_once()
+    service.notifier.notify_text.assert_awaited_once()
     messages = [c.args[0] for c in telegram.call_args_list]
     assert len(messages) == 2
     assert messages[0].startswith("WARNING") and "trade 9" in messages[0]

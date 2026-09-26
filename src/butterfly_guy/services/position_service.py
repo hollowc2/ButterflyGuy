@@ -375,7 +375,7 @@ class PositionService:
                             )
                             if self.notifier:
                                 try:
-                                    await self.notifier._post(alert_text)
+                                    await self.notifier.notify_text(alert_text)
                                 except Exception as notify_error:
                                     log.warning(
                                         "position_market_data_alert_failed",
@@ -516,7 +516,7 @@ class PositionService:
                             }, underlying=self.config.strategy.underlying),
                         )
                         if self.notifier:
-                            await self.notifier._post(
+                            await self.notifier.notify_text(
                                 f"WARNING: EXIT ORDER FAILED for trade {trade.trade_id} "
                                 f"({signal.reason}). Position still OPEN in Schwab. Retrying."
                             )
@@ -908,7 +908,7 @@ class PositionService:
                 )
                 if self.notifier:
                     try:
-                        await self.notifier._post(alert_text)
+                        await self.notifier.notify_text(alert_text)
                     except Exception as notify_error:
                         log.warning(
                             "broker_cash_settlement_alert_failed",
@@ -1074,7 +1074,7 @@ class PositionService:
                 )
                 if self.notifier:
                     try:
-                        await self.notifier._post(alert_text)
+                        await self.notifier.notify_text(alert_text)
                     except Exception as notify_error:
                         log.warning(
                             "position_telemetry_alert_failed",

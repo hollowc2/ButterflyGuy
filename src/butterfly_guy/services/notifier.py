@@ -116,6 +116,10 @@ class DiscordNotifier:
         except Exception as e:
             log.error("discord_error", error=str(e))
 
+    async def notify_text(self, text: str) -> None:
+        """Post a plain-text message."""
+        await self._post(text)
+
     async def notify_entry(
         self,
         trade_id: int,
