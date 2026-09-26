@@ -167,6 +167,12 @@ class ButterflyBuilder:
                 center_q = by_strike[center]
                 upper_q = by_strike[upper]
 
+                # Reject negative or crossed quotes. A zero bid is still accepted:
+                # far-OTM 0-DTE wings legitimately quote 0.00 bid, and the synthetic
+                # backtest chains floor bids at zero.
+                if any(q.bid < 0 or q.bid > q.ask for q in (lower_q, center_q, upper_q)):
+                    continue
+
                 # Butterfly cost: buy lower + buy upper - 2 * sell center (using mark)
                 cost = fly_mark_value(lower_q, center_q, upper_q)
                 # Fly ask: real market cost hitting the spread.
