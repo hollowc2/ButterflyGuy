@@ -591,6 +591,32 @@ async def _reconcile_broker_state(
         raise
 
 
+async def _sync_startup_risk_pnl(
+    risk_engine: RiskEngine,
+    realized_pnl: float,
+    recovered_trade: TradeRecord | None,
+    today: dt.date,
+) -> None:
+    """Restore realized P&L; hold an open trade's entry cost as committed exposure.
+
+    The entry cost is the worst-case loss while the trade is open, so it counts
+    against the daily loss limit, but it is kept out of realized_pnl because the
+    trade's full P&L is added via record_pnl when it closes.
+    """
+    await risk_engine.sync_realized_pnl(realized_pnl, today)
+    if recovered_trade is not None and recovered_trade.trade_date == today:
+        open_trade_entry = trade_pnl_dollars(
+            recovered_trade.entry_price, recovered_trade.quantity
+        )
+        risk_engine.set_committed_exposure(open_trade_entry, today)
+        log.info(
+            "startup_pnl_sync_with_open_trade",
+            realized_pnl=realized_pnl,
+            open_trade_entry=open_trade_entry,
+            worst_case_pnl=realized_pnl - open_trade_entry,
+        )
+
+
 async def broker_reconciler_loop(
     schwab: SchwabClientWrapper,
     underlying: str,
@@ -1126,22 +1152,7 @@ async def main() -> None:
             if t.get("pnl") is not None
         )
 
-        # Sync risk state PnL — if an open trade was recovered, include its entry cost as
-        # worst-case committed exposure so the daily loss budget is correctly consumed.
-        if recovered_trade is not None and recovered_trade.trade_date == today:
-            open_trade_entry = trade_pnl_dollars(
-                recovered_trade.entry_price, recovered_trade.quantity
-            )
-            worst_case_pnl = realized_pnl - open_trade_entry
-            await risk_engine.sync_realized_pnl(worst_case_pnl, today)
-            log.info(
-                "startup_pnl_sync_with_open_trade",
-                realized_pnl=realized_pnl,
-                open_trade_entry=open_trade_entry,
-                worst_case_pnl=worst_case_pnl,
-            )
-        else:
-            await risk_engine.sync_realized_pnl(realized_pnl, today)
+        await _sync_startup_risk_pnl(risk_engine, realized_pnl, recovered_trade, today)
 
         daily_pnl.labels(underlying=underlying).set(realized_pnl)
         broker_gate = BrokerStateGate()

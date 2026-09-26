@@ -21,12 +21,14 @@ from butterfly_guy.data.providers import (
     DirectSchwabMarketDataProvider,
     GatewayAuthoritativeMarketDataProvider,
 )
+from butterfly_guy.data.schemas import TradeRecord
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
     TerminalOrderError,
 )
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
+from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.scripts.run_live import (
     BrokerStateGate,
     _assert_broker_state_matches_db,
@@ -36,6 +38,7 @@ from butterfly_guy.scripts.run_live import (
     _close_runtime_resources,
     _order_symbols,
     _reconcile_broker_state,
+    _sync_startup_risk_pnl,
     broker_reconciler_loop,
     entry_loop,
     gateway_market_data_readiness_loop,
@@ -939,3 +942,74 @@ async def test_failed_token_reload_blocks_new_entries(monkeypatch):
 
     trade_service.attempt_entry.assert_not_awaited()
     set_readiness(None)
+
+
+class _StatefulRiskQueries:
+    """Minimal in-memory daily_risk_state for P&L bookkeeping tests."""
+
+    def __init__(self) -> None:
+        self.state = {"trade_count": 1, "realized_pnl": 0.0, "halted": False}
+        self.db = Mock()
+        self.db.pool.execute = AsyncMock(side_effect=self._execute)
+
+    async def _execute(self, sql, *args):
+        if "SET realized_pnl = $1" in sql:
+            self.state["realized_pnl"] = args[0]
+
+    async def get_or_create(self, trade_date, underlying):
+        return dict(self.state)
+
+    async def update_pnl(self, trade_date, pnl_delta, underlying):
+        self.state["realized_pnl"] += pnl_delta
+
+    async def set_halted(self, trade_date, underlying):
+        self.state["halted"] = True
+
+    async def get_weekly_pnl(self, underlying, session_date):
+        return 0.0
+
+    async def get_recent_closed_pnls(self, underlying, limit):
+        return []
+
+
+@pytest.mark.asyncio
+async def test_restart_with_open_trade_does_not_double_count_entry_cost():
+    today = dt.date(2026, 6, 25)
+    queries = _StatefulRiskQueries()
+    engine = RiskEngine(RiskSettings(max_daily_loss=500.0), queries)
+    trade = TradeRecord(trade_id=1, trade_date=today, entry_price=2.00, quantity=1)
+
+    await _sync_startup_risk_pnl(engine, 0.0, trade, today)
+    assert queries.state["realized_pnl"] == 0.0
+
+    # Exit at $3.00 on a $2.00 entry: +$1.00 x 100 multiplier, recorded on close.
+    await engine.record_pnl(100.0, today)
+
+    assert queries.state["realized_pnl"] == pytest.approx(100.0)
+    assert not queries.state["halted"]
+
+
+@pytest.mark.asyncio
+async def test_restart_open_trade_exposure_blocks_entry_until_closed(monkeypatch):
+    today = dt.date(2026, 6, 25)
+    queries = _StatefulRiskQueries()
+    queries.state.update(trade_count=0, realized_pnl=-100.0)
+    engine = RiskEngine(
+        RiskSettings(max_daily_loss=500.0, max_trades_per_day=2), queries
+    )
+    trade = TradeRecord(trade_id=1, trade_date=today, entry_price=4.50, quantity=1)
+    monkeypatch.setattr("butterfly_guy.risk.risk_engine.is_market_open", lambda: True)
+    monkeypatch.setattr("butterfly_guy.risk.risk_engine.is_trading_day", lambda _d: True)
+
+    await _sync_startup_risk_pnl(engine, -100.0, trade, today)
+    allowed, reason = await engine.can_trade(trade_date=today)
+
+    assert not allowed
+    assert "open_exposure" in reason
+    assert not queries.state["halted"]
+
+    await engine.record_pnl(50.0, today)
+    allowed, reason = await engine.can_trade(trade_date=today)
+
+    assert allowed, reason
+    assert queries.state["realized_pnl"] == pytest.approx(-50.0)
