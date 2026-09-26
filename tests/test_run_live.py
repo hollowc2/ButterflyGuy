@@ -30,6 +30,7 @@ from butterfly_guy.execution.order_manager import (
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.scripts.run_live import (
+    ActiveMonitor,
     BrokerStateGate,
     _assert_broker_state_matches_db,
     _assert_live_config_supported,
@@ -714,6 +715,39 @@ async def test_entry_loop_alerts_monitor_failure_after_market_close(monkeypatch)
     critical_notifier.notify_critical.assert_awaited_once_with("settlement_failure")
     assert readiness_snapshot() == (False, "broker_order_state_unsafe")
     set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_entry_loop_registers_recovered_monitor_for_reconciler(monkeypatch):
+    position_service = Mock()
+    position_service.monitor_loop.return_value = _never_awaited()
+    monitor_task = Mock()
+    monitor_task.done.return_value = False
+
+    def create_task(coro, **_kwargs):
+        coro.close()
+        return monitor_task
+
+    async def stop(_):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "create_task", create_task)
+    monkeypatch.setattr(asyncio, "sleep", stop)
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: False)
+
+    active_monitor = ActiveMonitor()
+    with pytest.raises(asyncio.CancelledError):
+        await entry_loop(
+            Mock(attempt_entry=AsyncMock()),
+            position_service,
+            recovered_trade=Mock(trade_id=7),
+            recovered_candidate=Mock(),
+            active_monitor=active_monitor,
+        )
+
+    assert active_monitor.trade_id == 7
+    monitor_task.done.return_value = True
+    assert active_monitor.trade_id is None
 
 
 async def _never_awaited():

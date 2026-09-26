@@ -7,6 +7,7 @@ import pytest
 
 from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
 from butterfly_guy.scripts.run_live import (
+    ActiveMonitor,
     BrokerStateGate,
     _assert_broker_state_matches_db,
     _repair_filled_entry_intent,
@@ -360,7 +361,7 @@ async def test_filled_entry_intent_repair_can_be_disabled():
 
     with pytest.raises(RuntimeError, match="restart to repair"):
         await _assert_broker_state_matches_db(
-            schwab, "SPX", [], intents, trades, allow_entry_repair=False
+            schwab, "SPX", [], intents, trades, allow_repair=False
         )
 
     trades.insert_trade.assert_not_awaited()
@@ -449,6 +450,146 @@ async def test_filled_entry_intent_rejects_zero_quantity():
         )
 
     trades.insert_trade.assert_not_awaited()
+
+
+OPEN_TRADE_99 = {
+    "id": 99,
+    "entry_price": 2.00,
+    "peak_value": 3.75,
+    "lower_symbol": "SPXW  260625C06000000",
+    "center_symbol": "SPXW  260625C06050000",
+    "upper_symbol": "SPXW  260625C06100000",
+    "quantity": 1,
+}
+
+
+def _filled_exit_with_open_trade() -> tuple[AsyncMock, AsyncMock, AsyncMock]:
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+    order = {**broker_fill_payload(order_type="NET_CREDIT"), "orderId": "BOT2"}
+    schwab.get_todays_orders.return_value = [order]
+    intents = AsyncMock()
+    intents.intents_for_day.return_value = [
+        {
+            "id": 2,
+            "underlying": "SPX",
+            "trade_date": "2026-06-25",
+            "side": "EXIT",
+            "status": "SUBMITTED",
+            "broker_order_id": "BOT2",
+            "trade_id": 99,
+            "candidate_snapshot": {"exit_reason": "profit_take"},
+        }
+    ]
+    trades = AsyncMock()
+    trades.close_trade.return_value = True
+    trades.get_open_trades.return_value = [dict(OPEN_TRADE_99)]
+    return schwab, intents, trades
+
+
+@pytest.mark.asyncio
+async def test_runtime_leaves_filled_exit_to_the_running_monitor():
+    schwab, intents, trades = _filled_exit_with_open_trade()
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [dict(OPEN_TRADE_99)], intents, trades,
+        allow_repair=False, monitored_trade_id=99,
+    )
+
+    trades.close_trade.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_runtime_filled_exit_without_monitor_raises_instead_of_closing():
+    schwab, intents, trades = _filled_exit_with_open_trade()
+
+    with pytest.raises(RuntimeError, match="no monitor owns it"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [dict(OPEN_TRADE_99)], intents, trades,
+            allow_repair=False, monitored_trade_id=None,
+        )
+
+    trades.close_trade.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_runtime_filled_exit_for_another_trade_than_the_monitor_raises():
+    schwab, intents, trades = _filled_exit_with_open_trade()
+
+    with pytest.raises(RuntimeError, match="no monitor owns it"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [dict(OPEN_TRADE_99)], intents, trades,
+            allow_repair=False, monitored_trade_id=100,
+        )
+
+    trades.close_trade.assert_not_awaited()
+
+
+async def _run_reconciler_once(monkeypatch, schwab, intents, trades, gate, **kwargs):
+    async def stop_after_one_iteration(_):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "sleep", stop_after_one_iteration)
+    with pytest.raises(asyncio.CancelledError):
+        await broker_reconciler_loop(schwab, "SPX", trades, intents, gate, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_runtime_reconciler_defers_exit_to_active_monitor(monkeypatch):
+    schwab, intents, trades = _filled_exit_with_open_trade()
+    gate = BrokerStateGate()
+    critical_notifier = Mock(
+        notify_critical=AsyncMock(return_value=False),
+        retry_pending_resolutions=AsyncMock(),
+    )
+    monitor = asyncio.get_running_loop().create_future()
+    active_monitor = ActiveMonitor()
+    active_monitor.track(99, monitor)
+
+    await _run_reconciler_once(
+        monkeypatch, schwab, intents, trades, gate,
+        critical_notifier=critical_notifier, active_monitor=active_monitor,
+    )
+
+    trades.close_trade.assert_not_awaited()
+    assert not gate.unsafe
+    critical_notifier.notify_critical.assert_not_awaited()
+    monitor.cancel()
+
+
+@pytest.mark.asyncio
+async def test_runtime_reconciler_alerts_once_monitor_has_finished(monkeypatch):
+    schwab, intents, trades = _filled_exit_with_open_trade()
+    gate = BrokerStateGate()
+    critical_notifier = Mock(notify_critical=AsyncMock(return_value=False))
+    monitor = asyncio.get_running_loop().create_future()
+    monitor.set_result(None)
+    active_monitor = ActiveMonitor()
+    active_monitor.track(99, monitor)
+
+    set_readiness(None)
+    await _run_reconciler_once(
+        monkeypatch, schwab, intents, trades, gate,
+        critical_notifier=critical_notifier, active_monitor=active_monitor,
+    )
+
+    trades.close_trade.assert_not_awaited()
+    assert gate.unsafe
+    assert "no monitor owns it" in gate.reason
+    assert readiness_snapshot() == (False, "broker_reconciliation_unsafe")
+    critical_notifier.notify_critical.assert_awaited_once_with("reconciliation_failure")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_active_monitor_reports_trade_only_while_task_runs():
+    active_monitor = ActiveMonitor()
+    assert active_monitor.trade_id is None
+    monitor = asyncio.get_running_loop().create_future()
+    active_monitor.track(7, monitor)
+    assert active_monitor.trade_id == 7
+    monitor.set_result(None)
+    assert active_monitor.trade_id is None
 
 
 @pytest.mark.asyncio
