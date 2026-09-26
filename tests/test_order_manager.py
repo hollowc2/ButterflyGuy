@@ -718,6 +718,29 @@ async def test_single_attempt_ignores_other_underlying_positions():
 
 
 @pytest.mark.asyncio
+async def test_wait_for_fill_counts_request_latency_against_timeout():
+    om, schwab = make_order_manager(make_settings())
+    clock = [0.0]
+
+    async def slow_status(_order_id):
+        clock[0] += 6.0
+        return {"status": "WORKING"}
+
+    async def fake_sleep(seconds):
+        clock[0] += seconds
+
+    schwab.get_order_status = AsyncMock(side_effect=slow_status)
+    with patch(
+        "butterfly_guy.execution.order_manager.monotonic", new=lambda: clock[0]
+    ), patch("butterfly_guy.execution.order_manager.asyncio.sleep", new=fake_sleep):
+        result = await om._wait_for_fill("ORD1", 10)
+
+    assert result is False
+    # 0s: poll (+6s) and sleep (+2s); 8s: poll (+6s) and sleep (+2s); 16s: deadline.
+    assert schwab.get_order_status.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_post_cancel_status_failure_is_ambiguous():
     om, schwab = make_order_manager(make_settings())
     om.intent_queries = AsyncMock()

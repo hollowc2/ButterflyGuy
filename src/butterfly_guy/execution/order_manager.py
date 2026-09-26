@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 from collections.abc import Iterator
+from time import monotonic
 from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
@@ -789,10 +790,11 @@ class OrderManager:
         requested_quantity: int = 1,
     ) -> BrokerFill | None:
         """Poll order status until filled or timeout."""
-        elapsed = 0
+        # Monotonic deadline so broker request latency counts against the timeout.
+        deadline = monotonic() + timeout
         poll_interval = 2
 
-        while elapsed < timeout:
+        while monotonic() < deadline:
             try:
                 status = await self.schwab.get_order_status(order_id)
                 order_status = status.get("status", "")
@@ -829,6 +831,5 @@ class OrderManager:
                 log.warning("order_poll_error", error=str(e))
 
             await asyncio.sleep(poll_interval)
-            elapsed += poll_interval
 
         return False
