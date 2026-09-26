@@ -13,6 +13,7 @@ from butterfly_guy.core.config import (
 from butterfly_guy.execution.order_manager import AmbiguousOrderError, TerminalOrderError
 from butterfly_guy.services.trade_service import (
     TradeService,
+    _previous_trading_day,
     _session_open_from_intraday_candles,
     now_eastern,
 )
@@ -106,7 +107,6 @@ async def test_attempt_entry_blocks_stale_vix_before_chain_fetch():
     direction_filter = MagicMock()
     direction_filter.get_direction.return_value = "CALL"
     chain_queries = MagicMock()
-    chain_queries.db.pool.fetchval = AsyncMock(return_value=5900.0)
     stale_vix_ts = now_eastern() - dt.timedelta(minutes=10)
     chain_queries.db.pool.fetchrow = AsyncMock(
         return_value={"ts": stale_vix_ts, "price": 18.0}
@@ -126,6 +126,7 @@ async def test_attempt_entry_blocks_stale_vix_before_chain_fetch():
         candidate_queries=MagicMock(),
         decision_queries=decision_queries,
     )
+    service._previous_close = AsyncMock(return_value=5900.0)
     service._session_open_price = AsyncMock(return_value=6001.0)
 
     with patch("butterfly_guy.services.trade_service.time_in_window", return_value=True), \
@@ -212,7 +213,6 @@ async def test_attempt_entry_does_not_restart_after_terminal_rejection():
         "REJECTED", "ORD1"
     )
     chain_queries = MagicMock()
-    chain_queries.db.pool.fetchval = AsyncMock(return_value=5990.0)
     chain_queries.db.pool.fetchrow = AsyncMock(return_value=None)
     candidate_queries = MagicMock()
     candidate_queries.bulk_insert = AsyncMock()
@@ -253,6 +253,7 @@ async def test_attempt_entry_does_not_restart_after_terminal_rejection():
         candidate_queries=candidate_queries,
         decision_queries=decision_queries,
     )
+    service._previous_close = AsyncMock(return_value=5990.0)
     service._session_open_price = AsyncMock(return_value=6000.0)
     service._parse_chain_to_quotes = MagicMock(return_value=[MagicMock()])
     service._entry_selection_parity_report = AsyncMock(return_value={})
@@ -297,7 +298,6 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
     }
     order_manager.intent_queries = AsyncMock()
     chain_queries = MagicMock()
-    chain_queries.db.pool.fetchval = AsyncMock(return_value=5990.0)
     chain_queries.db.pool.fetchrow = AsyncMock(return_value=None)
     trade_queries = MagicMock(insert_trade=AsyncMock(return_value=99))
     candidate_queries = MagicMock(bulk_insert=AsyncMock())
@@ -342,6 +342,7 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
         decision_queries=decision_queries,
     )
     service._live_chain_snapshot_fresh = AsyncMock(return_value=True)
+    service._previous_close = AsyncMock(return_value=5990.0)
     service._session_open_price = AsyncMock(return_value=6000.0)
     service._parse_chain_to_quotes = MagicMock(return_value=[MagicMock()])
     service._entry_selection_parity_report = AsyncMock(return_value={})
@@ -373,3 +374,109 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
         "estimated_execution_drag": 0.25
     }
     service._release_entry_lock.assert_awaited_once()
+
+
+def test_previous_trading_day_skips_weekends_and_holidays():
+    assert _previous_trading_day(dt.date(2026, 9, 24)) == dt.date(2026, 9, 23)
+    # Monday -> Friday
+    assert _previous_trading_day(dt.date(2026, 9, 28)) == dt.date(2026, 9, 25)
+    # Tuesday after Labor Day (2026-09-07) -> Friday
+    assert _previous_trading_day(dt.date(2026, 9, 8)) == dt.date(2026, 9, 4)
+
+
+def _prev_close_service(fetchrow: AsyncMock) -> tuple[TradeService, MagicMock]:
+    risk_engine = AsyncMock()
+    risk_engine.can_trade.return_value = (True, "ok")
+    schwab = AsyncMock()
+    schwab.get_spot_price.return_value = 6000.0
+    chain_queries = MagicMock()
+    chain_queries.db.pool.fetchrow = fetchrow
+    decision_queries = MagicMock(log_event=AsyncMock())
+    direction_filter = MagicMock()
+    direction_filter.get_direction.return_value = "CALL"
+    service = TradeService(
+        config=AppConfig(),
+        schwab=schwab,
+        risk_engine=risk_engine,
+        order_manager=AsyncMock(),
+        builder=MagicMock(),
+        selector=MagicMock(),
+        direction_filter=direction_filter,
+        chain_queries=chain_queries,
+        trade_queries=MagicMock(),
+        candidate_queries=MagicMock(),
+        decision_queries=decision_queries,
+    )
+    service._session_open_price = AsyncMock(return_value=6001.0)
+    return service, decision_queries
+
+
+async def _attempt_on(service: TradeService, trade_date: dt.date):
+    with patch("butterfly_guy.services.trade_service.time_in_window", return_value=True), \
+         patch("butterfly_guy.services.trade_service.session_date", return_value=trade_date):
+        return await service.attempt_entry()
+
+
+def _blocked_payloads(decision_queries: MagicMock) -> list[dict]:
+    return [
+        call.args[1]
+        for call in decision_queries.log_event.await_args_list
+        if call.args[0] == "entry_blocked"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_attempt_entry_blocks_when_prev_close_query_fails():
+    service, decision_queries = _prev_close_service(
+        AsyncMock(side_effect=RuntimeError("db down"))
+    )
+
+    assert await _attempt_on(service, dt.date(2026, 9, 24)) is None
+
+    payloads = _blocked_payloads(decision_queries)
+    assert [p["reason"] for p in payloads] == ["prev_close_unavailable"]
+    assert payloads[0]["error"] == "db down"
+    service.direction_filter.get_direction.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_attempt_entry_blocks_when_prev_close_missing():
+    service, decision_queries = _prev_close_service(AsyncMock(return_value=None))
+
+    assert await _attempt_on(service, dt.date(2026, 9, 24)) is None
+
+    assert [p["reason"] for p in _blocked_payloads(decision_queries)] == [
+        "prev_close_unavailable"
+    ]
+    service.direction_filter.get_direction.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_attempt_entry_blocks_when_prev_close_is_stale():
+    service, decision_queries = _prev_close_service(
+        AsyncMock(return_value={"date": dt.date(2026, 9, 22), "close": 5990.0})
+    )
+
+    assert await _attempt_on(service, dt.date(2026, 9, 24)) is None
+
+    assert _blocked_payloads(decision_queries) == [
+        {
+            "reason": "prev_close_stale",
+            "prev_close_date": "2026-09-22",
+            "expected_date": "2026-09-23",
+        }
+    ]
+    service.direction_filter.get_direction.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_previous_close_queries_before_eastern_session_date():
+    fetchrow = AsyncMock(return_value={"date": dt.date(2026, 9, 25), "close": 5990.0})
+    service, decision_queries = _prev_close_service(fetchrow)
+
+    close = await service._previous_close("SPX", dt.date(2026, 9, 28))
+
+    assert close == 5990.0
+    assert fetchrow.await_args.args[1:] == ("SPX", dt.date(2026, 9, 28))
+    assert "CURRENT_DATE" not in fetchrow.await_args.args[0]
+    decision_queries.log_event.assert_not_awaited()

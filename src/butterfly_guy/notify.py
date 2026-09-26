@@ -4,11 +4,15 @@ Usage:
     from butterfly_guy.notify import send
     send("Something went wrong")
 
+From async code, use ``await send_async(...)`` so the blocking HTTP call runs
+in a worker thread instead of stalling the event loop.
+
 Requires env vars:
     TELEGRAM_BOT_TOKEN
     TELEGRAM_CHAT_ID
 """
 
+import asyncio
 import datetime as dt
 import json
 import os
@@ -33,6 +37,11 @@ def send(message: str) -> bool:
             return resp.status == 200
     except Exception:
         return False
+
+
+async def send_async(message: str) -> bool:
+    """Async-safe :func:`send`: runs the blocking request in a worker thread."""
+    return await asyncio.to_thread(send, message)
 
 
 def send_alertmanager(

@@ -1,7 +1,7 @@
 """Integration tests for the option chain collector (requires live Schwab token)."""
 
 import datetime as dt
-import json
+import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -157,8 +157,8 @@ async def test_collect_snapshot_succeeds_when_chain_cache_write_fails():
 
 
 @pytest.mark.asyncio
-async def test_collect_snapshot_succeeds_when_chain_cache_is_corrupt():
-    """A corrupt optional chain cache should not fail a DB-backed snapshot."""
+async def test_collect_snapshot_writes_chain_cache_off_event_loop():
+    """The chain cache write must not block the event loop."""
     config = AppConfig()
     schwab = MagicMock()
     schwab.get_spot_price = AsyncMock(return_value=5500.0)
@@ -176,12 +176,18 @@ async def test_collect_snapshot_succeeds_when_chain_cache_is_corrupt():
         spot_queries=spot_queries,
     )
 
-    error = json.JSONDecodeError("Extra data", "{}", 2)
+    loop_thread = threading.get_ident()
+    write_threads = []
+
+    def save_snapshot(*args, **kwargs):
+        write_threads.append(threading.get_ident())
+
     with patch(
         "butterfly_guy.data.collector.get_0dte_expiration",
         return_value=dt.date(2026, 3, 10),
-    ), patch("butterfly_guy.data.collector.save_snapshot", side_effect=error):
+    ), patch("butterfly_guy.data.collector.save_snapshot", side_effect=save_snapshot):
         count = await collector.collect_snapshot()
 
     assert count == 2
-    chain_queries.bulk_insert_snapshot.assert_called_once()
+    assert len(write_threads) == 1
+    assert write_threads[0] != loop_thread

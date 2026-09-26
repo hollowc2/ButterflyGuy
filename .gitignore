@@ -51,6 +51,8 @@ data/equity_market_data/
 # Real option chain cache
 data/chains/*.json
 data/chains/*/*.json
+data/chains/*.jsonl
+data/chains/*/*.jsonl
 
 # Logs
 *.log
