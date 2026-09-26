@@ -846,3 +846,74 @@ uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-05-15 2026-09-25
 
 Filter evaluation and the live comparison were scratch scripts over these runs' per-session
 output; they were not committed.
+
+### Robustness to fly choice (near-tied flies)
+
+Because the selector's width and center choice turns on a few cents of mark, each rule was
+rescored on every fly the selector could plausibly have chosen, not just the one it did.
+
+Method: for each of 124 sessions and both directions, the entry bar was found exactly as
+`run_backtest_db.py` finds it. Every candidate the selector considers was rebuilt: all widths
+in the VIX bucket, centers within ±15 of each width's VIX target, and the `rr_max` filter.
+Each candidate that a combined mark shift of at most $0.25 could promote over the winner was
+simulated with the backtest's own `simulate_day_from_entry`. The shift is the
+reward/risk-distance gap divided by both flies' reward/risk sensitivity to cost (width ÷
+cost²). This averaged 2.1 flies per session-direction within $0.10 and 2.5 within $0.25.
+Rules use the official gap inputs. The MA side is decided from spot at the entry bar.
+Accounting is the same as above.
+
+For each rule:
+
+- **Tie-set avg:** each session's P&L is the mean over its tied flies.
+- **Random draws:** 5,000 draws pick one tied fly per session uniformly. The same draw is
+  used for a given session and direction in every rule, so comparisons are paired.
+- **Beats gap rule:** the share of draws in which the rule's total exceeds the gap rule's.
+
+Tie set = flies within **$0.10** of winning (about the measured live-vs-DB mark gap):
+
+| Rule | Trades | Selected fly | Tie-set avg | Draw median | Draw 5%–95% | Tie-set avg from 06-15 | Beats gap rule |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Gap rule (official inputs) | 123 | +22,720 | +22,846 | +22,787 | +20,766 to +25,093 | +1,174 | — |
+| MA20 | 124 | +14,266 | +15,085 | +15,073 | +12,300 to +17,889 | −4,954 | 0% |
+| MA50 | 123 | +16,354 | +16,173 | +16,174 | +14,495 to +18,005 | −6,864 | 0% |
+| MA100 | 123 | +14,574 | +14,554 | +14,543 | +12,875 to +16,372 | −6,320 | 0% |
+| MA150 | 123 | +16,853 | +16,717 | +16,708 | +15,025 to +18,547 | −6,320 | 0% |
+| MA200 | 123 | +15,279 | +15,738 | +15,730 | +14,326 to +17,155 | −6,320 | 0% |
+| Call only: VIX ≥ 17 & gap up | 39 | +20,499 | +20,135 | +20,136 | +19,562 to +20,699 | −1,346 | 1% |
+
+Tie set = flies within **$0.25** of winning:
+
+| Rule | Trades | Selected fly | Tie-set avg | Draw median | Draw 5%–95% | Tie-set avg from 06-15 | Beats gap rule |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Gap rule (official inputs) | 123 | +22,720 | +23,901 | +23,810 | +20,948 to +27,133 | +2,092 | — |
+| MA20 | 124 | +14,266 | +16,974 | +16,995 | +13,243 to +20,875 | −4,061 | 0% |
+| MA50 | 123 | +16,354 | +17,610 | +17,651 | +14,767 to +20,575 | −6,417 | 0% |
+| MA100 | 123 | +14,574 | +16,044 | +16,079 | +13,196 to +19,057 | −5,842 | 0% |
+| MA150 | 123 | +16,853 | +18,185 | +18,221 | +15,316 to +21,161 | −5,842 | 0% |
+| MA200 | 123 | +15,279 | +17,265 | +17,270 | +14,499 to +19,998 | −5,842 | 0% |
+| Call only: VIX ≥ 17 & gap up | 39 | +20,499 | +20,219 | +20,219 | +19,619 to +20,804 | −1,320 | 1% |
+
+The selected-fly column reproduces the earlier runs except MA50 (+$16,354 vs +$16,117) and
+the call filter (39 trades, +$20,499, vs 40 and +$20,368). Both come from one or two sessions
+where the side or VIX was decided on a slightly different bar.
+
+Findings:
+
+- **Correction to the paragraph above.** Fly-choice noise moves a rule's total by about
+  ±$2–3k (5–95%). That is smaller than the $6–8k by which every MA rule trails the gap rule.
+  No MA rule beat the gap rule in any of 5,000 paired draws at either threshold, so the MA
+  result is robust to fly choice. It is not robust to anything else: this measures only
+  which near-tied fly was picked, not which sessions happened to occur.
+- The gap rule's total rises slightly when tied flies are averaged in (+$126 at $0.10, +$1,181
+  at $0.25). The selector's specific pick is not an edge.
+- The call-only VIX ≥ 17 & gap-up filter barely moves (5–95% range about $1.1k wide). It
+  still loses from mid-June in every tie definition, and it beats the gap rule's total in
+  about 1% of draws with a third of the trades. Its standing is unchanged: a post-hoc variant
+  of H-LV1, not validated.
+- What this does not address: session sampling (a day-block bootstrap would), the selection
+  of 18 filters and five MA lengths after seeing the data, flies that noise would push across
+  the cost-cap or `rr_min` cutoffs (excluded, so tie sets are slightly too small), and
+  stressed execution costs.
+
+The harness (`robust.py`, one worker per four-week block) and scorer (`rb_eval.py`) were
+scratch scripts built on `run_backtest_db.py`'s public functions; they were not committed.
