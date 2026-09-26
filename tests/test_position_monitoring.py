@@ -249,7 +249,7 @@ async def test_intermittent_missing_held_leg_degrades_then_recovers_without_brok
     ), patch(
         "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
     ), patch(
-        "butterfly_guy.services.position_service.notify_telegram", return_value=True
+        "butterfly_guy.services.position_service.notify_telegram", new=AsyncMock(return_value=True)
     ) as telegram_notify, patch(
         "butterfly_guy.services.position_service.log"
     ) as monitor_log, pytest.raises(

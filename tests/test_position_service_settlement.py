@@ -624,7 +624,10 @@ def _monitor_patches(trade: TradeRecord, sleep: AsyncMock):
             return_value=trade.trade_date,
         ),
         patch("butterfly_guy.services.position_service.asyncio.sleep", new=sleep),
-        patch("butterfly_guy.services.position_service.notify_telegram", return_value=True),
+        patch(
+            "butterfly_guy.services.position_service.notify_telegram",
+            new=AsyncMock(return_value=True),
+        ),
     )
 
 
@@ -801,7 +804,7 @@ async def test_overdue_broker_settlement_alerts_once_and_keeps_waiting() -> None
     ), patch(
         "butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()
     ), patch(
-        "butterfly_guy.services.position_service.notify_telegram", return_value=True
+        "butterfly_guy.services.position_service.notify_telegram", new=AsyncMock(return_value=True)
     ) as telegram:
         result = await service._wait_for_broker_cash_settlement(trade)
 

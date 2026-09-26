@@ -51,7 +51,7 @@ from butterfly_guy.execution.order_manager import (
     PartialFillError,
     TerminalOrderError,
 )
-from butterfly_guy.notify import send as notify_telegram
+from butterfly_guy.notify import send_async as notify_telegram
 from butterfly_guy.position.position_manager import (
     PositionManager,
     PositionQuotesUnavailableError,
@@ -382,7 +382,7 @@ class PositionService:
                                         "position_market_data_alert_failed",
                                         error=str(notify_error),
                                     )
-                            if not notify_telegram(alert_text):
+                            if not await notify_telegram(alert_text):
                                 log.warning("position_market_data_telegram_alert_failed")
                     await asyncio.sleep(poll_interval)
                     continue
@@ -406,7 +406,7 @@ class PositionService:
                         consecutive_failures=market_data_failures,
                     )
                     if market_data_alerted:
-                        notify_telegram(
+                        await notify_telegram(
                             f"OK: position market data recovered for trade {trade.trade_id}."
                         )
                     market_data_failures = 0
@@ -881,7 +881,7 @@ class PositionService:
                         net_pnl_dollars=settlement.net_pnl_dollars,
                     )
                     if pending_alerted:
-                        notify_telegram(
+                        await notify_telegram(
                             f"OK: broker cash settlement posted for trade {trade.trade_id}."
                         )
                     return settlement
@@ -915,7 +915,7 @@ class PositionService:
                             "broker_cash_settlement_alert_failed",
                             error=str(notify_error),
                         )
-                if not notify_telegram(alert_text):
+                if not await notify_telegram(alert_text):
                     log.warning("broker_cash_settlement_telegram_alert_failed")
             await asyncio.sleep(300)
 
@@ -1081,7 +1081,7 @@ class PositionService:
                             "position_telemetry_alert_failed",
                             error=str(notify_error),
                         )
-                if not notify_telegram(alert_text):
+                if not await notify_telegram(alert_text):
                     log.warning("position_telemetry_telegram_alert_failed")
             return False, None
 
@@ -1094,7 +1094,7 @@ class PositionService:
             )
             if not self._telemetry_alerted:
                 clear_readiness("position_telemetry_unavailable")
-                notify_telegram(
+                await notify_telegram(
                     f"OK: position DB writes recovered for trade {self._telemetry_trade_id}."
                 )
         return True, result
