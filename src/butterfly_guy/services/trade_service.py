@@ -30,7 +30,9 @@ from butterfly_guy.core.time_utils import (
     EASTERN,
     MARKET_OPEN,
     get_0dte_expiration,
+    is_trading_day,
     now_eastern,
+    session_date,
     time_in_window,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
@@ -78,6 +80,14 @@ def _age_seconds(ts: dt.datetime, now: dt.datetime) -> float:
     if now.tzinfo is None:
         now = now.replace(tzinfo=dt.timezone.utc)
     return (now.astimezone(dt.timezone.utc) - ts.astimezone(dt.timezone.utc)).total_seconds()
+
+
+def _previous_trading_day(d: dt.date) -> dt.date:
+    """Most recent trading day strictly before *d*."""
+    prev = d - dt.timedelta(days=1)
+    while not is_trading_day(prev):
+        prev -= dt.timedelta(days=1)
+    return prev
 
 
 def _session_open_from_intraday_candles(
@@ -230,21 +240,11 @@ class TradeService:
             log.error("spot_fetch_failed", error=str(e))
             return None
 
-        # Previous close from daily_bars (official close, not last spot snapshot)
-        previous_close = spot_price
-        try:
-            row = await self.chain_queries.db.pool.fetchval(
-                """
-                SELECT close FROM daily_bars
-                WHERE underlying = $1 AND date < CURRENT_DATE
-                ORDER BY date DESC LIMIT 1
-                """,
-                self.config.strategy.underlying,
-            )
-            if row:
-                previous_close = float(row)
-        except Exception:
-            pass
+        # Previous close from daily_bars (official close, not last spot snapshot).
+        # Direction depends on it, so a missing or stale close blocks the entry.
+        previous_close = await self._previous_close(underlying, session_date())
+        if previous_close is None:
+            return None
 
         # Opening price for gap direction — first regular-session 1-min bar.
         # Stored spot snapshots can be stale at 09:30, so do not guess if
@@ -828,6 +828,59 @@ class TradeService:
             return False
 
         return True
+
+    async def _previous_close(
+        self, underlying: str, trade_date: dt.date
+    ) -> float | None:
+        """Return the previous trading day's close, or log a block and return None."""
+        expected_date = _previous_trading_day(trade_date)
+        try:
+            row = await self.chain_queries.db.pool.fetchrow(
+                """
+                SELECT date, close FROM daily_bars
+                WHERE underlying = $1 AND date < $2
+                ORDER BY date DESC LIMIT 1
+                """,
+                underlying,
+                trade_date,
+            )
+        except Exception as e:
+            await self.decision_queries.log_event(
+                "entry_blocked",
+                {"reason": "prev_close_unavailable", "error": str(e)},
+                underlying=underlying,
+            )
+            log.error("entry_blocked", reason="prev_close_unavailable", error=str(e))
+            return None
+
+        if row is None or row["close"] is None:
+            await self.decision_queries.log_event(
+                "entry_blocked",
+                {"reason": "prev_close_unavailable"},
+                underlying=underlying,
+            )
+            log.info("entry_blocked", reason="prev_close_unavailable")
+            return None
+
+        if row["date"] != expected_date:
+            await self.decision_queries.log_event(
+                "entry_blocked",
+                {
+                    "reason": "prev_close_stale",
+                    "prev_close_date": row["date"].isoformat(),
+                    "expected_date": expected_date.isoformat(),
+                },
+                underlying=underlying,
+            )
+            log.info(
+                "entry_blocked",
+                reason="prev_close_stale",
+                prev_close_date=row["date"].isoformat(),
+                expected_date=expected_date.isoformat(),
+            )
+            return None
+
+        return float(row["close"])
 
     async def _build_entry_chart_png(
         self,
