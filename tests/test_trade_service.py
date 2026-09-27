@@ -10,6 +10,7 @@ from butterfly_guy.core.config import (
     StrategySettings,
     VixWidthBucket,
 )
+from butterfly_guy.data.schemas import OptionQuote
 from butterfly_guy.execution.order_manager import AmbiguousOrderError, TerminalOrderError
 from butterfly_guy.services.trade_service import (
     TradeService,
@@ -473,3 +474,37 @@ async def test_previous_close_queries_before_eastern_session_date():
     assert fetchrow.await_args.args[1:] == ("SPX", dt.date(2026, 9, 28))
     assert "CURRENT_DATE" not in fetchrow.await_args.args[0]
     decision_queries.log_event.assert_not_awaited()
+
+
+def _bid_quote(strike: float, bid: float) -> OptionQuote:
+    return OptionQuote(
+        symbol=f"SPXW C{strike}", underlying="SPX", expiration=dt.date(2026, 9, 28),
+        strike=strike, option_type="CALL", bid=bid, ask=bid + 0.1, mark=bid + 0.05,
+    )
+
+
+@pytest.mark.parametrize(
+    ("paper_trading", "require_bids", "expected_strikes"),
+    [
+        (False, True, [6000.0, 6010.0]),
+        (True, True, [6000.0, 6005.0, 6010.0]),
+        (False, False, [6000.0, 6005.0, 6010.0]),
+    ],
+)
+def test_zero_bid_legs_are_dropped_only_live_with_the_flag_on(
+    paper_trading, require_bids, expected_strikes
+):
+    service = TradeService.__new__(TradeService)
+    service.config = AppConfig(
+        execution=ExecutionSettings(paper_trading=paper_trading),
+        entry=EntrySettings(live_require_leg_bids=require_bids),
+    )
+    quotes = [_bid_quote(6000.0, 1.20), _bid_quote(6005.0, 0.0), _bid_quote(6010.0, 0.05)]
+
+    kept = service._live_selectable_quotes(quotes)
+
+    assert [q.strike for q in kept] == expected_strikes
+
+
+def test_live_require_leg_bids_defaults_off():
+    assert EntrySettings().live_require_leg_bids is False

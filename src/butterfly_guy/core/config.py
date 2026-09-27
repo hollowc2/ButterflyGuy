@@ -54,6 +54,10 @@ class EntrySettings(ConfigModel):
     max_chain_snapshot_age_seconds: int = 180  # live entries require a recent collector snapshot
     bull_call_bias: bool = False  # Override to CALL in BULL regime on gap-down days
     min_gap_pct: float | None = None  # Skip days where |gap| < this (e.g. 0.0025 = 0.25%)
+    # Live only (ignored in paper and backtests): drop zero-bid legs before selection,
+    # so no live butterfly buys a wing with no bid. Off by default: on XSP it cut
+    # backtest P&L (see the 2026-09-25 review follow-up, L11).
+    live_require_leg_bids: bool = False
 
 
 class ExecutionSettings(ConfigModel):

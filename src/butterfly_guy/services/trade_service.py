@@ -364,7 +364,9 @@ class TradeService:
                 log.error("chain_fetch_failed", step=step, error=str(e))
                 break
 
-            quotes = self._parse_chain_to_quotes(chain_data, expiration)
+            quotes = self._live_selectable_quotes(
+                self._parse_chain_to_quotes(chain_data, expiration)
+            )
             if not quotes:
                 log.warning("empty_chain", step=step)
                 break
@@ -975,10 +977,12 @@ class TradeService:
                 "reason": f"no_db_snapshot_within_{DB_SELECTION_PARITY_MAX_LAG_SECONDS}s",
             }
 
-        db_quotes = rows_to_option_quotes(
-            snapshot["rows"],
-            underlying=underlying,
-            expiration=expiration,
+        db_quotes = self._live_selectable_quotes(
+            rows_to_option_quotes(
+                snapshot["rows"],
+                underlying=underlying,
+                expiration=expiration,
+            )
         )
         if not db_quotes:
             return {"available": False, "reason": "empty_db_snapshot"}
@@ -1003,6 +1007,12 @@ class TradeService:
         )
         report["available"] = True
         return report
+
+    def _live_selectable_quotes(self, quotes: list[OptionQuote]) -> list[OptionQuote]:
+        """Drop zero-bid legs when live trading has entry.live_require_leg_bids on."""
+        if self.config.execution.paper_trading or not self.config.entry.live_require_leg_bids:
+            return quotes
+        return [quote for quote in quotes if quote.bid > 0]
 
     def _parse_chain_to_quotes(
         self, chain_data: dict, expiration: dt.date
