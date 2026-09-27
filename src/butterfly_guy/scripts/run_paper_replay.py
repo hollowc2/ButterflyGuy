@@ -31,6 +31,7 @@ import yfinance as yf
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.core.config import StrategySettings, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
+from butterfly_guy.data.chain_utils import select_pm_settled_rows
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.butterfly_builder import (
     VIX_SIGMA_BY_WIDTH,
@@ -233,7 +234,7 @@ async def load_chains_from_db(
         date, asset,
     )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
-    for r in rows:
+    for r in select_pm_settled_rows(rows):
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)

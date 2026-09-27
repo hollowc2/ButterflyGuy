@@ -54,6 +54,10 @@ class EntrySettings(ConfigModel):
     max_chain_snapshot_age_seconds: int = 180  # live entries require a recent collector snapshot
     bull_call_bias: bool = False  # Override to CALL in BULL regime on gap-down days
     min_gap_pct: float | None = None  # Skip days where |gap| < this (e.g. 0.0025 = 0.25%)
+    # Live only (ignored in paper and backtests): drop zero-bid legs before selection,
+    # so no live butterfly buys a wing with no bid. Off by default: on XSP it cut
+    # backtest P&L (see the 2026-09-25 review follow-up, L11).
+    live_require_leg_bids: bool = False
 
 
 class ExecutionSettings(ConfigModel):
@@ -150,7 +154,7 @@ class ProfitManagementSettings(ConfigModel):
 class RiskSettings(ConfigModel):
     max_daily_loss: float = 500.0
     max_trades_per_day: int = 1
-    max_position_size: int = 1
+    max_position_size: int = 1  # upper-bound check only; entries always trade quantity 1
     max_weekly_loss: float | None = 1500.0  # None disables the weekly entry halt
     max_consecutive_losses: int = 10        # warn after N consecutive losing trades (0 = disabled)
     min_buying_power: float = 500.0        # minimum buying power required to enter

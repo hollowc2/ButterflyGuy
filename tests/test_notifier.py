@@ -6,7 +6,7 @@ import datetime as dt
 import json
 import sys
 import types
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -237,3 +237,11 @@ async def test_telegram_send_async_runs_blocking_send_off_loop(monkeypatch):
     assert await notify.send_async("hello") is True
     assert seen[0][0] == "hello"
     assert seen[0][1] != loop_thread
+
+
+@pytest.mark.asyncio
+async def test_notify_text_posts_plain_message():
+    notifier = DiscordNotifier("https://example.invalid/webhook")
+    with patch.object(notifier, "_post", new=AsyncMock()) as post:
+        await notifier.notify_text("WARNING: exit order failed")
+    post.assert_awaited_once_with("WARNING: exit order failed")

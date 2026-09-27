@@ -41,6 +41,7 @@ import asyncpg
 
 from butterfly_guy.backtest.chain_cache import ChainDay
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
+from butterfly_guy.backtest.db_loader import fetch_prev_close
 from butterfly_guy.backtest.execution_accounting import (
     ExecutableTrade,
     price_frozen_trade,
@@ -64,6 +65,7 @@ from butterfly_guy.backtest.simulation_engine import (
 )
 from butterfly_guy.core.config import AppConfig, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
+from butterfly_guy.data.chain_utils import select_pm_settled_rows
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.strategy.entry_selection import (
     entry_selection_config,
@@ -615,7 +617,7 @@ async def load_chains_from_db(
         underlying, date,
     )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
-    for r in rows:
+    for r in select_pm_settled_rows(rows):
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
@@ -651,7 +653,7 @@ async def load_entry_chains(
         underlying, date, start_utc, end_utc,
     )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
-    for r in rows:
+    for r in select_pm_settled_rows(rows):
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
@@ -706,7 +708,7 @@ async def load_monitoring_chains(
             underlying, date, strikes, option_types, trade_id,
         )
     chains: dict[dt.datetime, list[OptionQuote]] = defaultdict(list)
-    for r in [*collector_rows, *monitor_rows]:
+    for r in [*select_pm_settled_rows(collector_rows), *monitor_rows]:
         ts = r["snapshot_time"]
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=dt.timezone.utc)
@@ -804,43 +806,6 @@ async def load_bars_from_db(
         price = float(r["spot_price"])
         bars.append(MinuteBar(ts=ts, open=price, high=price, low=price, close=price, volume=0))
     return bars
-
-
-async def get_prev_close(
-    conn: asyncpg.Connection,
-    date: dt.date,
-    underlying: str,
-) -> float | None:
-    """Return the previous session's official close, as live uses for gap direction.
-
-    Falls back to the last spot price at or before 16:00 ET on the previous
-    trading day when no daily bar is stored.
-    """
-    official = await conn.fetchval(
-        """
-        SELECT close FROM daily_bars
-        WHERE underlying = $1 AND date < $2
-        ORDER BY date DESC
-        LIMIT 1
-        """,
-        underlying, date,
-    )
-    if official is not None:
-        return float(official)
-    row = await conn.fetchval(
-        """
-        SELECT price FROM spot_prices
-        WHERE underlying = $1
-          AND (ts AT TIME ZONE 'America/New_York')::date < $2
-          AND (ts AT TIME ZONE 'America/New_York')::time <= '16:00:00'
-        ORDER BY ts DESC
-        LIMIT 1
-        """,
-        underlying, date,
-    )
-    if row:
-        return float(row)
-    return None
 
 
 async def get_official_open(
@@ -1147,8 +1112,9 @@ async def load_date_data(
     bars = await load_bars_from_db(conn, date, underlying)
     if not chains or not bars:
         return None
-    prev_close = await get_prev_close(conn, date, underlying)
-    if prev_close is None:
+    prev_close, skip_reason = await fetch_prev_close(conn, underlying, date)
+    if skip_reason is not None:
+        log.info("backtest_day_skipped", date=str(date), underlying=underlying, reason=skip_reason)
         return None
     direction_bar = select_direction_bar(bars)
     open_spot = await get_official_open(conn, date, underlying)

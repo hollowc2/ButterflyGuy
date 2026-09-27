@@ -101,7 +101,7 @@ from butterfly_guy.strategy.butterfly_builder import ButterflyBuilder
 from butterfly_guy.strategy.butterfly_selector import ButterflySelector
 from butterfly_guy.strategy.direction_filter import DirectionFilter
 from butterfly_guy.strategy.gap_regime_filter import GapRegimeFilter
-from butterfly_guy.strategy.regime_classifier import RegimeClassifier
+from butterfly_guy.strategy.regime_classifier import Regime, RegimeClassifier
 
 log = get_logger("run_live")
 
@@ -388,6 +388,28 @@ class BrokerStateGate:
         self.reason = None
 
 
+class ActiveMonitor:
+    """The trade whose monitor_loop is running, shared by entry_loop and the reconciler.
+
+    The monitor owns its trade's DB row while it runs, so the runtime reconciler reads
+    this to leave an in-flight exit to it instead of closing the row underneath it.
+    """
+
+    def __init__(self) -> None:
+        self._trade_id: int | None = None
+        self._task: asyncio.Task | None = None
+
+    def track(self, trade_id: int, task: asyncio.Task) -> None:
+        self._trade_id = trade_id
+        self._task = task
+
+    @property
+    def trade_id(self) -> int | None:
+        if self._task is None or self._task.done():
+            return None
+        return self._trade_id
+
+
 async def _assert_broker_state_matches_db(
     schwab: SchwabClientWrapper,
     underlying: str,
@@ -395,8 +417,15 @@ async def _assert_broker_state_matches_db(
     intent_queries: OrderIntentQueries | None = None,
     trade_queries: TradeQueries | None = None,
     trade_date: dt.date | None = None,
-    allow_entry_repair: bool = True,
+    allow_repair: bool = True,
+    monitored_trade_id: int | None = None,
 ) -> None:
+    """Raise unless broker and DB agree; at startup, repair a fill the DB missed.
+
+    Repair writes trade rows, so it is startup-only (*allow_repair*). At runtime the
+    same mismatches raise instead, except a filled exit for the trade whose monitor
+    is still running (*monitored_trade_id*): that monitor persists its own close.
+    """
     today = trade_date or session_date()
     account_snapshot = await schwab.get_account_snapshot()
     broker_positions = _broker_option_positions(account_snapshot, underlying)
@@ -480,7 +509,7 @@ async def _assert_broker_state_matches_db(
             and intent.get("status") == "FILLED"
             and not intent.get("trade_id")
         ]
-        if len(filled_entries) == 1 and not allow_entry_repair:
+        if len(filled_entries) == 1 and not allow_repair:
             # Repair is startup-only: a trade row created here would have no
             # monitor, no risk trade count, and no settlement close.
             raise RuntimeError(
@@ -513,6 +542,22 @@ async def _assert_broker_state_matches_db(
             and intent.get("status") == "FILLED"
             and intent.get("trade_id") in {row.get("id") for row in open_rows}
         ]
+        if len(open_rows) == 1 and len(filled_exits) == 1 and not allow_repair:
+            trade_id = open_rows[0].get("id")
+            if trade_id is not None and trade_id == monitored_trade_id:
+                log.info(
+                    "broker_filled_exit_awaiting_monitor",
+                    intent_id=filled_exits[0]["id"],
+                    trade_id=trade_id,
+                )
+                return
+            # Closing the row here would skip the monitor's risk P&L and exit
+            # bookkeeping, so runtime only reports it.
+            raise RuntimeError(
+                f"Broker filled exit intent {filled_exits[0]['id']} for {underlying} "
+                f"trade {trade_id} but DB trade is still OPEN and no monitor owns it; "
+                "restart to repair"
+            )
         if trade_queries is not None and len(open_rows) == 1 and len(filled_exits) == 1:
             await _repair_filled_exit_intent(filled_exits[0], open_rows[0], trade_queries)
             log.warning(
@@ -569,7 +614,8 @@ async def _reconcile_broker_state(
     trade_queries: TradeQueries | None,
     critical_notifier: AlertmanagerNotifier | None,
     trade_date: dt.date | None = None,
-    allow_entry_repair: bool = True,
+    allow_repair: bool = True,
+    monitored_trade_id: int | None = None,
 ) -> None:
     try:
         if open_rows is None:
@@ -583,7 +629,8 @@ async def _reconcile_broker_state(
             intent_queries,
             trade_queries,
             trade_date,
-            allow_entry_repair,
+            allow_repair,
+            monitored_trade_id,
         )
     except Exception:
         if critical_notifier:
@@ -625,6 +672,7 @@ async def broker_reconciler_loop(
     gate: BrokerStateGate,
     interval_seconds: int = 15,
     critical_notifier: AlertmanagerNotifier | None = None,
+    active_monitor: ActiveMonitor | None = None,
 ) -> None:
     while True:
         try:
@@ -635,7 +683,8 @@ async def broker_reconciler_loop(
                 intent_queries,
                 trade_queries,
                 critical_notifier,
-                allow_entry_repair=False,
+                allow_repair=False,
+                monitored_trade_id=active_monitor.trade_id if active_monitor else None,
             )
             if critical_notifier:
                 await critical_notifier.retry_pending_resolutions()
@@ -709,6 +758,7 @@ async def entry_loop(
     broker_gate: BrokerStateGate | None = None,
     token_reload_gate: BrokerStateGate | None = None,
     critical_notifier: AlertmanagerNotifier | None = None,
+    active_monitor: ActiveMonitor | None = None,
 ) -> None:
     """Periodically attempt entries during the entry window."""
     active_trade: TradeRecord | None = recovered_trade
@@ -725,6 +775,8 @@ async def entry_loop(
             ),
             name=f"monitor_{recovered_trade.trade_id}",
         )
+        if active_monitor is not None:
+            active_monitor.track(recovered_trade.trade_id, monitor_task)
 
     while True:
         # Check if monitor task has finished — reset active_trade so we can re-enter.
@@ -784,6 +836,8 @@ async def entry_loop(
                         position_service.monitor_loop(active_trade, candidate),
                         name=f"monitor_{active_trade.trade_id}",
                     )
+                    if active_monitor is not None:
+                        active_monitor.track(active_trade.trade_id, monitor_task)
             except Exception as e:
                 log.error("entry_loop_error", error=str(e))
                 if isinstance(
@@ -844,8 +898,42 @@ async def eod_chart_loop(position_service: PositionService) -> None:
             log.info("eod_chart_batch_complete", sent=sent, trade_date=str(now.date()))
 
 
-async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
-    """Reset daily risk state at market open."""
+# After the collector's first-snapshot daily-bar refresh at the 09:30 open, and
+# before the entry window opens.
+REGIME_RECLASSIFY_TIME = dt.time(9, 45)
+
+
+async def classify_market_regime(
+    daily_bar_queries: DailyBarQueries, underlying: str
+) -> Regime:
+    """Classify the market regime from stored daily closes and the latest VIX close."""
+    regime_classifier = RegimeClassifier()
+    recent_closes = await daily_bar_queries.get_recent_closes(
+        underlying, days=regime_classifier.lookback_days + 5
+    )
+    vix_closes = await daily_bar_queries.get_recent_closes("$VIX", days=1)
+    vix_level = vix_closes[0] if vix_closes else 0.0
+    regime = regime_classifier.classify(recent_closes, vix_level)
+    log.info(
+        "regime_classified",
+        regime=regime.value,
+        spx_bars=len(recent_closes),
+        vix=vix_level,
+    )
+    return regime
+
+
+async def daily_reset_loop(
+    risk_queries: RiskQueries,
+    underlying: str,
+    trade_service: TradeService | None = None,
+    daily_bar_queries: DailyBarQueries | None = None,
+) -> None:
+    """Reset daily risk state at midnight, then reclassify the regime before entry.
+
+    Containers run for weeks, so the regime is refreshed each trading day instead of
+    only at startup. A failed reclassification keeps the previous regime.
+    """
     while True:
         now = now_eastern()
         # Sleep until next day
@@ -860,6 +948,19 @@ async def daily_reset_loop(risk_queries: RiskQueries, underlying: str) -> None:
         trades_active.labels(underlying=underlying).set(0)
         daily_pnl.labels(underlying=underlying).set(0)
         log.info("daily_risk_reset", date=str(today))
+
+        if trade_service is None or daily_bar_queries is None or not is_trading_day(today):
+            continue
+        now = now_eastern()
+        reclassify_at = dt.datetime.combine(today, REGIME_RECLASSIFY_TIME, tzinfo=now.tzinfo)
+        if reclassify_at > now:
+            await asyncio.sleep((reclassify_at - now).total_seconds())
+        try:
+            trade_service.regime = await classify_market_regime(daily_bar_queries, underlying)
+        except Exception as e:
+            log.error(
+                "regime_reclassify_failed", error=str(e), regime=trade_service.regime.value
+            )
 
 
 async def token_reload_loop(
@@ -987,21 +1088,9 @@ async def main() -> None:
             else None
         )
 
-        # Classify today's market regime (must precede TradeService construction)
-        regime_classifier = RegimeClassifier()
-        lookback = regime_classifier.lookback_days
-        recent_spx = await daily_bar_q.get_recent_closes(
-            config.strategy.underlying, days=lookback + 5
-        )
-        vix_closes = await daily_bar_q.get_recent_closes("$VIX", days=1)
-        vix_level = vix_closes[0] if vix_closes else 0.0
-        regime = regime_classifier.classify(recent_spx, vix_level)
-        log.info(
-            "regime_classified",
-            regime=regime.value,
-            spx_bars=len(recent_spx),
-            vix=vix_level,
-        )
+        # Classify today's market regime (must precede TradeService construction);
+        # daily_reset_loop refreshes it each trading day.
+        regime = await classify_market_regime(daily_bar_q, config.strategy.underlying)
 
         gap_regime_filter = GapRegimeFilter(
             bull_call_bias=config.entry.bull_call_bias,
@@ -1157,6 +1246,7 @@ async def main() -> None:
         daily_pnl.labels(underlying=underlying).set(realized_pnl)
         broker_gate = BrokerStateGate()
         token_reload_gate = BrokerStateGate()
+        active_monitor = ActiveMonitor()
 
         # Seed candidates_found from the most recent scan today
         last_scan_count = await db.pool.fetchval(
@@ -1212,6 +1302,7 @@ async def main() -> None:
                             broker_gate,
                             token_reload_gate,
                             critical_notifier,
+                            active_monitor,
                         ),
                         name="entry_loop",
                     )
@@ -1226,13 +1317,20 @@ async def main() -> None:
                                 intent_q,
                                 broker_gate,
                                 critical_notifier=critical_notifier,
+                                active_monitor=active_monitor,
                             ),
                             name="broker_reconciler",
                         )
                     )
                 supervised.append(
                     tg.create_task(
-                        daily_reset_loop(risk_q, config.strategy.underlying), name="daily_reset"
+                        daily_reset_loop(
+                            risk_q,
+                            config.strategy.underlying,
+                            trade_service,
+                            daily_bar_q,
+                        ),
+                        name="daily_reset",
                     )
                 )
                 supervised.append(

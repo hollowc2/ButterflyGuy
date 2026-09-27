@@ -11,12 +11,14 @@ import pytest
 
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
+from butterfly_guy.data.schwab_client import OrderRejectedError
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
     LiveSpread,
     OrderManager,
     PartialFillError,
+    TerminalOrderError,
     parse_broker_fill,
 )
 
@@ -594,6 +596,58 @@ async def test_single_attempt_ambiguous_submit_leaves_unsafe_intent_without_retr
 
 
 @pytest.mark.asyncio
+async def test_single_attempt_4xx_submit_is_rejected_not_ambiguous():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    schwab.place_order = AsyncMock(side_effect=OrderRejectedError(400, "bad price"))
+
+    with pytest.raises(TerminalOrderError, match="REJECTED"):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_not_called()
+    om.intent_queries.update_broker_status.assert_awaited_once_with(
+        42, "REJECTED", {"http_status": 400, "error": "bad price"}
+    )
+    om.intent_queries.mark_unknown.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_exit_ladder_stops_after_4xx_submit_rejection():
+    om, schwab = make_order_manager(
+        make_settings(paper_trading=False, price_ladder_steps=2)
+    )
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    schwab.place_order.side_effect = OrderRejectedError(400, "bad price")
+
+    with patch.object(
+        om, "_fetch_live_spread", new=AsyncMock(return_value=None)
+    ), pytest.raises(TerminalOrderError, match="REJECTED"):
+        await om.execute_exit(
+            make_candidate(5900, 5950, 6000, 2.50), current_value=3.00, trade_id=7
+        )
+
+    schwab.place_order.assert_awaited_once()
+    om.intent_queries.mark_unknown.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rejection_is_still_terminal_when_recording_it_fails():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    om.intent_queries.update_broker_status.side_effect = RuntimeError("db down")
+    schwab.place_order = AsyncMock(side_effect=OrderRejectedError(403, "forbidden"))
+
+    with pytest.raises(TerminalOrderError):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+
+
+@pytest.mark.asyncio
 async def test_single_attempt_raises_ambiguous_when_mark_unknown_also_fails():
     settings = make_settings(paper_trading=False, retry_interval_seconds=0)
     om, schwab = make_order_manager(settings)
@@ -838,7 +892,7 @@ async def test_exit_uses_live_bid_not_current_value():
 
     assert result is not None
     limit_price_used = om.builder.build_butterfly_close.call_args[0][1]
-    # Step 0: bid_floor + (max_steps-1)*step = 3.20 + 3*0.05 = 3.35
+    # Step 0: bid anchor + (max_steps-1)*step = 3.20 + 3*0.05 = 3.35
     assert limit_price_used == pytest.approx(live_bid + 3 * 0.05)
 
 
@@ -876,10 +930,55 @@ async def test_exit_steps_down_from_live_bid():
     assert result is not None
     calls = om.builder.build_butterfly_close.call_args_list
     assert len(calls) == 2
-    # Step 0: bid_floor + (4-1)*0.05 = 3.35  (best price first)
-    # Step 1: bid_floor + (4-2)*0.05 = 3.30  (step down)
+    # Step 0: bid anchor + (4-1)*0.05 = 3.35  (best price first)
+    # Step 1: bid anchor + (4-2)*0.05 = 3.30  (step down)
     assert calls[0][0][1] == pytest.approx(live_bid + 3 * 0.05)
     assert calls[1][0][1] == pytest.approx(live_bid + 2 * 0.05)
+
+
+@pytest.mark.parametrize(
+    ("underlying", "expected"),
+    [("SPX", [3.40, 3.35]), ("XSP", [3.36, 3.31])],
+)
+@pytest.mark.asyncio
+async def test_exit_limits_round_up_to_the_underlyings_increment(underlying, expected):
+    settings = make_settings(price_ladder_steps=4)
+    om, _ = make_order_manager(settings, underlying=underlying)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    live_spread = LiveSpread(bid=3.21, mark=3.40, ask=3.60)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=live_spread)), \
+         patch.object(
+             om, "_wait_for_fill", new=AsyncMock(side_effect=[False, broker_fill()])
+         ):
+        await om.execute_exit(candidate, current_value=2.50, quantity=1)
+
+    limits = [c[0][1] for c in om.builder.build_butterfly_close.call_args_list]
+    assert limits == pytest.approx(expected)
+
+
+async def _exit_limits_for_bids(bids: list[float]) -> list[float]:
+    settings = make_settings(price_ladder_steps=4)
+    om, _ = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spreads = [LiveSpread(bid=b, mark=b + 0.20, ask=b + 0.40) for b in bids]
+    fills = [False] * (len(bids) - 1) + [broker_fill()]
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(side_effect=spreads)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=fills)):
+        await om.execute_exit(candidate, current_value=2.50, quantity=1)
+    return [c[0][1] for c in om.builder.build_butterfly_close.call_args_list]
+
+
+@pytest.mark.asyncio
+async def test_exit_single_bad_bid_does_not_pin_later_steps():
+    # A lone 1.00 tick used to anchor every later step near 1.00.
+    limits = await _exit_limits_for_bids([3.20, 1.00, 3.20, 3.20])
+    assert limits == pytest.approx([3.35, 2.20, 3.25, 3.20])
+
+
+@pytest.mark.asyncio
+async def test_exit_sustained_bid_decline_still_lowers_the_ladder():
+    limits = await _exit_limits_for_bids([3.20, 2.90, 2.60, 2.30])
+    assert limits == pytest.approx([3.35, 3.15, 2.95, 2.60])
 
 
 @pytest.mark.asyncio

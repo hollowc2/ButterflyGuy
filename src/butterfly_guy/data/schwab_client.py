@@ -42,6 +42,20 @@ def _creation_timestamp(document: object) -> float | None:
     return timestamp if math.isfinite(timestamp) and timestamp > 0 else None
 
 
+class OrderRejectedError(RuntimeError):
+    """Schwab refused an order submit with a 4xx and no Location: nothing was placed.
+
+    Schwab's order endpoint returns 201 with a Location header on success and 4xx
+    for invalid, unauthorised or forbidden requests. Timeouts and 5xx stay
+    ambiguous because the submit may still have been accepted.
+    """
+
+    def __init__(self, status_code: int, body: str) -> None:
+        self.status_code = status_code
+        self.body = body
+        super().__init__(f"Schwab rejected order submit with HTTP {status_code}: {body}")
+
+
 class SchwabClientWrapper:
     """Async wrapper around schwab-py with retry and metrics."""
 
@@ -296,6 +310,12 @@ class SchwabClientWrapper:
         try:
             resp = await self.client.place_order(self.account_hash, order_spec)
             resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            schwab_api_errors.labels(endpoint=endpoint).inc()
+            status = e.response.status_code
+            if 400 <= status < 500 and not e.response.headers.get("Location"):
+                raise OrderRejectedError(status, e.response.text[:500]) from e
+            raise
         except Exception:
             schwab_api_errors.labels(endpoint=endpoint).inc()
             raise

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import statistics
+from collections import deque
 from collections.abc import Iterator
 from time import monotonic
 from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
-from butterfly_guy.core.entry_pricing import entry_fill_within_limit
+from butterfly_guy.core.entry_pricing import entry_fill_within_limit, round_credit_limit
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import (
     order_fill_duration,
@@ -20,11 +22,18 @@ from butterfly_guy.core.time_utils import get_0dte_expiration, now_utc, session_
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.providers import OptionChainProvider
 from butterfly_guy.data.schemas import ButterflyCandidate
-from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
+from butterfly_guy.data.schwab_client import (
+    SCHWAB_CHAIN_SYMBOLS,
+    OrderRejectedError,
+    SchwabClientWrapper,
+)
 from butterfly_guy.db.queries import OrderIntentQueries
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 
 log = get_logger(__name__)
+
+#: Exit ladder anchors on the median of this many most recent spread bids.
+EXIT_BID_ANCHOR_WINDOW = 3
 
 WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
 PARTIAL_FILL_STATUSES = {"PARTIAL", "PARTIAL_FILL", "PARTIALLY_FILLED"}
@@ -387,6 +396,26 @@ class OrderManager:
             },
         }
 
+    async def _submit_rejected(
+        self, intent_id: int | None, error: OrderRejectedError, side: str
+    ) -> TerminalOrderError:
+        """Record a definitive submit rejection and return the ladder-stopping error."""
+        log.error(
+            f"{side}_order_rejected_at_submit",
+            http_status=error.status_code,
+            body=error.body,
+        )
+        if intent_id is not None and self.intent_queries is not None:
+            try:
+                await self.intent_queries.update_broker_status(
+                    intent_id,
+                    "REJECTED",
+                    {"http_status": error.status_code, "error": error.body},
+                )
+            except Exception as db_error:
+                log.error("intent_reject_record_failed", error=str(db_error))
+        return TerminalOrderError("REJECTED", "not-placed")
+
     async def _mark_intent_unknown(self, intent_id: int | None, error: str) -> None:
         """Best-effort bookkeeping: a DB fault here must not mask the ambiguity."""
         if intent_id is None or self.intent_queries is None:
@@ -569,6 +598,8 @@ class OrderManager:
 
         except (BrokerFillError, PartialFillError, TerminalOrderError):
             raise
+        except OrderRejectedError as e:
+            raise await self._submit_rejected(intent_id, e, "entry") from e
         except Exception as e:
             log.error("entry_attempt_failed", error=str(e))
             await self._mark_intent_unknown(intent_id, str(e))
@@ -610,7 +641,9 @@ class OrderManager:
             }
 
         deadline = now_utc() + dt.timedelta(seconds=timeout)
-        bid_floor: float | None = None
+        # Anchor on the median of the last few bids: a single bad low tick must not
+        # pin every later ladder step lower, while a sustained decline still does.
+        recent_bids: deque[float] = deque(maxlen=EXIT_BID_ANCHOR_WINDOW)
         step_trace: list[dict[str, float | int | bool | None]] = []
 
         while True:
@@ -625,10 +658,12 @@ class OrderManager:
 
                 spread = await self._fetch_live_spread(candidate)
                 if spread is not None:
-                    bid_floor = spread.bid if bid_floor is None else min(bid_floor, spread.bid)
-                mid_price = bid_floor if bid_floor is not None else current_value
+                    recent_bids.append(spread.bid)
+                mid_price = statistics.median(recent_bids) if recent_bids else current_value
 
-                limit_price = round(max(0.05, mid_price + (max_steps - 1 - i) * step), 2)
+                limit_price = round_credit_limit(
+                    max(0.05, mid_price + (max_steps - 1 - i) * step), self.underlying
+                )
                 log.debug("exit_ladder_step", step=i, price=limit_price, mid_price=mid_price)
                 step_trace.append({
                     "step": i,
@@ -720,6 +755,8 @@ class OrderManager:
 
                 except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
                     raise
+                except OrderRejectedError as e:
+                    raise await self._submit_rejected(intent_id, e, "exit") from e
                 except Exception as e:
                     log.error("exit_step_failed", step=i, error=str(e))
                     await self._mark_intent_unknown(intent_id, str(e))

@@ -19,11 +19,40 @@ import asyncpg
 
 from butterfly_guy.backtest.data_loader import DayData, MinuteBar
 from butterfly_guy.core.logging import get_logger
+from butterfly_guy.core.time_utils import previous_trading_day
+from butterfly_guy.data.chain_utils import select_pm_settled_rows
 from butterfly_guy.data.schemas import OptionQuote
 
 log = get_logger(__name__)
 
 EASTERN = ZoneInfo("America/New_York")
+
+
+async def fetch_prev_close(
+    conn: asyncpg.Connection,
+    underlying: str,
+    date: dt.date,
+) -> tuple[float | None, str | None]:
+    """Previous trading day's official close, with live's entry-block reasons.
+
+    Mirrors TradeService._previous_close: returns ``(close, None)``, or
+    ``(None, "prev_close_unavailable")`` when daily_bars has no earlier close, or
+    ``(None, "prev_close_stale")`` when the latest one is not from the previous
+    trading day. There is deliberately no spot-price fallback, since live has none.
+    """
+    row = await conn.fetchrow(
+        """
+        SELECT date, close FROM daily_bars
+        WHERE  underlying = $1 AND date < $2
+        ORDER  BY date DESC LIMIT 1
+        """,
+        underlying, date,
+    )
+    if row is None or row["close"] is None:
+        return None, "prev_close_unavailable"
+    if row["date"] != previous_trading_day(date):
+        return None, "prev_close_stale"
+    return float(row["close"]), None
 
 
 class DbDataLoader:
@@ -130,7 +159,7 @@ class DbDataLoader:
             # 2. Last known VIX close before this session (never the same-day close)
             vix = await self._get_vix(conn, date)
 
-            # 3. Previous trading day's close from daily_bars
+            # 3. Previous trading day's close from daily_bars (skip the day like live)
             prev_close = await self._get_prev_close(conn, date)
             if vix is None or prev_close is None:
                 log.warning(
@@ -212,36 +241,11 @@ class DbDataLoader:
         return None
 
     async def _get_prev_close(self, conn: asyncpg.Connection, date: dt.date) -> float | None:
-        """Last close from daily_bars strictly before *date*."""
-        val = await conn.fetchval(
-            """
-            SELECT close FROM daily_bars
-            WHERE  underlying = $1 AND date < $2
-            ORDER  BY date DESC LIMIT 1
-            """,
-            self.underlying, date,
-        )
-        if val is not None:
-            return float(val)
-
-        # Fallback: last tick of the prior ET day from spot_prices
-        day_start_et = dt.datetime(date.year, date.month, date.day, tzinfo=EASTERN)
-        prior_end_utc = day_start_et.astimezone(dt.timezone.utc)
-        prior_start_utc = prior_end_utc - dt.timedelta(days=7)
-        val = await conn.fetchval(
-            """
-            SELECT price FROM spot_prices
-            WHERE  underlying = $1
-              AND  ts >= $2 AND ts < $3
-            ORDER  BY ts DESC LIMIT 1
-            """,
-            self.underlying, prior_start_utc, prior_end_utc,
-        )
-        if val is not None:
-            return float(val)
-
-        log.warning("db_loader_no_prev_close", date=str(date))
-        return None
+        """Previous trading day's close, or None (logged) where live would block entry."""
+        prev_close, reason = await fetch_prev_close(conn, self.underlying, date)
+        if reason is not None:
+            log.warning("db_loader_no_prev_close", date=str(date), reason=reason)
+        return prev_close
 
     async def _get_recent_closes(
         self, conn: asyncpg.Connection, date: dt.date, n: int = 30
@@ -315,7 +319,7 @@ class DbDataLoader:
                 return int(v) if v is not None else default
 
             quotes: list[OptionQuote] = []
-            for r in rows:
+            for r in select_pm_settled_rows(rows):
                 quotes.append(OptionQuote(
                     symbol=r["symbol"] or "",
                     underlying=underlying,
