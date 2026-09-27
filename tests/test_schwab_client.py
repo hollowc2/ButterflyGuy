@@ -12,7 +12,7 @@ import httpx
 import pytest
 
 from butterfly_guy.core.config import SchwabSettings
-from butterfly_guy.data.schwab_client import SchwabClientWrapper
+from butterfly_guy.data.schwab_client import OrderRejectedError, SchwabClientWrapper
 
 
 @pytest.mark.asyncio
@@ -58,6 +58,45 @@ async def test_place_order_submits_once_without_retry_wrapper():
     assert order_id == "ORD1"
     schwab.client.place_order.assert_awaited_once()
     schwab._retry.assert_not_called()
+
+
+def _schwab_returning(status: int, headers: dict | None = None) -> SchwabClientWrapper:
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    schwab._account_hash = "HASH"
+    schwab._client = MagicMock()
+    request = httpx.Request("POST", "https://api.schwabapi.com/trader/v1/accounts/HASH/orders")
+    response = httpx.Response(status, headers=headers, text="price invalid", request=request)
+    schwab.client.place_order = AsyncMock(return_value=response)
+    schwab._retry = AsyncMock()
+    return schwab
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 429])
+async def test_place_order_4xx_without_location_is_a_definite_rejection(status):
+    schwab = _schwab_returning(status)
+
+    with pytest.raises(OrderRejectedError) as raised:
+        await schwab.place_order({"orderType": "LIMIT"})
+
+    assert raised.value.status_code == status
+    assert raised.value.body == "price invalid"
+    schwab.client.place_order.assert_awaited_once()
+    schwab._retry.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "headers"),
+    [(500, None), (503, None), (400, {"Location": "https://api/orders/ORD1"})],
+)
+async def test_place_order_5xx_or_4xx_with_location_stays_ambiguous(status, headers):
+    schwab = _schwab_returning(status, headers)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await schwab.place_order({"orderType": "LIMIT"})
+
+    schwab.client.place_order.assert_awaited_once()
 
 
 @pytest.mark.asyncio

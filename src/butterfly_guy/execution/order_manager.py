@@ -22,7 +22,11 @@ from butterfly_guy.core.time_utils import get_0dte_expiration, now_utc, session_
 from butterfly_guy.data.chain_utils import iter_chain_options
 from butterfly_guy.data.providers import OptionChainProvider
 from butterfly_guy.data.schemas import ButterflyCandidate
-from butterfly_guy.data.schwab_client import SCHWAB_CHAIN_SYMBOLS, SchwabClientWrapper
+from butterfly_guy.data.schwab_client import (
+    SCHWAB_CHAIN_SYMBOLS,
+    OrderRejectedError,
+    SchwabClientWrapper,
+)
 from butterfly_guy.db.queries import OrderIntentQueries
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 
@@ -392,6 +396,26 @@ class OrderManager:
             },
         }
 
+    async def _submit_rejected(
+        self, intent_id: int | None, error: OrderRejectedError, side: str
+    ) -> TerminalOrderError:
+        """Record a definitive submit rejection and return the ladder-stopping error."""
+        log.error(
+            f"{side}_order_rejected_at_submit",
+            http_status=error.status_code,
+            body=error.body,
+        )
+        if intent_id is not None and self.intent_queries is not None:
+            try:
+                await self.intent_queries.update_broker_status(
+                    intent_id,
+                    "REJECTED",
+                    {"http_status": error.status_code, "error": error.body},
+                )
+            except Exception as db_error:
+                log.error("intent_reject_record_failed", error=str(db_error))
+        return TerminalOrderError("REJECTED", "not-placed")
+
     async def _mark_intent_unknown(self, intent_id: int | None, error: str) -> None:
         """Best-effort bookkeeping: a DB fault here must not mask the ambiguity."""
         if intent_id is None or self.intent_queries is None:
@@ -574,6 +598,8 @@ class OrderManager:
 
         except (BrokerFillError, PartialFillError, TerminalOrderError):
             raise
+        except OrderRejectedError as e:
+            raise await self._submit_rejected(intent_id, e, "entry") from e
         except Exception as e:
             log.error("entry_attempt_failed", error=str(e))
             await self._mark_intent_unknown(intent_id, str(e))
@@ -729,6 +755,8 @@ class OrderManager:
 
                 except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
                     raise
+                except OrderRejectedError as e:
+                    raise await self._submit_rejected(intent_id, e, "exit") from e
                 except Exception as e:
                     log.error("exit_step_failed", step=i, error=str(e))
                     await self._mark_intent_unknown(intent_id, str(e))

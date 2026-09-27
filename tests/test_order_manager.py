@@ -11,12 +11,14 @@ import pytest
 
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
+from butterfly_guy.data.schwab_client import OrderRejectedError
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
     LiveSpread,
     OrderManager,
     PartialFillError,
+    TerminalOrderError,
     parse_broker_fill,
 )
 
@@ -591,6 +593,58 @@ async def test_single_attempt_ambiguous_submit_leaves_unsafe_intent_without_retr
 
     schwab.place_order.assert_awaited_once()
     om.intent_queries.mark_unknown.assert_awaited_once_with(42, "missing Location")
+
+
+@pytest.mark.asyncio
+async def test_single_attempt_4xx_submit_is_rejected_not_ambiguous():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    schwab.place_order = AsyncMock(side_effect=OrderRejectedError(400, "bad price"))
+
+    with pytest.raises(TerminalOrderError, match="REJECTED"):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_not_called()
+    om.intent_queries.update_broker_status.assert_awaited_once_with(
+        42, "REJECTED", {"http_status": 400, "error": "bad price"}
+    )
+    om.intent_queries.mark_unknown.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_exit_ladder_stops_after_4xx_submit_rejection():
+    om, schwab = make_order_manager(
+        make_settings(paper_trading=False, price_ladder_steps=2)
+    )
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    schwab.place_order.side_effect = OrderRejectedError(400, "bad price")
+
+    with patch.object(
+        om, "_fetch_live_spread", new=AsyncMock(return_value=None)
+    ), pytest.raises(TerminalOrderError, match="REJECTED"):
+        await om.execute_exit(
+            make_candidate(5900, 5950, 6000, 2.50), current_value=3.00, trade_id=7
+        )
+
+    schwab.place_order.assert_awaited_once()
+    om.intent_queries.mark_unknown.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rejection_is_still_terminal_when_recording_it_fails():
+    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    om.intent_queries.update_broker_status.side_effect = RuntimeError("db down")
+    schwab.place_order = AsyncMock(side_effect=OrderRejectedError(403, "forbidden"))
+
+    with pytest.raises(TerminalOrderError):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
 
 
 @pytest.mark.asyncio
