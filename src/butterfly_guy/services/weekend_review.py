@@ -108,33 +108,47 @@ def _parse_metadata(raw: Any) -> dict[str, Any]:
     return {}
 
 
+def _money(value: float) -> str:
+    return f"+${value:,.2f}" if value >= 0 else f"-${abs(value):,.2f}"
+
+
 def format_trade_recap(row: dict[str, Any], *, tent_hit: bool | None) -> str:
     trade_date = _trade_date(row)
     pnl_dollars = trade_pnl_dollars(
         float(row.get("pnl") or 0), int(row.get("quantity") or 1)
     )
-    pnl_str = f"+${pnl_dollars:.2f}" if pnl_dollars >= 0 else f"-${abs(pnl_dollars):.2f}"
+    executable = trade_point_from_row(row).executable_pnl_dollars
+    executable_str = _money(executable) if executable is not None else "n/a"
     tent_label = "HIT" if tent_hit else "MISSED" if tent_hit is not None else "N/A"
     exit_reason = row.get("exit_reason") or "unknown"
     return (
-        f"🦋 **SPX #{row['id']}** ({trade_date})\n"
+        f"🦋 **{row['underlying']} #{row['id']}** ({trade_date})\n"
         f"> **{row['direction']}** {row['wing_width']}-wide | "
         f"{row['lower_strike']:.0f} / **{row['center_strike']:.0f}** / {row['upper_strike']:.0f}\n"
         f"> Entry ${float(row['entry_price']):.2f} → "
         f"Exit ${float(row.get('exit_price') or 0):.2f}\n"
-        f"> P&L: **{pnl_str}** | Exit: `{exit_reason}` | Tent: **{tent_label}**"
+        f"> Paper P&L: **{_money(pnl_dollars)}** | Executable: **{executable_str}** | "
+        f"Exit: `{exit_reason}` | Tent: **{tent_label}**"
     )
+
+
+def format_executable_pnl(trades: list[TradePoint]) -> str:
+    """Executable P&L total, noting trades that recorded no marketable prices."""
+    priced = [t.executable_pnl_dollars for t in trades if t.executable_pnl_dollars is not None]
+    unpriced = len(trades) - len(priced)
+    if not priced:
+        return "n/a"
+    text = _money(sum(priced))
+    return f"{text} ({unpriced} unpriced)" if unpriced else text
 
 
 def format_performance_caption(label: str, trades: list[TradePoint]) -> str:
     pnls = [t.pnl_dollars for t in trades]
     stats = compute_stats(pnls)
-    pnl_str = (
-        f"+${stats.total_pnl:.2f}" if stats.total_pnl >= 0 else f"-${abs(stats.total_pnl):.2f}"
-    )
     return (
         f"📊 **{label} Performance**\n"
-        f"> Trades: {stats.trade_count} | P&L: **{pnl_str}** | "
+        f"> Trades: {stats.trade_count} | Paper P&L: **{_money(stats.total_pnl)}** | "
+        f"Executable: **{format_executable_pnl(trades)}** | "
         f"Win rate: {stats.win_rate:.0f}% | PF: {stats.profit_factor:.2f} | "
         f"Max DD: ${stats.max_drawdown:.2f}"
     )
@@ -159,9 +173,9 @@ def format_combined_performance_caption(
     return "\n".join(lines)
 
 
-def format_review_header(windows: ReviewWindows, trade_count: int) -> str:
+def format_review_header(windows: ReviewWindows, trade_count: int, underlying: str) -> str:
     return (
-        f"📋 **SPX Weekend Review** "
+        f"📋 **{underlying} Weekend Review** "
         f"({windows.week_start} → {windows.week_end})\n"
         f"> {trade_count} trade{'s' if trade_count != 1 else ''} this week | Paper Trading"
     )
@@ -264,7 +278,9 @@ async def send_weekend_review(
     notifier: DiscordNotifier | None,
     dry_run: bool = False,
     dry_run_dir: Path | None = None,
+    include_trade_recaps: bool = True,
 ) -> ReviewResult:
+    """Post one asset's review: header, optional per-trade recaps, performance summary."""
     windows = review_windows(reference)
     all_rows = await fetch_closed_trades(db, underlying)
     all_points = closed_trades_to_points(all_rows)
@@ -292,14 +308,14 @@ async def send_weekend_review(
 
     await _post_with_delay(
         notifier,
-        content=format_review_header(windows, len(weekly_rows)),
+        content=format_review_header(windows, len(weekly_rows), underlying),
         dry_run=dry_run,
         dry_run_dir=dry_run_dir,
         dry_run_counter=dry_run_counter,
     )
     messages_sent += 1
 
-    for row in weekly_rows:
+    for row in weekly_rows if include_trade_recaps else []:
         chart_png, tent_hit = await build_eod_chart_for_row(db, row)
         recap = format_trade_recap(row, tent_hit=tent_hit)
         if chart_png is None:

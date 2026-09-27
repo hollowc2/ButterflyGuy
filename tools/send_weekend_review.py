@@ -1,4 +1,7 @@
-"""Send SPX weekend review to Discord #weekend-review.
+"""Send the weekend review to Discord #weekend-review.
+
+Posts one review per asset with paper and executable P&L side by side. SPX also
+gets per-trade recaps with charts; NDX and XSP post their summary only.
 
 Cron: Saturday 9:00 AM PT
   0 16 * * 6 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_weekend_review.py >> /opt/butterflyguy/weekend_review.log 2>&1
@@ -36,7 +39,7 @@ def parse_reference_date(week_ending: str | None) -> dt.date:
 
 
 async def main() -> int:
-    parser = argparse.ArgumentParser(description="Send SPX weekend review to Discord")
+    parser = argparse.ArgumentParser(description="Send the weekend review to Discord")
     parser.add_argument("--config", default="configs/config.yaml")
     parser.add_argument(
         "--week-ending",
@@ -54,7 +57,19 @@ async def main() -> int:
         default=Path("/tmp/butterfly-weekend-review"),
         help="Directory for --dry-run PNG output",
     )
+    parser.add_argument(
+        "--assets",
+        default="SPX,NDX,XSP",
+        help="Comma-separated underlyings to review, in posting order",
+    )
+    parser.add_argument(
+        "--recap-assets",
+        default="SPX",
+        help="Underlyings that also get per-trade recaps with charts",
+    )
     args = parser.parse_args()
+    assets = [a.strip().upper() for a in args.assets.split(",") if a.strip()]
+    recap_assets = {a.strip().upper() for a in args.recap_assets.split(",") if a.strip()}
 
     setup_logging()
     config = load_config(args.config)
@@ -72,31 +87,30 @@ async def main() -> int:
     db = DatabasePool(config.database.dsn)
     await db.initialize()
     try:
-        result = await send_weekend_review(
-            db,
-            underlying=config.strategy.underlying,
-            reference=reference,
-            notifier=notifier,
-            dry_run=args.dry_run,
-            dry_run_dir=args.dry_run_dir if args.dry_run else None,
-        )
+        for asset in assets:
+            result = await send_weekend_review(
+                db,
+                underlying=asset,
+                reference=reference,
+                notifier=notifier,
+                dry_run=args.dry_run,
+                dry_run_dir=args.dry_run_dir / asset if args.dry_run else None,
+                include_trade_recaps=asset in recap_assets,
+            )
+            if result.skipped:
+                print(f"{asset}: skipped ({result.reason})")
+            elif args.dry_run:
+                print(
+                    f"{asset}: dry run complete: {result.weekly_trade_count} weekly trades, "
+                    f"{result.messages_sent} messages, PNGs in {args.dry_run_dir / asset}"
+                )
+            else:
+                print(
+                    f"{asset}: sent weekend review ({result.weekly_trade_count} trades, "
+                    f"{result.messages_sent} messages)"
+                )
     finally:
         await db.close()
-
-    if result.skipped:
-        print(f"Skipped: {result.reason}")
-        return 0
-
-    if args.dry_run:
-        print(
-            f"Dry run complete: {result.weekly_trade_count} weekly trades, "
-            f"{result.messages_sent} messages, PNGs in {args.dry_run_dir}"
-        )
-    else:
-        print(
-            f"OK: sent weekend review ({result.weekly_trade_count} trades, "
-            f"{result.messages_sent} messages)"
-        )
     return 0
 
 
