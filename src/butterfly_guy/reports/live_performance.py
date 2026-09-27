@@ -42,6 +42,8 @@ class TradePoint:
     entry_spot: float | None
     dd_at_exit_pct: float | None
     paper_fill_model: str = "legacy"
+    # P&L at the marketable prices observed at fill time; None when not recorded.
+    executable_pnl_dollars: float | None = None
 
 
 @dataclass(frozen=True)
@@ -165,11 +167,36 @@ def _parse_metadata(raw: Any) -> dict[str, Any]:
     return {}
 
 
+def executable_pnl_points(row: dict[str, Any], metadata: dict[str, Any]) -> float | None:
+    """Per-contract P&L at marketable prices, or None when the trade did not record them.
+
+    Entry uses the ask-side estimate (ask + slippage + commission) and exit the
+    bid-side estimate (bid - slippage - commission). A cash-settled exit has no
+    execution cost, so its settlement value is used as-is.
+    """
+    entry = (metadata.get("entry_execution_diagnostics") or {}).get(
+        "marketable_entry_estimate"
+    )
+    exit_value = (metadata.get("exit_execution_diagnostics") or {}).get(
+        "marketable_exit_estimate"
+    )
+    if (
+        exit_value is None
+        and row.get("exit_reason") == "cash_settled"
+        and row.get("exit_price") is not None
+    ):
+        exit_value = row["exit_price"]
+    if entry is None or exit_value is None:
+        return None
+    return float(exit_value) - float(entry)
+
+
 def trade_point_from_row(row: dict[str, Any]) -> TradePoint:
     metadata = _parse_metadata(row.get("metadata"))
     exit_parity = metadata.get("exit_mark_parity") or {}
     dd_at_exit = exit_parity.get("live_drawdown_pct")
     pnl = row.get("pnl")
+    executable = executable_pnl_points(row, metadata)
     return TradePoint(
         trade_date=row["trade_date"],
         direction=str(row["direction"]),
@@ -192,6 +219,11 @@ def trade_point_from_row(row: dict[str, Any]) -> TradePoint:
         entry_spot=float(metadata["entry_spot"]) if metadata.get("entry_spot") is not None else None,
         dd_at_exit_pct=float(dd_at_exit) if dd_at_exit is not None else None,
         paper_fill_model=str(metadata.get("paper_fill_model") or "legacy"),
+        executable_pnl_dollars=(
+            trade_pnl_dollars(executable, int(row.get("quantity") or 1))
+            if executable is not None
+            else None
+        ),
     )
 
 
