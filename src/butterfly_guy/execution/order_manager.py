@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import statistics
+from collections import deque
 from collections.abc import Iterator
 from time import monotonic
 from typing import Any, NamedTuple
@@ -25,6 +27,9 @@ from butterfly_guy.db.queries import OrderIntentQueries
 from butterfly_guy.execution.order_builder import ButterflyOrderBuilder
 
 log = get_logger(__name__)
+
+#: Exit ladder anchors on the median of this many most recent spread bids.
+EXIT_BID_ANCHOR_WINDOW = 3
 
 WORKING_ORDER_STATUSES = {"WORKING", "QUEUED", "PENDING_ACTIVATION", "ACCEPTED"}
 PARTIAL_FILL_STATUSES = {"PARTIAL", "PARTIAL_FILL", "PARTIALLY_FILLED"}
@@ -610,7 +615,9 @@ class OrderManager:
             }
 
         deadline = now_utc() + dt.timedelta(seconds=timeout)
-        bid_floor: float | None = None
+        # Anchor on the median of the last few bids: a single bad low tick must not
+        # pin every later ladder step lower, while a sustained decline still does.
+        recent_bids: deque[float] = deque(maxlen=EXIT_BID_ANCHOR_WINDOW)
         step_trace: list[dict[str, float | int | bool | None]] = []
 
         while True:
@@ -625,8 +632,8 @@ class OrderManager:
 
                 spread = await self._fetch_live_spread(candidate)
                 if spread is not None:
-                    bid_floor = spread.bid if bid_floor is None else min(bid_floor, spread.bid)
-                mid_price = bid_floor if bid_floor is not None else current_value
+                    recent_bids.append(spread.bid)
+                mid_price = statistics.median(recent_bids) if recent_bids else current_value
 
                 limit_price = round_credit_limit(
                     max(0.05, mid_price + (max_steps - 1 - i) * step), self.underlying
