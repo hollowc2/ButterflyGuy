@@ -296,3 +296,21 @@ def test_a_run_with_a_feature_rule_records_the_feature_inputs(tmp_path):
     (results,) = tmp_path.glob("mini_spx/*/results.json")
     meta = json.loads(results.read_text())["meta"]
     assert meta["inputs"]["event_calendar"]["sha256"] == EventCalendar().sha256
+
+
+# The hashes `register` would record, as listed in research-core and the 2026-09
+# registration decision package. A change to a rule's class source or parameters changes
+# its hash: update these (and the docs) deliberately, never to make a test pass.
+# HTS1 was documented as 2ec8c008... in stage 4; the committed code has always given
+# fab8bf3e... (stage 6 fact fix).
+DEFINITION_HASHES = {
+    "HLV1": "6ed12752c07aeda2b857e3c7a04129f85e02bbdf5be40b2ab46e4feade2ed6d6",
+    "HSN1": "4589760a17440ebc01b86451b52f2dae18905eebb13270497476a468c2988147",
+    "HEV1": "9180c56d9a7deb480778906bd3c199b164150e8389e6e089bdb1eb9ba23d660f",
+    "HTS1": "fab8bf3e0ab10805d8b6d8ee19617df7013c0fa776ed6fbf86314c6238ff69c6",
+}
+
+
+@pytest.mark.parametrize("name", sorted(DEFINITION_HASHES))
+def test_hypothesis_definition_hashes_match_the_decision_package(name):
+    assert CATALOG[name].definition_hash() == DEFINITION_HASHES[name]

@@ -102,6 +102,20 @@ added or refreshed and nothing is pending.
 refreshed and changed nothing; the dataset hash stays `b76dc6c9…`. The export still ends
 at 2026-09-25.
 
+**2026-09-28 (stage 6): session 2026-09-28 added.** `export --start 2026-03-13 --end
+2026-09-28` (tunnel, 23:31 UTC, after the close) exported one new session: 2026-09-28, with
+376 snapshots × 158 strikes. Its files are `chain.parquet` (59,408 rows, `cb6f4dbb…`) and
+`clock.parquet` (376 rows, `6da9f987…`). `sessions.parquet` went from 133 to 134 rows and
+`spot_ticks.parquet` from 109,078 to 109,830.
+- **Settlement.** 2026-09-28's official close had not landed, so it is pending. A
+  `--bars-only` refresh straight after changed nothing. No other settlement was pending.
+- **Dataset hash now** `c7fff54a1ffa7c4ee368a6d341828e792d65f7da6cfe27cd40300fae9e625182`
+  (134 sessions, 2026-03-13 → 2026-09-28). It will change again when that close lands.
+  `tests/test_research_features.py` pins it, with a comment.
+- `parity` (118 trades, 0 mismatches, $17,691.60 / $14,170.60 / $9,890.60) and
+  `tests/test_research_sweep_ports.py` pass unchanged. Their windows end at 2026-09-18 and
+  2026-09-24.
+
 **Adding another data source.** Implement `DataSource.copy_csv`, or write the same
 Parquet schema directly. The simulator never touches the database. For vendor history, see
 `docs/research/history-vendor-readiness.md` (adapter spec and validation plan).
@@ -242,12 +256,23 @@ entry.
 - `aux_hash` `b6175510…` → `cb12502b…`; `dataset_hash` unchanged (`b76dc6c9…`).
 - 2026-09-28 is not an exported session, so no feature on the 133 sessions changed.
 
-**Coverage of the 133 sessions:**
-- Daily prior-session closes for VIX, VIX9D, VIX3M and VIX1D: 133 of 133. That is all
-  132 sessions the diagnostics evaluate (2026-09-25 has no official close yet).
-- Intraday VIX, VIX9D and VIX3M at 10:00: 30 sessions (2026-08-12 onward).
-- Intraday VIX1D: none (the gateway's first VIX1D bars are from 2026-09-28, after the
-  export).
+**Refresh on 2026-09-28 (stage 6): no change.** The dump was re-run the same way over
+2026-08-03 → 2026-09-28, the last completed session (ingested 23:36 UTC).
+- **The output is byte-identical to stage 5's:** sha256 `ccf781f6…`, 164 records, no
+  errors. No session had completed since.
+- **Ingest was a no-op:** 0 bars added, removed or revised, and `kept_not_in_dump` 0.
+  Retention still starts at 2026-08-12 (33 sessions), so the merge has not yet had to keep
+  a bar the gateway dropped.
+- `aux_hash` stays `cb12502b…`; `dataset_hash` is `c7fff54a…` (the new session, above).
+- **`$VIX1D` intraday is still 2026-09-28 only.** Whether it now arrives every session
+  cannot be told until 2026-09-29 closes; re-check at the next dump.
+- Cboe daily files were not re-read in this stage.
+
+**Coverage of the 134 sessions (stage 6):**
+- Daily prior-session closes for VIX, VIX9D, VIX3M and VIX1D: 134 of 134. For 2026-09-28
+  they are 2026-09-25's (VIX1D/VIX 0.841).
+- Intraday VIX, VIX9D and VIX3M at 10:00: 31 sessions (2026-08-12 onward, plus 2026-09-28).
+- Intraday VIX1D at 10:00: 1 session, 2026-09-28 (7.88, against VIX 15.83).
 
 The intraday file is shipped for the forward record and future use. It is too short for
 any breakdown here, and `$VIX` intraday was already in `spot_ticks`.
@@ -610,6 +635,10 @@ and R1 skipped all three sessions (entry VIX below 17). Run `b10a02d93d13`:
 `trades.jsonl` `741e116377b0c2314efcd4a770f5350a993f2dc31a04e68f1a60c9444b3f5e63`. The run id
 includes the ledger commit, so it changes as the cohort appends.
 
+**Not re-run in stages 4, 5 or 6.** In stage 6 (2026-09-28, about 23:32 UTC) the ledger read with
+`git show` was still `70ccb8e` locally and on the remote, with 2026-09-22 → 2026-09-24
+recorded. No session after 2026-09-24 has been recorded, so there is nothing new to shadow.
+
 ## Diagnostics (descriptive only)
 
 `diagnose` breaks E0 down by scheduled event and by term-structure bucket.
@@ -820,8 +849,17 @@ entries use the runtime trailer, as E0 does. Definition hashes on 2026-09-28:
 |---|---|---|
 | `HSN1` | `SigmaPlacedEntry()` | `4589760a17440ebc01b86451b52f2dae18905eebb13270497476a468c2988147` |
 | `HEV1` | `ReleaseSkipEntry(E0)` | `9180c56d9a7deb480778906bd3c199b164150e8389e6e089bdb1eb9ba23d660f` |
-| `HTS1` | `PriorRatioFilter(E0, "vix1d_vix", 2022-01-03, 2024-06-28)` | `2ec8c008b0408ac54473ae5bc15a014d2638584d82a163ab02c2a68b82ee90e3` |
+| `HTS1` | `PriorRatioFilter(E0, "vix1d_vix", 2022-01-03, 2024-06-28)` | `fab8bf3e0ab10805d8b6d8ee19617df7013c0fa776ed6fbf86314c6238ff69c6` |
 | `HLV1` (existing) | `FilteredEntry(E0, skip_low_vix_calls, 17.0)` | `6ed12752c07aeda2b857e3c7a04129f85e02bbdf5be40b2ab46e4feade2ed6d6` |
+
+*(Corrected in stage 6, marked: this table gave HTS1 as `2ec8c008…`, which was never the
+hash of committed code. `tests/test_research_hypotheses.py` now pins all four.)*
+
+The hash covers the top-level rule class's source and its parameters. Nested code (E0's
+`BaselineEntry`, HLV1's predicate), `features.py`, the calendar and `configs/config.yaml` are
+frozen only by the register record's `git_sha`. The registration decision package,
+`docs/research/registration-decision-2026-09.md`, collects each hypothesis's frozen
+choices, alternatives and development evidence for the owner.
 
 The draft leaves some details open. **The owner should review these choices before
 registering**, because the hash freezes them:

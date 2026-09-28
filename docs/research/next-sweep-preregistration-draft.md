@@ -22,7 +22,9 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 >   as drafted. *(Corrected 2026-09-28, marked: an earlier wording of this bullet said the
 >   owner had decided not to buy vendor history. That was wrong.)*
 > - **The rules exist in the catalog** as `HSN1` (`4589760a…`), `HEV1` (`9180c56d…`) and
->   `HTS1` (`2ec8c008…`), alongside the existing `HLV1` (`6ed12752…`). None is registered.
+>   `HTS1` (`fab8bf3e…`), alongside the existing `HLV1` (`6ed12752…`). None is registered.
+>   *(Corrected 2026-09-28 (stage 6), marked: this bullet gave HTS1 as `2ec8c008…`, which
+>   was never the hash of the committed code; `fab8bf3e…` is what `register` would record.)*
 > - **Details this draft leaves open** were fixed in the implementation and are listed in
 >   `research-core.md` ("Hypothesis rules"). The owner should review them before
 >   registering: the hash freezes them.

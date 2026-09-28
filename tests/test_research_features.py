@@ -325,6 +325,8 @@ def test_the_published_dataset_still_loads_with_its_hash():
     except (FileNotFoundError, ValueError):
         pytest.skip("research cache not present (see docs/research/research-core.md)")
     # dd38a5ec... until 2026-09-25's official close landed (bars-only refresh, 2026-09-28);
-    # aux files never change it.
-    assert ds.hash == "b76dc6c9e1c77a4ca15aa2aa4be73bcc86e3c6e5e5314e634d9dacf839ae0f45"
+    # b76dc6c9... until stage 6 exported session 2026-09-28 (134 sessions; its official
+    # close was still pending, so landing it will change the hash again). Aux files never
+    # change it.
+    assert ds.hash == "c7fff54a1ffa7c4ee368a6d341828e792d65f7da6cfe27cd40300fae9e625182"
     assert ds.manifest.schema_version in (1, 2)

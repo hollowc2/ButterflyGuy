@@ -1239,6 +1239,10 @@ coverage is:
 
 `HSN1` (`4589760a…`), `HEV1` (`9180c56d…`) and `HTS1` (`2ec8c008…`) are new catalog
 entries. HLV1 is unchanged (`6ed12752…`).
+
+> **[Correction, 2026-09-28 (stage 6)]** HTS1's definition hash is `fab8bf3e…`, not
+> `2ec8c008…`. The committed code at `82aed43` already gave `fab8bf3e…`; the value above was
+> never the hash of committed code. The other three are right.
 - They were unit-tested on synthetic data only, and were not run on any real data.
 - Their implementation choices for details the draft leaves open are listed in
   research-core for the owner to review before registering.
@@ -1383,3 +1387,87 @@ this is a proxy for the 10:00 → close exposure, not a test of H-TS1. H-EV1, H-
 cannot be checked with close-only index data. The result informs whether the owner
 registers H-TS1; it changes nothing in the pre-registration draft, and no registry record
 was written.
+
+## 2026-09-28 — stage 6: forward housekeeping and the registration decision package (no vendor data)
+
+This entry evaluates no rule, registers nothing, runs no hypothesis rule on any data, and does
+not touch the frozen strategy or the open cohort `spx-prospective-2026-09-22`. Work is on
+branch `research/unified-core`. Stage 5 (`0d440b8`) was confirmed on
+`origin/research/unified-core`, with the branch's upstream pointing there, before starting.
+Nothing has been bought: `thetadata.py` stays a stub and `history.SOURCES` stays empty.
+Details and commands are in `docs/research/research-core.md`.
+
+### Housekeeping
+
+- **Export.** 2026-09-28 is the only session recorded since 2026-09-25. It was exported
+  read-only through the tunnel after the close (376 snapshots × 158 strikes).
+  - 134 sessions, 2026-03-13 → 2026-09-28.
+  - **Dataset hash `b76dc6c9…` → `c7fff54a1ffa7c4ee368a6d341828e792d65f7da6cfe27cd40300fae9e625182`.**
+  - Settlements landed: none. Pending: 2026-09-28, whose official close was not yet in Helios
+    `daily_bars`. The `--bars-only` refresh straight after changed nothing.
+  - `tests/test_research_features.py` pins the hash; it was updated, with a comment saying
+    why. Landing 2026-09-28's close will change it again.
+- **Parity.** `parity` reproduces the frozen replay unchanged: 118 trades, 0 mismatches,
+  $17,691.60 / $14,170.60 / $9,890.60, 22 settled and 96 intraday.
+  `tests/test_research_sweep_ports.py` passes unchanged. Neither window reaches the new
+  session.
+- **Cohort shadow: not run.** The ledger, read with `git show` only, is still `70ccb8e`
+  locally and on the remote, with 2026-09-22 → 09-24 recorded. There is no session after
+  2026-09-24 to shadow.
+- **Gateway re-dump**, 2026-08-03 → 2026-09-28, as in stage 5.
+  - The output is byte-identical to stage 5's (`ccf781f6…`, 164 records, no errors): no
+    session had completed in between.
+  - The merge ingest added, removed and revised 0 bars; `kept_not_in_dump` 0.
+  - **`aux_hash` unchanged at `cb12502b721efeda92f06f55f35273e26b101ecaa3a847e7339a628445144967`.**
+  - Retention still starts at 2026-08-12, so no dump yet lacks a bar the file holds.
+- **VIX1D intraday.** Still for 2026-09-28 only. Whether it now arrives every session can't
+  be judged until 2026-09-29 has closed; re-check at the next dump.
+  - 2026-09-28 is now an exported session, so its 10:00 features include intraday VIX1D
+    (7.88).
+  - Coverage of the 134 sessions: prior closes 134, intraday VIX/VIX9D/VIX3M at 10:00 31,
+    intraday VIX1D 1.
+
+### Registration decision package (nothing registered)
+
+`docs/research/registration-decision-2026-09.md` is written for the owner. For H-LV1,
+H-SN1, H-EV1 and H-TS1 it gives:
+- the claim and mechanism quoted from the draft;
+- every implementation choice the definition hash freezes, with its alternative and effect;
+- the development evidence so far, labelled 2026 descriptive, stage-5 mechanism check or
+  shadow.
+
+It ends with the owner's choices: which hypotheses to register, k and its Bonferroni level,
+optional H-EV2, and a forward (Helios-only) holdout if ThetaData is not bought. The registry
+still has no `register` event.
+
+Findings that came up while writing it:
+- **HTS1's hash was misdocumented.** Stage 4 recorded `2ec8c008…`; the committed code gives
+  `fab8bf3e0ab10805d8b6d8ee19617df7013c0fa776ed6fbf86314c6238ff69c6`, identically at
+  `82aed43` and `0d440b8`. The research-core table and the draft carry marked fact fixes, and
+  the stage-4 entry above a correction note. A new test pins all four definition hashes.
+- **What the hash does not cover.** Only the top-level rule class's source and parameters
+  are hashed. E0's code, HLV1's predicate body, the feature and calendar code and
+  `configs/config.yaml` are frozen only by the register record's `git_sha`.
+- **H-EV1 and 10:00 releases.** Calendar v1 has four PCE releases at 10:00, all in the
+  holdout (2024-11-27, 2025-04-30, 2025-12-05, 2026-01-22). H-EV1's strict "before 10:00"
+  trades them.
+- **H-SN1's noise secondary is not built.** The 1.48σ/1.68σ runs are not catalog entries,
+  and the draft gives no statistic for the comparison.
+- **H-TS1 under a forward holdout.** It cannot be fitted as defined without
+  development-window sessions in the dataset; a forward holdout would need a redefined
+  threshold (new hash).
+- **H-TS1 threshold** (feature count only, no P&L): the development bound (≈0.918) flags 23
+  of the 132 evaluable 2026 sessions (17 H1, 6 H2), against 44 for the 2026 tercile
+  (0.828). The mechanism check stays "not supported".
+- **H-EV1's 2026 release sessions** moved more after 10:00 (RMS 1.192σ) than no-event
+  sessions (0.956σ). That is the opposite of its mechanism's direction; it is descriptive,
+  from 17 sessions.
+
+### Tooling hygiene
+
+- `graphify` is not available on this machine: it is not on `PATH`, and the binary path in
+  `AGENTS.md` (`/home/billy/.local/bin/graphify`) does not exist here. `graphify update .`
+  was not run.
+- `export-history --provider thetadata` still stops with "Data provider not chosen" and exit
+  2. It stops in `history.get_source`, before any source is built or request made.
+- `uv run pytest` and `uv run ruff check .` pass.
