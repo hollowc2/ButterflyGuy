@@ -10,7 +10,7 @@ here changes live-trading code.
 
 | Module | Responsibility |
 |---|---|
-| `dataset.py` | Parquet schema, manifest with per-file SHA-256, row counts and export history, hash-checked loading |
+| `dataset.py` | Parquet schema, manifest with per-file SHA-256, row counts and export history, hash-checked loading; separately hashed `aux/` files (schema 2) |
 | `export.py` | Read-only export (`DataSource`: SSH tunnel via asyncpg, or `docker exec psql`); `--bars-only` settlement refresh |
 | `market.py` | Snapshot at or before a time, fly mark and executable-side paths, missing and crossed masks, ATM straddle |
 | `accounting.py` | Midpoint, marketable, stressed and delayed-exit stressed fills; imports `execution_accounting` constants |
@@ -24,6 +24,10 @@ here changes live-trading code.
 | `variants.py` | Named variant catalog: every idea-sweep variant (E0, X1–X5, C1/C2, D1–D4, T1–T6, K1, G1/G2, R1–R5) and HLV1 |
 | `shadow.py` | Exploratory paired shadow on an open cohort's recorded sessions (ledger read with `git show`) |
 | `latency.py` | Read-only calibration of exit latency from recorded paper trades |
+| `event_calendar.py` | The committed, versioned market-event table (`data/market_events_v1.csv`): validation, hash, leakage rule |
+| `volindex.py` | Cboe daily VIX-family history and gateway intraday bars as separately hashed `aux/` files |
+| `features.py` | Pre-entry session features: `events` and the term structure (prior-session closes; completed intraday bars) |
+| `diagnose.py` | DESCRIPTIVE E0 breakdowns by event and term structure (no registry record) |
 | `report.py`, `cli.py` | Artifacts and the `python -m butterfly_guy.research` CLI |
 
 ## Data
@@ -73,13 +77,160 @@ registry counts variants by dataset name, so that is expected.
 
 **The 2026-09-27 export** covers 133 sessions from 2026-03-13 to 2026-09-25, is
 128 MB, and has dataset hash `dd38a5ecb2cfb08df6e057167c9da06041569da20aab9c30d3bf333e348bc523`.
-A `--bars-only` refresh on 2026-09-27 found no change. 2026-09-25's official close is
+Two `--bars-only` refreshes on 2026-09-27 (the second in stage 3) found no change. The
+Helios `daily_bars` still ended at 2026-09-24 for SPX and `$VIX`. 2026-09-25's official
+close is
 still missing from `daily_bars` (the history entry lists it under
 `pending_settlements`), so the hash is unchanged. The cohort's recorded sessions
 (2026-09-22 → 2026-09-24) are all in this export.
 
 **Adding another data source.** Implement `DataSource.copy_csv`, or write the same
-Parquet schema directly. The simulator never touches the database.
+Parquet schema directly. The simulator never touches the database. For vendor history, see
+`docs/research/history-vendor-readiness.md` (adapter spec and validation plan).
+
+### Auxiliary inputs (manifest schema 2)
+
+Feature inputs from sources other than the Helios export live under `aux/` in the same
+dataset. They are listed and hashed separately (`aux`, `aux_hash`), so adding or
+refreshing one never changes `dataset_hash`: `dd38a5ec…` stays the hash of the chain data.
+
+- A manifest without aux files is still written as schema 1, byte for byte as before.
+  One with aux files is schema 2; the loader accepts both.
+- Every aux write appends a `history` entry (`mode: aux`) with the rows added, removed
+  and revised, and the previous and new `aux_hash`.
+- `verify` checks aux files with the rest.
+
+**Recording inputs in a run.** A run records the calendar hash and the aux hash in its
+meta **only when it uses them**. Runs that use no features (every catalog variant today)
+keep their results unchanged, so the published `results.json` hashes and run ids above
+stay valid.
+
+### Event calendar
+
+`src/butterfly_guy/research/data/market_events_v1.csv` is committed. It covers
+2022-01-01 → 2026-12-31 (as known on 2026-09-27): FOMC statement days, CPI, NFP (the BLS
+Employment Situation) and PCE (BEA Personal Income and Outlays) release days, monthly
+OPEX, quarter-end and NYSE early closes.
+
+- **Columns.** Each row carries its `source` and the date that schedule was public
+  (`published_on`), with the basis and the page that shows it (`published_source`). The
+  full column list is in `event_calendar.py`.
+- **Building it.** The table is built by `tools/build_market_events.py`, which caches
+  every page it reads (default `~/.cache/butterfly_guy/research/_sources/market_events/`).
+
+**How `published_on` is established:**
+- FOMC: the Fed's tentative-schedule press release for the year.
+- CPI, NFP and PCE: the previous release, which names the next date
+  (`prior_release_notice`).
+- The 2025 and 2026 appropriations-lapse reschedules and cancellations, and BEA's 2026
+  moves: dated notices, or the earliest archive capture that carries the change.
+- Dates after the latest release: the agency schedule page, dated by when it was read.
+- OPEX, quarter-end and early closes: the earliest archived NYSE holiday page listing the
+  year.
+
+Archive and fetch dates are upper bounds on the real announcement. That can only hide an
+event from a session, never reveal one early.
+
+**Leakage rule.** An event is a feature for session S only when all of these hold:
+- it is not `unscheduled` (the 2025-08-22 FOMC notation vote is the one such row);
+- `published_on < S`;
+- it had not been withdrawn before S (`withdrawn_on` empty or `>= S`).
+
+`held` (whether it happened) is never used. A release still expected on S and later
+cancelled stays an expected event for S. `features.SessionFeatures.events(S)` returns the
+visible event types. `MarketEvent.before(10:00)` is strict, so a 10:00 release does not
+count as known at a 10:00 decision.
+
+**Version 1** has 313 rows and sha256
+`3185297d2421b53c7d672b85d4a922e41eeddb5c48815477719aed7e58385b93`.
+
+- Each year 2022–2026 has 8 FOMC statement days, 12 OPEX and 4 quarter-ends, and 12 each
+  of CPI, NFP and PCE, except where a lapse cancelled or merged a release:
+  - 2025: 11 CPI and 11 NFP (October cancelled), 10 PCE (October and November combined
+    on 2026-01-22).
+- 11 early closes.
+- OPEX moved to the Thursday on 2022-04-14 and 2025-04-17 (Good Friday) and on
+  2026-06-18 (Juneteenth).
+- 17 withdrawn or rescheduled release rows cover the 2025 and 2026 lapses, BEA's
+  post-lapse schedule and its 2026-09-30 → 10-06 move.
+- One known gap: January 2026 NFP's original 2026-02-06 date has no row. The release
+  that announced it (2026-01-09) has no archived copy, so only the rescheduled 2026-02-11
+  row (published 2026-02-05) exists.
+
+```bash
+uv run python tools/build_market_events.py --today 2026-09-27   # rebuild (network)
+uv run python -m butterfly_guy.research verify                  # prints the calendar sha256
+```
+
+### Volatility term structure
+
+**Where the history can come from** (checked 2026-09-27):
+
+- **Helios DB:** nothing. `spot_prices` and `daily_bars` hold only SPX, NDX, XSP and
+  `$VIX`; `$VIX` daily bars start 2026-03-02.
+- **Schwab gateway** `/v1/session-history`: 1-minute regular-session bars for `$VIX`,
+  `$VIX9D` and `$VIX3M`, stamped at the **bar start** (`$SPX` returns 390 bars,
+  09:30 → 15:59).
+  - Retention is about 30 sessions: the earliest bars are from 2026-08-12.
+  - `$VIX1D` (and `VIX1D`, `$VIX1D.X`) returns no bars.
+  - `/v1/history` rejects `$VIX1D` with 400.
+- **Cboe public daily files** (`cdn.cboe.com/api/global/us_indices/daily_prices/<INDEX>_History.csv`,
+  no sign-up): OHLC for VIX (1990→), VIX9D (2011-01-04→), VIX3M (2009-09-18→) and
+  VIX1D (2022-05-13→).
+
+**What was added to `spx_0dte`:**
+
+| File | Rows | SHA-256 | Source |
+|---|---:|---|---|
+| `aux/vol_index_daily.parquet` | 18,613 | `048eb3de…` | Cboe daily files, fetched 2026-09-28 06:18 UTC; every index through 2026-09-25 |
+| `aux/vol_index_intraday.parquet` | 37,343 | `d4a54490…` | Gateway dump 2026-08-03 → 2026-09-25 (dump sha256 `699420d1…`) |
+
+`aux_hash` is `b6175510dbcc0a3f365d66ce4810a80041f5d33c705c2237c62a090023d7d12e`.
+`dataset_hash` is unchanged: `dd38a5ecb2cfb08df6e057167c9da06041569da20aab9c30d3bf333e348bc523`.
+
+**Coverage of the 133 sessions:**
+- Daily prior-session closes for VIX, VIX9D, VIX3M and VIX1D: 133 of 133. That is all
+  132 sessions the diagnostics evaluate (2026-09-25 has no official close yet).
+- Intraday VIX, VIX9D and VIX3M at 10:00: 30 sessions (2026-08-12 onward).
+- Intraday VIX1D: none.
+
+The intraday file is shipped for the forward record and future use. It is too short for
+any breakdown here, and `$VIX` intraday was already in `spot_ticks`.
+
+**Feature rules (`features.py`):**
+- Daily: the close on the previous SPX session only, from the dataset's `daily_bars`.
+  - Cboe prints VIX on some NYSE holidays (for example 2026-05-25, 06-19, 07-03 and
+    09-07); those rows are not the previous session and are skipped.
+  - An index with no row on the previous session is missing.
+- Intraday: the close of the last bar complete at or before the decision
+  (`ts + bar_seconds <= decision`), at most 5 minutes old.
+- Ratios: `vix1d_vix`, `vix9d_vix` and `vix_vix3m`.
+- Missing stays missing.
+
+```bash
+uv run python -m butterfly_guy.research export-vol --cboe
+# where the gateway key lives (read-only GETs), then ingest locally:
+ssh billy@helios 'docker exec -i butterfly_spx_app python - 2026-08-03 2026-09-25' \
+  < tools/research_gateway_vol_dump.py > vol_dump.jsonl
+uv run python -m butterfly_guy.research export-vol --gateway-dump vol_dump.jsonl
+```
+
+Because retention is about 30 sessions, a longer intraday record needs the dump re-run
+at least monthly. A scheduled job for it would be a new service and is not set up.
+
+### Overnight futures (ES): audit only
+
+- **Helios DB:** no futures data. `bars_1m`, `trades` and `l2_book` are crypto (BTC).
+- **Schwab gateway:** `/v1/session-history` for `/ES` with `session=extended` returns
+  1-minute bars from 04:00 to 16:59 ET only, so the 18:00–04:00 Globex overnight is
+  missing.
+  - Retention is shorter than the VIX family: 2026-08-14 has none, 2026-08-21 does.
+  - `/v1/history` rejects `/ES` with 400.
+  - A prior 16:00 → 09:29 ES move is computable only inside that retention window.
+- **Free sources:** none licensed. CME DataMine and Databento `GLBX.MDP3` are paid, and
+  unofficial scrapes (for example `ES=F`) were excluded.
+- **Nothing was ingested.** A usable overnight signal needs either a paid CME history or
+  a forward-only recorder.
 
 ## Decision profiles
 
@@ -398,6 +549,59 @@ and R1 skipped all three sessions (entry VIX below 17). Run `b10a02d93d13`:
 `results.json` `b1bbdb472184f8a9362cf986996b2ea8a310a6d929ac7c66e7530b8a4e219e93`,
 `trades.jsonl` `741e116377b0c2314efcd4a770f5350a993f2dc31a04e68f1a60c9444b3f5e63`. The run id
 includes the ledger commit, so it changes as the cohort appends.
+
+## Diagnostics (descriptive only)
+
+`diagnose` breaks E0 down by scheduled event and by term-structure bucket.
+
+- **Nothing here evaluates a rule.** It writes no registry record, reports no intervals
+  or p-values, and every artifact is headed "DESCRIPTIVE — development data — not a rule
+  evaluation".
+- **Columns in every cell:** sessions and trades (all/H1/H2), stressed and delayed-exit
+  nets (all/H1/H2 and per session), tie-set averages at $0.10/$0.25, settled landings,
+  and the RMS and mean |move| after 10:00 in chain-implied σ.
+- **Buckets:** term-structure buckets are sample terciles (data-derived; the bounds are
+  printed), plus the fixed VIX/VIX3M = 1 split.
+- **Inputs recorded:** the run's meta carries the calendar sha256 and the `aux_hash`.
+
+```bash
+uv run python -m butterfly_guy.research diagnose   # sweep_20260925, 2026-03-13 → 2026-09-24
+```
+
+Run `90673e0c138b` (2026-09-28; dataset `dd38a5ec…`, aux `b6175510…`, calendar
+`3185297d…`, config `d120b63f…`):
+- `diagnostics.json` `bc651323b5765c3b37715511d4d44a7b80ad8bd1b303d973ec8068b869e94d20`
+- `sessions.json` `e8015da40900e5b27fb46d683b4b8db90d21f34c1152c0e9bdc90152b1fc1ee1`
+
+The run reproduces the sweep E0 totals: 132 sessions, 122 trades, stressed $10,424
+(H1 $17,031 / H2 −$6,607), delayed $9,947, tie-set $10,982.
+
+Selected cells (stressed; sessions all/H1/H2; per session):
+
+| Cell | Sessions | Stressed | H1 | H2 | /session | Tie $0.10 | Settled | RMS σ |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| No scheduled event | 101/50/51 | 10,094 | 13,413 | −3,319 | 100 | 10,104 | 18 | 0.956 |
+| Any scheduled event | 31/17/14 | 330 | 3,618 | −3,288 | 11 | 878 | 5 | 1.061 |
+| 08:30 release before entry | 17/9/8 | −97 | 1,652 | −1,749 | −6 | 507 | 2 | 1.192 |
+| FOMC | 5/3/2 | −961 | −485 | −475 | −192 | −1,003 | 0 | 1.121 |
+| CPI | 6/3/3 | −1,594 | −891 | −703 | −266 | −984 | 1 | 0.777 |
+| NFP | 4/2/2 | −976 | −515 | −460 | −244 | −967 | 0 | 1.685 |
+| PCE | 7/4/3 | 2,472 | 3,058 | −586 | 353 | 2,457 | 1 | 1.136 |
+| OPEX | 7/4/3 | −1,549 | −898 | −651 | −221 | −1,649 | 1 | 0.570 |
+| VIX1D/VIX prior, low (< 0.693) | 44/20/24 | 6,838 | 6,484 | 354 | 155 | 6,072 | 7 | 1.064 |
+| VIX1D/VIX prior, mid | 44/20/24 | 6,948 | 9,605 | −2,657 | 158 | 7,163 | 10 | 0.947 |
+| VIX1D/VIX prior, high (≥ 0.828) | 44/27/17 | −3,361 | 942 | −4,303 | −76 | −2,253 | 6 | 0.925 |
+| VIX9D/VIX prior, low (< 0.853) | 44/15/29 | −1,940 | −723 | −1,217 | −44 | −1,860 | 4 | 1.140 |
+| VIX9D/VIX prior, mid | 44/23/21 | 8,919 | 11,101 | −2,182 | 203 | 8,454 | 11 | 0.855 |
+| VIX9D/VIX prior, high (≥ 0.942) | 44/29/15 | 3,446 | 6,654 | −3,208 | 78 | 4,388 | 8 | 0.920 |
+| VIX/VIX3M ≥ 1 (backwardation) | 7/7/0 | 1,856 | 1,856 | 0 | 265 | 2,302 | 2 | 0.725 |
+
+- **Thin cells.** Event cells hold 2–7 sessions, so a single cash settlement ($1–4k)
+  decides their sign. The sample has no early-close session.
+- **Tercile cells hold 44 sessions each** but are confounded with H1/H2 and the VIX level.
+- **These are development data** the strategy was built on.
+
+The full tables are in the run's `report.md`.
 
 ## Known differences
 

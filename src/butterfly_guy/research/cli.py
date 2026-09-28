@@ -8,6 +8,8 @@
   shadow             exploratory paired shadow on an open cohort's recorded sessions
   parity             replay E0 under the frozen profile against the frozen replay ledger
   calibrate-latency  read-only exit latency of recorded paper trades
+  export-vol         Cboe daily VIX-family history (and a gateway intraday dump) as aux files
+  diagnose           DESCRIPTIVE E0 breakdowns by scheduled event and term structure
 """
 
 from __future__ import annotations
@@ -109,11 +111,21 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
+    from butterfly_guy.research.event_calendar import EventCalendar
+
     ds = _dataset(args)
     problems = ds.verify()
     reg = Registry.for_dataset(Path(args.registry), ds.name)
     problems += [f"registry: {p}" for p in reg.verify()]
     print(f"dataset {ds.name} hash {ds.hash}: {len(ds.manifest.files)} files")
+    if ds.manifest.aux:
+        print(f"aux hash {ds.aux_hash}: {', '.join(sorted(ds.manifest.aux))}")
+    try:
+        cal = EventCalendar()
+        print(f"event calendar {cal.path.name} ({cal.version}) sha256 {cal.sha256}: "
+              f"{len(cal.events)} rows")
+    except (OSError, ValueError) as exc:
+        problems.append(f"event calendar: {exc}")
     for p in problems:
         print("  PROBLEM", p)
     print("OK" if not problems else f"{len(problems)} problem(s)")
@@ -317,6 +329,62 @@ def cmd_parity(args: argparse.Namespace) -> int:
     return 1 if report["mismatches"] else 0
 
 
+def cmd_export_vol(args: argparse.Namespace) -> int:
+    from butterfly_guy.research import volindex
+
+    cache = Path(args.cache) if args.cache else None
+    if not args.gateway_dump or args.cboe:
+        volindex.export_daily(args.dataset, cache, log=sys.stdout)
+    if args.gateway_dump:
+        volindex.ingest_intraday(args.dataset, Path(args.gateway_dump), cache, log=sys.stdout)
+    return 0
+
+
+def cmd_diagnose(args: argparse.Namespace) -> int:
+    from butterfly_guy.research import diagnose
+    from butterfly_guy.research.features import SessionFeatures
+
+    _quiet_logs()
+    ds = _dataset(args)
+    features = SessionFeatures.load(ds)
+    t0 = time.monotonic()
+    rows, info = diagnose.session_rows(features, ds, args.profile, args.start, args.end,
+                                       args.split, args.exit_delay)
+    meta = {
+        "label": diagnose.LABEL, "dataset": ds.name, "dataset_hash": ds.hash,
+        "inputs": features.inputs, "profile": args.profile,
+        "config_sha256": sha256_file(SPX_CONFIG),
+        "start": str(args.start), "end": str(args.end), "split": args.split.isoformat(),
+        "exit_delay_snapshots": args.exit_delay, "baseline": "E0",
+        "definition_hash": CATALOG["E0"].definition_hash(),
+    }
+    results = {"meta": meta, "sessions": info, "breakdowns": diagnose.breakdowns(rows),
+               "coverage": diagnose.coverage(rows)}
+    run_id = hashlib.sha256(canonical_json(meta).encode()).hexdigest()[:12]
+    out_dir = Path(args.out) / ds.name / "diagnostics" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files = {"diagnostics.json": dump_canonical(results),
+             "sessions.json": dump_canonical(diagnose.session_table(rows))}
+    hashes = {}
+    for name, text in files.items():
+        (out_dir / name).write_text(text)
+        hashes[name] = hashlib.sha256(text.encode()).hexdigest()
+    git_sha, dirty = _git()
+    provenance = {
+        "run_id": run_id, "git_sha": git_sha, "git_dirty": dirty,
+        "command": " ".join(shlex.quote(a) for a in ["python", "-m", "butterfly_guy.research",
+                                                      *sys.argv[1:]]),
+        "created_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        "registry": "not recorded: diagnostics are not rule evaluations",
+        "run_seconds": round(time.monotonic() - t0, 1), "hashes": hashes,
+    }
+    (out_dir / "provenance.json").write_text(dump_canonical(provenance))
+    (out_dir / "report.md").write_text(diagnose.markdown(results, provenance))
+    print((out_dir / "report.md").read_text())
+    print(f"artifacts: {out_dir}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m butterfly_guy.research", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -388,6 +456,22 @@ def build_parser() -> argparse.ArgumentParser:
     par.add_argument("--end", type=_date, default=dt.date(2026, 9, 18))
     par.add_argument("--tolerance", type=float, default=0.005, help="dollars per trade")
     par.set_defaults(func=cmd_parity)
+
+    ev = sub.add_parser("export-vol", help="VIX-family history into separately hashed aux files")
+    ev.add_argument("--cboe", action="store_true",
+                    help="fetch Cboe's public daily files (the default without --gateway-dump)")
+    ev.add_argument("--gateway-dump", default=None,
+                    help="JSONL from tools/research_gateway_vol_dump.py (intraday bars)")
+    ev.set_defaults(func=cmd_export_vol)
+
+    dg = sub.add_parser("diagnose", help="DESCRIPTIVE E0 breakdowns (no registry record)")
+    dg.add_argument("--profile", choices=sorted(PROFILES), default="sweep_20260925")
+    dg.add_argument("--start", type=_date, default=dt.date(2026, 3, 13))
+    dg.add_argument("--end", type=_date, default=dt.date(2026, 9, 24))
+    dg.add_argument("--split", type=_date, default=EvalParams.split)
+    dg.add_argument("--exit-delay", type=int, default=DEFAULT_EXIT_DELAY)
+    dg.add_argument("--out", default=str(REPORTS))
+    dg.set_defaults(func=cmd_diagnose)
     return p
 
 

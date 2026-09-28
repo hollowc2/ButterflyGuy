@@ -14,6 +14,14 @@ Layout under a dataset root (outside Git):
     sessions/<date>/clock.parquet
         ts_us, spot, spot_min, spot_max: every underlying snapshot time that day, as the
         DB replay's bar query returns it (the reference decision clock).
+    aux/vol_index_daily.parquet     date, index, open, high, low, close (Cboe VIX family)
+    aux/vol_index_intraday.parquet  ts_us (bar start), index, bar_seconds, open, high, low,
+                                    close
+
+Auxiliary (`aux/`) files are feature inputs from other sources. They are listed and hashed
+separately in the manifest (`aux`, `aux_hash`, schema 2), so adding or refreshing one never
+changes `dataset_hash`, which covers the exported chain data only. A manifest without aux
+files is written as schema 1, exactly as before.
 
 Timestamps are integer microseconds since the Unix epoch (UTC).
 """
@@ -33,7 +41,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMAS = (1, 2)  # 1: no aux files; 2 adds `aux` and `aux_hash`
 OPTION_TYPES = ("C", "P")
 PRICE_FIELDS = ("bid", "ask", "mark")
 GREEK_FIELDS = ("iv", "delta")
@@ -159,14 +168,22 @@ class Manifest:
     source: dict
     export: dict
     files: dict[str, dict] = field(default_factory=dict)
-    schema_version: int = SCHEMA_VERSION
     updated_at: str = ""
     exporter_git_sha: str = ""
     history: list[dict] = field(default_factory=list)  # one entry per export run
+    aux: dict[str, dict] = field(default_factory=dict)  # separately hashed feature inputs
 
     @property
     def dataset_hash(self) -> str:
         return dataset_hash(self.files)
+
+    @property
+    def aux_hash(self) -> str | None:
+        return dataset_hash(self.aux) if self.aux else None
+
+    @property
+    def schema_version(self) -> int:
+        return SCHEMA_VERSION if self.aux else 1
 
     def to_json(self) -> str:
         body = {
@@ -180,6 +197,9 @@ class Manifest:
             "dataset_hash": self.dataset_hash,
             "files": {p: self.files[p] for p in sorted(self.files)},
         }
+        if self.aux:
+            body["aux_hash"] = self.aux_hash
+            body["aux"] = {p: self.aux[p] for p in sorted(self.aux)}
         if self.history:
             body["history"] = self.history
         return json.dumps(body, indent=1, sort_keys=False) + "\n"
@@ -187,7 +207,7 @@ class Manifest:
     @classmethod
     def load(cls, path: Path) -> Manifest:
         body = json.loads(path.read_text())
-        if body.get("schema_version") != SCHEMA_VERSION:
+        if body.get("schema_version") not in SUPPORTED_SCHEMAS:
             raise ValueError(f"unsupported dataset schema {body.get('schema_version')}")
         m = cls(
             dataset=body["dataset"],
@@ -198,9 +218,12 @@ class Manifest:
             updated_at=body.get("updated_at", ""),
             exporter_git_sha=body.get("exporter_git_sha", ""),
             history=body.get("history", []),
+            aux=body.get("aux", {}),
         )
         if body.get("dataset_hash") != m.dataset_hash:
             raise ValueError("manifest dataset_hash does not match its file list")
+        if body.get("aux_hash") != m.aux_hash:
+            raise ValueError("manifest aux_hash does not match its aux file list")
         return m
 
     def save(self, path: Path) -> None:
@@ -229,8 +252,15 @@ class Dataset:
     def hash(self) -> str:
         return self.manifest.dataset_hash
 
+    @property
+    def aux_hash(self) -> str | None:
+        return self.manifest.aux_hash
+
+    def has_aux(self, rel: str) -> bool:
+        return rel in self.manifest.aux
+
     def _path(self, rel: str) -> Path:
-        entry = self.manifest.files.get(rel)
+        entry = self.manifest.files.get(rel) or self.manifest.aux.get(rel)
         if entry is None:
             raise FileNotFoundError(f"{rel} is not in the dataset manifest")
         path = self.root / rel
@@ -244,7 +274,7 @@ class Dataset:
     def verify(self) -> list[str]:
         """Return a list of problems (missing files, hash or row-count mismatches)."""
         problems = []
-        for rel, entry in sorted(self.manifest.files.items()):
+        for rel, entry in sorted({**self.manifest.files, **self.manifest.aux}.items()):
             path = self.root / rel
             if not path.exists():
                 problems.append(f"missing {rel}")
@@ -286,3 +316,8 @@ class Dataset:
         table = pq.read_table(self._path(f"{session_dir(date)}/clock.parquet"))
         return SessionClock(ts=table.column("ts_us").to_numpy(),
                             spot=table.column("spot").to_numpy())
+
+    @lru_cache(maxsize=2)
+    def aux_table(self, rel: str) -> pd.DataFrame:
+        """An auxiliary file (hash-checked like every other file)."""
+        return pq.read_table(self._path(rel)).to_pandas()

@@ -43,6 +43,8 @@ htmlcov/
 
 # Generated data outputs
 *.csv
+# Versioned research inputs (the event calendar) are committed
+!/src/butterfly_guy/research/data/*.csv
 
 # Schwab day cache
 data/schwab/*.json

@@ -1065,3 +1065,98 @@ had already been pushed, so the history was left as is.
 
 `main` still carries the old updater and a ledger ending 2026-09-24 until the cohort
 branch is merged.
+
+## 2026-09-28 — stage 3: event calendar, term-structure features, descriptive diagnostics, vendor readiness (development data only)
+
+This entry records inputs and descriptive breakdowns. It evaluates no rule, registers
+nothing, and does not touch the frozen strategy or the open cohort
+`spx-prospective-2026-09-22`. Work is on branch `research/unified-core`; details and
+commands are in `docs/research/research-core.md`.
+
+### Housekeeping
+
+- **Settlement refresh.** `export --bars-only` on 2026-09-27 found no change: Helios
+  `daily_bars` still ends at 2026-09-24, so 2026-09-25's official close is still pending.
+  The dataset hash stays `dd38a5ec…`. With nothing landed, parity and the sweep-port
+  tests had nothing new to check; both pass in the full suite.
+- **Cohort.** The ledger (`70ccb8e`, read with `git show`) still holds 2026-09-22 →
+  09-24, so the E0/HLV1/R1 shadow was not re-run. The next cohort update is Monday
+  2026-09-28 18:30 PT.
+
+### Feature sources and coverage
+
+- **Event calendar** (`market_events_v1.csv`, 313 rows, sha256 `3185297d…`, committed).
+  - Coverage: FOMC statement days, CPI/NFP/PCE releases, monthly OPEX, quarter-ends and
+    early closes, 2022 → 2026.
+  - Each row carries its source and the date its schedule was public: prior-release
+    notices, Fed schedule press releases, dated lapse notices, or the earliest archive
+    capture, which is an upper bound.
+  - An event is a feature only if it was published before the session and not withdrawn
+    before it. Unscheduled events (the 2025-08-22 FOMC notation vote) are never
+    features.
+- **Volatility term structure.**
+  - *Helios DB:* has none of it.
+  - *Schwab gateway:* one-minute `$VIX`, `$VIX9D` and `$VIX3M` bars for only about the
+    last 30 sessions, and nothing for `$VIX1D`. This probe was a read-only run inside the
+    SPX app container, which uses the container's own key.
+  - *Cboe public daily files:* cover everything (VIX1D from 2022-05-13).
+  - *Added to `spx_0dte`* as separately hashed aux files (`aux_hash` `b6175510…`), with
+    `dataset_hash` unchanged: Cboe daily for all four indices (prior-session closes for
+    all 133 sessions) and gateway intraday for the last 30.
+  - *Leakage rules:* features use prior-session closes only, anchored on the previous
+    SPX session (Cboe prints VIX on some exchange holidays). Intraday values count only
+    from bars complete at or before the decision.
+- **Overnight ES (audit only).** Not in the DB. The gateway has 04:00–16:59 ET `/ES`
+  minutes for about 25 sessions and no overnight Globex session. No licensed free source
+  exists. Nothing was ingested.
+
+### Descriptive E0 breakdowns (not evidence)
+
+Run `90673e0c138b`, `sweep_20260925`, 2026-03-13 → 2026-09-24. It reproduces the
+published E0 totals: 122 trades, stressed $10,424, H1 $17,031 / H2 −$6,607.
+
+- **Sessions with no scheduled event:** 101 sessions, +$10,094 ($100 per session).
+- **Sessions with any event:** 31 sessions, +$330 ($11 per session).
+  - Losing event cells: FOMC −$961 (5 sessions), CPI −$1,594 (6), NFP −$976 (4) and
+    OPEX −$1,549 (7). OPEX sessions had the smallest move after 10:00 (RMS 0.57σ against
+    0.98σ overall).
+  - PCE was +$2,472 (7 sessions) and quarter-end +$2,937 (2).
+- **Term structure.**
+  - Prior VIX1D/VIX terciles: low +$6,838, mid +$6,948, high −$3,361 (44 sessions each;
+    the high tercile is −$4,303 in H2).
+  - Prior VIX9D/VIX: low −$1,940, mid +$8,919, high +$3,446, which is not monotone.
+  - Seven backwardation sessions (VIX/VIX3M ≥ 1), all in H1: +$1,856.
+- **The delayed-exit model** moves no cell by more than $612 (the 125-session contango
+  cell); the whole sample moves by $477.
+
+These are cells of 2–44 sessions on the data the strategy was built on. One cash
+settlement decides any event cell's sign, and the terciles are confounded with H1/H2 and
+the VIX level. No rule is evaluated or implied. A feature rule must be registered before
+it is tested; see the next section.
+
+### Pre-registration draft (not registered)
+
+`docs/research/next-sweep-preregistration-draft.md` drafts the next sweep on vendor
+history. It is **not registered** and awaits the owner's decision.
+
+- **Split:** development 2022-01-03 → 2024-06-28, holdout 2024-07-01 → 2026-03-12. The
+  holdout is fixed before any vendor data is seen.
+- **Hypotheses:** H-LV1, the σ-normalised selector H-SN1, the 08:30-release skip H-EV1,
+  and the rich one-day-implied skip H-TS1.
+- **Gate:** stressed P&L per session, paired against E0, with a 10-session block
+  bootstrap and Bonferroni over k at family α 0.10, plus both halves, top-3-removed and
+  delayed-model gates.
+
+It was drafted before the diagnostics above were run and has not been changed since.
+
+### Vendor readiness
+
+`docs/research/history-vendor-readiness.md` compares ThetaData, Databento OPRA and Cboe
+DataShop, specifies a `HistorySource` adapter onto the research Parquet schema, and sets
+a validation plan with pass criteria fixed in advance.
+
+- **No vendor is complete on its own.** Databento and DataShop lack the SPX index level
+  (DataShop only with a Cboe index-feed licence) and intraday VIX, which the selector
+  needs.
+- **Mark.** In our Helios data, `mark` is exactly the bid/ask midpoint.
+- **Nothing was bought or signed up for.**
