@@ -10,6 +10,9 @@
   calibrate-latency  read-only exit latency of recorded paper trades
   export-vol         Cboe daily VIX-family history (and a gateway intraday dump) as aux files
   diagnose           DESCRIPTIVE E0 breakdowns by scheduled event and term structure
+  export-history     vendor history into spx_0dte_<vendor> (DATA PROVIDER NOT CHOSEN)
+  validate-vendor    fidelity validation of a vendor dataset against the Helios export
+  coverage           per-session quote, spot, VIX and official-bar coverage of a dataset
 """
 
 from __future__ import annotations
@@ -134,9 +137,15 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 def cmd_register(args: argparse.Namespace) -> int:
     reg = Registry.for_dataset(Path(args.registry), args.dataset)
+    git_sha, dirty = _git()
+    try:
+        dataset_hash = _dataset(args).hash
+    except FileNotFoundError:
+        dataset_hash = None  # not exported yet
     for v in resolve(args.variants.split(",")):
         rec = reg.append("register", variant=v.name, definition=v.definition(),
-                         definition_hash=v.definition_hash(), note=args.note or "")
+                         definition_hash=v.definition_hash(), note=args.note or "",
+                         git_sha=git_sha, git_dirty=dirty, dataset_hash=dataset_hash)
         print(f"registered {v.name} {rec['definition_hash'][:12]} (seq {rec['seq']})")
     return 0
 
@@ -158,11 +167,17 @@ def cmd_port(args: argparse.Namespace) -> int:
 def _simulate(args: argparse.Namespace, ds: Dataset, profile_name: str, names: list[str],
               start: dt.date | None, end: dt.date | None, tieset: bool):
     """Replay the baseline and `names`; returns the run result, tie-set scorer and meta."""
+    from butterfly_guy.research.features import SessionFeatures
+    from butterfly_guy.research.hypotheses import uses_features
+
     profile = PROFILES[profile_name]
-    ctx = RunContext(load_spx_config())
     names = [n for n in names if n != args.baseline]
+    variants = resolve([args.baseline, *names])
+    features = (SessionFeatures.load(ds) if any(uses_features(v.entry) for v in variants)
+                else None)
+    ctx = RunContext(load_spx_config(), features=features)
     scorer = TiesetScorer() if tieset else None
-    result = run_variants(SessionLoader(ds, profile), resolve([args.baseline, *names]), ctx,
+    result = run_variants(SessionLoader(ds, profile), variants, ctx,
                           start=start, end=end, exit_delay=args.exit_delay, tieset=scorer)
     params = EvalParams(split=args.split, bootstrap_reps=args.reps,
                         bootstrap_block=args.block, rolling_block=args.rolling_block)
@@ -175,6 +190,8 @@ def _simulate(args: argparse.Namespace, ds: Dataset, profile_name: str, names: l
                          "definition_hash": r.variant.definition_hash()}
                      for n, r in result.runs.items()},
     }
+    if features is not None:
+        meta["inputs"] = features.inputs
     if scorer is not None:
         meta["tieset"] = scorer.params()
     return result, scorer, params, meta
@@ -385,6 +402,80 @@ def cmd_diagnose(args: argparse.Namespace) -> int:
     return 0
 
 
+def _unseal(args: argparse.Namespace, ds_name: str):
+    """A registry-verified holdout unseal, or None when not asked for."""
+    if args.unseal_holdout is None:
+        return None
+    from butterfly_guy.research.dataset import Manifest
+    from butterfly_guy.research.holdout import verify_unseal
+
+    root = (Path(args.cache) if args.cache else default_cache_root()) / ds_name
+    return verify_unseal(Registry.for_dataset(Path(args.registry), ds_name),
+                         Manifest.load(root / "manifest.json"), args.unseal_holdout)
+
+
+def cmd_export_history(args: argparse.Namespace) -> int:
+    from butterfly_guy.research.history import HistoryPlan, get_source, write_history
+
+    try:
+        source = get_source(args.provider)
+    except NotImplementedError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    dataset = (args.dataset if args.dataset != DEFAULT_DATASET
+               else f"{DEFAULT_DATASET}_{args.provider}")
+    plan = HistoryPlan(args.start, args.end, dataset, max_cost=args.max_cost,
+                       unseal=_unseal(args, dataset))
+    write_history(source, plan, Path(args.cache) if args.cache else None)
+    return 0
+
+
+def cmd_coverage(args: argparse.Namespace) -> int:
+    from butterfly_guy.research.history import coverage
+
+    ds = _dataset(args)
+    out = coverage(ds, args.start, args.end, _unseal(args, ds.name))
+    path = Path(args.out) / ds.name / "coverage" / f"coverage_{out['summary']['first']}_" \
+        f"{out['summary']['last']}_{ds.hash[:12]}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dump_canonical({"label": args.label, **out}))
+    print(json.dumps({"label": args.label, "dataset": ds.name, "dataset_hash": ds.hash,
+                      **out["summary"]}, indent=1))
+    print(f"written: {path}")
+    return 0
+
+
+def cmd_validate_vendor(args: argparse.Namespace) -> int:
+    from butterfly_guy.research import validate
+    from butterfly_guy.research.volindex import fetch_cboe
+
+    _quiet_logs()
+    cache = Path(args.cache) if args.cache else None
+    helios = Dataset.open(args.reference, cache)
+    vendor = Dataset.open(args.vendor_dataset, cache)
+    url, raw = fetch_cboe(("SPX",))["SPX"]
+    t0 = time.monotonic()
+    results = validate.validate(helios, vendor, args.start, args.end,
+                                RunContext(load_spx_config()), validate.parse_cboe_spx(raw))
+    results["meta"]["cboe_spx"] = {"url": url, "sha256": hashlib.sha256(raw).hexdigest()}
+    run_id = hashlib.sha256(canonical_json(results["meta"]).encode()).hexdigest()[:12]
+    out_dir = Path(args.out) / vendor.name / "validation" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    git_sha, dirty = _git()
+    provenance = {"run_id": run_id, "git_sha": git_sha, "git_dirty": dirty,
+                  "created_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+                  "run_seconds": round(time.monotonic() - t0, 1),
+                  "config_sha256": sha256_file(SPX_CONFIG)}
+    text = dump_canonical(results)
+    (out_dir / "validation.json").write_text(text)
+    provenance["validation_sha256"] = hashlib.sha256(text.encode()).hexdigest()
+    (out_dir / "provenance.json").write_text(dump_canonical(provenance))
+    (out_dir / "report.md").write_text(validate.markdown(results, provenance))
+    print((out_dir / "report.md").read_text())
+    print(f"artifacts: {out_dir}")
+    return 0 if results["pass"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m butterfly_guy.research", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -472,6 +563,38 @@ def build_parser() -> argparse.ArgumentParser:
     dg.add_argument("--exit-delay", type=int, default=DEFAULT_EXIT_DELAY)
     dg.add_argument("--out", default=str(REPORTS))
     dg.set_defaults(func=cmd_diagnose)
+
+    def unseal_arg(sp: argparse.ArgumentParser) -> None:
+        sp.add_argument("--unseal-holdout", type=int, default=None, metavar="SEQ",
+                        help="registry seq of the last register record; verified against the "
+                             "registry and the dataset history before the holdout opens")
+
+    eh = sub.add_parser("export-history",
+                        help="vendor history into spx_0dte_<provider> (provider not chosen)")
+    eh.add_argument("--provider", required=True)
+    eh.add_argument("--start", type=_date, required=True)
+    eh.add_argument("--end", type=_date, required=True)
+    eh.add_argument("--max-cost", type=float, default=None,
+                    help="owner-approved dollars for a usage-billed pull")
+    unseal_arg(eh)
+    eh.set_defaults(func=cmd_export_history)
+
+    vv = sub.add_parser("validate-vendor", help="fidelity validation against the Helios export")
+    vv.add_argument("--vendor-dataset", required=True)
+    vv.add_argument("--reference", default=DEFAULT_DATASET)
+    vv.add_argument("--start", type=_date, default=dt.date(2026, 3, 13))
+    vv.add_argument("--end", type=_date, default=dt.date(2026, 9, 25))
+    vv.add_argument("--out", default=str(REPORTS))
+    vv.set_defaults(func=cmd_validate_vendor)
+
+    cv = sub.add_parser("coverage", help="per-session coverage of a dataset")
+    cv.add_argument("--start", type=_date, default=None)
+    cv.add_argument("--end", type=_date, default=None)
+    cv.add_argument("--label", default="",
+                    help='e.g. "in-sample development data"')
+    cv.add_argument("--out", default=str(REPORTS))
+    unseal_arg(cv)
+    cv.set_defaults(func=cmd_coverage)
     return p
 
 

@@ -245,7 +245,7 @@ def run_variants(
         # the first evaluated session, through a separate loader.
         first = min(rule.history_start for rule in histories)
         if first < dates[0]:
-            warm = SessionLoader(loader.dataset, loader.profile)
+            warm = SessionLoader(loader.dataset, loader.profile, loader.unseal)
             for d in warm.dates(first, dates[0] - dt.timedelta(days=1)):
                 s = warm.load(d)
                 if s is not None:

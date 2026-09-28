@@ -28,6 +28,10 @@ here changes live-trading code.
 | `volindex.py` | Cboe daily VIX-family history and gateway intraday bars as separately hashed `aux/` files |
 | `features.py` | Pre-entry session features: `events` and the term structure (prior-session closes; completed intraday bars) |
 | `diagnose.py` | DESCRIPTIVE E0 breakdowns by event and term structure (no registry record) |
+| `holdout.py` | The sealed holdout (2024-07-01 → 2026-03-12) and its registry-verified unseal |
+| `history.py` | Vendor history adapter onto the research schema (**no vendor purchased yet**), coverage report |
+| `validate.py` | Fidelity validation of a vendor dataset against the Helios export (readiness doc steps 1–4) |
+| `hypotheses.py` | Drafted hypothesis rules H-SN1, H-EV1, H-TS1 (catalog `HSN1`, `HEV1`, `HTS1`; not registered) |
 | `report.py`, `cli.py` | Artifacts and the `python -m butterfly_guy.research` CLI |
 
 ## Data
@@ -76,13 +80,21 @@ A landed close changes `daily_bars.parquet` and therefore the dataset hash. The
 registry counts variants by dataset name, so that is expected.
 
 **The 2026-09-27 export** covers 133 sessions from 2026-03-13 to 2026-09-25, is
-128 MB, and has dataset hash `dd38a5ecb2cfb08df6e057167c9da06041569da20aab9c30d3bf333e348bc523`.
-Two `--bars-only` refreshes on 2026-09-27 (the second in stage 3) found no change. The
-Helios `daily_bars` still ended at 2026-09-24 for SPX and `$VIX`. 2026-09-25's official
-close is
-still missing from `daily_bars` (the history entry lists it under
-`pending_settlements`), so the hash is unchanged. The cohort's recorded sessions
-(2026-09-22 → 2026-09-24) are all in this export.
+128 MB, and had dataset hash `dd38a5ecb2cfb08df6e057167c9da06041569da20aab9c30d3bf333e348bc523`.
+Two `--bars-only` refreshes on 2026-09-27 (the second in stage 3) found no change, because
+Helios `daily_bars` still ended at 2026-09-24.
+
+**2026-09-28 (stage 4): 2026-09-25's official close landed.** A `--bars-only` refresh
+changed only `daily_bars.parquet` (292 → 294 rows: the 2026-09-25 SPX bar, O/H/L/C
+7709.86 / 7752.07 / 7693.08 / 7743.41, and the `$VIX` bar, close 14.87). No session was
+added or refreshed and nothing is pending.
+
+- **Dataset hash now** `b76dc6c9e1c77a4ca15aa2aa4be73bcc86e3c6e5e5314e634d9dacf839ae0f45`.
+- The SPX close equals Cboe's published close (7743.41).
+- `parity` (the 118-trade frozen comparison, through 2026-09-18) and
+  `tests/test_research_sweep_ports.py` (through 2026-09-24) pass unchanged. Neither covers
+  2026-09-25, which is now replayable under every profile.
+- The cohort's recorded sessions (2026-09-22 → 2026-09-24) are all in this export.
 
 **Adding another data source.** Implement `DataSource.copy_csv`, or write the same
 Parquet schema directly. The simulator never touches the database. For vendor history, see
@@ -186,7 +198,20 @@ uv run python -m butterfly_guy.research verify                  # prints the cal
 | `aux/vol_index_intraday.parquet` | 37,343 | `d4a54490…` | Gateway dump 2026-08-03 → 2026-09-25 (dump sha256 `699420d1…`) |
 
 `aux_hash` is `b6175510dbcc0a3f365d66ce4810a80041f5d33c705c2237c62a090023d7d12e`.
-`dataset_hash` is unchanged: `dd38a5ecb2cfb08df6e057167c9da06041569da20aab9c30d3bf333e348bc523`.
+`dataset_hash` was unchanged by the aux files (`dd38a5ec…` at the time; `b76dc6c9…` after
+the 2026-09-25 close landed).
+
+**Refresh on 2026-09-28 (stage 4): no change.**
+- `export-vol --cboe` re-read the four Cboe files: 0 rows added, removed or revised.
+- The gateway dump was re-run the same way (2026-08-03 → 2026-09-25). Its output is
+  byte-identical to stage 3's (sha256 `699420d1…`), because no session had closed since.
+  Ingesting it changed nothing.
+- `aux_hash` is still `b6175510…`.
+- **Ingest replaces, it does not merge.** `ingest_intraday` writes the dump's rows as the
+  whole intraday file. Once the gateway's ~30-session retention rolls past 2026-08-12, a
+  re-dump over the same range returns fewer sessions, and ingesting it would *remove* the
+  older bars (the history entry would show them as removed). Merge before ingesting any
+  later dump.
 
 **Coverage of the 133 sessions:**
 - Daily prior-session closes for VIX, VIX9D, VIX3M and VIX1D: 133 of 133. That is all
@@ -241,6 +266,7 @@ A profile fixes what a replay could see and when.
 | `live` (default) | Replay bars (every SPX snapshot that day) | `daily_bars.open` | `daily_bars` close | ≥ 50 snapshots; VIX and prior VIX close required |
 | `frozen_20260921` | Replay bars | First bar at or after 09:30 | Last SPX tick ≤ 16:00 on an earlier day | as `live`; this is `run_backtest_db.py` at `b83c2a18` (the frozen replay and the open cohort) |
 | `sweep_20260925` | 0-DTE chain snapshots, 09:30–16:00 | First SPX tick at or after 09:30 | `daily_bars` close | Integer strikes within ±200 of spot; timestamps rounded to whole seconds, as that export's `::bigint` cast did |
+| `vendor_1m` | The vendor dataset's 1-minute grid, 09:31 → 16:00 ET (13:00 on early closes), with the vendor SPX index (or a flagged parity spot) | Vendor `daily_bars.open` | Vendor `daily_bars` close | Integer strikes; ≥ 50 grid points; VIX and prior VIX close required. For vendor datasets only (`history.py`) |
 
 Selection goes through the live `select_entry_candidate` wherever a rule uses the
 baseline's selector. The straddle-anchored rules (C1/C2, T1–T6) use it too: they pass a
@@ -371,6 +397,10 @@ checks the chain.
   stays post), and the two hashes count as one definition.
 - **Variant counts.** Reports show how many distinct definitions have been tried on the
   dataset name.
+- **Provenance of registrations.** Since stage 4, a `register` record also stores
+  `git_sha`, `git_dirty` and the dataset's current `dataset_hash` (None if the dataset is not
+  exported yet). The holdout unseal requires a clean tree and development-only data, so a
+  registration without these can never unseal anything.
 
 ```bash
 uv run python -m butterfly_guy.research register --variants HLV1 --note "before the H-LV1 test"
@@ -602,6 +632,188 @@ Selected cells (stressed; sessions all/H1/H2; per session):
 - **These are development data** the strategy was built on.
 
 The full tables are in the run's `report.md`.
+
+## Vendor history (NOT PURCHASED YET)
+
+**Status on 2026-09-28: no vendor has been bought.** The owner will likely buy ThetaData,
+from 2022 forward. Until that subscription is active, every vendor path stays stubbed and
+`history.SOURCES` stays empty. So no vendor dataset exists:
+- no source, plan, hashes or coverage;
+- no validation result;
+- no development-period figures.
+
+*(Corrected 2026-09-28, before the stage-4 commit: an earlier wording said the owner did
+not plan to buy vendor history. That was wrong.)*
+
+Everything that does not depend on the provider is built and tested on synthetic data.
+Adding a provider means:
+1. implement `history.HistorySource` for it, reading the credential only inside the
+   adapter;
+2. add it to `history.SOURCES`;
+3. pull 2026-03-13 → 2026-09-25 and run `validate-vendor`;
+4. only if every step passes, pull the development period.
+
+```bash
+# Today these stop with "Data provider not chosen" (exit 2):
+uv run python -m butterfly_guy.research export-history --provider <name> \
+  --start 2026-03-13 --end 2026-09-25 [--max-cost <approved dollars>]
+uv run python -m butterfly_guy.research validate-vendor --vendor-dataset spx_0dte_<name>
+uv run python -m butterfly_guy.research export-history --provider <name> \
+  --start 2022-01-03 --end 2024-06-28
+uv run python -m butterfly_guy.research --dataset spx_0dte_<name> coverage \
+  --start 2022-01-03 --end 2024-06-28 --label "in-sample development data"
+```
+
+### The adapter (`history.py`)
+
+The adapter writes the existing Parquet schema into its own dataset, `spx_0dte_<vendor>`.
+It refuses to write into `spx_0dte`, or into any name that does not start with `spx_0dte_`.
+The mapping follows the readiness doc's spec:
+
+- **Clock.** A 1-minute grid from 09:31 to 16:00 ET. On the calendar's early closes it
+  ends at 13:00 (210 points instead of 390).
+- **Quotes.** The vendor's quote state is carried within the session only, with its age
+  in the new optional `{C,P}_quote_age_s` columns. Helios chains have no such columns, so
+  their bytes and hashes are unchanged.
+- **Missing, crossed and zero-bid quotes** stay as the vendor gave them (NaN, crossed or
+  zero); nothing is repaired.
+- **Mark** is `(bid + ask) / 2`.
+- **Strikes** are integers within ±400 of the session's spot range.
+- **Spot** is the vendor's SPX index level. The put-call-parity forward is used only for a
+  session with no index level at all, flagged `spot_source = parity`.
+- **Official open and close** come from the vendor's daily bars.
+
+**Every pull appends a manifest `history` entry** with:
+- the source description;
+- every vendor call with its parameters;
+- the cost estimate;
+- the added and skipped sessions;
+- `holdout_sessions`, the dataset's count of holdout-dated sessions.
+
+**Cost.** Before any data is requested, `cost_estimate` is checked. A usage-billed pull
+estimated above `--max-cost` (none approved means $0) stops with `CostNotApprovedError`.
+
+**Consequence for the validation window.** 2026-03-12 is the last day of the holdout. The
+daily-bar lookback for a pull starting 2026-03-13 is therefore clipped at the holdout's
+end, and the history entry records that. The vendor replay will have no prior close for
+2026-03-13 and will skip that session. The frozen replay skips it anyway (missing
+prerequisites).
+
+### The sealed holdout (`holdout.py`)
+
+- **Development:** 2022-01-03 → 2024-06-28.
+- **Holdout:** 2024-07-01 → 2026-03-12.
+
+`guard` raises `HoldoutSealedError` for any range touching the holdout. It is applied at
+every level:
+- every vendor call, cost previews included, through `GuardedSource`, *before* the vendor
+  is called;
+- every pull (`write_history`);
+- every `SessionLoader.dates` and `load`, on any dataset;
+- `coverage`.
+
+The only way past it is an `Unseal`, which only `verify_unseal` can build. It checks, for
+`--unseal-holdout <seq>`:
+- the registry chain is intact;
+- record `<seq>` is a `register` event;
+- every `register` record up to it has `git_dirty: false`;
+- each was made on a dataset hash that the dataset's manifest history shows with
+  `holdout_sessions == 0`.
+
+A registration made after holdout data landed can never unseal anything.
+
+**What the guard does not cover.** The Cboe daily VIX-family file in `aux/` (public index
+closes, fetched in stage 3) spans 1990 → today, holdout dates included. It is read only
+through `features.SessionFeatures`, for a session being replayed, and holdout sessions
+cannot be replayed without an unseal. H-TS1's threshold is fitted through a
+`WindowedLoader` confined to the development window.
+
+### Fidelity validation (`validate.py`)
+
+This implements steps 1–4 of the readiness doc. The pass criteria are copied verbatim
+(`tests/test_research_validate.py` checks that they still match the doc). Where the plan
+leaves a detail open, the module fixes it:
+
+- **σ** is 1.25 × the Helios ATM straddle at the snapshot at or before 10:00 ET. The OTM
+  region is 1.0–2.5 σ from the Helios spot at each snapshot.
+- **A pair agrees** when both sides quote it and both its bid and its ask are within
+  $0.05. The 95% is measured at offset 0.
+- **The offset scan** runs from −180 to +180 s in 15 s steps.
+- **Step 2** uses a derived dataset: vendor quotes at the Helios timestamps, with the Helios
+  clock, spot, VIX and bars. A disagreement is *explained* by the first quote difference at
+  a decision snapshot on or before it.
+- **Step 3** must pass against both Helios profiles.
+- **Step 4** requires every vendor close on a compared session to equal the Helios
+  `daily_bars` close and Cboe's published SPX close, to the cent.
+
+The output goes to `reports/research/<vendor>/validation/<run id>/`: `validation.json`,
+`report.md` (one PASS/FAIL row per criterion, then the details) and `provenance.json`.
+
+**Harness self-check** on 2026-09-28, with the Helios export `b76dc6c9…` as both sides and
+all 133 sessions:
+- Step 1 passed: share 1.0 over 1,166,201 region pairs, best offset 0 s.
+- Step 2 passed with no disagreements: frozen $10,319.20 and sweep $10,259.20 stressed on
+  both sides.
+- Step 4 passed: all 133 official closes equal Cboe's, and the spot difference is 0.
+- The three steps took 38 s.
+- Eight sessions have no ATM straddle at the 10:00 snapshot, so they add nothing to step
+  1's region: 2026-03-13, 03-18, 04-27, 05-04, 05-18, 06-02, 08-25 and 09-08.
+
+This proves the harness runs at scale, not that any vendor is good.
+
+**Coverage baseline** for comparing a vendor later (`coverage` on `spx_0dte`):
+- 133 sessions with a median of 154 strikes and 375 timestamps.
+- Median missing and crossed rates within ±200 of spot: 0 and 0.
+- Median zero-bid share: 0.18 for calls, 0.06 for puts.
+- Official open and close on all 133 sessions.
+- A VIX tick between 09:55 and 10:00 on 126 sessions.
+
+### Hypothesis rules (implemented, not registered)
+
+These are new classes in `hypotheses.py`. No existing rule class was edited. The catalog
+entries use the runtime trailer, as E0 does. Definition hashes on 2026-09-28:
+
+| Variant | Rule | Definition hash |
+|---|---|---|
+| `HSN1` | `SigmaPlacedEntry()` | `4589760a17440ebc01b86451b52f2dae18905eebb13270497476a468c2988147` |
+| `HEV1` | `ReleaseSkipEntry(E0)` | `9180c56d9a7deb480778906bd3c199b164150e8389e6e089bdb1eb9ba23d660f` |
+| `HTS1` | `PriorRatioFilter(E0, "vix1d_vix", 2022-01-03, 2024-06-28)` | `2ec8c008b0408ac54473ae5bc15a014d2638584d82a163ab02c2a68b82ee90e3` |
+| `HLV1` (existing) | `FilteredEntry(E0, skip_low_vix_calls, 17.0)` | `6ed12752c07aeda2b857e3c7a04129f85e02bbdf5be40b2ab46e4feade2ed6d6` |
+
+The draft leaves some details open. **The owner should review these choices before
+registering**, because the hash freezes them:
+
+- **H-SN1**
+  - σ is fixed from the 10:00 straddle for the whole session. If no fly qualifies at
+    10:00, later window times reuse that σ with the current spot.
+  - The center is the nearest listed strike, the lower one on an exact tie. It must be
+    out of the money.
+  - The fly must be executable at the snapshot.
+  - The debit must be at least `min_debit` ($0.05) and at most the configured cap for its
+    width. For a width the config has no cap for (5, 15, 35, 60 …), the cap is the single
+    $0.10-per-point rate all configured caps share.
+  - Like E0, it requires a fresh VIX at the decision.
+  - There is no tie-set, because the live selector does not choose the fly.
+- **H-EV1**
+  - It counts CPI, NFP or PCE events visible under the calendar's leakage rule with a
+    release strictly before 10:00 ET.
+  - An event withdrawn *on* the session is still expected, as the calendar's rule says.
+- **H-TS1**
+  - The threshold is `numpy.quantile(…, 2/3)` (linear interpolation) of the prior-session
+    VIX1D/VIX over the development sessions the profile qualifies.
+  - It skips at or above that value. A session with no prior VIX1D close is never skipped.
+  - It needs the Cboe daily aux file on the vendor dataset
+    (`export-vol --cboe --dataset spx_0dte_<vendor>`).
+
+**Leakage guards.**
+- Rules that read features take them from `RunContext.features`, and a run then records
+  the calendar and aux hashes in its meta. Runs without such rules are unchanged, so
+  every published hash above still holds.
+- H-TS1 fits only through `WindowedLoader` and raises `LeakageError` on any date outside
+  its window.
+- The unit tests cover calendar visibility, prior-session-only term structure (including
+  a Cboe print on an exchange holiday), fit-window confinement and the placement
+  mechanics.
 
 ## Known differences
 

@@ -5,6 +5,12 @@ created, and no credential was handled. Every figure below comes from the vendor
 pages or a public third-party comparison, as cited; prices change and must be re-checked
 at purchase.
 
+**Update 2026-09-28:** nothing has been bought. The owner will likely buy ThetaData, from
+2022 forward. The adapter framework, the holdout
+guard and the validation harness below are built and tested on synthetic data
+(`history.py`, `holdout.py`, `validate.py`; see `research-core.md`, "Vendor history").
+Only a provider's own `HistorySource` is missing.
+
 Why: the review's power analysis (`docs/reviews/2026-09-27-research-pipeline-review.md`
 §2) needs about 400 trades to separate the measured edge from zero. Our own chain history
 starts 2026-03-13 (133 sessions). SPXW has had daily expirations since 2022, so vendor

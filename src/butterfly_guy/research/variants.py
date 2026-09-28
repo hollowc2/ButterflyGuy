@@ -17,6 +17,8 @@ from butterfly_guy.research.entry import (
     StraddleAnchoredEntry,
 )
 from butterfly_guy.research.exits import PeakTrailer, StopLoss, TakeProfit, TimeExit
+from butterfly_guy.research.holdout import DEVELOPMENT
+from butterfly_guy.research.hypotheses import PriorRatioFilter, ReleaseSkipEntry, SigmaPlacedEntry
 from butterfly_guy.research.learning import EVRankEntry, EVSelector, FittedFilter
 from butterfly_guy.research.simulate import Variant
 
@@ -82,6 +84,19 @@ CATALOG: dict[str, Variant] = {
                 "E0 candidate set ranked by prior-session EV instead of the VIX anchor and "
                 "reward/risk; runtime trailer (post hoc)."),
         Variant("R4", EV_RANK, (), "R3 held to settlement (post hoc)."),
+        # Drafted in next-sweep-preregistration-draft.md; NOT registered, not run on vendor
+        # data. The owner decides whether to register them.
+        Variant("HSN1", SigmaPlacedEntry(), "config",
+                "H-SN1: center at spot +/- 1.58 sigma in the gap direction, width 0.88 sigma "
+                "(nearest 5), sigma = 1.25 x the 10:00 ATM straddle; live cost caps, no RR "
+                "filter; runtime trailer."),
+        Variant("HEV1", ReleaseSkipEntry(BASE), "config",
+                "H-EV1: E0, skipping sessions with a CPI, NFP or PCE release scheduled "
+                "before 10:00 ET (calendar leakage rule)."),
+        Variant("HTS1", PriorRatioFilter(BASE, "vix1d_vix", *DEVELOPMENT), "config",
+                "H-TS1: E0, skipping sessions whose prior-session VIX1D/VIX is at or above "
+                "its upper tercile over the development period (fitted on "
+                "2022-01-03..2024-06-28)."),
     ]
 }
 

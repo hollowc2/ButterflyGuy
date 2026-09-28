@@ -16,6 +16,19 @@ decides which hypotheses, if any, to `register`, and may edit them first.
   `python -m butterfly_guy.research register --dataset <vendor dataset> ...` from a clean,
   committed tree, **before any holdout-period vendor data is downloaded**.
 
+> **[Fact update, 2026-09-28, marked; no hypothesis, split or gate changed]**
+> - **No vendor data has been bought yet.** The owner will likely buy ThetaData, from 2022
+>   forward. Until then no `spx_0dte_<vendor>` dataset exists, and this sweep cannot run
+>   as drafted. *(Corrected 2026-09-28, marked: an earlier wording of this bullet said the
+>   owner had decided not to buy vendor history. That was wrong.)*
+> - **The rules exist in the catalog** as `HSN1` (`4589760a…`), `HEV1` (`9180c56d…`) and
+>   `HTS1` (`2ec8c008…`), alongside the existing `HLV1` (`6ed12752…`). None is registered.
+> - **Details this draft leaves open** were fixed in the implementation and are listed in
+>   `research-core.md` ("Hypothesis rules"). The owner should review them before
+>   registering: the hash freezes them.
+> - **Registration** now records the git state and the dataset hash. The holdout opens
+>   only through a registry-verified unseal (`holdout.py`).
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).

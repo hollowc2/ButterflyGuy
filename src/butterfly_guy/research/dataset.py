@@ -11,6 +11,8 @@ Layout under a dataset root (outside Git):
         Dense grid flattened ts-major: n_ts x n_strike rows with columns ts_us, strike,
         spot, and {C,P}_{bid,ask,mark} (float64) and {C,P}_{iv,delta} (float32).
         A quote the source did not record is NaN in every field; nothing is imputed.
+        Vendor datasets (`history.py`) add {C,P}_quote_age_s (float32): seconds since the
+        vendor quote state carried to that timestamp was set. Helios exports have none.
     sessions/<date>/clock.parquet
         ts_us, spot, spot_min, spot_max: every underlying snapshot time that day, as the
         DB replay's bar query returns it (the reference decision clock).
@@ -46,6 +48,7 @@ SUPPORTED_SCHEMAS = (1, 2)  # 1: no aux files; 2 adds `aux` and `aux_hash`
 OPTION_TYPES = ("C", "P")
 PRICE_FIELDS = ("bid", "ask", "mark")
 GREEK_FIELDS = ("iv", "delta")
+AGE_FIELD = "quote_age_s"  # optional; written only when a chain carries it
 DEFAULT_DATASET = "spx_0dte"
 
 
@@ -106,6 +109,9 @@ def chain_to_table(chain: SessionChain) -> pa.Table:
             cols[f"{t}_{f}"] = chain.fields[f"{t}_{f}"].astype(np.float64).ravel()
         for f in GREEK_FIELDS:
             cols[f"{t}_{f}"] = chain.fields[f"{t}_{f}"].astype(np.float32).ravel()
+    for t in OPTION_TYPES:
+        if f"{t}_{AGE_FIELD}" in chain.fields:
+            cols[f"{t}_{AGE_FIELD}"] = chain.fields[f"{t}_{AGE_FIELD}"].astype(np.float32).ravel()
     return pa.table(cols)
 
 
@@ -121,6 +127,9 @@ def table_to_chain(table: pa.Table, date: dt.date) -> SessionChain:
     for t in OPTION_TYPES:
         for f in (*PRICE_FIELDS, *GREEK_FIELDS):
             name = f"{t}_{f}"
+            fields[name] = table.column(name).to_numpy(zero_copy_only=False).reshape(n_ts, n_k)
+        name = f"{t}_{AGE_FIELD}"
+        if name in table.column_names:
             fields[name] = table.column(name).to_numpy(zero_copy_only=False).reshape(n_ts, n_k)
     spot = table.column("spot").to_numpy().reshape(n_ts, n_k)[:, 0]
     return SessionChain(date=date, ts=ts, strikes=strikes, spot=spot, fields=fields)

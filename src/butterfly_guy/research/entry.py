@@ -10,6 +10,11 @@ narrowing of the exported chain, and session qualification. Named profiles:
   is the last SPX spot tick at or before 16:00 ET on an earlier day.
 - `live`: as `frozen_20260921` but with the official gap inputs of commit 67ba7ce, which
   live uses: `daily_bars` open and prior close, each falling back to the old source.
+- `vendor_1m`: vendor history (`history.py`). Clock and spot are the vendor's 1-minute
+  grid, 09:31 -> 16:00 ET (13:00 on early closes), stamped at each grid point (the time
+  the quote state applied), with the vendor's SPX index level (or a flagged parity spot);
+  official open and prior close from the vendor's index EOD; integer strikes;
+  prerequisites as `live`.
 - `sweep_20260925`: the idea-sweep numpy harness (`docs/research/spx-idea-sweep-2026-09-25`).
   Clock and spot are 0-DTE chain snapshots between 09:30 and 16:00 ET, integer strikes
   within 200 of spot; the open is the first SPX spot tick at or after 09:30 ET; the prior
@@ -32,6 +37,7 @@ import numpy as np
 from butterfly_guy.core.config import AppConfig, VixWidthBucket, load_config
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.research.dataset import Dataset, SessionChain
+from butterfly_guy.research.holdout import Unseal, guard, in_holdout
 from butterfly_guy.research.market import (
     EASTERN,
     DayMarket,
@@ -83,6 +89,10 @@ PROFILES: dict[str, DecisionProfile] = {
         prev_close_source="official", strike_band=200.0, integer_strikes=True,
         chain_window=((9, 30), (16, 0)), round_to_seconds=True,
     ),
+    "vendor_1m": DecisionProfile(
+        name="vendor_1m", clock="bars", open_source="official", prev_close_source="official",
+        integer_strikes=True, min_snapshots=50, require_replay_prerequisites=True,
+    ),
 }
 
 
@@ -126,11 +136,14 @@ class Session:
 
 
 class SessionLoader:
-    """Build `Session`s from a dataset under one decision profile."""
+    """Build `Session`s from a dataset under one decision profile. Sessions in the sealed
+    holdout (`holdout.py`) are refused unless a verified `unseal` is given."""
 
-    def __init__(self, dataset: Dataset, profile: DecisionProfile) -> None:
+    def __init__(self, dataset: Dataset, profile: DecisionProfile,
+                 unseal: Unseal | None = None) -> None:
         self.dataset = dataset
         self.profile = profile
+        self.unseal = unseal
         bars = dataset.daily_bars()
         spx = bars[bars["underlying"] == "SPX"]
         vix = bars[bars["underlying"] == "$VIX"]
@@ -152,6 +165,7 @@ class SessionLoader:
             d = row.date
             if (start and d < start) or (end and d > end):
                 continue
+            self._guard(d)
             if row.snapshots < self.profile.min_snapshots:
                 self.skipped[d] = "too_few_snapshots"
                 continue
@@ -161,6 +175,11 @@ class SessionLoader:
                 continue
             out.append(d)
         return out
+
+    def _guard(self, d: dt.date) -> None:
+        if in_holdout(d):
+            guard(d, d, what=f"loading session {d}", dataset=self.dataset.name,
+                  unseal=self.unseal)
 
     def _prev_close(self, d: dt.date, *, official: bool) -> float | None:
         if official:
@@ -191,6 +210,7 @@ class SessionLoader:
         return chain
 
     def load(self, d: dt.date) -> Session | None:
+        self._guard(d)
         p = self.profile
         chain = self._chain(d)
         market = DayMarket(chain)
@@ -280,6 +300,9 @@ class EntryRule(Protocol):
 class RunContext:
     config: AppConfig
     asset: str = "SPX"
+    # Pre-entry session features (`features.SessionFeatures`) for rules that use them;
+    # a run records their input hashes only when a rule does (`uses_features`).
+    features: object | None = None
 
     @property
     def max_vix_age_s(self) -> float:

@@ -183,8 +183,8 @@ def fit_variant_entry(rule: object, loader: SessionLoader, ctx: RunContext) -> o
     """Fit an unfitted rule on its own window through a fresh, windowed loader."""
     if not is_fitted(rule) or rule.threshold is not None:
         return rule
-    window = WindowedLoader(SessionLoader(loader.dataset, loader.profile), rule.fit_start,
-                            rule.fit_end)
+    window = WindowedLoader(SessionLoader(loader.dataset, loader.profile, loader.unseal),
+                            rule.fit_start, rule.fit_end)
     return rule.fit(window, ctx)
 
 

@@ -1160,3 +1160,102 @@ a validation plan with pass criteria fixed in advance.
   needs.
 - **Mark.** In our Helios data, `mark` is exactly the bid/ask midpoint.
 - **Nothing was bought or signed up for.**
+
+## 2026-09-28 — stage 4: housekeeping, provider-independent vendor tooling, hypothesis rules (no vendor data)
+
+This entry evaluates no rule and registers nothing. It does not touch the frozen strategy
+or the open cohort `spx-prospective-2026-09-22`. Work is on branch `research/unified-core`
+(stage 3 committed as `5038e0d` first). Details and commands are in
+`docs/research/research-core.md`.
+
+**No data provider was chosen.** The owner decided not to buy vendor history for now. So
+this stage built everything that does not depend on a provider and marked the rest
+"Data provider not chosen". There is no vendor dataset, no fidelity validation result, no
+development-period coverage and no in-sample E0 on vendor data. Nothing was downloaded
+from any vendor and no account was created.
+
+> **[Correction, 2026-09-28, added before the stage-4 commit]** The paragraph above
+> misstates the owner's decision. Nothing has been bought, but the owner did not decide
+> against vendor history: they will likely buy ThetaData, from 2022 forward. Until the
+> subscription is active, every vendor path stays stubbed and `history.SOURCES` stays
+> empty. The rest of this entry stands as written.
+
+### Housekeeping
+
+- **Settlement.** `export --bars-only` found that 2026-09-25's official close had landed:
+  SPX 7743.41 (equal to Cboe's published close) and `$VIX` 14.87.
+  - Only `daily_bars.parquet` changed (292 → 294 rows).
+  - Dataset hash `dd38a5ec…` → `b76dc6c9e1c77a4ca15aa2aa4be73bcc86e3c6e5e5314e634d9dacf839ae0f45`.
+  - `parity` and the sweep-port tests pass unchanged. They end at 2026-09-18 and
+    2026-09-24, so the new close does not enter them.
+- **Cohort.** The ledger (local and remote `70ccb8e`, read-only) still holds 2026-09-22 →
+  09-24, so the shadow was not re-run.
+- **Aux inputs.** No change; `aux_hash` is still `b6175510…`.
+  - The Cboe daily refresh revised nothing.
+  - The re-run gateway dump is byte-identical to stage 3's (`699420d1…`).
+  - The intraday ingest replaces the file rather than merging it. Once the gateway's
+    retention passes 2026-08-12, a same-range dump would drop older bars, so merge before
+    ingesting any later dump.
+
+### Built (provider-independent, tested on synthetic data)
+
+- **Vendor adapter framework** (`history.py`):
+  - the `HistorySource` interface and every mapping rule of the readiness spec;
+  - a `vendor_1m` profile (09:31 → 16:00 ET, 13:00 on early closes);
+  - a request log in the manifest for every pull;
+  - a cost stop for usage-billed vendors;
+  - a per-session coverage report.
+
+  `SOURCES` is empty, and `export-history` stops with "Data provider not chosen".
+- **Sealed holdout** (`holdout.py`). Any request, cost preview, write or session load
+  touching 2024-07-01 → 2026-03-12 raises. The only way in is a registry-verified unseal:
+  a clean-tree `register` record made on development-only data.
+- **Fidelity validation harness** (`validate.py`). It implements steps 1–4 with the
+  readiness doc's criteria copied verbatim, and fixes the details the plan left open (see
+  research-core).
+  - Self-check with the Helios export on both sides (133 sessions): steps 1, 2 and 4 pass
+    trivially, in 38 s.
+  - Eight sessions lack a 10:00 ATM straddle, so step 1's region excludes them.
+
+### Validation results (readiness doc steps 1–4)
+
+| Step | Criterion | Result |
+|---|---|---|
+| 1 Quote level | ≥ 95% of pairs within $0.05 in the 1.0–2.5σ OTM region; best offset within 1 min | not run: no vendor data |
+| 2 Replay on the Helios clock | same fly ≥ 90%; stressed within max(±5%, ±$750); every disagreement explained | not run: no vendor data |
+| 3 Replay on the vendor clock | stressed total inside the Helios $0.10 tie-set draw band | not run: no vendor data |
+| 4 Spot and settlement | official closes identical to `daily_bars` and Cboe | not run: no vendor data |
+
+### Development coverage and in-sample E0
+
+None. No development-period data exists. For comparison later, the Helios export's own
+coverage is:
+- a median of 154 strikes and 375 timestamps per session;
+- median missing and crossed rates of 0 within ±200 of spot;
+- official bars on all 133 sessions;
+- VIX at 10:00 on 126 sessions.
+
+### Hypothesis rules (implemented, not registered)
+
+`HSN1` (`4589760a…`), `HEV1` (`9180c56d…`) and `HTS1` (`2ec8c008…`) are new catalog
+entries. HLV1 is unchanged (`6ed12752…`).
+- They were unit-tested on synthetic data only, and were not run on any real data.
+- Their implementation choices for details the draft leaves open are listed in
+  research-core for the owner to review before registering.
+- `register` records now store `git_sha`, `git_dirty` and the dataset hash, which the
+  unseal requires.
+
+### What this means for the evidence plan
+
+Without vendor history, the pre-registered sweep cannot run as drafted. The draft's split
+and gate assume the 2022–2026 vendor sessions. The alternatives discussed with the owner
+on 2026-09-28 were:
+- **Record going forward.** Register hypotheses now and let the Helios recorder
+  accumulate an unseen holdout. The power analysis's ~400 trades would take about 1.7
+  years.
+- **A free mechanism check.** Test whether realised SPX moves undershoot VIX1D on
+  H-TS1's and H-EV1's sessions, using Cboe's public daily data on the development window
+  only.
+- **A one-month vendor subscription**, later, if either of those justifies it.
+
+None of these was started.
