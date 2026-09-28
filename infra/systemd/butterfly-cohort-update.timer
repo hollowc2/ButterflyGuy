@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Butterfly Guy cohort append, after the close and settlement data
+
+[Timer]
+# 18:30 America/Los_Angeles = 21:30 ET, well after the 16:00 ET close.
+OnCalendar=Mon-Fri 18:30
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

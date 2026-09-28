@@ -1,0 +1,16 @@
+[Unit]
+Description=SSH tunnel to the Helios TimescaleDB for Butterfly Guy research
+Documentation=https://github.com/hollowc2/ButterflyGuy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+# gpg-agent provides the ssh agent; the key must be unlocked once per boot.
+Environment=SSH_AUTH_SOCK=/run/user/1000/gnupg/S.gpg-agent.ssh
+ExecStart=/usr/bin/ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -L 15432:127.0.0.1:5432 billy@helios
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target
