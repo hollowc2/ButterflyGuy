@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 
+import numpy as np
 import pytest
 
 from butterfly_guy.backtest.execution_accounting import price_frozen_trade
@@ -139,3 +140,82 @@ def test_matches_execution_accounting_price_frozen_trade(model, ours):
     assert fills.entry == pytest.approx(ref.entry_price, abs=1e-12)
     assert fills.exit == pytest.approx(ref.exit_price, abs=1e-12)
     assert fills.exit_roll == ref.skipped_exit_observations
+
+
+# ---------------------------------------------------------------------------
+# Exit-latency stress (stressed_delayed)
+# ---------------------------------------------------------------------------
+
+T3 = minute(10, 3)
+
+
+def _delayed(quotes, times, delayed_index, settlement=9.0, exit_index=1):
+    return price_trade(_path(quotes, times), entry_index=0, entry_mark=0.45,
+                       exit_index=exit_index, exit_mark=2.0, settlement=settlement,
+                       costs=COSTS, delayed_exit_index=delayed_index).fills
+
+
+def test_delayed_exit_fills_one_snapshot_after_the_trigger():
+    quotes = {**fly_quotes(T0, (3.0, 3.2), (1.5, 1.6), (0.5, 0.6)),
+              **fly_quotes(T1, (4.0, 4.2), (1.0, 1.1), (0.2, 0.3)),
+              **fly_quotes(T2, (3.6, 3.8), (1.0, 1.1), (0.2, 0.3))}
+    fills = _delayed(quotes, (T0, T1, T2), delayed_index=2)
+    assert fills["stressed"].exit_index == 1  # the undelayed models are unchanged
+    d = fills["stressed_delayed"]
+    assert d.exit_index == 2 and d.exit_roll == 0 and not d.settlement_fallback
+    assert d.exit == pytest.approx(3.6 + 0.2 - 2 * 1.1 - 0.026 - 0.20)
+    assert d.entry == fills["stressed"].entry
+
+
+def test_delayed_exit_rolls_forward_past_unusable_snapshots():
+    quotes = {**fly_quotes(T0, (3.0, 3.2), (1.5, 1.6), (0.5, 0.6)),
+              **fly_quotes(T1, (4.0, 4.2), (1.0, 1.1), (0.2, 0.3)),
+              **fly_quotes(T2, (3.9, 3.8), (1.0, 1.1), (0.2, 0.3)),  # crossed
+              **fly_quotes(T3, (3.5, 3.7), (1.0, 1.1), (0.2, 0.3))}
+    d = _delayed(quotes, (T0, T1, T2, T3), delayed_index=2)["stressed_delayed"]
+    assert d.exit_index == 3 and d.exit_roll == 1
+    assert d.exit == pytest.approx(3.5 + 0.2 - 2 * 1.1 - 0.026 - 0.20)
+
+
+def test_delayed_exit_falls_back_to_settlement_or_stays_unpriced():
+    quotes = {**fly_quotes(T0, (3.0, 3.2), (1.5, 1.6), (0.5, 0.6)),
+              **fly_quotes(T1, (4.0, 4.2), (1.0, 1.1), (0.2, 0.3))}
+    # The trigger was the last snapshot: no later market exists.
+    d = _delayed(quotes, (T0, T1), delayed_index=2)["stressed_delayed"]
+    assert d.settlement_fallback and d.exit == 9.0
+    none = _delayed(quotes, (T0, T1), delayed_index=2, settlement=None)
+    assert none["stressed_delayed"].status == "missing_exit_market"
+    assert none["stressed"].exit_index == 1  # the trigger snapshot itself was usable
+
+
+def test_held_trades_are_not_affected_by_the_delay():
+    quotes = fly_quotes(T0, (3.0, 3.2), (1.5, 1.6), (0.5, 0.6))
+    out = price_trade(_path(quotes, (T0,)), entry_index=0, entry_mark=0.45, exit_index=None,
+                      exit_mark=None, settlement=7.5, costs=COSTS, delayed_exit_index=None)
+    assert out.pnl_dollars("stressed_delayed") == out.pnl_dollars("stressed")
+
+
+def _clock_session(chain_times, clock_times):
+    from butterfly_guy.research.entry import PROFILES, Series, Session
+
+    chain = make_chain(list(chain_times), {})
+    clock = np.array(clock_times, dtype=np.int64)
+    return Session(date=DAY, market=DayMarket(chain), clock_ts=clock,
+                   clock_spot=np.full(len(clock), 5960.0), open=5960.0, prev_close=5950.0,
+                   close=5980.0, vix=Series(clock, np.full(len(clock), 18.0)),
+                   profile=PROFILES["live"])
+
+
+def test_delayed_index_uses_the_next_clock_time_and_at_least_one_snapshot():
+    from butterfly_guy.research.simulate import delayed_exit_index
+
+    s = _clock_session((T0, T1, T2), (T0, T1, T2))
+    assert delayed_exit_index(s, T1, 1, 1) == 2
+    assert delayed_exit_index(s, T2, 2, 1) == 3  # past the end: settlement fallback
+    # A clock denser than the chain: the next clock time maps back to the trigger's
+    # snapshot, so the delay still moves to the next recorded snapshot.
+    dense = _clock_session((T0, T1, T2), (T0, T1, minute(10, 1, 20), T2))
+    assert delayed_exit_index(dense, T1, 1, 1) == 2
+    # Two clock times reach only 10:02, but a delay of two means two recorded snapshots.
+    assert delayed_exit_index(dense, T1, 1, 2) == 3
+    assert delayed_exit_index(dense, T1, 1, 0) == 1

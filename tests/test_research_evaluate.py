@@ -84,3 +84,39 @@ def test_trade_metrics_top3_and_drawdown():
     assert m["top3_share"] == 100.0
     assert m["max_drawdown"] == 200.0
     assert m["profit_factor"] == pytest.approx(900 / 350, abs=1e-3)
+
+
+def _full_trade(day: int, pnl_points: float, variant: str, direction: str = "CALL") -> Trade:
+    from butterfly_guy.research.accounting import MODELS
+
+    fills = TradeFills({m: Fill(entry=1.0, exit=1.0 + pnl_points) for m in MODELS})
+    return Trade(dt.date(2026, 6, day), variant, Fly(direction, 1, 2, 3), 0, 0, 1.0, None,
+                 None, "", "cash_settled", None, None, None, 0.0, 0.0, fills)
+
+
+def test_multi_trade_sessions_sum_and_any_exclusion_drops_the_session_for_every_arm():
+    from butterfly_guy.research.entry import BaselineEntry, BothSides
+    from butterfly_guy.research.evaluate import evaluate
+    from butterfly_guy.research.simulate import RunResult, Variant, VariantRun
+
+    dates = [dt.date(2026, 6, d) for d in (1, 2, 3, 4)]
+    base = VariantRun(Variant("E0", BaselineEntry()),
+                      [_full_trade(d, 1.0, "E0") for d in (1, 2, 3, 4)])
+    both = VariantRun(Variant("D3", BothSides()), [
+        _full_trade(1, 2.0, "D3", "CALL"), _full_trade(1, -0.5, "D3", "PUT"),  # two trades
+        _full_trade(2, 1.0, "D3", "CALL"),
+        _full_trade(3, 4.0, "D3", "CALL"),  # its PUT entry on day 3 could not be replayed
+    ], excluded={dt.date(2026, 6, 3): "incomplete_data"})
+    ev = evaluate(RunResult(dates, {"E0": base, "D3": both}, {}), "E0",
+                  EvalParams(min_bootstrap_sessions=0))
+    assert ev["sessions"] == 3 and ev["dropped_sessions"] == {"2026-06-03": "D3:incomplete_data"}
+    d3, e0 = ev["arms"]["D3"]["stressed"], ev["arms"]["E0"]["stressed"]
+    assert d3["n"] == 3 and d3["net"] == pytest.approx(150.0 + 100.0)  # day 1 sums, day 3 out
+    assert e0["net"] == pytest.approx(300.0)  # the baseline loses day 3 too: still paired
+    assert d3["vs_baseline"]["net_diff"] == pytest.approx(-50.0)
+    assert d3["per_session"] == round(250.0 / 3, 2)
+
+
+def test_bootstrap_is_not_reported_on_too_few_sessions():
+    out = paired_bootstrap(np.ones(3), np.zeros(3), EvalParams())
+    assert out == {"ci90": None, "p_better": None}

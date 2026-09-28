@@ -12,6 +12,10 @@ These are the 2026-09-21 accounting models, identical to
   snapshot, and with none left the fly cash-settles against the official close.
   Cash settlement has no order, commission or stress.
 - stressed: marketable with every contract fill $0.05 worse on each executed side.
+- stressed_delayed: stressed, but an intraday exit fills starting from a later snapshot
+  (exit-latency stress, review §5): the caller passes the delayed snapshot index, and
+  the exit still rolls forward past unusable markets and falls back to settlement.
+  Entries, decisions and held trades are unchanged.
 
 A missing or crossed entry market leaves the trade unpriced in the executable models;
 no quote is ever imputed.
@@ -30,8 +34,8 @@ from butterfly_guy.backtest.execution_accounting import (
 )
 from butterfly_guy.research.market import FlyPath
 
-Model = Literal["midpoint", "marketable", "stressed"]
-MODELS: tuple[Model, ...] = ("midpoint", "marketable", "stressed")
+Model = Literal["midpoint", "marketable", "stressed", "stressed_delayed"]
+MODELS: tuple[Model, ...] = ("midpoint", "marketable", "stressed", "stressed_delayed")
 MIN_PAPER_EXIT = 0.05
 SETTLED = "cash_settled"
 
@@ -87,12 +91,15 @@ def price_trade(
     exit_mark: float | None,
     settlement: float | None,
     costs: Costs,
+    delayed_exit_index: int | None = None,
 ) -> TradeFills:
     """Price one trade whose decisions are already made.
 
     `entry_index` is the snapshot at or before the entry decision; `exit_index` the
     snapshot at or before the exit decision, or None when the fly is held to settlement
-    (then `settlement` must be the cash-settlement value).
+    (then `settlement` must be the cash-settlement value). `delayed_exit_index` is where
+    the `stressed_delayed` exit starts looking for a fill (at or past the end of the path
+    when no later snapshot exists); it defaults to `exit_index`.
     """
     out = TradeFills()
     held = exit_index is None
@@ -107,8 +114,8 @@ def price_trade(
         mid.exit_index = exit_index
     out.fills["midpoint"] = mid
 
-    for model in ("marketable", "stressed"):
-        stress = costs.stress if model == "stressed" else 0.0
+    for model in ("marketable", "stressed", "stressed_delayed"):
+        stress = 0.0 if model == "marketable" else costs.stress
         fill = Fill()
         out.fills[model] = fill
         if path.missing[entry_index]:
@@ -121,16 +128,19 @@ def price_trade(
         if held:
             fill.exit = settlement
             continue
-        usable = np.flatnonzero(path.executable[exit_index:])
+        start = exit_index
+        if model == "stressed_delayed" and delayed_exit_index is not None:
+            start = max(exit_index, delayed_exit_index)
+        usable = np.flatnonzero(path.executable[start:])
         if len(usable):
-            j = exit_index + int(usable[0])
+            j = start + int(usable[0])
             fill.exit = float(path.credit[j]) - costs.commission - stress
             fill.exit_index = j
-            fill.exit_roll = j - exit_index
+            fill.exit_roll = j - start
         elif settlement is not None:
             fill.exit = settlement
             fill.settlement_fallback = True
-            fill.exit_roll = len(path.executable) - exit_index
+            fill.exit_roll = max(0, len(path.executable) - start)
         else:
             fill.status = "missing_exit_market"
     return out

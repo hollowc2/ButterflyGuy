@@ -2,7 +2,8 @@
 
 Layout under a dataset root (outside Git):
 
-    manifest.json               schema, source, export parameters, {path: {rows, sha256}}
+    manifest.json               schema, source, export parameters, {path: {rows, sha256}},
+                                and `history`: what each export run changed
     sessions.parquet            one row per exported session
     daily_bars.parquet          date, underlying, open, high, low, close
     spot_ticks.parquet          ts_us, underlying, price (spot_prices rows)
@@ -161,6 +162,7 @@ class Manifest:
     schema_version: int = SCHEMA_VERSION
     updated_at: str = ""
     exporter_git_sha: str = ""
+    history: list[dict] = field(default_factory=list)  # one entry per export run
 
     @property
     def dataset_hash(self) -> str:
@@ -178,6 +180,8 @@ class Manifest:
             "dataset_hash": self.dataset_hash,
             "files": {p: self.files[p] for p in sorted(self.files)},
         }
+        if self.history:
+            body["history"] = self.history
         return json.dumps(body, indent=1, sort_keys=False) + "\n"
 
     @classmethod
@@ -193,6 +197,7 @@ class Manifest:
             files=body["files"],
             updated_at=body.get("updated_at", ""),
             exporter_git_sha=body.get("exporter_git_sha", ""),
+            history=body.get("history", []),
         )
         if body.get("dataset_hash") != m.dataset_hash:
             raise ValueError("manifest dataset_hash does not match its file list")

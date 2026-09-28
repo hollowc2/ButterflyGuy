@@ -12,6 +12,9 @@ Events:
   (conservative: anything not registered in advance counts as chosen after seeing results).
 - `backfill`: a variant tried on this data before the registry existed, carried over
   from the research journal with the stage its source recorded.
+- `port`: links the executable definition of a variant to the placeholder `backfill`
+  that described it in words before it was implemented here (`ported_from`). The port
+  inherits the placeholder's stage, and the two hashes count as one definition.
 
 The multiple-testing count reported with results is the number of distinct definitions
 with an `evaluate` or `backfill` event on the dataset name, since extended data still
@@ -27,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 GENESIS = "0" * 64
-EVENTS = {"register", "evaluate", "backfill"}
+EVENTS = {"register", "evaluate", "backfill", "port"}
 STAGES = {"pre", "post"}
 
 
@@ -88,6 +91,9 @@ class Registry:
                     f"{variant} is already in the registry; it cannot be pre-registered now"
                 )
             stage = "pre"
+        elif event == "port":
+            stage = self._port_stage(existing, variant, definition_hash,
+                                     fields.get("ported_from"))
         if stage not in STAGES:
             raise ValueError("a backfill record needs stage 'pre' or 'post'")
         rec = {
@@ -109,19 +115,50 @@ class Registry:
         return rec
 
     @staticmethod
+    def _port_stage(records: list[dict], variant: str, definition_hash: str,
+                    ported_from: object) -> str:
+        placeholder = [r for r in records if r["event"] == "backfill"
+                       and r["definition_hash"] == ported_from]
+        if not placeholder or placeholder[0]["variant"] != variant:
+            raise RegistryError(f"{variant}: no backfill record {ported_from!r} to port from")
+        if any(r["definition_hash"] == definition_hash for r in records):
+            raise RegistryError(f"{variant} {definition_hash[:12]} is already in the registry")
+        if any(r["event"] == "port" and r.get("ported_from") == ported_from for r in records):
+            raise RegistryError(f"{variant}: backfill {ported_from!r} was already ported")
+        return placeholder[0]["stage"]
+
+    @staticmethod
     def _registered(records: list[dict], definition_hash: str) -> bool:
         return any(r["definition_hash"] == definition_hash
-                   and (r["event"] == "register" or (r["event"] == "backfill"
+                   and (r["event"] == "register" or (r["event"] in {"backfill", "port"}
                                                      and r["stage"] == "pre"))
                    for r in records)
 
     def tried(self, dataset_hash: str | None = None) -> dict[str, int]:
         """Distinct definitions evaluated (or backfilled) on this dataset name, overall and
-        on one exact dataset hash."""
-        recs = [r for r in self.records() if r["event"] in {"evaluate", "backfill"}]
-        out = {"dataset": len({r["definition_hash"] for r in recs}),
-               "post_hoc": len({r["definition_hash"] for r in recs if r["stage"] == "post"})}
+        on one exact dataset hash. A ported definition counts as its placeholder."""
+        records = self.records()
+        alias = {r["definition_hash"]: r["ported_from"] for r in records if r["event"] == "port"}
+        recs = [r for r in records if r["event"] in {"evaluate", "backfill"}]
+
+        def key(r: dict) -> str:
+            return alias.get(r["definition_hash"], r["definition_hash"])
+
+        out = {"dataset": len({key(r) for r in recs}),
+               "post_hoc": len({key(r) for r in recs if r["stage"] == "post"})}
         if dataset_hash is not None:
-            out["this_hash"] = len({r["definition_hash"] for r in recs
+            out["this_hash"] = len({key(r) for r in recs
                                     if r.get("dataset_hash") == dataset_hash})
         return out
+
+    def placeholder(self, variant: str) -> dict | None:
+        """The unported backfill record describing `variant` only in words (no executable
+        `entry` definition), if any."""
+        records = self.records()
+        ported = {r.get("ported_from") for r in records if r["event"] == "port"}
+        for r in records:
+            if (r["event"] == "backfill" and r["variant"] == variant
+                    and "entry" not in r["definition"]
+                    and r["definition_hash"] not in ported):
+                return r
+        return None

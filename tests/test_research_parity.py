@@ -66,7 +66,9 @@ def test_mini_fixture_reproduces_the_idea_sweep_harness():
     dates = [dt.date.fromisoformat(d) for d in EXPECTED["dates"]]
     result = _run(ds, "sweep_20260925", dates[0], dates[-1])
     got = {t.date.isoformat(): trade_record(t) for t in result.runs["E0"].trades}
-    assert got == EXPECTED["sweep_e0"]
+    # The fixture predates the delayed-exit model; every recorded field must still match.
+    assert {d: {k: r[k] for k in EXPECTED["sweep_e0"][d]} for d, r in got.items()} == \
+        EXPECTED["sweep_e0"]
 
 
 def _cache() -> Dataset | None:

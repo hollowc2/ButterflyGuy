@@ -12,6 +12,10 @@ Each tied fly is replayed with the variant's own exits from the same entry snaps
 Per session the tie-set average is the mean over tied flies; random draws pick one tied
 fly per session uniformly, with the draw keyed by (session, direction) so every rule
 sees the same draw for the same session and side (paired across rules).
+
+`TiesetScorer` is fed from the main replay loop (no second pass over the data). Rules
+whose entries do not come from the live selector (for example the EV learners and the
+ATM fly) have no tie set and are reported as not applicable.
 """
 
 from __future__ import annotations
@@ -23,9 +27,10 @@ import numpy as np
 
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.research.accounting import Costs, Model
-from butterfly_guy.research.entry import Entry, RunContext, Session, SessionLoader, selection_span
+from butterfly_guy.research.entry import Entry, RunContext, Session, selection_span
+from butterfly_guy.research.exits import ExitRule
 from butterfly_guy.research.market import Fly
-from butterfly_guy.research.simulate import Trade, Variant, entries_for, simulate_entry
+from butterfly_guy.research.simulate import Trade, simulate_entry
 from butterfly_guy.strategy.butterfly_builder import vix_target_center
 from butterfly_guy.strategy.entry_selection import select_entry_candidate
 
@@ -59,15 +64,16 @@ def selector_pool(
 
 def tied_candidates(s: Session, ctx: RunContext, e: Entry, threshold: float
                     ) -> list[ButterflyCandidate]:
-    config = ctx.config
+    config = e.select_config or ctx.config
+    vix = e.select_vix if e.select_vix is not None else e.vix
     quotes = s.market.quotes_at(e.index, e.direction, near=e.spot, span=selection_span(config))
     result = select_entry_candidate(quotes=quotes, spot=e.spot, direction=e.direction,
-                                    vix=e.vix, config=config, asset=ctx.asset)
+                                    vix=vix, config=config, asset=ctx.asset)
     winner = result.candidate
     if winner is None:
         return []
     pool = selector_pool(
-        list(result.candidates), vix=e.vix, spot=e.spot, direction=e.direction,
+        list(result.candidates), vix=vix, spot=e.spot, direction=e.direction,
         widths=result.active_widths, sigmas=result.active_sigmas,
         center_tolerance=config.entry.center_tolerance, rr_max=config.strategy.rr_max,
     )
@@ -83,62 +89,70 @@ def draw_keys(d: dt.date, direction: str, draws: int, seed: int) -> np.ndarray:
     return np.random.default_rng(key).random(draws)
 
 
-def run_tiesets(
-    loader: SessionLoader, variants: list[Variant], ctx: RunContext, dates: list[dt.date], *,
-    thresholds: tuple[float, ...] = THRESHOLDS, models: tuple[Model, ...] = ("stressed",),
-    draws: int = 5000, seed: int = 7, costs: Costs | None = None,
-) -> dict[str, dict[str, dict]]:
-    """Per variant and threshold: tie sets per session and paired draw totals."""
-    costs = costs or Costs(ctx.config.execution.paper_commission_per_contract)
-    n = len(dates)
-    # [variant][threshold][model] -> (draws,) totals, tie-set average total, tie sizes
-    totals = {v.name: {t: {m: np.zeros(draws) for m in models} for t in thresholds}
-              for v in variants}
-    avg = {v.name: {t: {m: 0.0 for m in models} for t in thresholds} for v in variants}
-    sizes = {v.name: {t: [] for t in thresholds} for v in variants}
-    for d in dates:
-        s = loader.load(d)
-        if s is None:
-            continue
-        for v in variants:
-            rules = v.exit_rules(ctx)
-            for e in entries_for(s, ctx, v.entry):
-                u = draw_keys(d, e.direction, draws, seed)
-                for t in thresholds:
-                    ties = tied_candidates(s, ctx, e, t)
-                    trades: list[Trade] = []
-                    for c in ties:
-                        alt = Entry(Fly.from_candidate(c), e.ts_us, e.index, c.cost,
-                                    e.direction, vix=e.vix, spot=e.spot, candidate=c)
-                        out = simulate_entry(s, ctx, alt, rules, v.name, costs)
-                        if isinstance(out, Trade):
-                            trades.append(out)
-                    if not trades:
-                        continue
-                    sizes[v.name][t].append(len(trades))
-                    pick = np.minimum((u * len(trades)).astype(int), len(trades) - 1)
-                    for m in models:
-                        pnl = np.array([tr.pnl(m) or 0.0 for tr in trades])
-                        totals[v.name][t][m] += pnl[pick]
-                        avg[v.name][t][m] += float(pnl.mean())
-    out: dict[str, dict[str, dict]] = {}
-    base = variants[0].name
-    for v in variants:
-        out[v.name] = {}
-        for t in thresholds:
-            row = {"sessions": n, "mean_tie_size": round(float(np.mean(sizes[v.name][t])), 2)
-                   if sizes[v.name][t] else None}
-            for m in models:
-                tot = totals[v.name][t][m]
-                lo, med, hi = np.percentile(tot, [5, 50, 95])
-                row[m] = {
-                    "tieset_avg": round(avg[v.name][t][m], 2),
-                    "draw_median": round(float(med), 2),
-                    "draw_p05": round(float(lo), 2),
-                    "draw_p95": round(float(hi), 2),
-                }
-                if v.name != base:
-                    row[m]["beats_baseline"] = round(
-                        float((tot > totals[base][t][m]).mean()), 4)
-            out[v.name][f"{t:.2f}"] = row
-    return out
+NOT_APPLICABLE = "entries are not chosen by the live selector"
+
+
+class TiesetScorer:
+    """Collects tie sets per variant, threshold and entry during the replay."""
+
+    def __init__(self, thresholds: tuple[float, ...] = THRESHOLDS,
+                 models: tuple[Model, ...] = ("stressed",), draws: int = 5000,
+                 seed: int = 7) -> None:
+        self.thresholds, self.models, self.draws, self.seed = thresholds, models, draws, seed
+        # (variant, threshold) -> [(date, direction, {model: per-tied-fly pnl})]
+        self.rows: dict[tuple[str, float], list[tuple[dt.date, str, dict]]] = {}
+        self.not_applicable: set[str] = set()
+
+    def params(self) -> dict:
+        return {"thresholds": list(self.thresholds), "draws": self.draws, "seed": self.seed}
+
+    def add(self, s: Session, ctx: RunContext, variant: str, e: Entry, rules: tuple[ExitRule, ...],
+            costs: Costs, exit_delay: int) -> None:
+        if e.candidate is None:
+            self.not_applicable.add(variant)
+            return
+        for t in self.thresholds:
+            trades: list[Trade] = []
+            for c in tied_candidates(s, ctx, e, t):
+                alt = Entry(Fly.from_candidate(c), e.ts_us, e.index, c.cost, e.direction,
+                            vix=e.vix, spot=e.spot, candidate=c)
+                out = simulate_entry(s, ctx, alt, rules, variant, costs, exit_delay)
+                if isinstance(out, Trade):
+                    trades.append(out)
+            if trades:
+                pnl = {m: np.array([tr.pnl(m) or 0.0 for tr in trades]) for m in self.models}
+                self.rows.setdefault((variant, t), []).append((s.date, e.direction, pnl))
+
+    def summary(self, names: list[str], dates: list[dt.date]) -> dict[str, dict]:
+        """Per variant and threshold over `dates` (the compared sessions); the first name
+        is the baseline for `beats_baseline`."""
+        keep = set(dates)
+        totals: dict[tuple[str, float, str], np.ndarray] = {}
+        out: dict[str, dict] = {}
+        for name in names:
+            if name in self.not_applicable:
+                out[name] = {"not_applicable": NOT_APPLICABLE}
+                continue
+            out[name] = {}
+            for t in self.thresholds:
+                rows = [r for r in self.rows.get((name, t), []) if r[0] in keep]
+                sizes = [len(r[2][self.models[0]]) for r in rows]
+                row = {"sessions": len(dates),
+                       "mean_tie_size": round(float(np.mean(sizes)), 2) if sizes else None}
+                for m in self.models:
+                    tot = np.zeros(self.draws)
+                    avg = 0.0
+                    for d, direction, pnl in rows:
+                        u = draw_keys(d, direction, self.draws, self.seed)
+                        pick = np.minimum((u * len(pnl[m])).astype(int), len(pnl[m]) - 1)
+                        tot += pnl[m][pick]
+                        avg += float(pnl[m].mean())
+                    totals[(name, t, m)] = tot
+                    lo, med, hi = np.percentile(tot, [5, 50, 95])
+                    row[m] = {"tieset_avg": round(avg, 2), "draw_median": round(float(med), 2),
+                              "draw_p05": round(float(lo), 2), "draw_p95": round(float(hi), 2)}
+                    base = totals.get((names[0], t, m))
+                    if name != names[0] and base is not None:
+                        row[m]["beats_baseline"] = round(float((tot > base).mean()), 4)
+                out[name][f"{t:.2f}"] = row
+        return out

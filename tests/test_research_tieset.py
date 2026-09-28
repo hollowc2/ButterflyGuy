@@ -44,3 +44,10 @@ def test_draws_are_keyed_by_session_and_direction():
     d = dt.date(2026, 6, 10)
     assert np.array_equal(draw_keys(d, "CALL", 100, 7), draw_keys(d, "CALL", 100, 7))
     assert not np.array_equal(draw_keys(d, "CALL", 100, 7), draw_keys(d, "PUT", 100, 7))
+
+
+def test_run_scores_tie_sets_unless_told_not_to():
+    from butterfly_guy.research.cli import build_parser
+
+    assert build_parser().parse_args(["run", "--variants", "E0"]).no_tieset is False
+    assert build_parser().parse_args(["run", "--variants", "E0", "--no-tieset"]).no_tieset

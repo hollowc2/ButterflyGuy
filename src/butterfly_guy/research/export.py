@@ -234,6 +234,7 @@ class ExportPlan:
     dataset: str = DEFAULT_DATASET
     strike_margin: float = DEFAULT_STRIKE_MARGIN
     refresh: bool = False
+    bars_only: bool = False  # re-read only daily_bars (pending official closes)
     daily_lookback_days: int = 400
     spot_lookback_days: int = 10
     log: object = field(default=sys.stderr)
@@ -290,8 +291,73 @@ def _weekdays(start: dt.date, end: dt.date) -> list[dt.date]:
     return out
 
 
+def _bars_key(df: pd.DataFrame) -> dict[tuple[str, str], dict[str, float]]:
+    return {(pd.Timestamp(r.date).date().isoformat(), r.underlying):
+            {c: float(getattr(r, c)) for c in ("open", "high", "low", "close")}
+            for r in df.itertuples()}
+
+
+def bars_changes(old: pd.DataFrame | None, new: pd.DataFrame) -> list[dict]:
+    """Row-level differences between two `daily_bars` tables."""
+    before = {} if old is None else _bars_key(old)
+    after = _bars_key(new)
+    out = []
+    for key in sorted(set(before) | set(after)):
+        a, b = before.get(key), after.get(key)
+        if a == b:
+            continue
+        rec = {"date": key[0], "underlying": key[1]}
+        if a is None:
+            rec["added"] = b
+        elif b is None:
+            rec["removed"] = a
+        else:
+            rec["changed"] = {c: [a[c], b[c]] for c in a if a[c] != b[c]
+                              and not (np.isnan(a[c]) and np.isnan(b[c]))}
+        out.append(rec)
+    return out
+
+
+def _spx_closes(bars: pd.DataFrame | None, underlying: str) -> set[dt.date]:
+    if bars is None:
+        return set()
+    rows = bars[(bars["underlying"] == underlying) & bars["close"].notna()]
+    return {pd.Timestamp(d).date() for d in rows["date"]}
+
+
+def _history_entry(prev_files: dict, prev_hash: str | None, manifest: Manifest,
+                   old_bars: pd.DataFrame | None, new_bars: pd.DataFrame,
+                   sessions: pd.DataFrame, added: list[dt.date], refreshed: list[dt.date],
+                   plan: ExportPlan) -> dict:
+    files = manifest.files
+    changed = {p: {"sha256": [prev_files[p]["sha256"] if p in prev_files else None,
+                              files[p]["sha256"] if p in files else None],
+                   "rows": [prev_files[p]["rows"] if p in prev_files else None,
+                            files[p]["rows"] if p in files else None]}
+               for p in sorted(set(prev_files) | set(files))
+               if prev_files.get(p) != files.get(p)}
+    dates = {pd.Timestamp(d).date() for d in sessions["date"]}
+    before, after = _spx_closes(old_bars, plan.underlying), _spx_closes(new_bars, plan.underlying)
+    return {
+        "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        "mode": "bars_only" if plan.bars_only else ("refresh" if plan.refresh else "extend"),
+        "range": [plan.start.isoformat(), plan.end.isoformat()],
+        "exporter_git_sha": _git_sha(),
+        "previous_dataset_hash": prev_hash,
+        "dataset_hash": manifest.dataset_hash,
+        "sessions_added": [d.isoformat() for d in added],
+        "sessions_refreshed": [d.isoformat() for d in refreshed],
+        "files_changed": changed,
+        "daily_bars_changes": bars_changes(old_bars, new_bars),
+        "settlements_landed": sorted(d.isoformat() for d in dates & (after - before)),
+        "pending_settlements": sorted(d.isoformat() for d in dates - after),
+    }
+
+
 def run_export(source: DataSource, plan: ExportPlan, cache_root: Path | None = None) -> Manifest:
-    """Export (or extend) a dataset. Existing sessions are kept unless `refresh`."""
+    """Export (or extend) a dataset. Existing sessions are kept unless `refresh`; with
+    `bars_only`, only `daily_bars` is re-read (to pick up official closes that had not
+    landed). Every run appends what it changed to the manifest's `history`."""
     root = (cache_root or default_cache_root()) / plan.dataset
     root.mkdir(parents=True, exist_ok=True)
     manifest_path = root / "manifest.json"
@@ -307,11 +373,17 @@ def run_export(source: DataSource, plan: ExportPlan, cache_root: Path | None = N
             raise ValueError(
                 f"existing dataset was exported with {manifest.export}; use a new dataset name"
             )
+    elif plan.bars_only:
+        raise ValueError("--bars-only needs an existing dataset")
     else:
         manifest = Manifest(
             dataset=plan.dataset, underlying=plan.underlying,
             source=source.describe(), export=export_params,
         )
+    prev_files = {p: dict(v) for p, v in manifest.files.items()}
+    prev_hash = manifest.dataset_hash if manifest.files else None
+    bars_path = root / "daily_bars.parquet"
+    old_bars = pd.read_parquet(bars_path) if "daily_bars.parquet" in prev_files else None
     manifest.source = source.describe()
     log = plan.log
 
@@ -324,9 +396,12 @@ def run_export(source: DataSource, plan: ExportPlan, cache_root: Path | None = N
             columns=["date", "snapshots", "chain_snapshots", "strikes", "strike_lo",
                      "strike_hi", "clock_spot_disagreements"]
         )
-    known = set(sessions["date"]) if not plan.refresh else set()
+    existing = set(sessions["date"])
+    known = existing if not plan.refresh else set()
+    added: list[dt.date] = []
+    refreshed: list[dt.date] = []
 
-    for date in _weekdays(plan.start, plan.end):
+    for date in [] if plan.bars_only else _weekdays(plan.start, plan.end):
         if date in known:
             continue
         n = int(_read_csv(source.copy_csv(snapshot_count_sql(plan.underlying, date)))["n"][0])
@@ -354,19 +429,22 @@ def run_export(source: DataSource, plan: ExportPlan, cache_root: Path | None = N
         sessions = pd.concat(
             [sessions[sessions["date"] != date], pd.DataFrame([row])], ignore_index=True
         )
+        (refreshed if date in existing else added).append(date)
         print(f"  {date}: {len(chain.ts)} snapshots x {len(chain.strikes)} strikes", file=log)
 
     if sessions.empty:
         raise RuntimeError("no sessions exported")
     sessions = sessions.sort_values("date").reset_index(drop=True)
     sessions["date"] = pd.to_datetime(sessions["date"])
-    manifest.files["sessions.parquet"] = write_table(
-        pa.Table.from_pandas(sessions.astype({"snapshots": "int64", "chain_snapshots": "int64",
-                                              "strikes": "int64",
-                                              "clock_spot_disagreements": "int64"}),
-                             preserve_index=False),
-        sessions_path,
-    )
+    if not plan.bars_only:
+        manifest.files["sessions.parquet"] = write_table(
+            pa.Table.from_pandas(sessions.astype({"snapshots": "int64",
+                                                  "chain_snapshots": "int64",
+                                                  "strikes": "int64",
+                                                  "clock_spot_disagreements": "int64"}),
+                                 preserve_index=False),
+            sessions_path,
+        )
     first, last = sessions["date"].min().date(), sessions["date"].max().date()
 
     bars = _read_csv(source.copy_csv(daily_bars_sql(
@@ -377,30 +455,39 @@ def run_export(source: DataSource, plan: ExportPlan, cache_root: Path | None = N
         **{c: bars[c].astype("float64") for c in ("open", "high", "low", "close")},
     }).sort_values(["underlying", "date"])
     manifest.files["daily_bars.parquet"] = write_table(
-        pa.Table.from_pandas(bars, preserve_index=False), root / "daily_bars.parquet"
+        pa.Table.from_pandas(bars, preserve_index=False), bars_path
     )
 
-    tick_frames = []
-    chunk_start = first - dt.timedelta(days=plan.spot_lookback_days)
-    while chunk_start <= last:
-        chunk_end = min(chunk_start + dt.timedelta(days=7), last + dt.timedelta(days=1))
-        df = _read_csv(source.copy_csv(spot_ticks_sql(chunk_start, chunk_end)))
-        if not df.empty:
-            tick_frames.append(pd.DataFrame({
-                "ts_us": _ts_us(df["ts"]),
-                "underlying": df["underlying"].astype(str),
-                "price": df["price"].astype("float64"),
-            }))
-        chunk_start = chunk_end
-    ticks = pd.concat(tick_frames, ignore_index=True).sort_values(
-        ["underlying", "ts_us"], kind="stable")
-    manifest.files["spot_ticks.parquet"] = write_table(
-        pa.Table.from_pandas(ticks, preserve_index=False), root / "spot_ticks.parquet"
-    )
+    if not plan.bars_only:
+        tick_frames = []
+        chunk_start = first - dt.timedelta(days=plan.spot_lookback_days)
+        while chunk_start <= last:
+            chunk_end = min(chunk_start + dt.timedelta(days=7), last + dt.timedelta(days=1))
+            df = _read_csv(source.copy_csv(spot_ticks_sql(chunk_start, chunk_end)))
+            if not df.empty:
+                tick_frames.append(pd.DataFrame({
+                    "ts_us": _ts_us(df["ts"]),
+                    "underlying": df["underlying"].astype(str),
+                    "price": df["price"].astype("float64"),
+                }))
+            chunk_start = chunk_end
+        ticks = pd.concat(tick_frames, ignore_index=True).sort_values(
+            ["underlying", "ts_us"], kind="stable")
+        manifest.files["spot_ticks.parquet"] = write_table(
+            pa.Table.from_pandas(ticks, preserve_index=False), root / "spot_ticks.parquet"
+        )
 
-    manifest.updated_at = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
-    manifest.exporter_git_sha = _git_sha()
+    entry = _history_entry(prev_files, prev_hash, manifest, old_bars, bars, sessions, added,
+                           refreshed, plan)
+    manifest.history.append(entry)
+    manifest.updated_at = entry["at"]
+    manifest.exporter_git_sha = entry["exporter_git_sha"]
     manifest.save(manifest_path)
     print(f"dataset {plan.dataset}: {len(sessions)} sessions {first} -> {last}, "
           f"hash {manifest.dataset_hash}", file=log)
+    print(f"  added {len(added)}, refreshed {len(refreshed)}, files changed "
+          f"{len(entry['files_changed'])}, daily_bars rows changed "
+          f"{len(entry['daily_bars_changes'])}; settlements landed "
+          f"{entry['settlements_landed'] or 'none'}; pending "
+          f"{entry['pending_settlements'] or 'none'}", file=log)
     return manifest

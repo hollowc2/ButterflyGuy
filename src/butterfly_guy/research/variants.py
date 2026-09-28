@@ -7,11 +7,27 @@ registry; changing a rule's parameters or its class source changes the hash.
 
 from __future__ import annotations
 
-from butterfly_guy.research.entry import BaselineEntry, FilteredEntry
+import datetime as dt
+
+from butterfly_guy.research.entry import (
+    ATMEntry,
+    BaselineEntry,
+    BothSides,
+    FilteredEntry,
+    StraddleAnchoredEntry,
+)
 from butterfly_guy.research.exits import PeakTrailer, StopLoss, TakeProfit, TimeExit
+from butterfly_guy.research.learning import EVRankEntry, EVSelector, FittedFilter
 from butterfly_guy.research.simulate import Variant
 
 BASE = BaselineEntry()
+STRADDLE = StraddleAnchoredEntry()
+H1 = (dt.date(2026, 3, 13), dt.date(2026, 6, 18))  # the idea sweep's first half
+EV_RANK = EVRankEntry()
+
+
+def _late(hh: int, mm: int) -> StraddleAnchoredEntry:
+    return StraddleAnchoredEntry(BaselineEntry(start_et=(hh, mm)))
 
 CATALOG: dict[str, Variant] = {
     v.name: v
@@ -38,6 +54,34 @@ CATALOG: dict[str, Variant] = {
                 "E0 call entries only (post hoc)."),
         Variant("HLV1", FilteredEntry(BASE, "skip_low_vix_calls", (("level", 17.0),)),
                 "config", "H-LV1: E0, skipping CALL entries when entry VIX is below 17.0."),
+        Variant("C1", STRADDLE, "config",
+                "Centers anchored on 1.25 x the ATM straddle (chain-implied remaining move) "
+                "instead of the VIX move; runtime trailer."),
+        Variant("C2", STRADDLE, (), "C1 selection held to settlement."),
+        Variant("D3", BothSides(), "config",
+                "Both sides: the baseline call fly and the baseline put fly every session "
+                "(trailer); session P&L is their sum."),
+        Variant("D4", ATMEntry(), (),
+                "ATM call fly (center nearest spot, middle width of the VIX bucket), held "
+                "to settlement."),
+        *[Variant(code, _late(hh, mm), exits, f"Straddle-anchored entry from {hh}:{mm:02d} "
+                  f"ET; {'runtime trailer' if exits == 'config' else 'held to settlement'}.")
+          for code, (hh, mm), exits in [
+              ("T1", (11, 30), "config"), ("T2", (11, 30), ()), ("T3", (13, 0), "config"),
+              ("T4", (13, 0), ()), ("T5", (14, 30), "config"), ("T6", (14, 30), ())]],
+        Variant("K1", FittedFilter(BASE, "entry_spread_ratio", *H1, if_undefined="keep"),
+                "config", "E0, skipping entries whose (ask - mark) / mark exceeds the median "
+                "over E0 entries in H1 (fitted on 2026-03-13..2026-06-18)."),
+        Variant("G1", EVSelector(10, 0), (),
+                "10:00 ET prior-session EV selector over all flies, held to settlement."),
+        Variant("G2", EVSelector(13, 0), (), "G1 at 13:00 ET."),
+        Variant("R2", FittedFilter(BASE, "vix_straddle_ratio", *H1), "config",
+                "E0, skipping entries whose VIX move / (1.25 x ATM straddle) exceeds the "
+                "median over E0 entries in H1 (post hoc; fitted on 2026-03-13..2026-06-18)."),
+        Variant("R3", EV_RANK, "config",
+                "E0 candidate set ranked by prior-session EV instead of the VIX anchor and "
+                "reward/risk; runtime trailer (post hoc)."),
+        Variant("R4", EV_RANK, (), "R3 held to settlement (post hoc)."),
     ]
 }
 

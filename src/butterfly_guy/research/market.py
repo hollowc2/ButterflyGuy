@@ -137,6 +137,21 @@ class DayMarket:
             crossed=crossed,
         )
 
+    def first_at_or_after(self, ts_us: int) -> int | None:
+        """Index of the first snapshot recorded at or after `ts_us`, or None."""
+        i = int(np.searchsorted(self.ts, ts_us, side="left"))
+        return i if i < len(self.ts) else None
+
+    def atm_straddle(self, i: int) -> float | None:
+        """ATM straddle mark at snapshot `i`: call plus put mark at the strike nearest the
+        snapshot's spot (the lower strike on an exact tie); None if either is missing."""
+        j = int(np.argmin(np.abs(self.strikes - self.spot[i])))
+        c = self.chain.fields["C_mark"][i, j]
+        p = self.chain.fields["P_mark"][i, j]
+        if not (np.isfinite(c) and np.isfinite(p)):
+            return None
+        return float(c + p)
+
     def quotes_at(
         self, i: int, direction: Direction, near: float | None = None, span: float | None = None
     ) -> list[OptionQuote]:

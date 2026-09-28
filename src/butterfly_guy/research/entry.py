@@ -29,7 +29,7 @@ from typing import Literal, Protocol
 
 import numpy as np
 
-from butterfly_guy.core.config import AppConfig, load_config
+from butterfly_guy.core.config import AppConfig, VixWidthBucket, load_config
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.research.dataset import Dataset, SessionChain
 from butterfly_guy.research.market import (
@@ -39,6 +39,10 @@ from butterfly_guy.research.market import (
     Fly,
     et_us,
     restrict_view,
+)
+from butterfly_guy.strategy.butterfly_builder import (
+    resolve_wing_widths_for_vix,
+    vix_expected_move,
 )
 from butterfly_guy.strategy.entry_selection import select_entry_candidate
 
@@ -258,6 +262,14 @@ class Entry:
     spot: float | None = None
     candidate: ButterflyCandidate | None = None
     tag: str = ""
+    # The selector inputs when they differ from the run's config and the entry VIX (the
+    # straddle anchor), so tie-set scoring replays the same selection.
+    select_config: AppConfig | None = None
+    select_vix: float | None = None
+    # Learning rules: how many prior-session observations the decision used, and the
+    # latest of their dates (always before the session).
+    history_n: int | None = None
+    history_last: dt.date | None = None
 
 
 class EntryRule(Protocol):
@@ -386,3 +398,110 @@ PREDICATES = {
     "call_only": _call_only,
     "skip_low_vix_calls": _skip_low_vix_calls,
 }
+
+
+def cached_entries(s: Session, ctx: RunContext, rule: EntryRule) -> list[Entry]:
+    """A stateless rule's entries, cached per session so every variant (and every rule
+    wrapping it) sees the exact same decisions."""
+    key = ("entries", rule)
+    if key not in s.cache:
+        s.cache[key] = rule.entries(s, ctx)
+    return s.cache[key]
+
+
+def baseline_window(rule: BaselineEntry, s: Session, ctx: RunContext) -> tuple[int, int]:
+    """`BaselineEntry`'s decision window (its start/length overrides applied)."""
+    lo, hi = ctx.window(s.date)
+    if rule.start_et is not None:
+        lo = et_us(s.date, *rule.start_et)
+        hi = lo + (hi - ctx.window(s.date)[0])
+    if rule.window_minutes is not None:
+        hi = lo + rule.window_minutes * 60_000_000
+    return lo, hi
+
+
+def straddle_selection(config: AppConfig, vix: float, spot: float, move: float
+                       ) -> tuple[AppConfig, float]:
+    """Selector inputs that place centers by `move` instead of the VIX-implied move while
+    keeping the entry VIX's width bucket: a one-bucket config holding that bucket's widths
+    (so its positional sigmas are unchanged) and the VIX whose implied move is `move`."""
+    widths, _ = resolve_wing_widths_for_vix(vix, config.strategy.vix_width_buckets)
+    strategy = config.strategy.model_copy(update={
+        "vix_width_buckets": [VixWidthBucket(vix_max=9999.0, widths=list(widths))]})
+    return config.model_copy(update={"strategy": strategy}), move / vix_expected_move(1.0, spot)
+
+
+@dataclass(frozen=True)
+class StraddleAnchoredEntry:
+    """The baseline entry with centers anchored on the chain-implied remaining move,
+    `multiple` x the ATM straddle mark, instead of the VIX daily move (idea sweep C1/C2
+    and, with a later window, T1-T6). Widths still come from the entry VIX bucket, and
+    selection still runs through the live selector. A snapshot without a straddle is
+    skipped."""
+
+    base: BaselineEntry = BaselineEntry()
+    multiple: float = 1.25
+
+    def entries(self, s: Session, ctx: RunContext) -> list[Entry]:
+        lo, hi = baseline_window(self.base, s, ctx)
+        direction = self.base._direction(s, lo)
+        for ts in s.clock_ts[(s.clock_ts >= lo) & (s.clock_ts <= hi)]:
+            ts = int(ts)
+            vix = s.vix.at_or_before(ts, max_age_s=ctx.max_vix_age_s)
+            if vix is None:
+                continue
+            i = s.market.at_or_before(ts)
+            straddle = s.market.atm_straddle(i) if i >= 0 else None
+            if straddle is None:
+                continue
+            spot = float(s.clock_spot[s.clock_index(ts)])
+            config, anchor_vix = straddle_selection(ctx.config, vix[0], spot,
+                                                    self.multiple * straddle)
+            cand, i, spot = select_at(s, ctx, ts, direction, anchor_vix, config=config)
+            if cand is not None:
+                return [Entry(Fly.from_candidate(cand), ts, i, cand.cost, direction,
+                              vix=vix[0], spot=spot, candidate=cand, tag="straddle",
+                              select_config=config, select_vix=anchor_vix)]
+        return []
+
+
+@dataclass(frozen=True)
+class ATMEntry:
+    """Idea sweep D4: a call fly centered on the strike step nearest spot, with the middle
+    width of the entry VIX bucket, at the first window time with a fresh VIX whose fly is
+    observed. Not selected by the live selector (no tie-set)."""
+
+    strike_step: int = 5
+
+    def entries(self, s: Session, ctx: RunContext) -> list[Entry]:
+        lo, hi = ctx.window(s.date)
+        buckets = ctx.config.strategy.vix_width_buckets
+        for ts in s.clock_ts[(s.clock_ts >= lo) & (s.clock_ts <= hi)]:
+            ts = int(ts)
+            vix = s.vix.at_or_before(ts, max_age_s=ctx.max_vix_age_s)
+            i = s.market.at_or_before(ts)
+            if vix is None or i < 0:
+                continue
+            widths, _ = resolve_wing_widths_for_vix(vix[0], buckets)
+            w = widths[len(widths) // 2]
+            spot = float(s.market.spot[i])
+            c = float(round(spot / self.strike_step) * self.strike_step)
+            fly = Fly("CALL", c - w, c, c + w)
+            path = s.market.fly_path(fly)
+            if path is None or not path.observed[i]:
+                continue
+            return [Entry(fly, ts, i, float(path.mark[i]), "CALL", vix=vix[0], spot=spot,
+                          tag="ATM")]
+        return []
+
+
+@dataclass(frozen=True)
+class BothSides:
+    """Every entry of each rule on the same session (idea sweep D3: the baseline call fly
+    and the baseline put fly). The session's P&L is the sum of its trades."""
+
+    rules: tuple[BaselineEntry, ...] = (BaselineEntry(direction="CALL"),
+                                        BaselineEntry(direction="PUT"))
+
+    def entries(self, s: Session, ctx: RunContext) -> list[Entry]:
+        return [e for rule in self.rules for e in cached_entries(s, ctx, rule)]

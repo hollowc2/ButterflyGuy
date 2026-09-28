@@ -1,10 +1,13 @@
 """Research CLI: `uv run python -m butterfly_guy.research <command> ...`
 
-  export    read-only export of SPX 0-DTE data into the Parquet cache
-  verify    check the dataset manifest hashes and the registry chain
-  register  pre-register catalog variants before evaluating them
-  run       evaluate variants against a baseline and write artifacts
-  parity    replay E0 under the frozen profile against the frozen replay ledger
+  export             read-only export of SPX 0-DTE data into the Parquet cache
+  verify             check the dataset manifest hashes and the registry chain
+  register           pre-register catalog variants before evaluating them
+  port               link ported variants to their placeholder backfill records
+  run                evaluate variants against a baseline and write artifacts
+  shadow             exploratory paired shadow on an open cohort's recorded sessions
+  parity             replay E0 under the frozen profile against the frozen replay ledger
+  calibrate-latency  read-only exit latency of recorded paper trades
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import logging
 import shlex
 import subprocess
 import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -34,8 +38,8 @@ from butterfly_guy.research.entry import (
 from butterfly_guy.research.evaluate import EvalParams, common_dates, evaluate
 from butterfly_guy.research.registry import Registry
 from butterfly_guy.research.report import dump_canonical, trade_record, write_run
-from butterfly_guy.research.simulate import canonical_json, run_variants
-from butterfly_guy.research.tieset import run_tiesets
+from butterfly_guy.research.simulate import DEFAULT_EXIT_DELAY, canonical_json, run_variants
+from butterfly_guy.research.tieset import TiesetScorer
 from butterfly_guy.research.variants import CATALOG, resolve
 
 REPORTS = REPO_ROOT / "reports" / "research"
@@ -78,10 +82,29 @@ def cmd_export(args: argparse.Namespace) -> int:
     source = DockerExecSource() if args.source == "docker" else PostgresSource()
     try:
         run_export(source, ExportPlan(args.start, args.end, dataset=args.dataset,
-                                      refresh=args.refresh),
+                                      refresh=args.refresh, bars_only=args.bars_only),
                    Path(args.cache) if args.cache else None)
     finally:
         source.close()
+    return 0
+
+
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    from butterfly_guy.research.export import DockerExecSource, PostgresSource
+    from butterfly_guy.research.latency import collect, summarize
+
+    source = DockerExecSource() if args.source == "docker" else PostgresSource()
+    try:
+        rows = collect(source, args.start, args.end)
+    finally:
+        source.close()
+    summary = summarize(rows, _dataset(args))
+    out = {"range": [str(args.start), str(args.end)], "summary": summary, "trades": rows}
+    path = Path(args.out) / "calibration" / f"exit_latency_{args.start}_{args.end}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dump_canonical(out))
+    print(json.dumps(summary, indent=1))
+    print(f"written: {path}")
     return 0
 
 
@@ -106,48 +129,64 @@ def cmd_register(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    _quiet_logs()
-    ds = _dataset(args)
-    profile = PROFILES[args.profile]
-    config = load_spx_config()
-    ctx = RunContext(config)
-    names = [n for n in args.variants.split(",") if n != args.baseline]
-    variants = resolve([args.baseline, *names])
+def cmd_port(args: argparse.Namespace) -> int:
+    reg = Registry.for_dataset(Path(args.registry), args.dataset)
+    for v in resolve(args.variants.split(",")):
+        placeholder = reg.placeholder(v.name)
+        if placeholder is None:
+            raise SystemExit(f"{v.name}: no unported placeholder backfill record")
+        rec = reg.append("port", variant=v.name, definition=v.definition(),
+                         definition_hash=v.definition_hash(),
+                         ported_from=placeholder["definition_hash"], note=args.note or "")
+        print(f"ported {v.name} {rec['definition_hash'][:12]} <- "
+              f"{placeholder['definition_hash'][:12]} ({rec['stage']}, seq {rec['seq']})")
+    return 0
+
+
+def _simulate(args: argparse.Namespace, ds: Dataset, profile_name: str, names: list[str],
+              start: dt.date | None, end: dt.date | None, tieset: bool):
+    """Replay the baseline and `names`; returns the run result, tie-set scorer and meta."""
+    profile = PROFILES[profile_name]
+    ctx = RunContext(load_spx_config())
+    names = [n for n in names if n != args.baseline]
+    scorer = TiesetScorer() if tieset else None
+    result = run_variants(SessionLoader(ds, profile), resolve([args.baseline, *names]), ctx,
+                          start=start, end=end, exit_delay=args.exit_delay, tieset=scorer)
     params = EvalParams(split=args.split, bootstrap_reps=args.reps,
                         bootstrap_block=args.block, rolling_block=args.rolling_block)
-    loader = SessionLoader(ds, profile)
-    result = run_variants(loader, variants, ctx, start=args.start, end=args.end)
-    ev = evaluate(result, args.baseline, params)
-    config_sha = sha256_file(SPX_CONFIG)
     meta = {
         "dataset": ds.name, "dataset_hash": ds.hash, "profile": asdict(profile),
-        "config_sha256": config_sha, "start": str(args.start), "end": str(args.end),
+        "config_sha256": sha256_file(SPX_CONFIG), "start": str(start), "end": str(end),
         "baseline": args.baseline, "eval": params.as_dict(),
-        "variants": {v.name: {"definition": v.definition(),
-                              "definition_hash": v.definition_hash()} for v in variants},
+        "accounting": {"exit_delay_snapshots": args.exit_delay},
+        "variants": {n: {"definition": r.variant.definition(),
+                         "definition_hash": r.variant.definition_hash()}
+                     for n, r in result.runs.items()},
     }
-    results = {"meta": meta, "evaluation": ev}
-    if args.tieset:
-        common, _ = common_dates(result, [v.name for v in variants])
-        results["tiesets"] = run_tiesets(SessionLoader(ds, profile), variants, ctx, common)
-        meta["tieset"] = {"thresholds": [0.10, 0.25], "draws": 5000, "seed": 7}
+    if scorer is not None:
+        meta["tieset"] = scorer.params()
+    return result, scorer, params, meta
+
+
+def _record(args: argparse.Namespace, ds: Dataset, result, meta: dict, results: dict,
+            **extra: object) -> tuple[str, Path, dict]:
+    """Write artifacts' provenance and registry records; returns run id, dir, provenance."""
     run_id = hashlib.sha256(canonical_json(meta).encode()).hexdigest()[:12]
     out_dir = Path(args.out) / ds.name / run_id
     git_sha, dirty = _git()
     reg = Registry.for_dataset(Path(args.registry), ds.name)
     stages = {}
-    trades = [t for r in result.runs.values() for t in r.trades]
     results_hash = hashlib.sha256(dump_canonical(results).encode()).hexdigest()
     if not args.no_registry:
-        for v in variants:
+        for name, run in result.runs.items():
+            v = run.variant
             rec = reg.append(
-                "evaluate", variant=v.name, definition=v.definition(),
+                "evaluate", variant=name, definition=v.definition(),
                 definition_hash=v.definition_hash(), dataset_hash=ds.hash, git_sha=git_sha,
-                git_dirty=dirty, run_id=run_id, profile=profile.name,
-                config_sha256=config_sha, results_sha256=results_hash,
+                git_dirty=dirty, run_id=run_id, profile=meta["profile"]["name"],
+                config_sha256=meta["config_sha256"], results_sha256=results_hash, **extra,
             )
-            stages[v.name] = rec["stage"]
+            stages[name] = rec["stage"]
     provenance = {
         "run_id": run_id, "git_sha": git_sha, "git_dirty": dirty,
         "command": " ".join(shlex.quote(a) for a in ["python", "-m", "butterfly_guy.research",
@@ -158,11 +197,68 @@ def cmd_run(args: argparse.Namespace) -> int:
             "recorded": not args.no_registry},
         "stages": stages,
     }
-    hashes = write_run(out_dir, results, trades, provenance)
+    return run_id, out_dir, provenance
+
+
+def _finish(out_dir: Path, results: dict, result, provenance: dict, render=None) -> None:
+    trades = [t for r in result.runs.values() for t in r.trades]
+    hashes = write_run(out_dir, results, trades, provenance, render)
     print((out_dir / "report.md").read_text())
     print(f"artifacts: {out_dir}")
     for f, h in hashes.items():
         print(f"  {f} {h}")
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    _quiet_logs()
+    ds = _dataset(args)
+    t0 = time.monotonic()
+    result, scorer, params, meta = _simulate(args, ds, args.profile, args.variants.split(","),
+                                             args.start, args.end, not args.no_tieset)
+    ev = evaluate(result, args.baseline, params)
+    results = {"meta": meta, "evaluation": ev}
+    if scorer is not None:
+        common, _ = common_dates(result, list(result.runs))
+        results["tiesets"] = scorer.summary(list(result.runs), common)
+    run_id, out_dir, provenance = _record(args, ds, result, meta, results)
+    provenance["run_seconds"] = round(time.monotonic() - t0, 1)
+    _finish(out_dir, results, result, provenance)
+    print(f"run time {provenance['run_seconds']} s")
+    return 0
+
+
+def cmd_shadow(args: argparse.Namespace) -> int:
+    from butterfly_guy.research import shadow
+
+    _quiet_logs()
+    ds = _dataset(args)
+    ledger = shadow.read_cohort_ledger(args.cohort, args.ref)
+    sessions = ledger.sessions
+    if not sessions:
+        raise SystemExit(f"cohort {args.cohort} has no recorded sessions at {ledger.commit}")
+    args.split = sessions[0]  # H1/H2 are meaningless on a handful of sessions
+    result, _, params, meta = _simulate(args, ds, shadow.COHORT_PROFILE,
+                                        args.variants.split(","), sessions[0], sessions[-1],
+                                        tieset=False)
+    missing = [d for d in sessions if d not in set(result.dates)]
+    ev = evaluate(result, args.baseline, params, only=sessions)
+    meta["shadow"] = {"cohort": ledger.cohort_id, "ref": ledger.ref, "commit": ledger.commit,
+                      "sessions": [d.isoformat() for d in sessions]}
+    evaluated = [d for d in sessions if d not in missing]
+    results = {"meta": meta, "evaluation": ev, "shadow": {
+        "exploratory": True,
+        "sessions": [d.isoformat() for d in evaluated],
+        "not_evaluated": {d.isoformat(): result.skipped.get(d, "not in dataset")
+                          for d in missing},
+        "e0_vs_cohort": shadow.compare_with_cohort(
+            [t for t in result.runs[args.baseline].trades if t.date in set(sessions)], ledger),
+        "rows": shadow.session_rows(result, list(result.runs), evaluated, args.baseline),
+    }}
+    run_id, out_dir, provenance = _record(
+        args, ds, result, meta, results, scope=f"shadow:{ledger.cohort_id}",
+        cohort_commit=ledger.commit, sessions=[d.isoformat() for d in evaluated])
+    _finish(out_dir, results, result, provenance,
+            lambda r, p: shadow.markdown(ledger, r, p))
     return 0
 
 
@@ -234,7 +330,16 @@ def build_parser() -> argparse.ArgumentParser:
     e.add_argument("--end", type=_date, required=True)
     e.add_argument("--source", choices=["tunnel", "docker"], default="tunnel")
     e.add_argument("--refresh", action="store_true", help="re-export existing sessions")
+    e.add_argument("--bars-only", action="store_true",
+                   help="re-read only daily_bars (official closes that had not landed)")
     e.set_defaults(func=cmd_export)
+
+    c = sub.add_parser("calibrate-latency", help="read-only exit latency of paper trades")
+    c.add_argument("--start", type=_date, required=True)
+    c.add_argument("--end", type=_date, required=True)
+    c.add_argument("--source", choices=["tunnel", "docker"], default="tunnel")
+    c.add_argument("--out", default=str(REPORTS))
+    c.set_defaults(func=cmd_calibrate)
 
     v = sub.add_parser("verify", help="check dataset hashes and the registry chain")
     v.set_defaults(func=cmd_verify)
@@ -244,21 +349,37 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--note", default="")
     r.set_defaults(func=cmd_register)
 
+    po = sub.add_parser("port", help="link ported variants to their placeholder backfill")
+    po.add_argument("--variants", required=True)
+    po.add_argument("--note", default="")
+    po.set_defaults(func=cmd_port)
+
+    def evaluation_args(sp: argparse.ArgumentParser) -> None:
+        sp.add_argument("--variants", required=True)
+        sp.add_argument("--baseline", default="E0")
+        sp.add_argument("--split", type=_date, default=EvalParams.split)
+        sp.add_argument("--reps", type=int, default=EvalParams.bootstrap_reps)
+        sp.add_argument("--block", type=int, default=EvalParams.bootstrap_block)
+        sp.add_argument("--rolling-block", type=int, default=EvalParams.rolling_block)
+        sp.add_argument("--exit-delay", type=int, default=DEFAULT_EXIT_DELAY,
+                        help="decision-clock times from exit trigger to the delayed fill")
+        sp.add_argument("--out", default=str(REPORTS))
+        sp.add_argument("--no-registry", action="store_true",
+                        help="do not record the evaluation (the report says so)")
+
     run = sub.add_parser("run", help="evaluate variants against a baseline")
-    run.add_argument("--variants", required=True)
-    run.add_argument("--baseline", default="E0")
+    evaluation_args(run)
     run.add_argument("--profile", choices=sorted(PROFILES), default="live")
     run.add_argument("--start", type=_date, default=None)
     run.add_argument("--end", type=_date, default=None)
-    run.add_argument("--split", type=_date, default=EvalParams.split)
-    run.add_argument("--reps", type=int, default=EvalParams.bootstrap_reps)
-    run.add_argument("--block", type=int, default=EvalParams.bootstrap_block)
-    run.add_argument("--rolling-block", type=int, default=EvalParams.rolling_block)
-    run.add_argument("--tieset", action="store_true", help="score near-tied flies")
-    run.add_argument("--out", default=str(REPORTS))
-    run.add_argument("--no-registry", action="store_true",
-                     help="do not record the evaluation (the report says so)")
+    run.add_argument("--no-tieset", action="store_true", help="skip near-tied fly scoring")
     run.set_defaults(func=cmd_run)
+
+    sh = sub.add_parser("shadow", help="exploratory shadow on a cohort's recorded sessions")
+    evaluation_args(sh)
+    sh.add_argument("--cohort", required=True)
+    sh.add_argument("--ref", default=None, help="cohort branch (default origin/cohort/<id>)")
+    sh.set_defaults(func=cmd_shadow)
 
     par = sub.add_parser("parity", help="compare E0 with the frozen replay ledger")
     par.add_argument("--ledger", default=str(FROZEN_LEDGER))

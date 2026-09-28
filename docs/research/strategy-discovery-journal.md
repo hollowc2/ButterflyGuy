@@ -917,3 +917,151 @@ Findings:
 
 The harness (`robust.py`, one worker per four-week block) and scorer (`rb_eval.py`) were
 scratch scripts built on `run_backtest_db.py`'s public functions; they were not committed.
+
+## 2026-09-27 — unified research core, cohort runner move, and stage-2 research tooling (development data only)
+
+This entry records infrastructure and reproductions. It does not change the frozen
+strategy or the open cohort `spx-prospective-2026-09-22`, and nothing in it is evidence
+about either. Everything below runs on development data the strategy was built on, except
+the three-session cohort shadow, which is exploratory. Work is on branch
+`research/unified-core`. Design and commands are in `docs/research/research-core.md`;
+the motivation is in `docs/reviews/2026-09-27-research-pipeline-review.md`.
+
+### Research core and data
+
+`src/butterfly_guy/research/` replaces the idea sweep's standalone numpy harness as the
+simulator for rule research. It uses the live selector and profit-policy functions,
+2026-09-21 accounting, paired day-block bootstrap scoring, tie-set robustness by default,
+and a hash-chained variant registry. `run_backtest_db.py` and `SimulationEngine` stay the
+live-parity reference and are unchanged.
+
+The data is a read-only, per-day-bounded export from the Helios database into a Parquet
+cache outside Git:
+
+- 133 sessions, 2026-03-13 → 2026-09-25;
+- dataset hash `dd38a5ecb2cfb08df6e057167c9da06041569da20aab9c30d3bf333e348bc523`;
+- every file hash-checked on read.
+
+A settlement refresh on 2026-09-27 (`export --bars-only`) found 2026-09-25's official
+close still absent from `daily_bars`. The manifest's new export history lists it as
+pending, and the hash is unchanged.
+
+### Parity
+
+- **Frozen replay.** E0 under the `frozen_20260921` profile reproduces
+  `run_backtest_db.py` at `b83c2a18` (the 2026-09-21 executable result) trade by trade:
+  118 trades, midpoint $17,691.60, marketable $14,170.60, stressed $9,890.60, with half a
+  cent per trade as the only tolerance.
+- **Idea sweep.** Under the `sweep_20260925` profile, all 26 idea-sweep variants
+  reproduce their published rows to the dime. That includes the 16 ported in this stage:
+  C1/C2, D3, D4, T1–T6, K1, G1/G2 and R2–R4. There are three documented float32/float64
+  ties:
+  - D2, and D3's put leg, on 2026-07-09: a drawdown of exactly 60%, +$25 stressed.
+  - G2 on 2026-09-23: a call and a put fly with identical stressed debit and payoff;
+    stressed is unchanged, midpoint differs by $15.
+- **Sweep inputs.** The published figures were confirmed against the original
+  2026-09-25 export as well as the new cache.
+
+**Correction: the parity residual was not the decision clock.** The 2026-09-25 entry
+attributed the harness's residual to its decision clock. That residual was −$57 midpoint
+and −$60 stressed ($17,634.60 / $9,830.60 against $17,691.60 / $9,890.60). Switching the
+sweep profile's settings one at a time toward the frozen profile shows the clock was not
+the cause:
+
+- Exact timestamps instead of whole-second rounding move it to $17,603.60 / $9,805.60.
+- Adding all strikes, the full-day bar clock and the first-bar open changes nothing.
+- The frozen replay's prior close closes the rest: the last SPX tick at or before 16:00,
+  instead of `daily_bars`. It flips gap direction on a few sessions.
+
+So the residual came from the prior-close source, partly offset by the whole-second
+rounding. The `live` profile (official `daily_bars` open and prior close, commit
+`67ba7ce`) reproduces the 2026-09-25 official-input gap rule: 123 trades, +$22,720
+midpoint.
+
+### Variant registry
+
+`reports/research/registry/spx_0dte.jsonl` was seeded with the 49 variant definitions
+tried on this data before it existed, 28 of them post hoc:
+
+- the 26 idea-sweep variants;
+- the five MA direction rules;
+- the 18 call-only entry filters from the 2026-09-25 entry. Four of these are placeholders:
+  that entry says eighteen but lists fourteen.
+
+The 16 variants ported in this stage are linked to their word-only backfill records by
+`port` events. They inherit those records' stages (C1–G2 pre, R2–R4 post) and are not
+counted twice.
+
+Fitted rules record their fit window and fitted value in their definition:
+
+- K1: 0.0504 over 59 H1 E0 entries;
+- R2: 2.2275.
+
+Both are fitted on H1 (2026-03-13 → 2026-06-18) and applied to every session, as
+published, so H1 is in-sample for them. Only their H2 figures are out of sample:
+
+- K1 H2: −$3,914, +$2,693 against E0;
+- R2 H2: −$5,598, +$1,009 against E0.
+
+The EV learners (G1/G2, R3/R4) are handed only sessions before the one they decide, and
+a session's own settlement is observed only after every variant has decided it.
+
+### Exit-latency stress
+
+Every run now also prices intraday exits one decision-clock snapshot after the trigger,
+still rolling forward past unusable markets and falling back to settlement. This is the
+"delayed" model.
+
+**Calibration.** It was made read-only from 67 recorded paper intraday exits
+(`monitoring_leg_quotes` and `butterfly_trades`).
+
+- Trigger-to-fill latency: median 0.9 s, p90 67.5 s.
+- Measured in collector snapshots (about 62 s apart), fills landed before the next
+  snapshot 49 times, one snapshot later 14 times and later still 4 times.
+- p90 is one snapshot, so the fixed one-snapshot stress is the calibrated one.
+- Paper exits fill on a simulated ladder, so live broker latency can only be longer.
+
+**Effect on the frozen 118-trade sample.** Stressed $9,890.60 becomes $9,408.20 delayed
+(−$482.40). Of the 96 intraday exits, 40 were worse, 40 better and 16 unchanged, averaging
+−$5.03. The idea-sweep E0 moves from $10,424 to $9,947. The exit delay is a small cost
+next to the $2–3k fly-choice noise and the settlement dependence already documented.
+
+### Cohort shadow (exploratory, three sessions)
+
+`shadow` reads the cohort ledger only with `git show` from
+`origin/cohort/spx-prospective-2026-09-22` (`70ccb8e`) and verifies every record hash.
+It scores variants paired against E0 on the cohort's recorded sessions, 2026-09-22 →
+2026-09-24.
+
+E0 reproduced all three cohort trades exactly: fly, entry time, exit reason and P&L in
+all three models, stressed +$669.
+
+| Session | E0 | H-LV1 (`HLV1`) | R1 |
+|---|---:|---:|---:|
+| 2026-09-22 | −$225 | $0 (low-VIX call skipped) | $0 |
+| 2026-09-23 | +$1,164 | +$1,164 | $0 |
+| 2026-09-24 | −$270 | −$270 | $0 |
+| Total | +$669 | +$894 | $0 |
+
+R1 skipped all three sessions (entry VIX below 17). Three sessions carry no information
+about either rule. This is recorded only to establish the shadow pipeline. It must not
+influence the cohort, whose rules stay frozen, and H-LV1 remains a hypothesis for a
+separate test.
+
+### Cohort runner move (2026-09-27) and a labeling note
+
+The cohort's daily update had stopped on 2026-09-25: research commits to
+`run_backtest_db.py` and to shared modules drifted its frozen source hashes. Since
+2026-09-27 the update runs from a dedicated worktree,
+`/mnt/Repos/Trading/Butterflyguy-cohort`, pinned at the frozen commit `6ffbfe7`. The
+ledger is committed to branch `cohort/spx-prospective-2026-09-22` instead of `main`.
+Research work no longer interrupts it.
+
+Commit `f933117` on that branch is labeled as a systemd README note. It also contains
+the 2026-09-24 session record (`daily_runs.jsonl` and `trades.jsonl`, trade
+`b87c47309d12f05c`), which `git commit -a` swept in from a manual `update` run. The
+record is genuine and verifies. Only the commit message is incomplete, and the branch
+had already been pushed, so the history was left as is.
+
+`main` still carries the old updater and a ledger ending 2026-09-24 until the cohort
+branch is merged.
