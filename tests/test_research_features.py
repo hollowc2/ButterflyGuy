@@ -18,7 +18,9 @@ from butterfly_guy.research.volindex import (
     DAILY_FILE,
     INTRADAY_FILE,
     daily_table,
+    ingest_intraday,
     intraday_table,
+    merge_intraday,
     parse_cboe_csv,
     write_aux,
 )
@@ -199,6 +201,99 @@ def test_tampered_aux_file_or_hash_is_caught(tmp_path):
     with pytest.raises(ValueError, match="aux_hash"):
         Manifest.load(root / "manifest.json")
 
+
+
+# ---------------------------------------------------------------------------
+# Intraday ingest merges: kept, added, revised, never silently removed
+# ---------------------------------------------------------------------------
+
+
+def _dump(path: Path, days: dict[str, list[tuple[str, float]]], symbol: str = "$VIX",
+          bar_seconds: int = 60) -> Path:
+    """A gateway dump with one record per date: {date: [(utc iso ts, close), ...]}."""
+    lines = [json.dumps({"symbol": symbol, "date": d, "bar_seconds": bar_seconds,
+                         "candles": [{"ts": ts, "open": c, "high": c, "low": c, "close": c}
+                                     for ts, c in bars]})
+             for d, bars in days.items()]
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def _us(ts: str) -> int:
+    return int(pd.Timestamp(ts).value // 1000)
+
+
+def test_intraday_ingest_keeps_adds_and_revises(tmp_path):
+    _copy_fixture(tmp_path)
+    first = _dump(tmp_path / "a.jsonl", {
+        "2026-08-12": [("2026-08-12T13:30:00+00:00", 16.0), ("2026-08-12T13:31:00+00:00", 16.1)],
+        "2026-08-13": [("2026-08-13T13:30:00+00:00", 17.0)]})
+    m1 = ingest_intraday("mini_spx", first, tmp_path)
+    assert m1.history[-1]["rows_added"] == 3 and m1.history[-1]["kept_not_in_dump"] == 0
+
+    # Retention rolled past 08-12; 08-13's bar was revised; 08-14 is new.
+    second = _dump(tmp_path / "b.jsonl", {
+        "2026-08-13": [("2026-08-13T13:30:00+00:00", 17.5)],
+        "2026-08-14": [("2026-08-14T13:30:00+00:00", 18.0)]})
+    m2 = ingest_intraday("mini_spx", second, tmp_path)
+    h = m2.history[-1]
+    assert h["rows_added"] == 1 and h["rows_removed"] == 0 and h["kept_not_in_dump"] == 2
+    assert h["revised"] == [{"index": "VIX", "ts_us": str(_us("2026-08-13T13:30:00Z")),
+                             **{c: [17.0, 17.5] for c in ("open", "high", "low", "close")}}]
+    assert h["dump_sha256"] == m2.aux[INTRADAY_FILE]["source"]["dumps"][-1]["dump_sha256"]
+    assert len(m2.aux[INTRADAY_FILE]["source"]["dumps"]) == 2
+
+    table = Dataset(tmp_path / "mini_spx").aux_table(INTRADAY_FILE)
+    assert table["ts_us"].tolist() == [_us("2026-08-12T13:30:00Z"), _us("2026-08-12T13:31:00Z"),
+                                       _us("2026-08-13T13:30:00Z"), _us("2026-08-14T13:30:00Z")]
+    assert table["close"].tolist() == [16.0, 16.1, 17.5, 18.0]
+    assert m2.dataset_hash == m1.dataset_hash and m2.aux_hash != m1.aux_hash
+
+
+def test_intraday_reingest_of_the_same_dump_changes_nothing(tmp_path):
+    _copy_fixture(tmp_path)
+    dump = _dump(tmp_path / "a.jsonl", {"2026-08-12": [("2026-08-12T13:30:00+00:00", 16.0)]})
+    m1 = ingest_intraday("mini_spx", dump, tmp_path)
+    m2 = ingest_intraday("mini_spx", dump, tmp_path)
+    h = m2.history[-1]
+    assert (h["rows_added"], h["rows_removed"], h["revised"]) == (0, 0, [])
+    assert m2.aux[INTRADAY_FILE]["sha256"] == m1.aux[INTRADAY_FILE]["sha256"]
+    assert m2.aux_hash == m1.aux_hash
+
+
+def test_intraday_ingest_converts_a_pre_merge_source(tmp_path):
+    root = _copy_fixture(tmp_path)
+    write_aux(root, INTRADAY_FILE, _bars("VIX", [_us("2026-08-12T13:30:00Z")], [16.0]),
+              {"kind": "schwab_gateway_session_history", "dump_sha256": "ab" * 32,
+               "ingested_at": "2026-09-28T06:18:00+00:00", "coverage": []},
+              ["index", "ts_us"])
+    dump = _dump(tmp_path / "b.jsonl", {"2026-08-13": [("2026-08-13T13:30:00+00:00", 17.0)]})
+    m = ingest_intraday("mini_spx", dump, tmp_path)
+    dumps = m.aux[INTRADAY_FILE]["source"]["dumps"]
+    assert [d["dump_sha256"] for d in dumps][0] == "ab" * 32 and len(dumps) == 2
+    assert m.aux[INTRADAY_FILE]["rows"] == 2
+
+
+def test_merge_never_removes_and_rejects_a_bar_size_clash():
+    old = _bars("VIX", [1, 2, 3], [16.0, 16.1, 16.2])
+    merged, kept = merge_intraday(old, _bars("VIX", [3, 4], [16.2, 16.3]))
+    assert merged["ts_us"].tolist() == [1, 2, 3, 4] and kept == 2
+    merged, kept = merge_intraday(old, _bars("VIX", [], []))
+    assert merged["ts_us"].tolist() == [1, 2, 3] and kept == 3
+    clash = _bars("VIX", [2], [16.1]).assign(bar_seconds=300)
+    with pytest.raises(ValueError, match="bar_seconds"):
+        merge_intraday(old, clash)
+
+
+def test_aux_write_refuses_to_remove_rows_when_asked(tmp_path):
+    root = _copy_fixture(tmp_path)
+    write_aux(root, INTRADAY_FILE, _bars("VIX", [1, 2], [16.0, 16.1]), {}, ["index", "ts_us"])
+    before = (root / "manifest.json").read_bytes()
+    with pytest.raises(ValueError, match="remove 1 existing rows"):
+        write_aux(root, INTRADAY_FILE, _bars("VIX", [2], [16.1]), {}, ["index", "ts_us"],
+                  allow_removal=False)
+    assert (root / "manifest.json").read_bytes() == before
+    assert Dataset(root).aux_table(INTRADAY_FILE)["ts_us"].tolist() == [1, 2]
 
 def test_session_features_record_their_inputs(tmp_path):
     root = _copy_fixture(tmp_path)

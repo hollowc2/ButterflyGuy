@@ -29,6 +29,14 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 > - **Registration** now records the git state and the dataset hash. The holdout opens
 >   only through a registry-verified unseal (`holdout.py`).
 
+> **[Fact update, 2026-09-28 (stage 5), marked; no hypothesis, split or gate changed]**
+> - **Development session count.** ThetaData's public docs say SPXW was quoted only on
+>   Mondays, Wednesdays and Fridays before 2022-05-16, so the development period has about
+>   590 SPXW 0-DTE sessions, not "about 625" as written below. The vendor's expiration list
+>   will fix the exact number.
+> - **Likely vendor:** ThetaData, from 2022 forward; not purchased. The purchase checklist
+>   and the enforced pull order are in `history-vendor-readiness.md`.
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).

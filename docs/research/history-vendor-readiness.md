@@ -11,6 +11,10 @@ guard and the validation harness below are built and tested on synthetic data
 (`history.py`, `holdout.py`, `validate.py`; see `research-core.md`, "Vendor history").
 Only a provider's own `HistorySource` is missing.
 
+**Update 2026-09-28 (stage 5):** ThetaData's public documentation was read and a stub
+source added (`research/thetadata.py`, not in `SOURCES`). See "ThetaData: public-docs
+findings and purchase checklist" below.
+
 Why: the review's power analysis (`docs/reviews/2026-09-27-research-pipeline-review.md`
 §2) needs about 400 trades to separate the measured edge from zero. Our own chain history
 starts 2026-03-13 (133 sessions). SPXW has had daily expirations since 2022, so vendor
@@ -79,6 +83,133 @@ quiet minutes.
   cross-checked against Cboe's settlement values, as the 2026-09-21 settlement parity did.
 
 The choice is the owner's. The adapter and the validation plan below apply to any of them.
+
+## ThetaData: public-docs findings and purchase checklist (2026-09-28)
+
+**Status: not purchased.** The owner will likely buy ThetaData, from 2022 forward.
+`research/thetadata.py` is a stub (every data method raises; not in `history.SOURCES`) that
+holds the endpoints and the request plan below. Everything here was read on 2026-09-28 from
+ThetaData's public pages, with no account, sign-up or terminal install. "To confirm at
+purchase" marks what the pages do not settle.
+
+### Plans and prices (as read)
+
+| Plan | Pricing page | Subscriptions doc | Reaches 2022-01-03? |
+|---|---|---|---|
+| Options Value, $40/mo | 4 years, 1-minute intervals | 1-minute from 2020-01-01 | **Conflict: to confirm at purchase** |
+| Options Standard, $80/mo | 8 years, tick level | tick level from 2016-01-01 | Yes |
+| Options Pro, $160/mo | 12 years, tick level | from 2012-06-01 | Yes |
+| Indices Value, $30/mo | 2 years, 15-minute intervals, 1-day delayed | 1-minute from 2023-01-01, 15-minute delay | No |
+| Indices Standard, $50/mo | 3 years, 1-minute intervals, real-time SPX & VIX | "lowest reported by venues" from 2022-01-01 | **Conflict: to confirm at purchase** |
+| Indices Pro, $100/mo | 7 years, tick level, real-time SPX, VIX & NDX | from 2017-01-01 | Yes |
+
+*(Correction, marked: the vendor table above says Value reaches "about 2022-09". That
+follows the pricing page; the docs say 2020-01-01. Either way the choice below is safe.)*
+
+- **Safe choice for 2022 → 2026-03:** Options Standard + Indices Pro, $180/month. With
+  Indices Standard, $130/month, if ThetaData confirms it reaches 2022-01-03 at 1 minute.
+- **What the Indices tier gives:** intraday SPX and VIX (`/index/history/price`), and an
+  index EOD report with open, high, low and close (`/index/history/eod`), which ThetaData
+  generates itself at 17:15 ET. Whether that open and close equal the official S&P values is
+  **to confirm at purchase** (validation step 4 checks the closes; development closes can be
+  checked against Cboe's public `SPX_History.csv`; no free source checks the opens).
+- **Concurrency** is account-wide at the highest tier held (Value 2, Standard 4, Pro 8).
+  There is no rate limit.
+
+### Licence (individual plans)
+
+- Pricing page: "Personal use only, no redistribution or business use".
+- Terms & Conditions §1.1: a limited, revocable licence "solely for the personal,
+  non-commercial use" of the subscriber; no use "in connection with any trade, business,
+  professional or other commercial activities".
+- §2.1(i): the subscriber shall not "archive, download, reproduce … create derivative
+  works" of the content.
+- §12.2: on termination, remove all services and content, destroy copies, and certify it in
+  writing within 30 days.
+- **To confirm with ThetaData in writing before paying:** whether a personal subscriber may
+  keep a local Parquet cache for personal research, and whether cancelling the subscription
+  counts as termination under §12.2. If the data must be deleted on cancelling, the
+  subscription must stay active for as long as the vendor datasets are used. (This is a
+  reading of the published terms, not legal advice.)
+
+### Access, credential and timestamps
+
+- The local Theta Terminal v3 (Java 21+) serves REST at `http://127.0.0.1:25503/v3`. Use
+  `127.0.0.1` only (error 476 on switching to `localhost`).
+- **Credential.** The terminal holds it: an API key from `--api-key`, the
+  `THETADATA_API_KEY` environment variable or a `.env` beside the jar, or email and password
+  in `creds.txt`. Requests to the local server carry no credential, so **our code never
+  reads it**. Keep it in a mode-600 `.env` outside the repo, not on the command line.
+- **Timestamps.** Rows carry `YYYY-MM-DDTHH:mm:ss.SSS` with no offset; ThetaData's Python
+  library types them as `America/New_York`, so the adapter reads ET wall-clock time. To
+  confirm at purchase on a DST-change day (none falls in the validation window; check the
+  first development sessions after 2022-03-13 and 2022-11-06).
+- **Interval rows.** "The quote for each interval represents the last quote at the
+  interval's timestamp"; index prices are "the price at the exact time of each timestamp".
+  To confirm at purchase: whether that instant is included, and whether a contract with no
+  quote yet returns a 0/0 row (which the adapter must map to NaN, not a zero bid).
+- **Limits.** Multi-day requests are capped at one month (option quotes must also name an
+  expiration); responses should stay under about 1M rows.
+- **Sessions.** ThetaData says SPXW was quoted only Monday, Wednesday and Friday before
+  2022-05-16, so the development window has about 590 sessions, not the draft's 625. The
+  expirations list will settle the exact count.
+
+### Endpoints and request plan
+
+| Need | Endpoint (v3) | Plan |
+|---|---|---|
+| Sessions | `/option/list/expirations?symbol=SPXW` | once per pull; filtered at once to the pull's dates |
+| Strikes | `/option/list/strikes?symbol=SPXW&expiration=D` | once per session |
+| Quotes | `/option/history/quote?symbol=SPXW&expiration=D&date=D&strike=*&right=both&interval=1m` | once per session (single day, ~200–250k rows); kept within ±400 of the day's SPX range |
+| SPX, VIX intraday | `/index/history/price?symbol=SPX\|VIX&date=D&interval=1m` | once per session each, so no batch can reach into the holdout |
+| Official bars | `/index/history/eod?symbol=SPX\|VIX&start_date=&end_date=` | chunks of at most one month inside the guarded range |
+
+| Pull | Sessions | Calls | Sequential time (est.) | Parquet (est.) |
+|---|---:|---:|---|---|
+| Validation 2026-03-13 → 2026-09-25 | 133 | ~550 | 20–40 min | ~130 MB |
+| Development 2022-01-03 → 2024-06-28 | ~590 | ~2,420 | 1–2.5 h | ~0.6 GB |
+| Holdout 2024-07-01 → 2026-03-12 | ~425 | ~1,750 | 0.7–1.8 h | ~0.45 GB |
+
+Latency per call is unmeasured; the validation pull measures it before the others.
+
+### Purchase checklist
+
+1. **Confirm in writing** (ThetaData support): the licence question above; the history
+   start of Options Value and Indices Standard; the EOD open/close definition.
+2. **Choose the plans:** Options Standard ($80/mo) and Indices Pro ($100/mo), or Indices
+   Standard ($50/mo) if it is confirmed to reach 2022-01-03 at 1 minute.
+3. **Expected subscription length:** at least one month, covering the validation and
+   development pulls, the owner's review and registration, and the holdout pull. Longer if
+   registration slips, or if the licence requires deleting the data on cancelling (then for
+   as long as the vendor datasets are in use).
+4. **Implement** `ThetaDataSource`, add it to `history.SOURCES`, and only then install and
+   start the terminal with the credential kept outside the repo.
+5. **Pull in the order the holdout guard enforces:**
+   1. the validation window, **2026-03-13 → 2026-09-25**, then `validate-vendor`;
+   2. only if every validation step passes, the development window, **2022-01-03 →
+      2024-06-28**;
+   3. the owner's registration (`register` from a clean, committed tree);
+   4. only then the holdout, **2024-07-01 → 2026-03-12**, with `--unseal-holdout <seq>`.
+
+**A single "2022 → today" download is not allowed.** It would touch the sealed holdout
+before registration; the guard refuses it before any request is made, and a registration
+made after holdout data landed can never unseal anything.
+
+Sources (read 2026-09-28):
+[pricing](https://www.thetadata.net/pricing),
+[subscriptions](https://thetadata.net/docs/Articles/Getting-Started/Subscriptions.html),
+[getting started](https://thetadata.net/docs/Articles/Getting-Started/Getting-Started.html),
+[option quote history](https://thetadata.net/docs/operations/option_history_quote.html),
+[expirations](https://thetadata.net/docs/operations/option_list_expirations.html),
+[strikes](https://thetadata.net/docs/operations/option_list_strikes.html),
+[index price history](https://thetadata.net/docs/operations/index_history_price.html),
+[index EOD](https://thetadata.net/docs/operations/index_history_eod.html),
+[making requests](https://thetadata.net/docs/Articles/Data-And-Requests/Making-Requests.html),
+[concurrent requests](https://thetadata.net/docs/Articles/Data-And-Requests/Concurrent-Requests.html),
+[request sizing](https://thetadata.net/docs/Articles/Data-And-Requests/Request-Sizing.html),
+[data issues](https://thetadata.net/docs/Articles/Data-And-Requests/Data-Issues.html),
+[OpenAPI spec](https://thetadata.net/docs/openapiv3.yaml),
+[terms and conditions](https://thetadata.net/terms-and-conditions).
 
 ## `DataSource` adapter spec
 

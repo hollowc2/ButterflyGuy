@@ -13,6 +13,7 @@
   export-history     vendor history into spx_0dte_<vendor> (DATA PROVIDER NOT CHOSEN)
   validate-vendor    fidelity validation of a vendor dataset against the Helios export
   coverage           per-session quote, spot, VIX and official-bar coverage of a dataset
+  mechanism          DESCRIPTIVE H-TS1 mechanism check on Cboe daily closes (development window)
 """
 
 from __future__ import annotations
@@ -402,6 +403,52 @@ def cmd_diagnose(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mechanism(args: argparse.Namespace) -> int:
+    from butterfly_guy.research import mechanism
+    from butterfly_guy.research.volindex import DAILY_FILE
+
+    ds = _dataset(args)
+    read_at = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+    if args.spx_csv:
+        raw, source = Path(args.spx_csv).read_bytes(), f"local file {args.spx_csv}"
+    else:
+        raw, source = mechanism.fetch_spx(), mechanism.SPX_URL
+    results, table = mechanism.run(mechanism.parse_spx_csv(raw), ds.aux_table(DAILY_FILE),
+                                   args.start, args.end)
+    inputs = {
+        "spx_csv": {"source": source, "sha256": hashlib.sha256(raw).hexdigest(),
+                    "bytes": len(raw), "read_at": read_at},
+        "vol_daily": {"dataset": ds.name, "file": DAILY_FILE,
+                      "sha256": ds.manifest.aux[DAILY_FILE]["sha256"], "aux_hash": ds.aux_hash},
+    }
+    # The run id covers the in-window inputs and the rule, not the raw file, which Cboe
+    # extends every day.
+    run_id = hashlib.sha256(canonical_json({
+        "window": results["window"], "inputs_in_window": results["inputs_in_window"],
+        "decision_rule": results["decision_rule"]}).encode()).hexdigest()[:12]
+    out_dir = Path(args.out) / "mechanism" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files = {"mechanism.json": dump_canonical(results),
+             "sessions.csv": table.to_csv(index=False, lineterminator="\n")}
+    hashes = {}
+    for name, text in files.items():
+        (out_dir / name).write_text(text)
+        hashes[name] = hashlib.sha256(text.encode()).hexdigest()
+    git_sha, dirty = _git()
+    provenance = {
+        "run_id": run_id, "label": mechanism.LABEL, "git_sha": git_sha, "git_dirty": dirty,
+        "command": " ".join(shlex.quote(a) for a in ["python", "-m", "butterfly_guy.research",
+                                                      *sys.argv[1:]]),
+        "created_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        "registry": "not recorded: a descriptive mechanism check is not a rule evaluation",
+        "inputs": inputs, "hashes": hashes,
+    }
+    (out_dir / "provenance.json").write_text(dump_canonical(provenance))
+    (out_dir / "report.md").write_text(mechanism.markdown(results, provenance))
+    print((out_dir / "report.md").read_text())
+    print(f"artifacts: {out_dir}")
+    return 0
+
 def _unseal(args: argparse.Namespace, ds_name: str):
     """A registry-verified holdout unseal, or None when not asked for."""
     if args.unseal_holdout is None:
@@ -563,6 +610,15 @@ def build_parser() -> argparse.ArgumentParser:
     dg.add_argument("--exit-delay", type=int, default=DEFAULT_EXIT_DELAY)
     dg.add_argument("--out", default=str(REPORTS))
     dg.set_defaults(func=cmd_diagnose)
+
+    mc = sub.add_parser("mechanism",
+                        help="DESCRIPTIVE H-TS1 mechanism check (development window, no registry)")
+    mc.add_argument("--spx-csv", default=None,
+                    help="a saved copy of Cboe's SPX_History.csv (default: fetch it)")
+    mc.add_argument("--start", type=_date, default=dt.date(2022, 5, 16))
+    mc.add_argument("--end", type=_date, default=dt.date(2024, 6, 28))
+    mc.add_argument("--out", default=str(REPORTS))
+    mc.set_defaults(func=cmd_mechanism)
 
     def unseal_arg(sp: argparse.ArgumentParser) -> None:
         sp.add_argument("--unseal-holdout", type=int, default=None, metavar="SEQ",

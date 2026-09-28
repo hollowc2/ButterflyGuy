@@ -25,13 +25,15 @@ here changes live-trading code.
 | `shadow.py` | Exploratory paired shadow on an open cohort's recorded sessions (ledger read with `git show`) |
 | `latency.py` | Read-only calibration of exit latency from recorded paper trades |
 | `event_calendar.py` | The committed, versioned market-event table (`data/market_events_v1.csv`): validation, hash, leakage rule |
-| `volindex.py` | Cboe daily VIX-family history and gateway intraday bars as separately hashed `aux/` files |
+| `volindex.py` | Cboe daily VIX-family history and gateway intraday bars as separately hashed `aux/` files; a gateway dump is merged, never replacing bars |
 | `features.py` | Pre-entry session features: `events` and the term structure (prior-session closes; completed intraday bars) |
 | `diagnose.py` | DESCRIPTIVE E0 breakdowns by event and term structure (no registry record) |
 | `holdout.py` | The sealed holdout (2024-07-01 → 2026-03-12) and its registry-verified unseal |
 | `history.py` | Vendor history adapter onto the research schema (**no vendor purchased yet**), coverage report |
+| `thetadata.py` | ThetaData `HistorySource` **stub** (not purchased, not in `SOURCES`): endpoints, request plan, open questions |
 | `validate.py` | Fidelity validation of a vendor dataset against the Helios export (readiness doc steps 1–4) |
 | `hypotheses.py` | Drafted hypothesis rules H-SN1, H-EV1, H-TS1 (catalog `HSN1`, `HEV1`, `HTS1`; not registered) |
+| `mechanism.py` | DESCRIPTIVE H-TS1 mechanism check on Cboe daily closes, development window only (no registry record) |
 | `report.py`, `cli.py` | Artifacts and the `python -m butterfly_guy.research` CLI |
 
 ## Data
@@ -95,6 +97,10 @@ added or refreshed and nothing is pending.
   `tests/test_research_sweep_ports.py` (through 2026-09-24) pass unchanged. Neither covers
   2026-09-25, which is now replayable under every profile.
 - The cohort's recorded sessions (2026-09-22 → 2026-09-24) are all in this export.
+
+**2026-09-28 (stage 5): no change.** A second `--bars-only` refresh (21:17 UTC) added,
+refreshed and changed nothing; the dataset hash stays `b76dc6c9…`. The export still ends
+at 2026-09-25.
 
 **Adding another data source.** Implement `DataSource.copy_csv`, or write the same
 Parquet schema directly. The simulator never touches the database. For vendor history, see
@@ -195,9 +201,10 @@ uv run python -m butterfly_guy.research verify                  # prints the cal
 | File | Rows | SHA-256 | Source |
 |---|---:|---|---|
 | `aux/vol_index_daily.parquet` | 18,613 | `048eb3de…` | Cboe daily files, fetched 2026-09-28 06:18 UTC; every index through 2026-09-25 |
-| `aux/vol_index_intraday.parquet` | 37,343 | `d4a54490…` | Gateway dump 2026-08-03 → 2026-09-25 (dump sha256 `699420d1…`) |
+| `aux/vol_index_intraday.parquet` | 38,899 | `b8c47604…` | Gateway dumps 2026-08-03 → 2026-09-25 (`699420d1…`) and → 2026-09-28 (`ccf781f6…`), merged |
 
-`aux_hash` is `b6175510dbcc0a3f365d66ce4810a80041f5d33c705c2237c62a090023d7d12e`.
+`aux_hash` is now `cb12502b721efeda92f06f55f35273e26b101ecaa3a847e7339a628445144967` (stage 5;
+`b6175510…` in stages 3 and 4, when the intraday file had 37,343 rows, `d4a54490…`).
 `dataset_hash` was unchanged by the aux files (`dd38a5ec…` at the time; `b76dc6c9…` after
 the 2026-09-25 close landed).
 
@@ -207,17 +214,40 @@ the 2026-09-25 close landed).
   byte-identical to stage 3's (sha256 `699420d1…`), because no session had closed since.
   Ingesting it changed nothing.
 - `aux_hash` is still `b6175510…`.
-- **Ingest replaces, it does not merge.** `ingest_intraday` writes the dump's rows as the
-  whole intraday file. Once the gateway's ~30-session retention rolls past 2026-08-12, a
-  re-dump over the same range returns fewer sessions, and ingesting it would *remove* the
-  older bars (the history entry would show them as removed). Merge before ingesting any
-  later dump.
+- **Ingest replaced, it did not merge** (fixed in stage 5, below).
+
+**Stage 5 (2026-09-28): the intraday ingest merges.** `ingest_intraday` now merges a dump
+into the file (`volindex.merge_intraday`):
+- bars already in the file and absent from the dump are kept;
+- bars only in the dump are added;
+- a bar in both with different OHLC takes the dump's value, and the history entry lists it
+  under `revised` (old and new);
+- a bar with a different `bar_seconds` on the same key raises;
+- the write refuses any table that would remove an existing row (`allow_removal=False`),
+  before anything is written.
+
+Each history entry also records `dump_sha256`, `dump_rows` and `kept_not_in_dump`. The
+file's `source.dumps` lists every dump ingested; stage 3's dump was converted into the first
+entry.
+
+**Refresh on 2026-09-28 (stage 5).** The gateway dump was re-run the same way, over
+2026-08-03 → 2026-09-28 (the session had closed; dump sha256
+`ccf781f6b3181c1d7364122469ced82d717996c2a9a86ae452c48ae93d2624aa`, 164 records, no errors).
+- Retention still starts at 2026-08-12 for `$VIX`, `$VIX9D` and `$VIX3M`.
+- **`$VIX1D` returned bars for the first time**, for 2026-09-28 only (389 bars, 09:31 →
+  15:59 ET); every earlier date still has none.
+- The merge added 1,556 bars (2026-09-28, four indices), removed 0, revised 0, and kept 0
+  bars that the dump lacked. The file is now 38,899 rows, sha256
+  `b8c47604ed1205ba4db84487627dc868d58c2764bd58236cc6f748ea598d532c`.
+- `aux_hash` `b6175510…` → `cb12502b…`; `dataset_hash` unchanged (`b76dc6c9…`).
+- 2026-09-28 is not an exported session, so no feature on the 133 sessions changed.
 
 **Coverage of the 133 sessions:**
 - Daily prior-session closes for VIX, VIX9D, VIX3M and VIX1D: 133 of 133. That is all
   132 sessions the diagnostics evaluate (2026-09-25 has no official close yet).
 - Intraday VIX, VIX9D and VIX3M at 10:00: 30 sessions (2026-08-12 onward).
-- Intraday VIX1D: none.
+- Intraday VIX1D: none (the gateway's first VIX1D bars are from 2026-09-28, after the
+  export).
 
 The intraday file is shipped for the forward record and future use. It is too short for
 any breakdown here, and `$VIX` intraday was already in `spot_ticks`.
@@ -645,6 +675,19 @@ from 2022 forward. Until that subscription is active, every vendor path stays st
 *(Corrected 2026-09-28, before the stage-4 commit: an earlier wording said the owner did
 not plan to buy vendor history. That was wrong.)*
 
+**ThetaData readiness (stage 5): stubbed, not purchased.** `thetadata.ThetaDataSource`
+implements `HistorySource`, but every data method raises `NotImplementedError("ThetaData
+not purchased yet …")`, and it is **not** in `SOURCES` (tests check both). Its docstring
+holds the v3 Theta Terminal endpoints, the request plan and the estimated calls and time for
+each pull. The purchase checklist, with prices, the licence question and the enforced pull
+order, is in `history-vendor-readiness.md`. Two findings matter before buying:
+- **Licence.** ThetaData's individual terms (read 2026-09-28) forbid archiving or
+  downloading content (§2.1(i)) and require deleting all copies when the terms end
+  (§12.2). Whether a local research cache may outlive a cancelled subscription is to be
+  confirmed with ThetaData in writing before paying.
+- **History depth.** The pricing page and the docs disagree for Options Value and Indices
+  Standard. Options Standard with Indices Pro reaches 2022-01-03 under both readings.
+
 Everything that does not depend on the provider is built and tested on synthetic data.
 Adding a provider means:
 1. implement `history.HistorySource` for it, reading the credential only inside the
@@ -814,6 +857,62 @@ registering**, because the hash freezes them:
 - The unit tests cover calendar visibility, prior-session-only term structure (including
   a Cboe print on an exchange holiday), fit-window confinement and the placement
   mechanics.
+
+## Mechanism check for H-TS1 (descriptive only)
+
+`mechanism` asks whether SPX moves less than VIX1D implied on sessions whose prior-close
+VIX1D/VIX is high. It uses only Cboe's public daily files, on the development window, and
+**informs whether H-TS1 is registered; it evaluates no rule, writes no registry record and
+changes nothing in the pre-registration draft.** Every artifact is headed "DESCRIPTIVE —
+development window — not a rule evaluation".
+
+- **Inputs.** Cboe's `SPX_History.csv` (`DATE,SPX`, closes only; fetched, or `--spx-csv`)
+  and the dataset's `aux/vol_index_daily.parquet` (VIX1D and VIX).
+- **Window.** Scored sessions 2022-05-16 → 2024-06-28. Both inputs are cut to the SPX
+  session before 2022-05-16 through 2024-06-28 before anything is computed; `holdout.guard`
+  is called on the range, and a range outside the development period raises.
+- **Statistic.** `r_t = |ln(SPX_close_t / SPX_close_{t-1})| / (VIX1D_close_{t-1} / 100 /
+  sqrt(252))`, priors on the previous SPX session through `features.DailyVol`.
+- **Decision rule (fixed before running).** Split at `numpy.quantile(prior VIX1D/VIX, 2/3)`
+  over the same sessions (top: ≥, as in `HTS1`). Statistic: mean r in the top tercile minus
+  mean r in the rest. Moving-block bootstrap, 10-session blocks, 10,000 reps, seed 1,
+  membership fixed per session. "Supported" only if the 90% interval lies entirely below
+  zero. Halves split at 2023-06-01 are reported, not tested.
+- **Limits.** Close-to-close includes the overnight move and the morning before entry, so
+  it is a proxy for the 10:00 → close exposure, not a test of H-TS1. H-EV1, H-SN1 and H-LV1
+  cannot be checked with close-only index data.
+- **Output.** `reports/research/mechanism/<run id>/`: `mechanism.json`, `sessions.csv`,
+  `report.md`, `provenance.json`. The run id hashes the in-window inputs and the rule, not
+  the raw Cboe file, which grows daily.
+
+```bash
+uv run python -m butterfly_guy.research mechanism
+```
+
+Run `a2b54db81c49` (2026-09-28 21:20 UTC; git `82aed43` plus the uncommitted stage-5 code):
+- `SPX_History.csv` from `cdn.cboe.com`, sha256
+  `cfab26ca71a640bc3f31210015684de3a800bb386dc4b16523ef91844c5670b5` (292,895 bytes);
+  in-window rows 534, sha256 `3127b07dc6c8771e9c44e570b902361c95fc762c0c55ba95e00773e316c8bd25`.
+- `aux/vol_index_daily.parquet` sha256 `048eb3de…` (aux_hash `cb12502b…`); in-window rows
+  2,152, sha256 `f2634e48f041288d5e1612df14ab8772dfc34d58a8dd567bb99a4f291aa556da`. Latest
+  input date 2024-06-28.
+- `mechanism.json` `210c585b6222eccd4fef6db7d3e90d5ee85674faf7d32b51e9e5f7cde7c17b5b`,
+  `sessions.csv` `242d88b6db95e92017e55fddeb9d432469f2a2b1d2f552c89013352c8d33f516`.
+
+**Result: not supported.** 533 sessions scored, none excluded. Tercile bounds of the prior
+VIX1D/VIX: 0.801 and 0.918.
+
+| Part | Sessions | Top n | Top mean r | Rest n | Rest mean r | Top − rest | 90% interval |
+|---|---:|---:|---:|---:|---:|---:|---|
+| All | 533 | 178 | 0.741 | 355 | 0.715 | +0.026 | [−0.058, +0.101] |
+| H1 (< 2023-06-01) | 262 | 107 | 0.762 | 155 | 0.737 | +0.025 | [−0.070, +0.132] |
+| H2 (≥ 2023-06-01) | 271 | 71 | 0.711 | 200 | 0.698 | +0.013 | [−0.108, +0.142] |
+
+- High-ratio sessions moved slightly *more* relative to VIX1D, not less, in both halves.
+- Over all sessions, mean r is 0.724, below the ≈0.80 of a normal move priced exactly by
+  VIX1D: one-day implied was rich on average, but not more so when VIX1D/VIX was high.
+- The development-window 2/3 bound (0.918) is well above the 2026 sample's (0.828), so a
+  threshold fitted on 2022–2024 would flag fewer 2026 sessions.
 
 ## Known differences
 

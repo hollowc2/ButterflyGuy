@@ -1259,3 +1259,127 @@ on 2026-09-28 were:
 - **A one-month vendor subscription**, later, if either of those justifies it.
 
 None of these was started.
+
+## 2026-09-28 — stage 5: corrected data decision, housekeeping, ThetaData readiness (stubbed), H-TS1 mechanism check (development window, descriptive)
+
+This entry evaluates no rule, registers nothing, and does not touch the frozen strategy or
+the open cohort `spx-prospective-2026-09-22`. Work is on branch `research/unified-core`;
+stage 4 was committed first as `82aed43`. Details and commands are in
+`docs/research/research-core.md`.
+
+### Data decision (corrected)
+
+Stage 4's docs said the owner had decided not to buy vendor history. That was wrong.
+**Nothing has been bought, and the owner will likely buy ThetaData, from 2022 forward.**
+The stage-4 entry above carries a marked correction note, and `research-core.md` and the
+draft's marked fact update were corrected before the stage-4 commit. Until the subscription
+is active, every vendor path stays stubbed and `history.SOURCES` stays empty.
+
+### Housekeeping
+
+- **Settlement.** `export --bars-only` found nothing new; the dataset hash stays
+  `b76dc6c9…`.
+- **Cohort.** The ledger (local and remote `70ccb8e`, read-only) still holds 2026-09-22 →
+  09-24, so the E0/HLV1/R1 shadow was not re-run.
+- **Intraday ingest now merges.** `ingest_intraday` used to replace the file with the
+  dump's rows, so a dump taken after the gateway's ~30-session retention rolled would have
+  deleted older bars. It now keeps existing bars, adds new ones, records revised bars (old
+  and new OHLC) in the history entry, raises on a `bar_seconds` clash, and refuses any write
+  that would remove a row. Every dump is listed in the file's source. Tests cover kept,
+  added, revised, never-removed and an idempotent re-ingest.
+- **Gateway re-dump**, run as in stage 3 over 2026-08-03 → 2026-09-28 (sha256 `ccf781f6…`,
+  no errors).
+  - Retention still starts at 2026-08-12.
+  - `$VIX1D` returned minute bars for the first time, for 2026-09-28 only.
+  - The merge added 1,556 bars (2026-09-28, four indices), removed, revised and kept-only 0.
+  - **`aux_hash` `b6175510…` → `cb12502b721efeda92f06f55f35273e26b101ecaa3a847e7339a628445144967`.**
+    `dataset_hash` is unchanged, and no feature on the 133 exported sessions changed.
+
+### ThetaData readiness (stubbed, nothing bought, nothing downloaded)
+
+Public pages only, read 2026-09-28: no account, no sign-up, no terminal install. Sources are
+listed in `history-vendor-readiness.md` (new section "ThetaData: public-docs findings and
+purchase checklist").
+
+- **Plans and prices.** Options Value $40, Standard $80, Pro $160; Indices Value $30,
+  Standard $50, Pro $100 (per month).
+  ([pricing](https://www.thetadata.net/pricing)).
+- **History depth: the pricing page and the docs disagree.**
+  - Options Value: "4 years" on the pricing page, 1-minute from 2020-01-01 in the
+    [subscriptions doc](https://thetadata.net/docs/Articles/Getting-Started/Subscriptions.html).
+  - Indices Standard: "3 years" against 2022-01-01.
+  - Options Standard (2016 / 8 years) and Indices Pro (2017 / 7 years) reach 2022-01-03 under
+    either reading, so the safe combination is $180/month, or $130/month if ThetaData
+    confirms Indices Standard reaches 2022. The readiness doc's "Standard, since Value
+    reaches only about 2022-09" holds under the pricing page's reading only.
+- **Indices tier.** Intraday SPX and VIX, and an index EOD report (open, high, low, close)
+  that ThetaData generates at 17:15 ET
+  ([index EOD](https://thetadata.net/docs/operations/index_history_eod.html)). Whether its
+  open and close equal the official values is to confirm at purchase.
+- **Licence.** Individual plans are "Personal use only, no redistribution or business use".
+  The [terms](https://thetadata.net/terms-and-conditions) also forbid archiving or
+  downloading content (§2.1(i)) and require destroying all copies on termination, certified
+  within 30 days (§12.2). **Whether a local research cache may outlive a cancelled
+  subscription must be confirmed with ThetaData in writing before paying**; if it may not,
+  the subscription must run for as long as the vendor data is used.
+- **Endpoints** (Theta Terminal v3, `http://127.0.0.1:25503/v3`):
+  - `/option/history/quote` with `interval=1m`: "the last quote at the interval's
+    timestamp";
+  - `/option/list/expirations` and `/option/list/strikes`;
+  - `/index/history/price` (price at the exact timestamp) and `/index/history/eod`.
+- **Limits.** Multi-day requests are capped at one month (option quotes must name an
+  expiration); concurrency is account-wide (2/4/8); there is no rate limit.
+- **Timestamps.** `YYYY-MM-DDTHH:mm:ss.SSS` with no offset; ThetaData's Python library types
+  them `America/New_York`. To confirm at purchase on a DST-change day.
+- **Credential.** The terminal holds it (API key by argument, environment variable or
+  `.env`; or `creds.txt`). Requests to the local server carry none, so our code never reads
+  it.
+- **Sessions.** SPXW was quoted only Monday, Wednesday and Friday before 2022-05-16, so the
+  development window has about 590 sessions; the draft's "about 625" carries a marked fact
+  fix.
+- **Built.** `research/thetadata.py`: `ThetaDataSource` implements `HistorySource`, every
+  data method raises "ThetaData not purchased yet", and it is not in `SOURCES` (tested).
+  Its docstring holds the per-session request plan (four calls per session, index prices
+  per session so that no batch reaches the holdout, EOD in ≤1-month chunks) and the
+  estimates: validation ~550 calls / 20–40 min, development ~2,420 / 1–2.5 h, holdout
+  ~1,750 / 0.7–1.8 h.
+- **Purchase checklist** (readiness doc): confirm the open questions in writing; choose
+  the plans; the expected subscription length; then the order the holdout guard enforces:
+  validation window and `validate-vendor`, the development window only if every step
+  passes, registration, and only then the holdout with `--unseal-holdout`. A single
+  "2022 → today" download is not allowed.
+
+### H-TS1 mechanism check (DESCRIPTIVE — development window — not a rule evaluation)
+
+Question: on sessions whose prior-close VIX1D/VIX is high, does SPX move less than VIX1D
+implied? Inputs are Cboe's public `SPX_History.csv` and the Cboe VIX1D/VIX daily aux file,
+cut to 2022-05-13 → 2024-06-28 before anything was computed; the range passed
+`holdout.guard`, and no value dated 2024-07-01 or later entered any computation.
+
+Decision rule, quoted as fixed before the run:
+
+> Split sessions at the upper tercile of the prior VIX1D/VIX, numpy.quantile at 2/3 over
+> the same sessions (top: ratio >= that value, as in HTS1). Statistic: mean r in the top
+> tercile minus mean r in the other two. Moving-block bootstrap over sessions in date
+> order: 10-session blocks, 10,000 reps, seed 1, tercile membership fixed per session. The
+> mechanism is 'supported' only if the 90% interval (5th to 95th percentile) lies entirely
+> below zero; otherwise 'not supported'. Both halves (split at 2023-06-01) and the tercile
+> bounds are reported. Fixed 2026-09-28, before the first run.
+
+with `r_t = |ln(SPX_close_t / SPX_close_{t-1})| / (VIX1D_close_{t-1} / 100 / sqrt(252))`.
+
+**Result: not supported** (run `a2b54db81c49`; `SPX_History.csv` sha256 `cfab26ca…`,
+in-window rows `3127b07d…`; vol file `048eb3de…`, aux_hash `cb12502b…`).
+
+- 533 sessions, none excluded; tercile bounds 0.801 and 0.918.
+- Top tercile mean r 0.741 (178 sessions) against 0.715 for the rest (355): difference
+  +0.026, 90% interval [−0.058, +0.101].
+- H1 (before 2023-06-01): +0.025 [−0.070, +0.132]. H2: +0.013 [−0.108, +0.142].
+- Mean r over all sessions is 0.724, below the ≈0.80 of a move priced exactly by VIX1D: the
+  one-day implied was rich on average, but not richer when VIX1D/VIX was high.
+
+**Limits.** Close-to-close includes the overnight move and the morning before entry, so
+this is a proxy for the 10:00 → close exposure, not a test of H-TS1. H-EV1, H-SN1 and H-LV1
+cannot be checked with close-only index data. The result informs whether the owner
+registers H-TS1; it changes nothing in the pre-registration draft, and no registry record
+was written.

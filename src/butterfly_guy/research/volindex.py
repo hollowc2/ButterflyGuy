@@ -12,7 +12,8 @@ about 30 sessions of minute history and returns nothing for `$VIX1D`.
 
 Both land under `aux/` with their own manifest entries, so `dataset_hash` (the exported
 chain data) never changes. Each refresh appends a manifest `history` entry listing the
-rows added, removed and revised.
+rows added, removed and revised. Cboe files are full history and replace the daily file;
+a gateway dump is merged into the intraday file, which never loses a row.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 
-from butterfly_guy.research.dataset import Manifest, default_cache_root, write_table
+from butterfly_guy.research.dataset import Dataset, Manifest, default_cache_root, write_table
 
 CBOE_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{index}_History.csv"
 CBOE_INDICES = ("VIX", "VIX1D", "VIX9D", "VIX3M")
@@ -122,16 +123,22 @@ def _row_changes(old: pd.DataFrame | None, new: pd.DataFrame, keys: list[str]) -
 
 
 def write_aux(root: Path, rel: str, table: pd.DataFrame, source: dict, keys: list[str],
-              log=None) -> Manifest:
-    """Write one aux file into an existing dataset and record the change in its manifest."""
+              log=None, *, allow_removal: bool = True, extra: dict | None = None) -> Manifest:
+    """Write one aux file into an existing dataset and record the change in its manifest.
+
+    With `allow_removal=False`, a table missing any existing row raises before anything is
+    written. `extra` is added to the history entry."""
     manifest_path = root / "manifest.json"
     manifest = Manifest.load(manifest_path)
     path = root / rel
-    old = pd.read_parquet(path) if rel in manifest.aux and path.exists() else None
+    old = Dataset(root).aux_table(rel) if rel in manifest.aux and path.exists() else None
+    changes = _row_changes(old, table, keys)
+    if changes["rows_removed"] and not allow_removal:
+        raise ValueError(f"{rel}: the new table would remove {changes['rows_removed']} "
+                         "existing rows; nothing was written")
     prev_aux = manifest.aux_hash
     entry = write_table(pa.Table.from_pandas(table, preserve_index=False), path)
     manifest.aux[rel] = {**entry, "source": source}
-    changes = _row_changes(old, table, keys)
     manifest.history.append({
         "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "mode": "aux",
@@ -140,6 +147,7 @@ def write_aux(root: Path, rel: str, table: pd.DataFrame, source: dict, keys: lis
         "previous_aux_hash": prev_aux,
         "aux_hash": manifest.aux_hash,
         **changes,
+        **(extra or {}),
     })
     manifest.save(manifest_path)
     if log is not None:
@@ -168,16 +176,64 @@ def export_daily(dataset: str, cache_root: Path | None = None, *, raw=None, log=
     return write_aux(root, DAILY_FILE, table, source, ["index", "date"], log)
 
 
+INTRADAY_KEYS = ["index", "ts_us"]
+INTRADAY_DTYPES = {"ts_us": "int64", "index": "object", "bar_seconds": "int64",
+                   **dict.fromkeys(OHLC, "float64")}
+
+
+def merge_intraday(old: pd.DataFrame | None, new: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """The existing bars merged with a dump's.
+
+    A bar only in the dump is added. A bar in both takes the dump's OHLC (`write_aux`
+    records it as revised, old and new). A bar the dump does not contain is kept, so a dump
+    taken after the gateway's retention has rolled never removes older bars. Returns the
+    merged table and the number of bars kept that the dump did not contain."""
+    cols = list(INTRADAY_DTYPES)
+    new = new[cols].astype(INTRADAY_DTYPES)
+    if old is None:
+        return new.sort_values(INTRADAY_KEYS, ignore_index=True), 0
+    old = old[cols].astype(INTRADAY_DTYPES)
+    both = old.merge(new[[*INTRADAY_KEYS, "bar_seconds"]], on=INTRADAY_KEYS,
+                     suffixes=("", "_dump"))
+    clash = both[both["bar_seconds"] != both["bar_seconds_dump"]]
+    if not clash.empty:
+        r = clash.iloc[0]
+        raise ValueError(f"{r['index']} ts_us {r['ts_us']}: bar_seconds {r['bar_seconds']} in "
+                         f"the file, {r['bar_seconds_dump']} in the dump")
+    in_dump = pd.MultiIndex.from_frame(new[INTRADAY_KEYS])
+    kept = old[~pd.MultiIndex.from_frame(old[INTRADAY_KEYS]).isin(in_dump)]
+    merged = pd.concat([kept, new], ignore_index=True).sort_values(INTRADAY_KEYS,
+                                                                   ignore_index=True)
+    return merged.astype(INTRADAY_DTYPES), len(kept)
+
+
 def ingest_intraday(dataset: str, dump: Path, cache_root: Path | None = None, *, log=None
                     ) -> Manifest:
+    """Merge a gateway dump into the intraday aux file (see `merge_intraday`). Every dump
+    ingested is listed in the file's `source.dumps`; the file never loses a row."""
     root = (cache_root or default_cache_root()) / dataset
     data = dump.read_bytes()
     table, coverage = intraday_table(data.decode().splitlines())
+    prev = Manifest.load(root / "manifest.json").aux.get(INTRADAY_FILE)
+    old = Dataset(root).aux_table(INTRADAY_FILE) if prev is not None else None
+    merged, kept = merge_intraday(old, table)
+
+    dumps = list((prev or {}).get("source", {}).get("dumps", []))
+    if prev is not None and not dumps and "dump_sha256" in prev["source"]:
+        # A file written before merging existed: its one dump becomes the first entry.
+        dumps = [{k: prev["source"][k] for k in ("dump_sha256", "ingested_at", "coverage")
+                  if k in prev["source"]}]
+    dump_sha = hashlib.sha256(data).hexdigest()
+    dumps.append({"dump_sha256": dump_sha,
+                  "ingested_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+                  "coverage": coverage})
     source = {
         "kind": "schwab_gateway_session_history",
-        "dump_sha256": hashlib.sha256(data).hexdigest(),
-        "ingested_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "timestamp": "bar start; complete at ts + bar_seconds",
-        "coverage": coverage,
+        "merge": "existing bars kept; dump bars added; a bar in both takes the dump's OHLC",
+        "dumps": dumps,
     }
-    return write_aux(root, INTRADAY_FILE, table, source, ["index", "ts_us"], log)
+    return write_aux(root, INTRADAY_FILE, merged, source, INTRADAY_KEYS, log,
+                     allow_removal=False,
+                     extra={"dump_sha256": dump_sha, "dump_rows": len(table),
+                            "kept_not_in_dump": kept})

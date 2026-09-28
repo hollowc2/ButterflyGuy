@@ -100,6 +100,7 @@ class HistorySource(Protocol):
 
 
 # DATA PROVIDER NOT CHOSEN: register a vendor's `HistorySource` factory here once bought.
+# ThetaData (likely) is stubbed in `thetadata.py`; add it only once the subscription is active.
 SOURCES: dict[str, Callable[[], HistorySource]] = {}
 
 
