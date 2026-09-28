@@ -1,0 +1,141 @@
+"""Executable-side pricing, stress, roll-forward exits and the settlement fallback."""
+
+from __future__ import annotations
+
+import datetime as dt
+
+import pytest
+
+from butterfly_guy.backtest.execution_accounting import price_frozen_trade
+from butterfly_guy.backtest.simulation_engine import DayResult
+from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
+from butterfly_guy.research.accounting import Costs, price_trade
+from butterfly_guy.research.market import DayMarket, Fly, us_to_datetime
+from tests.research_synth import DAY, fly_quotes, make_chain, minute
+
+FLY = Fly("CALL", 5970.0, 5980.0, 5990.0)
+COSTS = Costs(0.65)
+T0, T1, T2 = minute(10, 0), minute(10, 1), minute(10, 2)
+
+
+def _path(quotes, times=(T0, T1, T2)):
+    return DayMarket(make_chain(list(times), quotes)).fly_path(FLY)
+
+
+def test_marketable_and_stressed_use_executable_sides():
+    quotes = {
+        **fly_quotes(T0, lo=(3.0, 3.2), c=(1.5, 1.6), hi=(0.5, 0.6)),
+        **fly_quotes(T1, lo=(4.0, 4.2), c=(1.0, 1.1), hi=(0.2, 0.3)),
+    }
+    fills = price_trade(_path(quotes, (T0, T1)), entry_index=0, entry_mark=0.45,
+                        exit_index=1, exit_mark=2.25, settlement=None, costs=COSTS).fills
+    commission = 4 * 0.65 / 100
+    # Entry buys the outer legs at ask and sells two centers at bid.
+    assert fills["marketable"].entry == pytest.approx(3.2 + 0.6 - 2 * 1.5 + commission)
+    # Exit sells the outer legs at bid and buys two centers back at ask.
+    assert fills["marketable"].exit == pytest.approx(4.0 + 0.2 - 2 * 1.1 - commission)
+    # Stress moves each of the four contract fills $0.05 against us on each side.
+    assert fills["stressed"].entry == pytest.approx(fills["marketable"].entry + 0.20)
+    assert fills["stressed"].exit == pytest.approx(fills["marketable"].exit - 0.20)
+    assert fills["midpoint"].entry == pytest.approx(0.45 + commission)
+    assert fills["midpoint"].exit == pytest.approx(2.25 - commission)
+
+
+def test_cash_settlement_is_free_in_every_model():
+    quotes = fly_quotes(T0, lo=(3.0, 3.2), c=(1.5, 1.6), hi=(0.5, 0.6))
+    out = price_trade(_path(quotes, (T0,)), entry_index=0, entry_mark=0.45, exit_index=None,
+                      exit_mark=None, settlement=7.5, costs=COSTS)
+    for model in ("midpoint", "marketable", "stressed"):
+        assert out.fills[model].exit == 7.5
+    assert out.pnl_dollars("stressed") == pytest.approx(100 * (7.5 - (0.8 + 0.026 + 0.20)))
+
+
+def test_midpoint_exit_is_floored_like_paper_exit_price():
+    quotes = {**fly_quotes(T0, (1, 1.2), (0.5, 0.6), (0.1, 0.2)),
+              **fly_quotes(T1, (0.1, 0.2), (0.05, 0.1), (0.0, 0.05))}
+    fills = price_trade(_path(quotes, (T0, T1)), entry_index=0, entry_mark=0.3, exit_index=1,
+                        exit_mark=0.01, settlement=None, costs=COSTS).fills
+    assert fills["midpoint"].exit == 0.05
+
+
+@pytest.mark.parametrize("bad", ["missing", "crossed"])
+def test_unusable_entry_market_is_not_priced_or_imputed(bad):
+    lo = (3.0, 3.2) if bad == "missing" else (3.3, 3.2)  # crossed: bid > ask
+    quotes = fly_quotes(T0, lo=lo, c=(1.5, 1.6), hi=(0.5, 0.6))
+    if bad == "missing":
+        del quotes[(T0, 5990.0)]
+    out = price_trade(_path(quotes, (T0,)), entry_index=0, entry_mark=0.45, exit_index=None,
+                      exit_mark=None, settlement=5.0, costs=COSTS)
+    assert out.fills["marketable"].status == f"{bad}_entry_market"
+    assert out.pnl_dollars("stressed") is None
+    assert out.pnl_dollars("midpoint") is not None
+
+
+def test_exit_rolls_forward_past_missing_and_crossed_snapshots():
+    quotes = {
+        **fly_quotes(T0, (3.0, 3.2), (1.5, 1.6), (0.5, 0.6)),
+        **fly_quotes(T1, (4.0, 4.2), (1.0, 1.1), (0.2, 0.3)),
+        **fly_quotes(T2, (3.5, 3.4), (1.0, 1.1), (0.2, 0.3)),  # crossed lower leg
+        **fly_quotes(minute(10, 3), (3.8, 4.0), (1.0, 1.1), (0.2, 0.3)),
+    }
+    del quotes[(T1, 5980.0)]  # missing center at the trigger snapshot
+    times = (T0, T1, T2, minute(10, 3))
+    fills = price_trade(_path(quotes, times), entry_index=0, entry_mark=0.45, exit_index=1,
+                        exit_mark=2.0, settlement=9.0, costs=COSTS).fills
+    stressed = fills["stressed"]
+    assert stressed.exit_index == 3 and stressed.exit_roll == 2
+    assert stressed.exit == pytest.approx(3.8 + 0.2 - 2 * 1.1 - 0.026 - 0.20)
+    assert not stressed.settlement_fallback
+
+
+def test_exit_falls_back_to_settlement_when_no_executable_snapshot_remains():
+    quotes = {**fly_quotes(T0, (3.0, 3.2), (1.5, 1.6), (0.5, 0.6)),
+              **fly_quotes(T1, (4.0, 4.2), (1.0, 1.1), (0.2, 0.3))}
+    del quotes[(T1, 5990.0)]
+    fills = price_trade(_path(quotes, (T0, T1)), entry_index=0, entry_mark=0.45, exit_index=1,
+                        exit_mark=2.0, settlement=6.25, costs=COSTS).fills
+    assert fills["stressed"].settlement_fallback
+    assert fills["stressed"].exit == 6.25  # no commission or stress on settlement
+    unsettled = price_trade(_path(quotes, (T0, T1)), entry_index=0, entry_mark=0.45,
+                            exit_index=1, exit_mark=2.0, settlement=None, costs=COSTS)
+    assert unsettled.fills["stressed"].status == "missing_exit_market"
+    assert unsettled.pnl_dollars("stressed") is None
+
+
+def _option_quotes(quotes, when):
+    return [
+        OptionQuote(symbol="", underlying="SPX", expiration=DAY, strike=k, option_type="CALL",
+                    bid=b, ask=a, mark=m)
+        for (ts, k), (b, a, m) in quotes.items() if ts == when
+    ]
+
+
+@pytest.mark.parametrize("model,ours", [("marketable", "marketable"),
+                                        ("stressed_marketable", "stressed")])
+def test_matches_execution_accounting_price_frozen_trade(model, ours):
+    """Same entry, a missing trigger snapshot and a crossed one, then a usable exit."""
+    times = (T0, T1, T2, minute(10, 3))
+    quotes = {
+        **fly_quotes(T0, (3.0, 3.25), (1.45, 1.6), (0.5, 0.65)),
+        **fly_quotes(T1, (4.0, 4.2), (1.0, 1.1), (0.2, 0.3)),
+        **fly_quotes(T2, (3.5, 3.4), (1.0, 1.1), (0.2, 0.3)),
+        **fly_quotes(minute(10, 3), (3.8, 4.05), (0.95, 1.1), (0.15, 0.3)),
+    }
+    del quotes[(T1, 5980.0)]
+    chains = {us_to_datetime(t): _option_quotes(quotes, t) for t in times}
+    candidate = ButterflyCandidate(
+        direction="CALL", wing_width=10, center_strike=5980.0, lower_strike=5970.0,
+        upper_strike=5990.0, cost=0.45, max_profit=9.55, reward_risk=21.2, lower_be=0,
+        upper_be=0, distance_from_spot=20, spot_price=5960,
+    )
+    baseline = DayResult(date=DAY, traded=True, direction="CALL",
+                         entry_time=us_to_datetime(T0) + dt.timedelta(seconds=20),
+                         exit_time=us_to_datetime(T1) + dt.timedelta(seconds=5),
+                         exit_reason="drawdown_morning", exit_price=1.0)
+    ref = price_frozen_trade(baseline=baseline, candidate=candidate, chains=chains, model=model)
+    fills = price_trade(_path(quotes, times), entry_index=0, entry_mark=0.45, exit_index=1,
+                        exit_mark=2.0, settlement=None, costs=COSTS).fills[ours]
+    assert ref.status == "priced"
+    assert fills.entry == pytest.approx(ref.entry_price, abs=1e-12)
+    assert fills.exit == pytest.approx(ref.exit_price, abs=1e-12)
+    assert fills.exit_roll == ref.skipped_exit_observations
