@@ -538,6 +538,35 @@ def cmd_validate_vendor(args: argparse.Namespace) -> int:
     return 0 if results["pass"] else 1
 
 
+def _index_crosscheck(files: dict, start: dt.date, end: dt.date) -> dict:
+    """The owner's minute files against Yahoo `^GSPC` and Cboe VIX daily OHLC (report only)."""
+    import pandas as pd
+    import yfinance
+
+    from butterfly_guy.research import quality
+    from butterfly_guy.research.thetadata import fetch_cboe, load_minute_file, parse_cboe
+
+    minutes, notes = {}, {}
+    for sym, meta in files.items():
+        path = Path(meta["path"])
+        if not path.is_file() or sha256_file(path) != meta["sha256"]:
+            notes[sym] = "minute file missing or changed since the pull"
+            continue
+        minutes[sym] = load_minute_file(path)[0]
+    raw = yfinance.download("^GSPC", start=start.isoformat(),
+                            end=(end + dt.timedelta(days=1)).isoformat(), interval="1d",
+                            auto_adjust=False, progress=False)
+    raw.columns = [c[0] if isinstance(c, tuple) else c for c in raw.columns]
+    spx = pd.DataFrame({"date": raw.index.date, "high": raw["High"].to_numpy(),
+                        "low": raw["Low"].to_numpy()})
+    vix = parse_cboe(fetch_cboe("VIX"), "VIX")
+    out = quality.index_file_crosscheck(minutes, {"SPX": spx, "$VIX": vix}, start, end)
+    spx_hash = hashlib.sha256(spx.to_csv(index=False).encode()).hexdigest()
+    out["sources"] = {"SPX": {"yahoo": "^GSPC", "rows": len(spx), "sha256": spx_hash},
+                      "$VIX": {"url": "cboe VIX_History.csv"}, "notes": notes}
+    return out
+
+
 def cmd_vendor_quality(args: argparse.Namespace) -> int:
     from butterfly_guy.research import quality
     from butterfly_guy.research.dataset import Manifest
@@ -551,6 +580,9 @@ def cmd_vendor_quality(args: argparse.Namespace) -> int:
     t0 = time.monotonic()
     results = quality.run(vendor, helios, args.start, args.end, parse_cboe_spx(raw))
     results["meta"]["cboe_spx"] = {"url": url, "sha256": hashlib.sha256(raw).hexdigest()}
+    files = vendor.manifest.source.get("index_files")
+    if files and args.start < VALIDATION[0]:
+        results["index_files_crosscheck"] = _index_crosscheck(files, args.start, args.end)
     run_id = hashlib.sha256(canonical_json({"meta": results["meta"], "range": results["range"],
                                             "thresholds": results["thresholds"]}).encode()
                             ).hexdigest()[:12]

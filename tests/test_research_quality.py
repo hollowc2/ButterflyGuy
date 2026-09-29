@@ -117,7 +117,8 @@ def test_a_clean_day_passes_every_gate(tmp_path):
     m = r["matched_instants"]
     assert m["pairs"] > 0 and m["agree_share"] == 1.0
     assert r["full_validation_window"] is False
-    assert quality.history_entry(r, "abc", "t")["pass"] is False  # partial window
+    entry = quality.history_entry(r, "abc", "t")
+    assert entry["pass"] is True and not quality_passed(type("M", (), {"history": [entry]}))
 
 
 def test_coverage_crossed_stale_and_timestamp_failures_are_caught(tmp_path):
@@ -187,3 +188,16 @@ def test_q4_ignores_quotes_pinned_near_the_minimum_tick():
         c = chain(bid, ask)
         _, quoted = quality._cells(c, rows)
         assert quality._stale(c, rows, quoted) == expected
+
+
+def test_dst_weeks_are_listed_and_the_minute_file_crosscheck_reports_differences():
+    rows = [{"date": "2022-03-15", "q5": {"evaluable": True, "best_lag": 0}},
+            {"date": "2022-03-22", "q5": {"evaluable": True, "best_lag": 0}}]
+    assert quality._q5(rows)["dst_weeks"] == {"2022-03-15": 0}
+    d = dt.date(2022, 3, 15)
+    minutes = {"SPX": pd.DataFrame({"date": [d, d], "high": [4300.0, 4310.0],
+                                    "low": [4290.0, 4280.0]})}
+    ref = {"SPX": pd.DataFrame({"date": [d], "high": [4310.5], "low": [4280.0]})}
+    r = quality.index_file_crosscheck(minutes, ref, d, d)["SPX"]
+    assert r["compared"] == 1 and r["high_abs_diff"]["median"] == 0.5
+    assert r["low_abs_diff"]["median"] == 0.0 and r["days_over_0.5pct"] == 0

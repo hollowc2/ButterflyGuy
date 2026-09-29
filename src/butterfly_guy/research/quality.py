@@ -28,6 +28,11 @@ Operational details the plan leaves open, fixed here:
   SPX prints (Schwab ticks land at random seconds) is *not evaluable*; with no evaluable
   session, Q5 is `n/a` and gates nothing, and it must then pass on the development data.
 - **Q6** compares every session's SPX close in the vendor's `daily_bars` with Cboe's.
+- **DST-change weeks** (development data): Q5's best lag is listed for every session in the
+  weeks starting `DST_WEEKS`, where a time-zone mistake would show first.
+- **Minute-file cross-check** (report only, no threshold): the owner's SPX and VIX files'
+  daily high and low (09:31-16:00 ET, stale days excluded) against independent daily OHLC
+  (Yahoo `^GSPC` for SPX, Cboe for VIX).
 - **Matched instants** (report only): Helios snapshots taken 0-`MATCH_S` s after a minute
   mark against the vendor's row at that minute, and, for each disagreement beyond `TOL`,
   whether the vendor cell, the Helios cell, both or neither breaks a Q2/Q3 rule then.
@@ -45,6 +50,9 @@ from butterfly_guy.research.event_calendar import EventCalendar
 from butterfly_guy.research.history import session_close
 from butterfly_guy.research.holdout import VALIDATION, guard
 from butterfly_guy.research.market import et_us
+
+DST_WEEKS = (dt.date(2022, 3, 14), dt.date(2022, 11, 7), dt.date(2023, 3, 13),
+             dt.date(2023, 11, 6), dt.date(2024, 3, 11))
 
 PLAN = "docs/research/vendor-data-quality-plan-2026-09-28.md"
 BAND = 200.0
@@ -308,17 +316,23 @@ def _summary(rows: list[dict]) -> dict:
     }
 
 
+def _dst_week(d: dt.date) -> bool:
+    return any(0 <= (d - w).days <= 4 for w in DST_WEEKS)
+
+
 def _q5(rows: list[dict]) -> dict:
+    dst = {r["date"]: (r["q5"].get("best_lag") if r["q5"].get("evaluable") else r["q5"]["reason"])
+           for r in rows if "q5" in r and _dst_week(dt.date.fromisoformat(r["date"]))}
     ev = [r["q5"] for r in rows if r.get("q5", {}).get("evaluable")]
     if not ev:
-        return {"status": "n/a", "evaluable": 0, "sessions": len(rows)}
+        return {"status": "n/a", "evaluable": 0, "sessions": len(rows), "dst_weeks": dst}
     lags = [e["best_lag"] for e in ev]
     share0 = sum(x == 0 for x in lags) / len(lags)
     worst = max(abs(x) for x in lags)
     ok = share0 >= THRESHOLDS["Q5_min_lag0_share"] and worst <= THRESHOLDS["Q5_max_abs_lag"]
     return {"status": "pass" if ok else "fail", "evaluable": len(ev), "sessions": len(rows),
             "lag0_share": share0, "max_abs_lag": worst,
-            "lag_counts": {str(x): lags.count(x) for x in sorted(set(lags))}}
+            "lag_counts": {str(x): lags.count(x) for x in sorted(set(lags))}, "dst_weeks": dst}
 
 
 def _q6(vendor: Dataset, dates: list[dt.date], cboe_spx: pd.DataFrame) -> dict:
@@ -377,11 +391,41 @@ def run(vendor: Dataset, helios: Dataset, start: dt.date, end: dt.date,
     }
 
 
+def index_file_crosscheck(minutes: dict[str, pd.DataFrame], daily: dict[str, pd.DataFrame],
+                          start: dt.date, end: dt.date) -> dict:
+    """Report only: per symbol, the minute file's daily high/low (`minutes[sym]`: rows `date,
+    high, low` from `thetadata.load_minute_file`) against independent daily OHLC
+    (`daily[sym]`: `date, high, low`)."""
+    out = {}
+    for sym, m in minutes.items():
+        m = m[(m["date"] >= start) & (m["date"] <= end)]
+        mine = m.groupby("date").agg(high=("high", "max"), low=("low", "min"))
+        ref = daily.get(sym)
+        if ref is None or mine.empty:
+            out[sym] = {"compared": 0}
+            continue
+        j = mine.join(ref.set_index("date")[["high", "low"]], rsuffix="_ref", how="inner")
+        dh, dl = (j["high"] - j["high_ref"]).abs(), (j["low"] - j["low_ref"]).abs()
+        rel = pd.concat([dh / j["high_ref"], dl / j["low_ref"]], axis=1).max(axis=1)
+        worst = rel.sort_values(ascending=False).head(10)
+        out[sym] = {
+            "compared": len(j), "file_days_without_reference": int(len(mine) - len(j)),
+            "high_abs_diff": {"median": round(float(dh.median()), 4),
+                              "p99": round(float(dh.quantile(0.99)), 4)},
+            "low_abs_diff": {"median": round(float(dl.median()), 4),
+                             "p99": round(float(dl.quantile(0.99)), 4)},
+            "days_over_0.5pct": int((rel > 0.005).sum()),
+            "worst": {d.isoformat(): round(float(x), 5) for d, x in worst.items()},
+        }
+    return out
+
+
 def history_entry(results: dict, run_id: str, at: str) -> dict:
     """The manifest `history` record of a run (no `holdout_sessions` key: it registers
-    nothing for the unseal)."""
+    nothing for the unseal). Only a pass over the whole validation window opens earlier
+    pulls (`history.quality_passed` checks the range)."""
     return {"at": at, "mode": "vendor_quality", "run_id": run_id, "range": results["range"],
-            "pass": results["pass"] and results["full_validation_window"],
+            "pass": results["pass"],
             "gates": results["gates"], "dataset_hash": results["meta"]["vendor"]["dataset_hash"],
             "helios_dataset_hash": results["meta"]["helios"]["dataset_hash"], "plan": PLAN}
 
@@ -403,6 +447,25 @@ def markdown(results: dict, provenance: dict) -> str:
            f"lag 0 on {_pct(q5['lag0_share'], 1)} of {q5['evaluable']}; max |lag| "
            f"{q5['max_abs_lag']}; {q5['lag_counts']}")
     m = results["matched_instants"]
+    x = results.get("index_files_crosscheck")
+    extra = []
+    if q5.get("dst_weeks"):
+        extra += ["", "## Q5 on DST-change weeks", "",
+                  "Best lag per session (0 = aligned; a string = not evaluable): "
+                  + ", ".join(f"{d}: {v}" for d, v in sorted(q5["dst_weeks"].items())) + "."]
+    if x:
+        extra += ["", "## Minute-file cross-check (report only)", ""]
+        for sym, r in x.items():
+            if sym == "sources":
+                continue
+            if not r.get("compared"):
+                extra.append(f"- {sym}: {r}")
+                continue
+            extra.append(
+                f"- {sym}: {r['compared']} days; |Δhigh| median {r['high_abs_diff']['median']}, "
+                f"p99 {r['high_abs_diff']['p99']}; |Δlow| median {r['low_abs_diff']['median']}, "
+                f"p99 {r['low_abs_diff']['p99']}; days over 0.5%: {r['days_over_0.5pct']}; "
+                f"worst: {r['worst']}")
     lines = [
         f"# Vendor data quality ({provenance['run_id']})", "",
         f"- Vendor: `{results['meta']['vendor']['dataset']}` @ "
@@ -438,5 +501,6 @@ def markdown(results: dict, provenance: dict) -> str:
         f"Disagreements where a Q2/Q3 rule is broken by: the vendor only "
         f"{m['vendor_only_bad']:,}; Helios only {m['helios_only_bad']:,}; both "
         f"{m['both_bad']:,}; neither {m['neither_bad']:,}.",
+        *extra,
     ]
     return "\n".join(lines) + "\n"
