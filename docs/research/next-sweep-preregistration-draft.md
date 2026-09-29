@@ -39,6 +39,20 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 > - **Likely vendor:** ThetaData, from 2022 forward; not purchased. The purchase checklist
 >   and the enforced pull order are in `history-vendor-readiness.md`.
 
+> **[Fact update, 2026-09-29, marked; no hypothesis, split, metric or gate changed]**
+> - **Development-window results exist** (in-sample; ThetaData `spx_0dte_thetadata` @
+>   `93bbe58e`, `vendor_1m`, 2022-01-03 → 2024-06-28). They are in
+>   `registration-decision-2026-09-29.md`, which also lists the owner's open decisions.
+>   Anything in this draft that is changed from here on is made after seeing those results
+>   and must be marked as a revision.
+> - **Usable development sessions:** 585; E0 replays 584 (2023-07-03, an early close, is
+>   `incomplete_data`).
+> - **H-TS1's fitted threshold:** 0.9181935615930604 (n = 528 sessions with a prior VIX1D).
+> - **Built for the development runs:** optional H-EV2 as `HEV2` (`b0c670c0…`, FOMC statement
+>   days at any time) and H-SN1's noise secondary as `HSN1_c148` / `HSN1_c168`.
+> - **Holdout size from the calendar:** 358 usable sessions (H1 204 / H2 154) without an
+>   Indices month, 421 (204 / 217) with one.
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).

@@ -1471,3 +1471,90 @@ Findings that came up while writing it:
 - `export-history --provider thetadata` still stops with "Data provider not chosen" and exit
   2. It stops in `history.get_source`, before any source is built or request made.
 - `uv run pytest` and `uv run ruff check .` pass.
+
+## 2026-09-29 — ThetaData development window: E0 baseline, drafted hypotheses, power (in-sample; nothing registered)
+
+Everything in this entry is on the development window (2022-01-03 → 2024-06-28) and is
+**in-sample**. Nothing was registered, the holdout was not touched, and sessions from 2026-03-13
+onward were not used. Dataset `spx_0dte_thetadata` @ `93bbe58e`, profile `vendor_1m`, halves
+split at 2023-04-26 (by session count, fixed before any result was read). Vendor results are
+comparable only with other vendor results. The owner's package, with every table, is
+`docs/research/registration-decision-2026-09-29.md`.
+
+### Integrity
+
+`verify` OK; `coverage`: 585 sessions, each with a real SPX level, a 10:00 VIX and official
+bars. E0 replays 584. The one it cannot is 2023-07-03, an early close: its fly was still held
+when the 13:00 clock ended, and the replay calls that `incomplete_data`.
+
+### E0 loses on the development window
+
+| | Stressed | Midpoint | Delayed | $0.10 tie-set 5–95% |
+|---|---:|---:|---:|---|
+| 584 sessions, 361 trades | −13,085 (−$36/trade) | +18,362 | −8,791 | −13,561 … −10,965 |
+| 2022 / 2023 / 2024 H1 | +3,524 / −15,990 / −619 | | | |
+| Gap up (CALL) / gap down (PUT) | +6,934 / −20,020 | | | |
+
+At VIX < 17 the losses are the puts (−$14,216 over 96), not the calls (+$1,452 over 135), which
+reverses the 2026 pattern behind H-LV1. E0 barely enters at VIX ≥ 24.5 (6 trades in 120
+sessions).
+
+### Hypotheses, paired with E0 (draft bootstrap: 10-session blocks, 10,000 reps)
+
+| | Δ vs E0 | H1 / H2 | Delayed Δ | Fly-choice draws beating E0 | 97.5% lower bound |
+|---|---:|---|---:|---:|---:|
+| H-TS1 (threshold 0.9181935615930604, n = 528) | +9,960 | +6,075 / +3,885 | +7,815 | 100% | −1,071 |
+| H-EV2 (FOMC days; 4 trades) | +3,831 | +3,831 / 0 | +1,771 | 100% | +135 |
+| H-EV1 | +151 | +948 / −797 | +116 | 100% | −8,912 |
+| H-LV1 | −1,452 | +273 / −1,725 | −1,787 | 0% | −15,116 |
+| H-SN1 (Δ at 1.48σ / 1.68σ: −17,691 / −33,537) | −9,814 | −14,929 / +5,115 | −13,888 | n/a | −34,224 |
+
+- **H-TS1** is the only rule beyond fly-choice noise. Caveats:
+  - its threshold is fitted on these sessions;
+  - the stage-5 mechanism check was not supported;
+  - skipping 69 random E0 trades gains +$2.5k on average, and 6.6% of such skips gain as much;
+  - about a quarter of its Δ comes from below-zero exits (next section);
+  - its own net is still −$3,126.
+- **H-EV2's** gain rests on four trades, one of them an artifact.
+- **H-SN1** fails its noise secondary: the spread across centers is $23.7k, against E0's $2.6k
+  band.
+
+### Findings about the test itself
+
+- **Stressed exits can be priced below zero.** Six E0 trades have them: −$5,476 stressed
+  against −$514 midpoint. The worst is 2022-12-14 at 14:00 ET, the FOMC statement minute: a
+  $1.75 fly lost $2,535. Flooring those exits at $0 (sensitivity only) gives E0 −$9,685 and
+  H-TS1 Δ +$7,402.
+- **Gate 1 over-passes on skip filters.** With the exact nested bootstrap at 358 sessions and
+  no effect, H-TS1 passes gate 1 16% of the time at k = 1 (nominal 10%) and 7.3% at k = 4
+  (nominal 2.5%).
+- **With E0 negative,** a paired pass means "loses less than E0".
+
+### Power (from development vectors; assumes 2022–24 is representative)
+
+- **Holdout size:** 358 usable sessions (H1 204 / H2 154), or 421 with an Indices month.
+- **H-TS1, all gates:**
+  - 57% at k = 1 and 38% at k = 4 if the development effect is real;
+  - 34% at k = 1 if the effect is half as large;
+  - 421 sessions add about 2 points.
+- **The other four** have no realistic power.
+
+### Changes
+
+- **Data (owner-approved):** Cboe daily VIX-family closes were added to the vendor dataset for
+  H-TS1: aux_hash `eab136c9…`, dataset hash unchanged.
+- **Where runs are recorded (owner-confirmed):** the development runs are in a separate
+  registry, `reports/research/registry/development/spx_0dte_thetadata.jsonl`, because `register`
+  refuses a definition already in the dataset's registry. It holds 8 distinct definitions, all
+  post hoc.
+- **Code (`a36b110`):** `EventDaySkipEntry` and the catalog entries `HEV2`, `HSN1_c148` and
+  `HSN1_c168`. The four pinned hypothesis hashes are unchanged.
+- **Runs:** `9eccee6a6aa5` and `da7a9163c0fa`.
+
+### Recommendation for the owner
+
+If registering now, register H-TS1 alone (k = 1) and drop the other four. Only what is
+registered before the holdout pull can ever be tested on it, so not registering yet is a real
+alternative (D1). Decide D2–D5 (pass
+meaning, exit floor, gate-1 calibration, early closes) before any registration, because the
+`git_sha` freezes them. D6 (Indices month) and D7 (ThetaData licence) stay open.

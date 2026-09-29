@@ -1,5 +1,9 @@
 # Registration decision package — 2026-09 (for the owner; nothing is registered)
 
+> **[2026-09-29, marked]** For the ThetaData path this package is superseded by
+> `registration-decision-2026-09-29.md`, which has the development-window results, power and
+> open decisions. The implementation-choice tables below still apply.
+
 **Status: written 2026-09-28 (stage 6), before any registration.** This file registers
 nothing and changes nothing in `next-sweep-preregistration-draft.md` (the draft). The
 registry `reports/research/registry/spx_0dte.jsonl` holds 98 records (49 `backfill`, 33

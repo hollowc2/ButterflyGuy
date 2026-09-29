@@ -33,7 +33,7 @@ here changes live-trading code.
 | `thetadata.py` | ThetaData `HistorySource` (Options Value quotes; SPX/VIX from the owner's minute files and recorded data; Cboe closes) |
 | `quality.py` | Data-quality gates Q1–Q6 on a vendor dataset, Helios side by side (`vendor-quality`) |
 | `validate.py` | Fidelity validation of a vendor dataset against the Helios export (readiness doc steps 1–4) |
-| `hypotheses.py` | Drafted hypothesis rules H-SN1, H-EV1, H-TS1 (catalog `HSN1`, `HEV1`, `HTS1`; not registered) |
+| `hypotheses.py` | Drafted hypothesis rules H-SN1, H-EV1, H-TS1 and optional H-EV2 (catalog `HSN1`, `HEV1`, `HTS1`, `HEV2`; not registered) |
 | `mechanism.py` | DESCRIPTIVE H-TS1 mechanism check on Cboe daily closes, development window only (no registry record) |
 | `report.py`, `cli.py` | Artifacts and the `python -m butterfly_guy.research` CLI |
 
@@ -732,6 +732,28 @@ data, so those sessions are skipped until a real source is found (plan, D3).
 deleting all copies at termination (§12.2). Whether the local research cache may outlive a
 cancelled subscription is still to be confirmed with ThetaData in writing.
 
+**Development-window evaluation (2026-09-29, in-sample).** E0 and the drafted hypotheses
+were run on `spx_0dte_thetadata` @ `93bbe58e`, profile `vendor_1m`, 2022-01-03 → 2024-06-28,
+halves split at 2023-04-26, with the draft's bootstrap (10-session blocks, 10,000 reps,
+seed 1). Results, power and the owner's open decisions are in
+`docs/research/registration-decision-2026-09-29.md`.
+- **Inputs.** With the owner's approval, `export-vol --cboe` added Cboe's daily VIX-family
+  file to the vendor dataset for H-TS1: `aux/vol_index_daily.parquet`, 18,617 rows, sha256
+  `7fa50f1c887f0cf305d9d7903a2cacda1883324c1d0acedd4cf0821119d5b21c`, aux_hash
+  `eab136c9eb93b0b410217f5c15b0ed62e9e159a377cba8bd9fc77cfa21b19278`. The dataset hash is
+  unchanged. Its development-window rows are identical to `spx_0dte`'s copy.
+- **Where the evaluations are recorded.** `register` refuses a definition already present in
+  the dataset's registry, so development runs are recorded in a separate hash-chained file,
+  `reports/research/registry/development/spx_0dte_thetadata.jsonl` (owner-confirmed). The
+  registration registry `reports/research/registry/spx_0dte_thetadata.jsonl` does not exist
+  yet. The unseal reads only the latter.
+- **Runs:** `9eccee6a6aa5` (E0, HLV1, HEV1, HEV2, HTS1; `results.json` `2c042505…`) and
+  `da7a9163c0fa` (E0, HLV1, HSN1, HSN1_c148, HSN1_c168, HEV1, HEV2; `results.json`
+  `429d0829…`).
+- **Early closes.** The replay marks a trade still held when a shortened session's clock
+  ends (13:00) as `incomplete_data` (`MIN_END_OF_DAY_DATA_TIME` is 15:00), so the session
+  is dropped from every compared arm: 2023-07-03 for E0, and 2022-11-25 for HSN1.
+
 ```bash
 T="--provider thetadata --spx-minutes ../Butterflyguy/data/spx_1min.csv \
   --vix-minutes ../Butterflyguy/data/vix_1min.csv"
@@ -862,6 +884,15 @@ entries use the runtime trailer, as E0 does. Definition hashes on 2026-09-28:
 
 *(Corrected in stage 6, marked: this table gave HTS1 as `2ec8c008…`, which was never the
 hash of committed code. `tests/test_research_hypotheses.py` now pins all four.)*
+
+Added on 2026-09-29 for the development-window runs (not registered; the four hashes above
+did not move):
+
+| Variant | Rule | Definition hash |
+|---|---|---|
+| `HEV2` | `EventDaySkipEntry(E0, ("FOMC",))`: skip a session with a visible FOMC statement, at any time | `b0c670c064c05f2a155d079b9e2a2475196ac60e9a8a9f818889e78e5274b477` |
+| `HSN1_c148` | `SigmaPlacedEntry(center_sigma=1.48)`: H-SN1's noise secondary | `844e32da34d7571893500c943f451dd4203a8f90c62d582afb1d8ba65e195ecf` |
+| `HSN1_c168` | `SigmaPlacedEntry(center_sigma=1.68)`: H-SN1's noise secondary | `f0967c75c1a6ef506f68d13a1511477db3f0d50035ceb8cc848b4e76acdd87ad` |
 
 The hash covers the top-level rule class's source and its parameters. Nested code (E0's
 `BaselineEntry`, HLV1's predicate), `features.py`, the calendar and `configs/config.yaml` are
