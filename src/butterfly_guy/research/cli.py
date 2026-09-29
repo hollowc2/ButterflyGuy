@@ -12,6 +12,7 @@
   diagnose           DESCRIPTIVE E0 breakdowns by scheduled event and term structure
   export-history     vendor history into spx_0dte_<vendor> (ThetaData)
   vendor-quality     data-quality gates Q1-Q6 on a vendor dataset (opens earlier pulls)
+  exclude-sessions   take sessions out of a vendor dataset for a data-quality reason
   validate-vendor    fidelity validation of a vendor dataset against the Helios export
   coverage           per-session quote, spot, VIX and official-bar coverage of a dataset
   mechanism          DESCRIPTIVE H-TS1 mechanism check on Cboe daily closes (development window)
@@ -492,6 +493,17 @@ def cmd_export_history(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_exclude_sessions(args: argparse.Namespace) -> int:
+    from butterfly_guy.research.history import exclude_sessions
+
+    dates = [_date(x) for x in args.dates.split(",")]
+    m = exclude_sessions(args.dataset, dates, args.reason, args.evidence,
+                         Path(args.cache) if args.cache else None)
+    print(f"{args.dataset}: excluded {', '.join(d.isoformat() for d in dates)}; "
+          f"dataset hash {m.dataset_hash}")
+    return 0
+
+
 def cmd_coverage(args: argparse.Namespace) -> int:
     from butterfly_guy.research.history import coverage
 
@@ -722,6 +734,13 @@ def build_parser() -> argparse.ArgumentParser:
                     help="owner-approved dollars for a usage-billed pull")
     unseal_arg(eh)
     eh.set_defaults(func=cmd_export_history)
+
+    xs = sub.add_parser("exclude-sessions",
+                        help="take sessions out of a vendor dataset for a data-quality reason")
+    xs.add_argument("--dates", required=True, help="comma-separated YYYY-MM-DD")
+    xs.add_argument("--reason", required=True)
+    xs.add_argument("--evidence", required=True, help="e.g. the vendor-quality run id")
+    xs.set_defaults(func=cmd_exclude_sessions)
 
     vq = sub.add_parser("vendor-quality",
                         help="data-quality gates Q1-Q6 on a vendor dataset, Helios side by side")

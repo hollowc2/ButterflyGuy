@@ -33,6 +33,9 @@ Mapping rules (the readiness doc's spec):
   clipped at the holdout's end instead, and the history entry says so.
 - **Every pull** appends a manifest `history` entry with the source description, the
   request parameters of every vendor call and the cost estimate.
+- **Excluded sessions.** The owner can take a session out of a vendor dataset for a data-
+  quality reason (`exclude_sessions`): its row leaves `sessions.parquet`, its files leave
+  the manifest (moved under `excluded/`, never deleted), and later pulls skip it.
 - **Quality before earlier data.** A pull reaching before the validation window
   (`holdout.VALIDATION`) needs a passing `vendor-quality` run on that window in the
   dataset's manifest history (`quality.py`).
@@ -421,6 +424,14 @@ def quality_passed(manifest: Manifest | None) -> bool:
                for h in manifest.history)
 
 
+def excluded_sessions(manifest: Manifest | None) -> dict[dt.date, str]:
+    """Sessions the owner excluded for data quality, with the reason."""
+    if manifest is None:
+        return {}
+    return {dt.date.fromisoformat(d): h["reason"] for h in manifest.history
+            if h.get("mode") == "exclude_sessions" for d in h["sessions"]}
+
+
 def _table(df: pd.DataFrame) -> pa.Table:
     """Without pandas metadata, so re-writing unchanged rows gives identical bytes."""
     return pa.Table.from_pandas(df, preserve_index=False).replace_schema_metadata(None)
@@ -483,6 +494,7 @@ def write_history(source: HistorySource, plan: HistoryPlan, cache_root: Path | N
     if sessions is not None:
         sessions["date"] = pd.to_datetime(sessions["date"]).dt.date
     known = set() if sessions is None else set(sessions["date"])
+    excluded = excluded_sessions(manifest)
     (lo, hi), clipped = daily_range(plan)
     official = g.daily_bars(lo, hi)
     official = official.assign(date=pd.to_datetime(official["date"]).dt.date)
@@ -490,6 +502,10 @@ def write_history(source: HistorySource, plan: HistoryPlan, cache_root: Path | N
     rows, tick_frames, added, skipped = [], [], [], {}
     for d in g.sessions(plan.start, plan.end):
         if d in known:
+            continue
+        if d in excluded:
+            skipped[d.isoformat()] = "excluded"
+            print(f"  {d}: skipped (excluded: {excluded[d]})", file=plan.log)
             continue
         built = build_session(g, d, session_close(d, calendar), plan.strike_margin)
         if isinstance(built, str):
@@ -551,6 +567,48 @@ def write_history(source: HistorySource, plan: HistoryPlan, cache_root: Path | N
     manifest.save(manifest_path)
     print(f"dataset {plan.dataset}: {len(dates)} sessions, hash {manifest.dataset_hash}; "
           f"added {len(added)}, skipped {len(skipped)}", file=plan.log)
+    return manifest
+
+
+def exclude_sessions(dataset: str, dates: list[dt.date], reason: str, evidence: str,
+                     cache_root: Path | None = None) -> Manifest:
+    """Take `dates` out of a vendor dataset for a data-quality reason decided by the owner.
+    Nothing is deleted: each session's files move to `excluded/<date>/`. The history entry
+    carries the new dataset hash and its holdout session count, like a pull, so that a
+    registration on the reduced dataset can still be verified for the unseal."""
+    if dataset == DEFAULT_DATASET or not dataset.startswith(f"{DEFAULT_DATASET}_"):
+        raise ValueError(f"only vendor datasets ({DEFAULT_DATASET}_<vendor>) take exclusions")
+    root = (cache_root or default_cache_root()) / dataset
+    manifest = Manifest.load(root / "manifest.json")
+    sessions = pd.read_parquet(root / "sessions.parquet")
+    sessions["date"] = pd.to_datetime(sessions["date"]).dt.date
+    missing = sorted(set(dates) - set(sessions["date"]))
+    if missing:
+        raise ValueError(f"not sessions of {dataset}: {missing}")
+    prev_hash = manifest.dataset_hash
+    kept = sessions[~sessions["date"].isin(set(dates))]
+    manifest.files["sessions.parquet"] = write_table(
+        _table(kept.assign(date=pd.to_datetime(kept["date"]))), root / "sessions.parquet")
+    for d in sorted(dates):
+        rel = session_dir(d)
+        for name in ("chain.parquet", "clock.parquet"):
+            manifest.files.pop(f"{rel}/{name}", None)
+        target = root / "excluded" / d.isoformat()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).rename(target)
+    entry = {
+        "at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        "mode": "exclude_sessions",
+        "sessions": [d.isoformat() for d in sorted(dates)],
+        "reason": reason,
+        "evidence": evidence,
+        "previous_dataset_hash": prev_hash,
+        "dataset_hash": manifest.dataset_hash,
+        "holdout_sessions": sum(in_holdout(d) for d in kept["date"]),
+    }
+    manifest.history.append(entry)
+    manifest.updated_at = entry["at"]
+    manifest.save(root / "manifest.json")
     return manifest
 
 

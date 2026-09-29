@@ -290,3 +290,28 @@ def test_a_recorded_dataset_resamples_onto_the_grid_through_the_vendor_mapping(t
         assert np.array_equal(a.fields[f], b.fields[f], equal_nan=True)
     assert rec.manifest.source["vendor"] == "recorded"
     assert rec.manifest.source["dataset_hash"] == fake.hash
+
+
+def test_excluded_sessions_leave_the_dataset_without_deletion_and_stay_out(tmp_path):
+    from butterfly_guy.research.history import exclude_sessions, excluded_sessions
+
+    src = FakeSource({D: synthetic_day(D), EARLY: synthetic_day(EARLY, close=(13, 0))},
+                     extra_bars=PRIOR)
+    m0 = write_history(src, _plan(tmp_path), tmp_path)
+    with pytest.raises(ValueError, match="vendor datasets"):
+        exclude_sessions("spx_0dte", [D], "r", "e", tmp_path)
+    with pytest.raises(ValueError, match="not sessions"):
+        exclude_sessions("spx_0dte_fake", [dt.date(2023, 11, 20)], "r", "e", tmp_path)
+    m = exclude_sessions("spx_0dte_fake", [D], "vendor gap", "run abc", tmp_path)
+    ds = Dataset.open("spx_0dte_fake", tmp_path)
+    assert ds.sessions()["date"].tolist() == [EARLY]
+    assert ds.verify() == []
+    assert (ds.root / "excluded" / D.isoformat() / "chain.parquet").exists()
+    entry = m.history[-1]
+    assert entry["previous_dataset_hash"] == m0.dataset_hash != entry["dataset_hash"]
+    assert entry["holdout_sessions"] == 0  # the reduced hash still counts as development data
+    assert excluded_sessions(ds.manifest) == {D: "vendor gap"}
+    # A later pull over the same dates does not bring it back.
+    m2 = write_history(src, _plan(tmp_path), tmp_path)
+    assert m2.history[-1]["sessions_skipped"] == {D.isoformat(): "excluded"}
+    assert Dataset.open("spx_0dte_fake", tmp_path).sessions()["date"].tolist() == [EARLY]
