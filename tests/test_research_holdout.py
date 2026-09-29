@@ -86,7 +86,9 @@ def test_a_pull_touching_the_holdout_raises_before_any_request(tmp_path):
 def _dev_dataset(tmp_path) -> tuple[FakeSource, Manifest]:
     src = FakeSource({DEV_DAY: synthetic_day(DEV_DAY), HOLD_DAY: synthetic_day(HOLD_DAY)},
                      extra_bars=PRIOR)
-    m = write_history(src, HistoryPlan(DEV_DAY, DEV_DAY, NAME, log=io.StringIO()), tmp_path)
+    # The quality lock has its own tests (test_research_history.py); these test the unseal.
+    m = write_history(src, HistoryPlan(DEV_DAY, DEV_DAY, NAME, log=io.StringIO(),
+                                       require_quality=False), tmp_path)
     return src, m
 
 
@@ -142,7 +144,7 @@ def test_after_a_verified_unseal_the_holdout_opens_for_that_dataset_only(tmp_pat
         guard(HOLD_DAY, HOLD_DAY, what="test", dataset="spx_0dte_other", unseal=unseal)
 
     m2 = write_history(src, HistoryPlan(HOLD_DAY, HOLD_DAY, NAME, unseal=unseal,
-                                        log=io.StringIO()), tmp_path)
+                                        log=io.StringIO(), require_quality=False), tmp_path)
     assert m2.history[-1]["holdout_sessions"] == 1
     ds = Dataset.open(NAME, tmp_path)
 

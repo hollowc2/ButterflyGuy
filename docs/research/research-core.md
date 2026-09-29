@@ -30,7 +30,8 @@ here changes live-trading code.
 | `diagnose.py` | DESCRIPTIVE E0 breakdowns by event and term structure (no registry record) |
 | `holdout.py` | The sealed holdout (2024-07-01 → 2026-03-12) and its registry-verified unseal |
 | `history.py` | Vendor history adapter onto the research schema (**no vendor purchased yet**), coverage report |
-| `thetadata.py` | ThetaData `HistorySource` **stub** (not purchased, not in `SOURCES`): endpoints, request plan, open questions |
+| `thetadata.py` | ThetaData `HistorySource` (Options Value quotes; SPX/VIX from the owner's minute files and recorded data; Cboe closes) |
+| `quality.py` | Data-quality gates Q1–Q6 on a vendor dataset, Helios side by side (`vendor-quality`) |
 | `validate.py` | Fidelity validation of a vendor dataset against the Helios export (readiness doc steps 1–4) |
 | `hypotheses.py` | Drafted hypothesis rules H-SN1, H-EV1, H-TS1 (catalog `HSN1`, `HEV1`, `HTS1`; not registered) |
 | `mechanism.py` | DESCRIPTIVE H-TS1 mechanism check on Cboe daily closes, development window only (no registry record) |
@@ -692,48 +693,55 @@ Selected cells (stressed; sessions all/H1/H2; per session):
 
 The full tables are in the run's `report.md`.
 
-## Vendor history (NOT PURCHASED YET)
+## Vendor history (ThetaData, subscribed 2026-09-28)
 
-**Status on 2026-09-28: no vendor has been bought.** The owner will likely buy ThetaData,
-from 2022 forward. Until that subscription is active, every vendor path stays stubbed and
-`history.SOURCES` stays empty. So no vendor dataset exists:
-- no source, plan, hashes or coverage;
-- no validation result;
-- no development-period figures.
+**Status on 2026-09-28: ThetaData Options Value is subscribed ($40/mo)** and
+`history.SOURCES` holds `thetadata` (and `recorded`, which resamples our own Helios data onto
+the same 1-minute grid for comparisons). Options Value's historical 1-minute quotes reach
+2020-01-01. The Indices subscription was not bought.
 
-*(Corrected 2026-09-28, before the stage-4 commit: an earlier wording said the owner did
-not plan to buy vendor history. That was wrong.)*
+**The owner's rules** (`vendor-data-quality-plan-2026-09-28.md`, approved 2026-09-28):
+- data quality comes first;
+- **no derived data**: no SPX from put-call parity, no computed VIX, no filled bars. A
+  session without a real SPX level, or without a real VIX print between 09:55 and 10:00 ET,
+  is skipped (`no_spx_index`, `no_vix`); an index print older than 120 s is no level.
 
-**ThetaData readiness (stage 5): stubbed, not purchased.** `thetadata.ThetaDataSource`
-implements `HistorySource`, but every data method raises `NotImplementedError("ThetaData
-not purchased yet …")`, and it is **not** in `SOURCES` (tests check both). Its docstring
-holds the v3 Theta Terminal endpoints, the request plan and the estimated calls and time for
-each pull. The purchase checklist, with prices, the licence question and the enforced pull
-order, is in `history-vendor-readiness.md`. Two findings matter before buying:
-- **Licence.** ThetaData's individual terms (read 2026-09-28) forbid archiving or
-  downloading content (§2.1(i)) and require deleting all copies when the terms end
-  (§12.2). Whether a local research cache may outlive a cancelled subscription is to be
-  confirmed with ThetaData in writing before paying.
-- **History depth.** The pricing page and the docs disagree for Options Value and Indices
-  Standard. Options Standard with Indices Pro reaches 2022-01-03 under both readings.
+**Where each input comes from:**
+- **Option quotes:** ThetaData, 1-minute (`/option/history/quote`).
+- **SPX and VIX intraday, 2022 → 2025-12-09:** the owner's minute files (`data/spx_1min.csv`,
+  `data/vix_1min.csv`; gitignored; owner-supplied, added 2026-03-11, original vendor unknown;
+  US Central time, bar-end stamped). A day with 30 or more identical consecutive bars is a
+  forward-filled fake and is not served. On 2022 → 2025 that is SPX on 7 days and VIX on
+  7 days; the list is pinned in the manifest.
+- **SPX and VIX intraday after the files end** (the validation window): our recorded Helios
+  ticks (`--recorded spx_0dte`), never inside the holdout.
+- **Official closes:** Cboe's public `SPX_History.csv` and `VIX_History.csv`. SPX open, high
+  and low come from the minute file, then from the recorded `spx_0dte` daily bars.
 
-Everything that does not depend on the provider is built and tested on synthetic data.
-Adding a provider means:
-1. implement `history.HistorySource` for it, reading the credential only inside the
-   adapter;
-2. add it to `history.SOURCES`;
-3. pull 2026-03-13 → 2026-09-25 and run `validate-vendor`;
-4. only if every step passes, pull the development period.
+**Validation.** Run `76abde9f881a` of `validate-vendor` failed steps 1–3; the calibration
+and diagnostics that followed are in the plan. Under the approved plan, the data-quality
+gates Q1–Q6 (`quality.py`, command `vendor-quality`) replace steps 1–3 as the condition for
+earlier pulls. `export-history` refuses any pull before 2026-03-13 until the dataset's
+manifest history shows a passing `vendor-quality` run over the whole validation window
+(`QualityNotPassedError`).
+
+**Known gap:** 2025-12-10 → 2026-03-12 (about 62 holdout sessions) has no SPX or VIX minute
+data, so those sessions are skipped until a real source is found (plan, D3).
+
+**Licence.** ThetaData's individual terms forbid archiving content (§2.1(i)) and require
+deleting all copies at termination (§12.2). Whether the local research cache may outlive a
+cancelled subscription is still to be confirmed with ThetaData in writing.
 
 ```bash
-# Today these stop with "Data provider not chosen" (exit 2):
-uv run python -m butterfly_guy.research export-history --provider <name> \
-  --start 2026-03-13 --end 2026-09-25 [--max-cost <approved dollars>]
-uv run python -m butterfly_guy.research validate-vendor --vendor-dataset spx_0dte_<name>
-uv run python -m butterfly_guy.research export-history --provider <name> \
+T="--provider thetadata --spx-minutes ../Butterflyguy/data/spx_1min.csv \
+  --vix-minutes ../Butterflyguy/data/vix_1min.csv"
+uv run python -m butterfly_guy.research export-history $T --recorded spx_0dte \
+  --start 2026-03-13 --end 2026-09-25
+uv run python -m butterfly_guy.research vendor-quality --vendor-dataset spx_0dte_thetadata
+# Opens only after a passing vendor-quality run on the whole validation window:
+uv run python -m butterfly_guy.research export-history $T --start 2022-01-03 --end 2024-06-28
+uv run python -m butterfly_guy.research vendor-quality --vendor-dataset spx_0dte_thetadata \
   --start 2022-01-03 --end 2024-06-28
-uv run python -m butterfly_guy.research --dataset spx_0dte_<name> coverage \
-  --start 2022-01-03 --end 2024-06-28 --label "in-sample development data"
 ```
 
 ### The adapter (`history.py`)
@@ -751,9 +759,9 @@ The mapping follows the readiness doc's spec:
   zero); nothing is repaired.
 - **Mark** is `(bid + ask) / 2`.
 - **Strikes** are integers within ±400 of the session's spot range.
-- **Spot** is the vendor's SPX index level. The put-call-parity forward is used only for a
-  session with no index level at all, flagged `spot_source = parity`.
-- **Official open and close** come from the vendor's daily bars.
+- **Spot** is the real SPX index level at each grid point (its last print, at most 120 s
+  old). A session without one is skipped; nothing is derived.
+- **Official open and close** come from the source's daily bars (ThetaData: Cboe closes).
 
 **Every pull appends a manifest `history` entry** with:
 - the source description;

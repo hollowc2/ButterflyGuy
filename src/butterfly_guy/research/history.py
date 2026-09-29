@@ -1,13 +1,15 @@
 """Vendor option history written as a separate research dataset (`spx_0dte_<vendor>`).
 
-**DATA PROVIDER NOT CHOSEN (2026-09-28).** No vendor has been bought, so no concrete
-`HistorySource` exists and `SOURCES` is empty; `get_source` says so. Everything else, the
-mapping onto the research Parquet schema, the holdout guard on every request, the manifest
-history, the cost check and the coverage report, is vendor-independent and tested on a
-synthetic source. The candidates and the adapter spec are in
-`docs/research/history-vendor-readiness.md`. Adding a vendor means: implement
-`HistorySource` (reading its credential only inside the adapter, never logging it), add it
-to `SOURCES`, and run the fidelity validation (`validate.py`) before any sweep uses it.
+**Provider: ThetaData (2026-09-28), Options Value** plus the owner's SPX/VIX minute files
+and Cboe's daily files; see `thetadata.py`. The mapping onto the research Parquet schema,
+the holdout guard on every request, the manifest history, the cost check and the coverage
+report are vendor-independent and tested on a synthetic source. The adapter spec is in
+`docs/research/history-vendor-readiness.md`; the data-quality gates that replace validation
+steps 1-3 are in `docs/research/vendor-data-quality-plan-2026-09-28.md` (`quality.py`).
+
+**No derived data** (owner, 2026-09-28): every value written is a real observation. A
+session without a real SPX level, or without a real VIX print by 10:00 ET, is skipped with
+its reason; nothing is computed to stand in for it.
 
 Mapping rules (the readiness doc's spec):
 
@@ -22,14 +24,18 @@ Mapping rules (the readiness doc's spec):
 - **Mark** is `(bid + ask) / 2`; a vendor-supplied mark is ignored. IV and delta are the
   vendor's where supplied, else NaN; they are never computed here.
 - **Strikes.** Integer strikes within `strike_margin` (400) of the session's spot range.
-- **Spot.** The vendor's SPX index level at each grid point. Only when a session has no
-  index level at all is the put-call-parity forward used (`K + C - P` at the strike where
-  call and put mids are closest), and the session is flagged `spot_source = "parity"`.
-- **Official open and close** come from the vendor's index EOD (`daily_bars`), as
+- **Spot.** The SPX index level at each grid point: its last print at or before it, and
+  NaN when that print is older than `INDEX_MAX_AGE_S`. A session with no SPX level at all is
+  skipped (`no_spx_index`); one without a VIX print between 09:55 and 10:00 ET is skipped
+  (`no_vix`).
+- **Official open and close** come from the source's `daily_bars`, as
   `SPX` and `$VIX` rows. A daily-bar lookback never reaches into the sealed holdout; it is
   clipped at the holdout's end instead, and the history entry says so.
 - **Every pull** appends a manifest `history` entry with the source description, the
   request parameters of every vendor call and the cost estimate.
+- **Quality before earlier data.** A pull reaching before the validation window
+  (`holdout.VALIDATION`) needs a passing `vendor-quality` run on that window in the
+  dataset's manifest history (`quality.py`).
 """
 
 from __future__ import annotations
@@ -61,18 +67,26 @@ from butterfly_guy.research.dataset import (
     write_table,
 )
 from butterfly_guy.research.event_calendar import EventCalendar
-from butterfly_guy.research.holdout import HOLDOUT, Unseal, guard, in_holdout, touches_holdout
+from butterfly_guy.research.holdout import (
+    HOLDOUT,
+    VALIDATION,
+    Unseal,
+    guard,
+    in_holdout,
+    touches_holdout,
+)
 from butterfly_guy.research.market import et_us
 
 PROVIDER_NOT_CHOSEN = (
-    "Data provider not chosen: no vendor history source is implemented yet. The candidates, "
-    "adapter spec and validation plan are in docs/research/history-vendor-readiness.md; "
-    "buying a vendor is the owner's decision."
+    "Unknown history provider: the implemented sources are listed in history.SOURCES. The "
+    "adapter spec and validation plan are in docs/research/history-vendor-readiness.md."
 )
 DEFAULT_STRIKE_MARGIN = 400.0
 REGULAR_CLOSE = dt.time(16, 0)
 GRID_START = dt.time(9, 31)
 COVERAGE_BAND = 200.0  # strikes within this of spot count toward missing/crossed rates
+INDEX_MAX_AGE_S = 120  # an index print older than this at a grid point is no level
+VIX_BY = ((9, 55), (10, 0))  # a session needs a real VIX print in this ET window
 
 
 class HistorySource(Protocol):
@@ -99,19 +113,70 @@ class HistorySource(Protocol):
         return any market data."""
 
 
-# DATA PROVIDER NOT CHOSEN: register a vendor's `HistorySource` factory here once bought.
-# ThetaData (likely) is stubbed in `thetadata.py`; add it only once the subscription is active.
-SOURCES: dict[str, Callable[[], HistorySource]] = {}
+def _thetadata(**options: object) -> HistorySource:
+    from butterfly_guy.research.thetadata import ThetaDataSource
+
+    return ThetaDataSource(**options)
 
 
-def get_source(name: str) -> HistorySource:
+class RecordedSource:
+    """Our own recorded dataset (Helios `spx_0dte`) as a `HistorySource`, so that its
+    chains go through exactly the vendor mapping: the last recorded snapshot at or before
+    each 1-minute grid point. Calibration for 1-minute vendor data: it measures what the
+    1-minute clock alone does to the validation, and gives a same-clock reference."""
+
+    def __init__(self, recorded: Dataset) -> None:
+        self.recorded = recorded
+
+    def describe(self) -> dict:
+        return {"vendor": "recorded", "product": "recorded chains resampled onto the 1-minute grid",
+                "dataset": self.recorded.name, "dataset_hash": self.recorded.hash}
+
+    def sessions(self, start: dt.date, end: dt.date) -> list[dt.date]:
+        return [d for d in self.recorded.sessions()["date"] if start <= d <= end]
+
+    def quotes(self, d: dt.date, strikes: tuple[float, float]) -> pd.DataFrame:
+        """Every recorded cell, NaN included, so a missing snapshot quote clears the state."""
+        c = self.recorded.chain(d)
+        k = (c.strikes >= strikes[0]) & (c.strikes <= strikes[1])
+        n_ts, n_k = len(c.ts), int(k.sum())
+        frames = [pd.DataFrame({
+            "ts_us": np.repeat(c.ts, n_k), "strike": np.tile(c.strikes[k], n_ts), "t": t,
+            "bid": c.fields[f"{t}_bid"][:, k].ravel(), "ask": c.fields[f"{t}_ask"][:, k].ravel(),
+        }) for t in OPTION_TYPES]
+        return pd.concat(frames, ignore_index=True)
+
+    def index_bars(self, d: dt.date, symbol: str) -> pd.DataFrame:
+        ts, px = self.recorded.spot_ticks(symbol)
+        lo = np.searchsorted(ts, et_us(d, 0, 0), side="left")
+        hi = np.searchsorted(ts, et_us(d, 23, 59), side="right")
+        return pd.DataFrame({"ts_us": ts[lo:hi].astype("int64"),
+                             "price": px[lo:hi].astype("float64")})
+
+    def daily_bars(self, start: dt.date, end: dt.date) -> pd.DataFrame:
+        b = self.recorded.daily_bars()
+        return b[(b["date"] >= start) & (b["date"] <= end)].reset_index(drop=True)
+
+    def cost_estimate(self, start: dt.date, end: dt.date) -> float | None:
+        return None
+
+
+SOURCES: dict[str, Callable[..., HistorySource]] = {"thetadata": _thetadata,
+                                                     "recorded": RecordedSource}
+
+
+def get_source(name: str, **options: object) -> HistorySource:
     if name not in SOURCES:
         raise NotImplementedError(f"{PROVIDER_NOT_CHOSEN} (asked for {name!r})")
-    return SOURCES[name]()
+    return SOURCES[name](**options)
 
 
 class CostNotApprovedError(RuntimeError):
     """A usage-billed pull is estimated above what the owner approved."""
+
+
+class QualityNotPassedError(RuntimeError):
+    """A pull before the validation window without a passing `vendor-quality` run."""
 
 
 class GuardedSource:
@@ -229,9 +294,10 @@ def carry_quotes(updates: pd.DataFrame, grid: np.ndarray, d: dt.date,
     return pd.concat(frames, ignore_index=True)[cols]
 
 
-def index_on_grid(bars: pd.DataFrame, grid: np.ndarray, d: dt.date) -> np.ndarray:
+def index_on_grid(bars: pd.DataFrame, grid: np.ndarray, d: dt.date,
+                  max_age_s: float | None = None) -> np.ndarray:
     """The index's last print at or before each grid time on the same session; NaN
-    before its first print."""
+    before its first print, and where that print is older than `max_age_s`."""
     out = np.full(len(grid), np.nan)
     if bars is None or bars.empty:
         return out
@@ -239,21 +305,23 @@ def index_on_grid(bars: pd.DataFrame, grid: np.ndarray, d: dt.date) -> np.ndarra
              & np.isfinite(bars["price"])].sort_values("ts_us", kind="stable")
     if b.empty:
         return out
-    idx = _state_index(b["ts_us"].to_numpy(dtype=np.int64), grid)
+    ts = b["ts_us"].to_numpy(dtype=np.int64)
+    idx = _state_index(ts, grid)
     ok = idx >= 0
+    if max_age_s is not None:
+        ok &= (grid - ts[np.maximum(idx, 0)]) <= max_age_s * 1e6
     out[ok] = b["price"].to_numpy(dtype=np.float64)[idx[ok]]
     return out
 
 
-def parity_spot(chain: SessionChain) -> np.ndarray:
-    """Put-call-parity forward per timestamp: `K + C - P` at the strike where the call and
-    put mids are closest (0-DTE carry is negligible). NaN where no strike has both."""
-    c, p = chain.fields["C_mark"], chain.fields["P_mark"]
-    diff = np.where(np.isfinite(c) & np.isfinite(p), np.abs(c - p), np.inf)
-    j = np.argmin(diff, axis=1)
-    rows = np.arange(len(chain.ts))
-    fwd = chain.strikes[j] + c[rows, j] - p[rows, j]
-    return np.where(np.isfinite(diff[rows, j]), fwd, np.nan)
+def has_print(bars: pd.DataFrame, d: dt.date, window: tuple[tuple[int, int], tuple[int, int]]
+              ) -> bool:
+    """Whether the index has a finite print inside the ET `window` on `d`."""
+    if bars is None or bars.empty:
+        return False
+    lo, hi = et_us(d, *window[0]), et_us(d, *window[1])
+    ts = bars["ts_us"].to_numpy(dtype=np.int64)
+    return bool(((ts >= lo) & (ts <= hi) & np.isfinite(bars["price"].to_numpy())).any())
 
 
 def _age_fields(rows: pd.DataFrame, chain: SessionChain) -> dict[str, np.ndarray]:
@@ -277,22 +345,17 @@ class BuiltSession:
 
 
 def build_session(source: GuardedSource, d: dt.date, close: dt.time,
-                  official: pd.DataFrame, margin: float = DEFAULT_STRIKE_MARGIN
-                  ) -> BuiltSession | str:
+                  margin: float = DEFAULT_STRIKE_MARGIN) -> BuiltSession | str:
     """One session's chain, clock and index ticks, or the reason it was skipped."""
     grid = minute_grid(d, close)
     spx = source.index_bars(d, "SPX")
+    spot = index_on_grid(spx, grid, d, INDEX_MAX_AGE_S)
+    if not np.isfinite(spot).any():
+        return "no_spx_index"
     vix = source.index_bars(d, "$VIX")
-    spot = index_on_grid(spx, grid, d)
-    spot_source = "index"
-    if np.isfinite(spot).any():
-        lo, hi = float(np.nanmin(spot)), float(np.nanmax(spot))
-    else:
-        spot_source = "parity"
-        bar = official[(official["underlying"] == "SPX") & (official["date"] == d)]
-        if bar.empty or not np.isfinite(bar[["low", "high"]].to_numpy()).all():
-            return "no_spot_range"
-        lo, hi = float(bar["low"].iloc[0]), float(bar["high"].iloc[0])
+    if not has_print(vix, d, VIX_BY):
+        return "no_vix"
+    lo, hi = float(np.nanmin(spot)), float(np.nanmax(spot))
     strikes = strike_range(lo, hi, margin)
     rows = carry_quotes(source.quotes(d, strikes), grid, d, strikes)
     if rows.empty:
@@ -300,8 +363,6 @@ def build_session(source: GuardedSource, d: dt.date, close: dt.time,
     rows["spot"] = spot[np.searchsorted(grid, rows["ts_us"].to_numpy())]
     chain = dense_chain_from_rows(rows, d)
     chain.fields.update(_age_fields(rows, chain))
-    if spot_source == "parity":
-        chain.spot = parity_spot(chain)
     finite = np.isfinite(chain.spot)
     clock = pd.DataFrame({"ts_us": chain.ts[finite], "spot": chain.spot[finite],
                           "spot_min": chain.spot[finite], "spot_max": chain.spot[finite]})
@@ -317,7 +378,7 @@ def build_session(source: GuardedSource, d: dt.date, close: dt.time,
         "strikes": len(chain.strikes), "strike_lo": float(chain.strikes[0]),
         "strike_hi": float(chain.strikes[-1]), "clock_spot_disagreements": 0,
         "grid_points": len(grid), "session_close_et": close.strftime("%H:%M"),
-        "spot_source": spot_source,
+        "spot_source": "index",
     }
     return BuiltSession(chain, clock, row, ticks)
 
@@ -336,6 +397,7 @@ class HistoryPlan:
     daily_lookback_days: int = 10  # enough for the prior close across a long weekend
     max_cost: float | None = None  # owner-approved dollars for a usage-billed pull
     unseal: Unseal | None = None
+    require_quality: bool = True  # tests of the mapping on synthetic dates switch it off
     log: object = field(default=sys.stderr)
 
 
@@ -347,6 +409,16 @@ def daily_range(plan: HistoryPlan) -> tuple[tuple[dt.date, dt.date], bool]:
             and not touches_holdout(plan.start, plan.end)):
         return (max(lo, HOLDOUT[1] + dt.timedelta(days=1)), plan.end), True
     return (lo, plan.end), False
+
+
+def quality_passed(manifest: Manifest | None) -> bool:
+    """Whether the dataset's history holds a passing `vendor-quality` run over the whole
+    validation window."""
+    if manifest is None:
+        return False
+    return any(h.get("mode") == "vendor_quality" and h.get("pass") is True
+               and h.get("range") == [VALIDATION[0].isoformat(), VALIDATION[1].isoformat()]
+               for h in manifest.history)
 
 
 def _table(df: pd.DataFrame) -> pa.Table:
@@ -370,6 +442,14 @@ def write_history(source: HistorySource, plan: HistoryPlan, cache_root: Path | N
                          f"not {plan.dataset!r}")
     guard(plan.start, plan.end, what="vendor history pull", dataset=plan.dataset,
           unseal=plan.unseal)
+    root = (cache_root or default_cache_root()) / plan.dataset
+    manifest_path = root / "manifest.json"
+    if plan.require_quality and plan.start < VALIDATION[0] and not quality_passed(
+            Manifest.load(manifest_path) if manifest_path.exists() else None):
+        raise QualityNotPassedError(
+            f"{plan.dataset}: a pull before {VALIDATION[0]} needs a passing vendor-quality run "
+            f"on {VALIDATION[0]}..{VALIDATION[1]} first "
+            "(docs/research/vendor-data-quality-plan-2026-09-28.md)")
     calendar = calendar or EventCalendar()
     g = GuardedSource(source, plan.dataset, plan.unseal)
     estimate = g.cost_estimate(plan.start, plan.end)
@@ -378,12 +458,11 @@ def write_history(source: HistorySource, plan: HistoryPlan, cache_root: Path | N
             f"estimated ${estimate:,.2f} for {plan.start}..{plan.end} exceeds the approved "
             f"{'nothing' if plan.max_cost is None else f'${plan.max_cost:,.2f}'}; ask the owner")
 
-    root = (cache_root or default_cache_root()) / plan.dataset
     root.mkdir(parents=True, exist_ok=True)
-    manifest_path = root / "manifest.json"
     export_params = {"kind": "vendor_history", "underlying": "SPX",
                      "strike_margin": plan.strike_margin, "clock": "1m grid 09:31-close ET",
                      "mark": "mid", "spot_underlyings": ["SPX", "$VIX"],
+                     "spot": "index only, no derived levels", "index_max_age_s": INDEX_MAX_AGE_S,
                      "holdout": [HOLDOUT[0].isoformat(), HOLDOUT[1].isoformat()]}
     if manifest_path.exists():
         manifest = Manifest.load(manifest_path)
@@ -412,7 +491,7 @@ def write_history(source: HistorySource, plan: HistoryPlan, cache_root: Path | N
     for d in g.sessions(plan.start, plan.end):
         if d in known:
             continue
-        built = build_session(g, d, session_close(d, calendar), official, plan.strike_margin)
+        built = build_session(g, d, session_close(d, calendar), plan.strike_margin)
         if isinstance(built, str):
             skipped[d.isoformat()] = built
             print(f"  {d}: skipped ({built})", file=plan.log)

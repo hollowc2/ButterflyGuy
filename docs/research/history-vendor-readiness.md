@@ -15,6 +15,14 @@ Only a provider's own `HistorySource` is missing.
 source added (`research/thetadata.py`, not in `SOURCES`). See "ThetaData: public-docs
 findings and purchase checklist" below.
 
+**Update 2026-09-28 (purchased):** the owner bought **ThetaData Options Value** only. The
+subscriptions doc shows its historical 1-minute quotes reach 2020-01-01, so Options
+Standard is not needed. No Indices plan was bought: SPX/VIX intraday come from the owner's
+minute files, and official closes from Cboe's public files. `ThetaDataSource` is
+implemented and registered in `SOURCES`; see `research-core.md`, "Vendor history", for the
+inputs, the known Dec 2025 → Mar 2026 index gap and the commands. The plan and checklist
+below are kept as written before the purchase.
+
 Why: the review's power analysis (`docs/reviews/2026-09-27-research-pipeline-review.md`
 §2) needs about 400 trades to separate the measured edge from zero. Our own chain history
 starts 2026-03-13 (133 sessions). SPXW has had daily expirations since 2022, so vendor

@@ -1,6 +1,6 @@
 """Vendor history adapter: mapping onto the research schema, the vendor_1m clock, the
-writer's manifest history and cost check. All on a synthetic source (no provider is
-chosen yet)."""
+writer's manifest history and cost check. All on a synthetic source (ThetaData's own
+tests are in test_research_thetadata.py)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from butterfly_guy.research.dataset import Dataset, SessionChain
+from butterfly_guy.research.dataset import Dataset
 from butterfly_guy.research.entry import PROFILES, SessionLoader
 from butterfly_guy.research.event_calendar import EventCalendar
 from butterfly_guy.research.history import (
@@ -19,17 +19,18 @@ from butterfly_guy.research.history import (
     SOURCES,
     CostNotApprovedError,
     HistoryPlan,
+    QualityNotPassedError,
     carry_quotes,
     coverage,
     daily_range,
     get_source,
     index_on_grid,
     minute_grid,
-    parity_spot,
     session_close,
     strike_range,
     write_history,
 )
+from butterfly_guy.research.holdout import VALIDATION
 from butterfly_guy.research.market import et_us
 from tests.research_synth import FakeSource, synthetic_day
 
@@ -47,7 +48,9 @@ def _updates(rows: list[tuple]) -> pd.DataFrame:
 
 
 def _plan(tmp_path, start=D, end=EARLY, **kw) -> HistoryPlan:
-    return HistoryPlan(start, end, "spx_0dte_fake", log=io.StringIO(), **kw)
+    """Synthetic 2023 sessions test the mapping, not the quality lock."""
+    return HistoryPlan(start, end, "spx_0dte_fake", log=io.StringIO(),
+                       **{"require_quality": False, **kw})
 
 
 # ---------------------------------------------------------------------------
@@ -55,10 +58,10 @@ def _plan(tmp_path, start=D, end=EARLY, **kw) -> HistoryPlan:
 # ---------------------------------------------------------------------------
 
 
-def test_no_provider_is_registered_and_asking_for_one_says_so():
-    assert SOURCES == {}
-    with pytest.raises(NotImplementedError, match="Data provider not chosen"):
-        get_source("thetadata")
+def test_the_registered_providers_and_an_unknown_provider_says_so():
+    assert set(SOURCES) == {"thetadata", "recorded"}
+    with pytest.raises(NotImplementedError, match="Unknown history provider"):
+        get_source("databento")
     assert "history-vendor-readiness.md" in PROVIDER_NOT_CHOSEN
 
 
@@ -154,15 +157,12 @@ def test_index_level_is_the_last_print_of_the_same_session():
     assert np.isnan(out[0]) and list(out[1:]) == [6001.0, 6001.0]
 
 
-def test_parity_spot_is_the_forward_at_the_closest_call_put_pair():
-    strikes = np.array([5990.0, 6000.0, 6010.0])
-    c = np.array([[14.0, 7.0, 3.0]])
-    p = np.array([[3.5, 6.0, 12.0]])
-    fields = {f"{t}_{f}": np.full((1, 3), np.nan) for t in "CP" for f in
-              ("bid", "ask", "mark", "iv", "delta")}
-    fields["C_mark"], fields["P_mark"] = c, p
-    chain = SessionChain(D, np.array([0]), strikes, np.array([np.nan]), fields)
-    assert parity_spot(chain)[0] == pytest.approx(6000.0 + 7.0 - 6.0)
+def test_an_index_print_older_than_the_cap_is_no_level():
+    grid = minute_grid(D)[:3]
+    bars = pd.DataFrame({"ts_us": [grid[0] - 10_000_000], "price": [6000.0]})
+    capped = index_on_grid(bars, grid, D, max_age_s=70)
+    assert capped[0] == 6000.0 and capped[1] == 6000.0 and np.isnan(capped[2])
+    assert np.isfinite(index_on_grid(bars, grid, D)).all()  # no cap: last print
 
 
 # ---------------------------------------------------------------------------
@@ -195,16 +195,41 @@ def test_write_history_records_every_request_and_the_quote_age(tmp_path):
     assert m2.dataset_hash == m.dataset_hash
 
 
-def test_a_session_without_index_levels_uses_the_flagged_parity_spot(tmp_path):
-    src = FakeSource({D: synthetic_day(D, index=False)})
+def test_a_session_without_a_real_spx_or_vix_is_skipped_not_derived(tmp_path):
+    no_vix = synthetic_day(EARLY, close=(13, 0))
+    no_vix["vix"] = no_vix["vix"][no_vix["vix"]["ts_us"] > et_us(EARLY, 10, 0)]
+    src = FakeSource({D: synthetic_day(D, index=False), EARLY: no_vix}, extra_bars=PRIOR)
+    with pytest.raises(RuntimeError, match="no sessions written"):
+        write_history(src, _plan(tmp_path), tmp_path)
+    assert [c for c in src.calls if c[0] == "quotes"] == []  # nothing fetched for them
+    src = FakeSource({D: synthetic_day(D), EARLY: no_vix}, extra_bars=PRIOR)
+    m = write_history(src, _plan(tmp_path), tmp_path)
+    assert m.history[-1]["sessions_skipped"] == {EARLY.isoformat(): "no_vix"}
+    assert Dataset.open("spx_0dte_fake", tmp_path).sessions()["spot_source"].tolist() == ["index"]
+
+
+def test_a_pull_before_the_validation_window_needs_a_passing_quality_run(tmp_path):
+    src = FakeSource({D: synthetic_day(D)}, extra_bars=PRIOR)
+    plan = HistoryPlan(D, D, "spx_0dte_fake", log=io.StringIO())
+    with pytest.raises(QualityNotPassedError, match="vendor-quality"):
+        write_history(src, plan, tmp_path)
+    assert src.calls == []
+    # A passing run on part of the window, or a failing run on all of it, does not open it.
     write_history(src, _plan(tmp_path, end=D), tmp_path)
     ds = Dataset.open("spx_0dte_fake", tmp_path)
-    assert ds.sessions()["spot_source"].tolist() == ["parity"]
-    # Band from the official high/low when there is no index level.
-    q = [c for c in src.calls if c[0] == "quotes"][0]
-    assert q[2] == (5595.0, 6405.0)
-    assert ds.chain(D).spot[0] == pytest.approx(6000.0)
-    assert ds.clock(D).spot[0] == pytest.approx(6000.0)
+    full = [VALIDATION[0].isoformat(), VALIDATION[1].isoformat()]
+    for entry in ({"mode": "vendor_quality", "pass": True, "range": [full[0], "2026-04-01"]},
+                  {"mode": "vendor_quality", "pass": False, "range": full}):
+        ds.manifest.history.append(entry)
+        ds.manifest.save(ds.root / "manifest.json")
+        with pytest.raises(QualityNotPassedError):
+            write_history(src, HistoryPlan(EARLY, EARLY, "spx_0dte_fake", log=io.StringIO()),
+                          tmp_path)
+    ds.manifest.history.append({"mode": "vendor_quality", "pass": True, "range": full})
+    ds.manifest.save(ds.root / "manifest.json")
+    src = FakeSource({EARLY: synthetic_day(EARLY, close=(13, 0))}, extra_bars=PRIOR)
+    write_history(src, HistoryPlan(EARLY, EARLY, "spx_0dte_fake", log=io.StringIO()), tmp_path)
+    assert EARLY in set(Dataset.open("spx_0dte_fake", tmp_path).sessions()["date"])
 
 
 def test_vendor_data_never_goes_into_the_helios_dataset(tmp_path):
@@ -245,3 +270,23 @@ def test_coverage_reports_rates_and_sources(tmp_path):
     assert row["C_missing_rate"] == 0  # every quoted strike has a state from 09:31
     assert row["vix_at_10"] and row["spx_official_close"]
     assert out["summary"]["sessions"] == 1
+
+
+def test_a_recorded_dataset_resamples_onto_the_grid_through_the_vendor_mapping(tmp_path):
+    from butterfly_guy.research.history import RecordedSource
+
+    write_history(FakeSource({D: synthetic_day(D)}, extra_bars=PRIOR), _plan(tmp_path, end=D),
+                  tmp_path)
+    fake = Dataset.open("spx_0dte_fake", tmp_path)
+    src = RecordedSource(fake)
+    assert src.sessions(D, D) == [D]
+    write_history(src, HistoryPlan(D, D, "spx_0dte_recorded", log=io.StringIO(),
+                                   require_quality=False), tmp_path)
+    rec = Dataset.open("spx_0dte_recorded", tmp_path)
+    a, b = fake.chain(D), rec.chain(D)
+    # Both are on the 1-minute grid already, so resampling is the identity on quotes.
+    assert np.array_equal(a.ts, b.ts) and np.array_equal(a.strikes, b.strikes)
+    for f in ("C_bid", "P_ask"):
+        assert np.array_equal(a.fields[f], b.fields[f], equal_nan=True)
+    assert rec.manifest.source["vendor"] == "recorded"
+    assert rec.manifest.source["dataset_hash"] == fake.hash

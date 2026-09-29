@@ -10,7 +10,8 @@
   calibrate-latency  read-only exit latency of recorded paper trades
   export-vol         Cboe daily VIX-family history (and a gateway intraday dump) as aux files
   diagnose           DESCRIPTIVE E0 breakdowns by scheduled event and term structure
-  export-history     vendor history into spx_0dte_<vendor> (DATA PROVIDER NOT CHOSEN)
+  export-history     vendor history into spx_0dte_<vendor> (ThetaData)
+  vendor-quality     data-quality gates Q1-Q6 on a vendor dataset (opens earlier pulls)
   validate-vendor    fidelity validation of a vendor dataset against the Helios export
   coverage           per-session quote, spot, VIX and official-bar coverage of a dataset
   mechanism          DESCRIPTIVE H-TS1 mechanism check on Cboe daily closes (development window)
@@ -42,6 +43,7 @@ from butterfly_guy.research.entry import (
     load_spx_config,
 )
 from butterfly_guy.research.evaluate import EvalParams, common_dates, evaluate
+from butterfly_guy.research.holdout import VALIDATION
 from butterfly_guy.research.registry import Registry
 from butterfly_guy.research.report import dump_canonical, trade_record, write_run
 from butterfly_guy.research.simulate import DEFAULT_EXIT_DELAY, canonical_json, run_variants
@@ -462,18 +464,31 @@ def _unseal(args: argparse.Namespace, ds_name: str):
 
 
 def cmd_export_history(args: argparse.Namespace) -> int:
-    from butterfly_guy.research.history import HistoryPlan, get_source, write_history
+    from butterfly_guy.research.history import (
+        HistoryPlan,
+        QualityNotPassedError,
+        get_source,
+        write_history,
+    )
 
+    options = {k: v for k, v in (("spx_minutes", args.spx_minutes),
+                                 ("vix_minutes", args.vix_minutes)) if v}
+    if args.recorded:
+        options["recorded"] = Dataset.open(args.recorded, Path(args.cache) if args.cache else None)
     try:
-        source = get_source(args.provider)
-    except NotImplementedError as exc:
+        source = get_source(args.provider, **options)
+    except (NotImplementedError, FileNotFoundError, TypeError) as exc:
         print(exc, file=sys.stderr)
         return 2
     dataset = (args.dataset if args.dataset != DEFAULT_DATASET
                else f"{DEFAULT_DATASET}_{args.provider}")
     plan = HistoryPlan(args.start, args.end, dataset, max_cost=args.max_cost,
                        unseal=_unseal(args, dataset))
-    write_history(source, plan, Path(args.cache) if args.cache else None)
+    try:
+        write_history(source, plan, Path(args.cache) if args.cache else None)
+    except QualityNotPassedError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     return 0
 
 
@@ -518,6 +533,43 @@ def cmd_validate_vendor(args: argparse.Namespace) -> int:
     provenance["validation_sha256"] = hashlib.sha256(text.encode()).hexdigest()
     (out_dir / "provenance.json").write_text(dump_canonical(provenance))
     (out_dir / "report.md").write_text(validate.markdown(results, provenance))
+    print((out_dir / "report.md").read_text())
+    print(f"artifacts: {out_dir}")
+    return 0 if results["pass"] else 1
+
+
+def cmd_vendor_quality(args: argparse.Namespace) -> int:
+    from butterfly_guy.research import quality
+    from butterfly_guy.research.dataset import Manifest
+    from butterfly_guy.research.validate import parse_cboe_spx
+    from butterfly_guy.research.volindex import fetch_cboe
+
+    cache = Path(args.cache) if args.cache else None
+    helios = Dataset.open(args.reference, cache)
+    vendor = Dataset.open(args.vendor_dataset, cache)
+    url, raw = fetch_cboe(("SPX",))["SPX"]
+    t0 = time.monotonic()
+    results = quality.run(vendor, helios, args.start, args.end, parse_cboe_spx(raw))
+    results["meta"]["cboe_spx"] = {"url": url, "sha256": hashlib.sha256(raw).hexdigest()}
+    run_id = hashlib.sha256(canonical_json({"meta": results["meta"], "range": results["range"],
+                                            "thresholds": results["thresholds"]}).encode()
+                            ).hexdigest()[:12]
+    out_dir = Path(args.out) / vendor.name / "quality" / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    git_sha, dirty = _git()
+    at = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+    provenance = {"run_id": run_id, "git_sha": git_sha, "git_dirty": dirty, "created_at": at,
+                  "run_seconds": round(time.monotonic() - t0, 1)}
+    text = dump_canonical(results)
+    (out_dir / "quality.json").write_text(text)
+    provenance["quality_sha256"] = hashlib.sha256(text.encode()).hexdigest()
+    (out_dir / "provenance.json").write_text(dump_canonical(provenance))
+    (out_dir / "report.md").write_text(quality.markdown(results, provenance))
+    manifest_path = vendor.root / "manifest.json"
+    manifest = Manifest.load(manifest_path)
+    manifest.history.append({**quality.history_entry(results, run_id, at),
+                             "git_sha": git_sha, "git_dirty": dirty})
+    manifest.save(manifest_path)
     print((out_dir / "report.md").read_text())
     print(f"artifacts: {out_dir}")
     return 0 if results["pass"] else 1
@@ -625,15 +677,28 @@ def build_parser() -> argparse.ArgumentParser:
                         help="registry seq of the last register record; verified against the "
                              "registry and the dataset history before the holdout opens")
 
-    eh = sub.add_parser("export-history",
-                        help="vendor history into spx_0dte_<provider> (provider not chosen)")
-    eh.add_argument("--provider", required=True)
+    eh = sub.add_parser("export-history", help="vendor history into spx_0dte_<provider>")
+    eh.add_argument("--provider", required=True, help="thetadata")
+    eh.add_argument("--spx-minutes", help="SPX 1-minute CSV (thetadata; US Central, bar end)")
+    eh.add_argument("--vix-minutes", help="VIX 1-minute CSV (thetadata; US Central, bar end)")
+    eh.add_argument("--recorded", default=None, metavar="DATASET",
+                    help="recorded dataset for $VIX and the SPX open after the minute files end "
+                         "(thetadata; e.g. spx_0dte)")
     eh.add_argument("--start", type=_date, required=True)
     eh.add_argument("--end", type=_date, required=True)
     eh.add_argument("--max-cost", type=float, default=None,
                     help="owner-approved dollars for a usage-billed pull")
     unseal_arg(eh)
     eh.set_defaults(func=cmd_export_history)
+
+    vq = sub.add_parser("vendor-quality",
+                        help="data-quality gates Q1-Q6 on a vendor dataset, Helios side by side")
+    vq.add_argument("--vendor-dataset", required=True)
+    vq.add_argument("--reference", default=DEFAULT_DATASET)
+    vq.add_argument("--start", type=_date, default=VALIDATION[0])
+    vq.add_argument("--end", type=_date, default=VALIDATION[1])
+    vq.add_argument("--out", default=str(REPORTS))
+    vq.set_defaults(func=cmd_vendor_quality)
 
     vv = sub.add_parser("validate-vendor", help="fidelity validation against the Helios export")
     vv.add_argument("--vendor-dataset", required=True)

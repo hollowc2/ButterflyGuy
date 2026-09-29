@@ -30,6 +30,9 @@ from butterfly_guy.research.registry import Registry
 
 DEVELOPMENT = (dt.date(2022, 1, 3), dt.date(2024, 6, 28))
 HOLDOUT = (dt.date(2024, 7, 1), dt.date(2026, 3, 12))
+# Already-seen recorded sessions used to check a vendor's data quality
+# (docs/research/vendor-data-quality-plan-2026-09-28.md).
+VALIDATION = (dt.date(2026, 3, 13), dt.date(2026, 9, 25))
 
 _TOKEN = object()
 
