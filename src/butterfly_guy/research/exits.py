@@ -5,7 +5,10 @@ time after entry it reads the snapshot recorded at or before that time; an incom
 fly (any leg quote absent) is not an observation and cannot move the peak, trigger an
 exit or advance a confirmation count. The value is `max(0, fly mark)`. Rules are checked
 in order and the first that fires exits at that snapshot. With no exit the fly is held
-to the official close, provided the session's data runs to at least 15:00 ET.
+to the official close, provided the session's data runs to at least one hour before its
+scheduled close: 15:00 ET on a regular session, as `SimulationEngine` requires, and 12:00
+on a 13:00 early close (owner's decision D5, 2026-09-29). A session's scheduled close is
+16:00 unless its dataset records another (vendor datasets record 13:00 on early closes).
 
 Rules are small frozen dataclasses so a variant's exit policy has a canonical,
 hashable definition. `PeakTrailer.from_config` reads the runtime profit settings and
@@ -30,7 +33,10 @@ from butterfly_guy.position.profit_policy import (
 )
 from butterfly_guy.research.market import FlyPath, et_us
 
-MIN_END_OF_DAY_DATA_TIME = (15, 0)  # SimulationEngine.MIN_END_OF_DAY_DATA_TIME
+REGULAR_CLOSE = dt.time(16, 0)
+# Data must reach this long before the scheduled close: on a regular session that is
+# SimulationEngine's MIN_END_OF_DAY_DATA_TIME, 15:00 (a test pins the equality).
+END_OF_DAY_DATA_LEAD = dt.timedelta(hours=1)
 HELD = "cash_settled"
 INCOMPLETE = "incomplete_data"
 
@@ -227,6 +233,7 @@ def monitor(
     entry_ts_us: int,
     entry_price: float,
     rules: tuple[ExitRule, ...],
+    session_close: dt.time = REGULAR_CLOSE,
 ) -> ExitDecision:
     open_us = et_us(date, 9, 30)
     close_us = et_us(date, 16, 0)
@@ -252,6 +259,8 @@ def monitor(
             why = rule.reason(obs, memo)
             if why is not None:
                 return ExitDecision(why, int(i), int(ts), value, peak)
-    if len(clock_ts) == 0 or clock_ts[-1] < et_us(date, *MIN_END_OF_DAY_DATA_TIME):
+    needed = (et_us(date, session_close.hour, session_close.minute)
+              - int(END_OF_DAY_DATA_LEAD.total_seconds() * 1e6))
+    if len(clock_ts) == 0 or clock_ts[-1] < needed:
         return ExitDecision(INCOMPLETE, peak=peak)
     return ExitDecision(HELD, peak=peak)

@@ -165,7 +165,8 @@ def simulate_entry(s: Session, ctx: RunContext, e: Entry, rules: tuple[ExitRule,
         return "fly_not_listed"
     entry_price = e.cost + costs.commission
     decision = monitor(date=s.date, clock_ts=s.clock_ts, snapshot_ts=s.market.ts, path=path,
-                       entry_ts_us=e.ts_us, entry_price=entry_price, rules=rules)
+                       entry_ts_us=e.ts_us, entry_price=entry_price, rules=rules,
+                       session_close=s.scheduled_close)
     if decision.reason == INCOMPLETE:
         return INCOMPLETE
     settlement = e.fly.settlement_value(s.close) if s.close is not None else None

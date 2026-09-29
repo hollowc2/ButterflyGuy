@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import datetime as dt
+import io
+
 import numpy as np
 import pytest
 
@@ -17,7 +20,7 @@ from butterfly_guy.research.entry import (
     select_at,
 )
 from butterfly_guy.research.exits import HELD, INCOMPLETE, PeakTrailer, monitor
-from butterfly_guy.research.market import DayMarket, Fly, restrict_view
+from butterfly_guy.research.market import DayMarket, Fly, et_us, restrict_view
 from butterfly_guy.research.simulate import simulate_entry
 from tests.research_synth import DAY, fly_quotes, make_chain, minute
 
@@ -120,6 +123,71 @@ def test_confirmation_count_is_not_advanced_by_incomplete_observations():
 def test_short_session_is_incomplete_not_imputed():
     chain = _path_session([1.0, 1.1, 1.2], last=(14, 30))
     assert _monitor(chain, PeakTrailer()).reason == INCOMPLETE
+
+
+def _monitor_close(chain, session_close):
+    s = _session(chain)
+    path = s.market.fly_path(Fly("CALL", *FLY_A))
+    return monitor(date=DAY, clock_ts=s.clock_ts, snapshot_ts=s.market.ts, path=path,
+                   entry_ts_us=int(chain.ts[0]), entry_price=1.0, rules=(PeakTrailer(),),
+                   session_close=session_close)
+
+
+def test_an_early_close_settles_a_held_trade():
+    chain = _path_session([1.0, 1.1, 1.2], last=(13, 0))
+    assert _monitor_close(chain, dt.time(13, 0)).reason == HELD
+    # Without a recorded early close the same data is a short session, as before.
+    assert _monitor_close(chain, dt.time(16, 0)).reason == INCOMPLETE
+    # Data that stops more than an hour before the early close is still incomplete.
+    cut = _path_session([1.0, 1.1, 1.2], last=(11, 30))
+    assert _monitor_close(cut, dt.time(13, 0)).reason == INCOMPLETE
+
+
+def test_a_regular_session_still_needs_simulation_engines_15_00():
+    from butterfly_guy.backtest.simulation_engine import MIN_END_OF_DAY_DATA_TIME
+    from butterfly_guy.research.exits import END_OF_DAY_DATA_LEAD, REGULAR_CLOSE
+
+    need = (dt.datetime.combine(DAY, REGULAR_CLOSE) - END_OF_DAY_DATA_LEAD).time()
+    assert need == MIN_END_OF_DAY_DATA_TIME
+    assert _monitor_close(_path_session([1.0, 1.1], last=(15, 0)), REGULAR_CLOSE).reason == HELD
+    assert _monitor_close(_path_session([1.0, 1.1], last=(14, 59)),
+                          REGULAR_CLOSE).reason == INCOMPLETE
+
+
+def test_the_loader_takes_the_scheduled_close_from_a_vendor_dataset(tmp_path):
+    from butterfly_guy.research.dataset import Dataset
+    from butterfly_guy.research.entry import SessionLoader
+    from butterfly_guy.research.history import HistoryPlan, write_history
+    from tests.research_synth import FakeSource, synthetic_day
+
+    early, regular = dt.date(2023, 11, 24), dt.date(2023, 11, 27)  # calendar v1 early close
+    prior = [{"date": dt.date(2023, 11, 22), "underlying": u, "open": 1.0, "high": 1.0,
+              "low": 1.0, "close": c} for u, c in (("SPX", 5990.0), ("$VIX", 17.0))]
+    src = FakeSource({early: synthetic_day(early, close=(13, 0)),
+                      regular: synthetic_day(regular)}, extra_bars=prior)
+    write_history(src, HistoryPlan(early, regular, "spx_0dte_fake", log=io.StringIO(),
+                                   require_quality=False), tmp_path)
+    loader = SessionLoader(Dataset.open("spx_0dte_fake", tmp_path), PROFILES["vendor_1m"])
+    s = loader.load(early)
+    assert s.scheduled_close == dt.time(13, 0) and s.clock_ts[-1] == et_us(early, 13, 0)
+    assert loader.load(regular).scheduled_close == dt.time(16, 0)
+    # A fly held all session on the early close now settles instead of being dropped.
+    ts = int(s.clock_ts[30])
+    e = Entry(Fly("CALL", 5990.0, 6000.0, 6010.0), ts, s.market.at_or_before(ts), 1.0, "CALL")
+    out = simulate_entry(s, RunContext(_config()), e, (), "X1", Costs())
+    assert not isinstance(out, str) and out.exit_reason == HELD
+
+
+def test_a_dataset_without_recorded_closes_keeps_16_00():
+    from pathlib import Path
+
+    from butterfly_guy.research.dataset import Dataset
+    from butterfly_guy.research.entry import SessionLoader
+
+    ds = Dataset(Path(__file__).parent / "fixtures" / "research" / "mini_spx")
+    loader = SessionLoader(ds, PROFILES["frozen_20260921"])
+    d = loader.dates()[0]
+    assert loader.load(d).scheduled_close == dt.time(16, 0)
 
 
 def test_held_trade_without_official_close_is_excluded():
