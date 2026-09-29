@@ -768,18 +768,29 @@ seed 1). Results, power and the owner's open decisions are in
   `reports/research/registry/development/spx_0dte_thetadata.jsonl` (owner-confirmed). The
   registration registry `reports/research/registry/spx_0dte_thetadata.jsonl` does not exist
   yet. The unseal reads only the latter.
-- **Runs, floored (primary since Revision 1):**
-  - `7d7f91ad9ba5` (E0, HLV1, HEV1, HEV2, HTS1; `results.json` `f361f0f1…`);
+- **Runs, primary: floored, with early closes settled (git `6891317`):**
+  - `7d7f91ad9ba5` (E0, HLV1, HEV1, HEV2, HTS1; `results.json` `346a9f82…`);
   - `9971c5db1313` (E0, HLV1, HSN1, HSN1_c148, HSN1_c168, HEV1, HEV2; `results.json`
-    `415a3b2d…`).
+    `4a64d809…`).
+  - A run id does not hash the git commit, so these kept the ids of the floored runs made
+    before the early-close fix (`7b1f229`; `results.json` `f361f0f1…` and `415a3b2d…`).
 - **Runs, unfloored (first version):**
   - `9eccee6a6aa5` (`results.json` `2c042505…`);
   - `da7a9163c0fa` (`results.json` `429d0829…`).
-- **Owner's decisions (2026-09-29):** nothing is registered yet, and stressed exits are floored
-  at $0 (`--floor-stressed-exits`).
-- **Early closes.** The replay marks a trade still held when a shortened session's clock
-  ends (13:00) as `incomplete_data` (`MIN_END_OF_DAY_DATA_TIME` is 15:00), so the session
-  is dropped from every compared arm: 2023-07-03 for E0, and 2022-11-25 for HSN1.
+- **Owner's decisions (2026-09-29):**
+  - nothing is registered yet;
+  - stressed exits are floored at $0 (`--floor-stressed-exits`);
+  - held trades settle on early closes (D5).
+- **Early closes (D5, fixed in `6891317`).**
+  - Before the fix, the replay required data up to 15:00 ET before holding a trade to the
+    official close (`SimulationEngine.MIN_END_OF_DAY_DATA_TIME`). A trade held on a 13:00
+    early close was therefore `incomplete_data`, and the session dropped from every arm.
+  - Now the data must reach one hour before the session's scheduled close: 15:00 on a
+    regular day, 12:00 on an early close.
+  - `Session.scheduled_close` comes from the dataset's `session_close_et` where it records
+    one. Otherwise it is 16:00, so Helios replays and the frozen parity are unchanged.
+  - All 585 development sessions now replay. E0 gains 2023-07-03 (−$238, held), and H-SN1
+    gains 2022-11-25.
 
 ```bash
 T="--provider thetadata --spx-minutes ../Butterflyguy/data/spx_1min.csv \

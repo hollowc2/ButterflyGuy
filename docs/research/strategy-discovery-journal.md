@@ -1666,3 +1666,46 @@ replays holdout sessions.
 - A bug the tests caught: the recorded gate-1 level was rounded to 0.97 instead of 0.975
   (label only; the bound itself was right). Fixed.
 - The full suite (1046) and ruff pass.
+
+## 2026-09-29 (later) — D5: held trades settle on early closes (development re-run; nothing registered)
+
+In-sample on the development window. Nothing registered, unsealed or pulled.
+
+### Decision and change
+
+- **Decision (owner): D5.** A trade held on an early close settles on that day's official
+  close instead of dropping the session.
+- **Change (`6891317`).**
+  - The replay's end-of-data requirement is one hour before the session's scheduled close:
+    15:00 on a regular day, which is `SimulationEngine`'s rule, pinned by a test, and 12:00
+    on a 13:00 early close.
+  - The scheduled close comes from the vendor dataset's `session_close_et`. Helios datasets
+    have none, so their replays are unchanged: parity is 118 trades, 0 mismatches.
+  - The full suite (1050) and the `research_data` tests pass.
+- **Re-runs:** `7d7f91ad9ba5` and `9971c5db1313` at `6891317`. The ids are unchanged because
+  a run id does not hash the commit; the registry holds both versions' results hashes. The
+  development registry now holds 37 records, still 8 definitions. All 585 sessions replay.
+
+### Results
+
+| | Now | Floored, before the fix |
+|---|---:|---:|
+| E0 stressed net | −9,922 (362 trades) | −9,685 (361) |
+| H-TS1 Δ (90% lower bound) | +7,639 (+1,078) | +7,402 (+859) |
+| H-EV2 / H-EV1 / H-LV1 Δ | +1,366 / +151 / −1,455 | unchanged |
+| H-SN1 Δ | −12,736 | −12,878 |
+
+- E0 gained 2023-07-03, a held put that settled at −$238. H-TS1 had skipped that session, so
+  its Δ rose by the same amount.
+- H-SN1 gained 2022-11-25 (−$163).
+- Holdout power for H-TS1 alone (k = 1, 358 sessions, all gates) is essentially unchanged:
+  - 51% if the development effect is real, 33% if it is half as large;
+  - a false-pass rate of 18% with no effect.
+- The draft will carry D5 as Revision 3.
+
+### Still open
+
+- D2: what a pass means against a losing E0.
+- D4: gate-1 calibration on skip filters.
+- D6: Indices month.
+- D7: ThetaData licence.
