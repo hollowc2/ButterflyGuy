@@ -53,6 +53,27 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 > - **Holdout size from the calendar:** 358 usable sessions (H1 204 / H2 154) without an
 >   Indices month, 421 (204 / 217) with one.
 
+> **[REVISION 1, 2026-09-29, marked: the owner's decision, made AFTER seeing the
+> development-window results]**
+> - **Primary metric, accounting.** In the stressed-marketable model, and in its
+>   delayed-exit form used by gate 4, an intraday exit is booked at $0 when its net
+>   proceeds per fly are below $0. Net proceeds are the bid/ask-crossing credit, minus
+>   commission, minus the $0.05 stress.
+> - **Why.** A butterfly is never worth less than zero. Legging out across blown-out quotes
+>   made the model pay to close.
+>   - The worst case was on the 2022-12-14 FOMC statement minute: $22.53 a fly to close a
+>     20-point fly.
+>   - Six of E0's 361 development exits were priced below zero
+>     (`registration-decision-2026-09-29.md` §6.1).
+> - **Implementation.** `--floor-stressed-exits` (`Costs.stressed_exit_floor = 0.0`). Every
+>   vendor-sweep run must use it, the holdout evaluation included. Each run records
+>   `accounting.stressed_exit_floor: 0.0` and says so in its report.
+> - **Unchanged.** Midpoint, marketable, entries and cash settlement. The flag is off by
+>   default, so the Helios parity and idea-sweep reproductions still match the frozen
+>   replay exactly. Hypotheses, split, halves, bootstrap, the k rule and gates 1–5 are
+>   unchanged.
+> - **Owner's decision D1, same day:** nothing is registered yet.
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).
@@ -132,6 +153,8 @@ registration.
   paired against E0.
   - Stressed-marketable: ask/bid crossing, +$0.05 per contract adverse, $0.65 per
     contract commission, free cash settlement against the official close.
+  - *[Revision 1, 2026-09-29, marked: see the revision block above]* An intraday exit's
+    net proceeds are floored at $0 (`--floor-stressed-exits`).
   - Sessions any arm cannot replay without imputing data are dropped from every arm, as
     the core does now.
 - **Test:** the moving-block bootstrap of the total paired difference.

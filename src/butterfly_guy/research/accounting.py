@@ -17,6 +17,14 @@ These are the 2026-09-21 accounting models, identical to
   the exit still rolls forward past unusable markets and falls back to settlement.
   Entries, decisions and held trades are unchanged.
 
+Optional, off by default: `Costs.stressed_exit_floor`. With it set (0.0, the owner's
+decision of 2026-09-29 for the vendor sweep), an intraday exit in `stressed` and
+`stressed_delayed` whose net proceeds (credit minus commission and stress) fall below
+the floor is booked at the floor and marked `exit_floored`. A butterfly is never worth
+less than zero, so nobody pays to close one. Midpoint, marketable, entries and cash
+settlement are unchanged. Off, the models are exactly the 2026-09-21 set above, as the
+frozen-replay parity requires.
+
 A missing or crossed entry market leaves the trade unpriced in the executable models;
 no quote is ever imputed.
 """
@@ -43,6 +51,7 @@ SETTLED = "cash_settled"
 @dataclass(frozen=True)
 class Costs:
     commission_per_contract: float = 0.65
+    stressed_exit_floor: float | None = None  # None: the 2026-09-21 models, unfloored
 
     @property
     def commission(self) -> float:
@@ -65,6 +74,7 @@ class Fill:
     exit_index: int | None = None
     exit_roll: int = 0  # snapshots skipped rolling the exit forward
     settlement_fallback: bool = False
+    exit_floored: bool = False  # booked at Costs.stressed_exit_floor
 
     @property
     def pnl(self) -> float | None:
@@ -135,6 +145,9 @@ def price_trade(
         if len(usable):
             j = start + int(usable[0])
             fill.exit = float(path.credit[j]) - costs.commission - stress
+            floor = costs.stressed_exit_floor
+            if model != "marketable" and floor is not None and fill.exit < floor:
+                fill.exit, fill.exit_floored = floor, True
             fill.exit_index = j
             fill.exit_roll = j - start
         elif settlement is not None:

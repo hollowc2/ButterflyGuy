@@ -34,6 +34,7 @@ from pathlib import Path
 
 import structlog
 
+from butterfly_guy.research.accounting import Costs
 from butterfly_guy.research.dataset import DEFAULT_DATASET, Dataset, default_cache_root, sha256_file
 from butterfly_guy.research.entry import (
     PROFILES,
@@ -180,16 +181,21 @@ def _simulate(args: argparse.Namespace, ds: Dataset, profile_name: str, names: l
     features = (SessionFeatures.load(ds) if any(uses_features(v.entry) for v in variants)
                 else None)
     ctx = RunContext(load_spx_config(), features=features)
+    floor = 0.0 if args.floor_stressed_exits else None
+    costs = Costs(ctx.config.execution.paper_commission_per_contract, stressed_exit_floor=floor)
     scorer = TiesetScorer() if tieset else None
-    result = run_variants(SessionLoader(ds, profile), variants, ctx,
-                          start=start, end=end, exit_delay=args.exit_delay, tieset=scorer)
+    result = run_variants(SessionLoader(ds, profile), variants, ctx, start=start, end=end,
+                          costs=costs, exit_delay=args.exit_delay, tieset=scorer)
     params = EvalParams(split=args.split, bootstrap_reps=args.reps,
                         bootstrap_block=args.block, rolling_block=args.rolling_block)
+    accounting: dict = {"exit_delay_snapshots": args.exit_delay}
+    if floor is not None:  # recorded only when set, so unfloored run ids are unchanged
+        accounting["stressed_exit_floor"] = floor
     meta = {
         "dataset": ds.name, "dataset_hash": ds.hash, "profile": asdict(profile),
         "config_sha256": sha256_file(SPX_CONFIG), "start": str(start), "end": str(end),
         "baseline": args.baseline, "eval": params.as_dict(),
-        "accounting": {"exit_delay_snapshots": args.exit_delay},
+        "accounting": accounting,
         "variants": {n: {"definition": r.variant.definition(),
                          "definition_hash": r.variant.definition_hash()}
                      for n, r in result.runs.items()},
@@ -668,6 +674,9 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--out", default=str(REPORTS))
         sp.add_argument("--no-registry", action="store_true",
                         help="do not record the evaluation (the report says so)")
+        sp.add_argument("--floor-stressed-exits", action="store_true",
+                        help="book stressed and delayed intraday exits below $0 at $0 (the "
+                        "vendor sweep's primary metric since 2026-09-29; recorded in the run)")
 
     run = sub.add_parser("run", help="evaluate variants against a baseline")
     evaluation_args(run)

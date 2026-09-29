@@ -219,3 +219,93 @@ def test_delayed_index_uses_the_next_clock_time_and_at_least_one_snapshot():
     # Two clock times reach only 10:02, but a delay of two means two recorded snapshots.
     assert delayed_exit_index(dense, T1, 1, 2) == 3
     assert delayed_exit_index(dense, T1, 1, 0) == 1
+
+
+# ---------------------------------------------------------------------------
+# Stressed-exit floor (owner's decision, 2026-09-29; off by default)
+# ---------------------------------------------------------------------------
+
+# At T1 and T2 the centers' ask blows out: selling the outer legs at bid and buying two
+# centers at ask nets less than zero.
+BLOWN_OUT = {
+    **fly_quotes(T0, lo=(3.0, 3.2), c=(1.5, 1.6), hi=(0.5, 0.6)),
+    **fly_quotes(T1, lo=(0.1, 0.2), c=(0.5, 0.9), hi=(0.0, 0.05)),
+    **fly_quotes(T2, lo=(0.1, 0.2), c=(0.5, 0.8), hi=(0.0, 0.05)),
+}
+
+
+def _blown_out(costs, **kw):
+    return price_trade(_path(BLOWN_OUT), entry_index=0, entry_mark=0.45, exit_index=1,
+                       exit_mark=0.1, settlement=None, costs=costs, **kw).fills
+
+
+def test_stressed_exits_are_not_floored_by_default():
+    fills = _blown_out(COSTS, delayed_exit_index=2)
+    assert fills["stressed"].exit == pytest.approx(0.1 - 1.8 - 0.026 - 0.20)
+    assert fills["stressed_delayed"].exit == pytest.approx(0.1 - 1.6 - 0.026 - 0.20)
+    assert not any(f.exit_floored for f in fills.values())
+
+
+def test_floor_books_stressed_and_delayed_exits_below_zero_at_zero_only():
+    floored = Costs(0.65, stressed_exit_floor=0.0)
+    fills = _blown_out(floored, delayed_exit_index=2)
+    for model in ("stressed", "stressed_delayed"):
+        assert fills[model].exit == 0.0
+        assert fills[model].exit_floored
+        assert fills[model].exit_index == (1 if model == "stressed" else 2)
+    # Marketable, midpoint and entries are unchanged.
+    plain = _blown_out(COSTS, delayed_exit_index=2)
+    assert fills["marketable"].exit == plain["marketable"].exit < 0
+    assert not fills["marketable"].exit_floored
+    assert fills["midpoint"].exit == plain["midpoint"].exit
+    assert fills["stressed"].entry == plain["stressed"].entry
+
+
+def test_floor_leaves_positive_exits_and_settlement_alone():
+    floored = Costs(0.65, stressed_exit_floor=0.0)
+    quotes = {**fly_quotes(T0, lo=(3.0, 3.2), c=(1.5, 1.6), hi=(0.5, 0.6)),
+              **fly_quotes(T1, lo=(4.0, 4.2), c=(1.0, 1.1), hi=(0.2, 0.3))}
+    args = dict(entry_index=0, entry_mark=0.45, exit_index=1, exit_mark=2.25, settlement=None)
+    a = price_trade(_path(quotes, (T0, T1)), costs=floored, **args).fills
+    b = price_trade(_path(quotes, (T0, T1)), costs=COSTS, **args).fills
+    assert a["stressed"].exit == b["stressed"].exit > 0 and not a["stressed"].exit_floored
+    held = price_trade(_path(quotes, (T0, T1)), entry_index=0, entry_mark=0.45, exit_index=None,
+                       exit_mark=None, settlement=0.0, costs=floored).fills
+    assert held["stressed"].exit == 0.0 and not held["stressed"].exit_floored
+
+
+def test_trade_record_marks_floored_exits_only_when_floored():
+    from butterfly_guy.research.report import trade_record
+    from butterfly_guy.research.simulate import Trade
+
+    def record(costs):
+        fills = price_trade(_path(BLOWN_OUT), entry_index=0, entry_mark=0.45, exit_index=1,
+                            exit_mark=0.1, settlement=None, costs=costs)
+        return trade_record(Trade(DAY, "E0", FLY, T0, 0, 0.45, 18.0, 5960.0, "", "x", T1, 1,
+                                  0.1, 0.45, None, fills))
+
+    assert record(Costs(0.65, stressed_exit_floor=0.0))["stressed"]["exit_floored"] is True
+    plain = record(COSTS)
+    assert all("exit_floored" not in plain[m]
+               for m in ("midpoint", "marketable", "stressed", "stressed_delayed"))
+
+
+def test_run_records_the_floor_only_when_asked(tmp_path):
+    import json
+    from pathlib import Path
+
+    from butterfly_guy.research import cli
+
+    fixtures = Path(__file__).parent / "fixtures" / "research"
+    metas = {}
+    for flag in ([], ["--floor-stressed-exits"]):
+        out = tmp_path / ("floored" if flag else "plain")
+        assert cli.main(["--dataset", "mini_spx", "--cache", str(fixtures), "run", "--variants",
+                         "E0", "--profile", "frozen_20260921", "--no-registry", "--no-tieset",
+                         "--reps", "50", "--out", str(out), *flag]) == 0
+        (results,) = out.glob("mini_spx/*/results.json")
+        metas[bool(flag)] = json.loads(results.read_text())["meta"]
+        report = (results.parent / "report.md").read_text()
+        assert ("floored at $0.00" in report) is bool(flag)
+    assert "stressed_exit_floor" not in metas[False]["accounting"]
+    assert metas[True]["accounting"]["stressed_exit_floor"] == 0.0

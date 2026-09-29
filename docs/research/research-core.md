@@ -343,6 +343,18 @@ themselves. R3/R4 rank the live `ButterflyBuilder`'s candidates. The trailer is
 - The midpoint model keeps `paper_exit_price`'s 0.05 exit floor, for parity with the
   reference.
 
+**Stressed-exit floor** (`--floor-stressed-exits`, off by default; the owner's decision of
+2026-09-29 for the vendor sweep, Revision 1 of the pre-registration draft):
+- An intraday exit in `stressed` and `stressed_delayed` whose net proceeds per fly are below
+  $0 is booked at $0. Net proceeds are credit minus commission and stress.
+- `trades.jsonl` marks such a fill `exit_floored`.
+- The run meta records `accounting.stressed_exit_floor`, which gives the run a new id, and
+  the report says so.
+- Midpoint, marketable, entries and cash settlement are unchanged.
+- Off, nothing changes: the frozen parity `trades.jsonl` is byte-identical
+  (`b5b732ad…`). This matters because Helios data has such exits too: 3 of the 118
+  frozen-parity trades and 40 exits across the idea-sweep catalog.
+
 **Exit-latency stress** (review §5) adds a fourth model, `stressed_delayed`, shown as
 "Delayed" next to the stressed figures:
 

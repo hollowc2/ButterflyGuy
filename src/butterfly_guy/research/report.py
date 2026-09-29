@@ -46,6 +46,8 @@ def trade_record(t: Trade) -> dict:
         rec[m] = {"status": f.status, "entry": _r(f.entry), "exit": _r(f.exit),
                   "pnl": _r(t.pnl(m), 4), "exit_roll": f.exit_roll,
                   "settlement_fallback": f.settlement_fallback}
+        if f.exit_floored:  # only then, so unfloored runs keep their bytes
+            rec[m]["exit_floored"] = True
     return rec
 
 
@@ -86,6 +88,10 @@ def markdown(results: dict, provenance: dict) -> str:
     ev, meta = results["evaluation"], results["meta"]
     base = meta["baseline"]
     delay = meta.get("accounting", {}).get("exit_delay_snapshots")
+    floor = meta.get("accounting", {}).get("stressed_exit_floor")
+    floored = "" if floor is None else (
+        f" Intraday exits in the stressed and delayed models are floored at "
+        f"${floor:.2f} of net proceeds per fly (owner's decision, 2026-09-29).")
     few = ev["sessions"] < meta["eval"].get("min_bootstrap_sessions", 0)
     lines = [
         f"# Research run {provenance['run_id']}",
@@ -105,7 +111,7 @@ def markdown(results: dict, provenance: dict) -> str:
         "fly; session figures include zeros on no-trade days. CI: paired moving-block "
         f"bootstrap ({meta['eval']['bootstrap_block']}-session blocks, "
         f"{meta['eval']['bootstrap_reps']} reps) of the difference from {base}"
-        f"{' (not reported: too few sessions)' if few else ''}.",
+        f"{' (not reported: too few sessions)' if few else ''}.{floored}",
         "",
         f"Exit-latency stress (\"Delayed\"): stressed, with every intraday exit filled from "
         f"the snapshot {delay} decision-clock time(s) after the trigger (at least {delay} "
