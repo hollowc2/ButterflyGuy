@@ -18,7 +18,12 @@ from butterfly_guy.research.entry import (
 )
 from butterfly_guy.research.exits import PeakTrailer, StopLoss, TakeProfit, TimeExit
 from butterfly_guy.research.holdout import DEVELOPMENT
-from butterfly_guy.research.hypotheses import PriorRatioFilter, ReleaseSkipEntry, SigmaPlacedEntry
+from butterfly_guy.research.hypotheses import (
+    EventDaySkipEntry,
+    PriorRatioFilter,
+    ReleaseSkipEntry,
+    SigmaPlacedEntry,
+)
 from butterfly_guy.research.learning import EVRankEntry, EVSelector, FittedFilter
 from butterfly_guy.research.simulate import Variant
 
@@ -97,6 +102,16 @@ CATALOG: dict[str, Variant] = {
                 "H-TS1: E0, skipping sessions whose prior-session VIX1D/VIX is at or above "
                 "its upper tercile over the development period (fitted on "
                 "2022-01-03..2024-06-28)."),
+        # H-SN1's noise secondary (draft gate 5): the same placement at centers 1.48 and
+        # 1.68 sigma. Built 2026-09-29 for the development-window runs; not registered.
+        Variant("HSN1_c148", SigmaPlacedEntry(center_sigma=1.48), "config",
+                "H-SN1 noise secondary: HSN1 with the center at spot +/- 1.48 sigma."),
+        Variant("HSN1_c168", SigmaPlacedEntry(center_sigma=1.68), "config",
+                "H-SN1 noise secondary: HSN1 with the center at spot +/- 1.68 sigma."),
+        # Optional H-EV2 from the draft. Built 2026-09-29; not registered.
+        Variant("HEV2", EventDaySkipEntry(BASE), "config",
+                "H-EV2: E0, skipping sessions with an FOMC statement scheduled that day "
+                "(any time; calendar leakage rule)."),
     ]
 }
 

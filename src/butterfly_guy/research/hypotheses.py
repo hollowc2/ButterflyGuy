@@ -145,6 +145,26 @@ class ReleaseSkipEntry:
 
 
 @dataclass(frozen=True)
+class EventDaySkipEntry:
+    """H-EV2 (optional in the draft): the base rule's entries, except on sessions with a
+    scheduled event of `event_types` (an FOMC statement) at any time of day, including
+    after entry. Only events the calendar's leakage rule lets the session see count, as in
+    `ReleaseSkipEntry`; whether the event was held is never used."""
+
+    USES_FEATURES: ClassVar[bool] = True
+
+    base: BaselineEntry
+    event_types: tuple[str, ...] = ("FOMC",)
+
+    def skips(self, ctx: RunContext, d: dt.date) -> bool:
+        calendar = session_features(ctx, self).calendar
+        return any(e.event_type in self.event_types for e in calendar.events_for(d))
+
+    def entries(self, s: Session, ctx: RunContext) -> list[Entry]:
+        return [] if self.skips(ctx, s.date) else cached_entries(s, ctx, self.base)
+
+
+@dataclass(frozen=True)
 class PriorRatioFilter:
     """H-TS1: the base rule's entries, except on sessions whose prior-session ratio (for
     example VIX1D/VIX, from closes on the previous SPX session only) is at or above

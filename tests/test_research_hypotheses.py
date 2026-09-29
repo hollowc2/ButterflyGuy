@@ -23,6 +23,7 @@ from butterfly_guy.research.event_calendar import COLUMNS, EventCalendar
 from butterfly_guy.research.features import DailyVol, SessionFeatures
 from butterfly_guy.research.holdout import DEVELOPMENT
 from butterfly_guy.research.hypotheses import (
+    EventDaySkipEntry,
     PriorRatioFilter,
     ReleaseSkipEntry,
     SigmaPlacedEntry,
@@ -179,6 +180,26 @@ def test_release_skip_obeys_the_calendar_leakage_rule(tmp_path):
     assert rule.entries(s, ctx) == []
     s = SimpleNamespace(date=dt.date(2024, 3, 20), cache={})
     assert rule.entries(s, ctx) == ["E0 entry"]
+
+
+def test_event_day_skip_takes_fomc_at_any_time_under_the_leakage_rule(tmp_path):
+    cal = _calendar(tmp_path, [
+        {"event_date": "2024-03-12", "event_type": "CPI", "release_time_et": "08:30",
+         "published_on": "2024-02-13"},  # not an FOMC day
+        {"event_date": "2024-03-20", "event_type": "FOMC", "release_time_et": "14:00",
+         "published_on": "2023-06-01"},  # after entry: still skipped
+        {"event_date": "2024-05-01", "event_type": "FOMC", "release_time_et": "14:00",
+         "published_on": "2024-05-01"},  # published on the session: not yet known
+        {"event_date": "2024-06-12", "event_type": "FOMC", "release_time_et": "",
+         "kind": "unscheduled", "published_on": "2024-06-11"},
+    ])
+    ctx = RunContext(AppConfig(), features=SimpleNamespace(calendar=cal))
+    rule = EventDaySkipEntry(StubBase())
+    skipped = {d for d in ("2024-03-20", "2024-03-12", "2024-05-01", "2024-06-12")
+               if rule.skips(ctx, dt.date.fromisoformat(d))}
+    assert skipped == {"2024-03-20"}
+    assert rule.entries(SimpleNamespace(date=dt.date(2024, 3, 20), cache={}), ctx) == []
+    assert uses_features(rule)
 
 
 def test_feature_rules_refuse_to_run_without_features():
