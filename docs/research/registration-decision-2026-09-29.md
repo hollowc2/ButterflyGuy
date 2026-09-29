@@ -45,7 +45,8 @@ each hypothesis's frozen implementation choices and the 2026 descriptive evidenc
    - D2: what a paired pass means against a losing E0.
    - D4: gate 1 over-passes on skip filters.
    - D5: early closes.
-   - D9 (new): the holdout evaluation command does not exist yet.
+   - D9: the holdout evaluation command is **built** (`holdout`, commit `6f02a86`, §6.5).
+     Review the details it fixes (gate 3's reading, the re-run rule) before registering.
    - D6 (Indices month) and D7 (ThetaData licence) also remain open.
 
 ## 1. Data and integrity
@@ -367,12 +368,34 @@ See §1. On the holdout up to five early-close sessions can drop from every arm.
 symmetric across arms, but it removes sessions where a trade was held, and held trades carry
 most of the P&L.
 
-### 6.5 There is no holdout evaluation command yet (D9, new)
+### 6.5 The holdout evaluation command (D9, built 2026-09-29)
 
-`run` has no `--unseal-holdout` option: today only `export-history` and `coverage` accept one.
-So no command can evaluate a registered rule on holdout sessions yet. It has to be built,
-tested and committed before registration, because `register` freezes the `git_sha`. It must
-also run with `--floor-stressed-exits`.
+`holdout --unseal-holdout SEQ` (`protocol.py`, commit `6f02a86`) is the only command that
+replays holdout sessions; `run` still cannot.
+- **What it evaluates.** Exactly the variants registered up to `SEQ`, each paired with E0.
+- **Fixed, not parameters:** every choice the draft fixes (Revision 1 included). That is the
+  floor, `vendor_1m`, the bootstrap, the halves, k and gates 1–4.
+- **Recording.** Every evaluation is recorded, and there is no `--no-registry`.
+- **Refusals, all before any holdout session is replayed:**
+  - a registered definition that no longer matches the catalog;
+  - H-SN1 registered, because gate 5 has no statistic;
+  - a dirty tree, or `src/`/`configs/` changed since the registration commit;
+  - no holdout sessions pulled;
+  - a fitted rule whose re-fit differs from its registered value;
+  - a second evaluation that is not an exact reproduction of the first.
+- **Fitted values are now recorded at registration.** `register` fits a fitted rule on its
+  window and records the value. On this dataset HTS1 fits to 0.9181935615930604 (n = 528),
+  checked in-process with nothing registered.
+
+**Details the draft left open, now fixed in code. Review them before registering, because
+the `git_sha` freezes them:**
+- Gate 3's "either arm" is the union of each arm's top three sessions, removed from both. It
+  is the reading used in §3 and §4.
+- A second evaluation is allowed only as an exact reproduction (same unseal, dataset, arms
+  and code), and it is recorded as another look.
+
+The command was tested on a synthetic vendor dataset only. Nothing real was registered,
+unsealed or pulled.
 
 ## 7. Recommendation and frozen definitions
 
@@ -409,11 +432,12 @@ the floor):
 | Dataset | `spx_0dte_thetadata` @ `93bbe58eb799c516f2a65bd5b20b7fdbc686e65681378d56c9279c8955a05d30` (manifest shows `holdout_sessions: 0`) |
 | Profile | `vendor_1m` |
 
-**What the hash does not cover.** The threshold, the accounting flag, E0's code, `features.py`
-and the config are frozen only by the register record's `git_sha`, the note, and each run's
-recorded meta. The holdout run re-fits the threshold on the development window. **It must
-reproduce 0.9181935615930604 exactly**, and its meta must show `stressed_exit_floor: 0.0`. Any
-change to the replay code (D5, D9) must be committed before `register`.
+**What the hash does not cover.** E0's code, `features.py` and the config are frozen by the
+register record's `git_sha`: the `holdout` command refuses if `src/` or `configs/` differ from
+that commit. The threshold is recorded by `register` itself (`fitted`). The holdout run re-fits
+it on the development window and refuses unless it reproduces 0.9181935615930604 exactly. The
+floor is a constant of the `holdout` command. Any change to the replay code (for example D5)
+must be committed before `register`.
 
 **The other rules' hashes, for the record:** HLV1 `6ed12752…`, HSN1 `4589760a…`, HSN1_c148
 `844e32da…`, HSN1_c168 `f0967c75…`, HEV1 `9180c56d…`, HEV2 `b0c670c0…` (full values in
@@ -423,12 +447,15 @@ change to the replay code (D5, D9) must be committed before `register`.
 recommendation gives k = 1. Each extra hypothesis raises k by one and costs H-TS1 power (§4).
 The variant count on this dataset (8, §9) is reported alongside; it is not k.
 
-**How to register, if and when you decide to** (from a clean, committed tree, after D9 is
-built, and before any holdout pull):
+**How to register and evaluate, if and when you decide to.** Register from a clean,
+committed tree, before any holdout pull. Then pull the holdout with the same unseal, and
+evaluate once:
 
 ```bash
 uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata register --variants HTS1 \
-  --note "H-TS1 alone, k=1; threshold 0.9181935615930604 (n=528); --floor-stressed-exits; halves 2025-04-30; <D2/D4/D5/D6 choices>"
+  --note "H-TS1 alone, k=1; halves 2025-04-30; <D2/D4/D5/D6 choices>"
+# (the holdout pull: export-history ... --unseal-holdout <SEQ>, as research-core documents)
+uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata holdout --unseal-holdout <SEQ>
 ```
 
 This writes the first record of `reports/research/registry/spx_0dte_thetadata.jsonl`. The
@@ -444,7 +471,7 @@ development registry is a separate file and is never read by the unseal.
 | D2 | Meaning of a pass against a losing E0 | Open. Accept that a pass means "loses less than E0", or add the rule's own stressed P&L as a reported (or gating) secondary. A new gate is a marked revision of the draft | registration |
 | D4 | Gate 1 on skip filters (§6.2) | Open. Accept and state the real false-pass rates, or change the test (for example a random-skip null of the same size). A marked revision | registration |
 | D5 | Early closes (§6.4) | Open. Accept the symmetric drop (0–5 holdout sessions), or let a held trade settle on a shortened session's close (code change; moves E0 on 2 development sessions) | registration |
-| D9 | Holdout evaluation command (§6.5) | Open. Build `run --unseal-holdout` (with tests), always with `--floor-stressed-exits` | registration |
+| D9 | Holdout evaluation command (§6.5) | **Built 2026-09-29** (`holdout`, `6f02a86`). Review its two fixed readings (gate 3 union; exact-reproduction re-run rule) | registration |
 | D6 | ThetaData Indices month ($50) | Open. Fills the 63-session gap: 358 → 421 sessions, H2 154 → 217 (no measurable power gain, §4). Gives a real intraday VIX to check the smoothing (§5; H-TS1 is not affected) and cross-checks the owner's files. The gap pull is holdout data, so it can happen only after registration, but whether the holdout includes those sessions should be fixed in the register note | registration |
 | D7 | ThetaData licence | Open. Terms §2.1(i) and §12.2: may the local cache outlive a cancelled subscription? The holdout result's reproducibility and any later audit depend on the answer | holdout pull |
 

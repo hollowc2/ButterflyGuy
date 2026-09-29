@@ -29,6 +29,7 @@ here changes live-trading code.
 | `features.py` | Pre-entry session features: `events` and the term structure (prior-session closes; completed intraday bars) |
 | `diagnose.py` | DESCRIPTIVE E0 breakdowns by event and term structure (no registry record) |
 | `holdout.py` | The sealed holdout (2024-07-01 → 2026-03-12) and its registry-verified unseal |
+| `protocol.py` | The pre-registered holdout evaluation (`holdout` command): the draft's fixed choices as constants, gates 1–4, and the checks made before any holdout session is replayed |
 | `history.py` | Vendor history adapter onto the research schema (**no vendor purchased yet**), coverage report |
 | `thetadata.py` | ThetaData `HistorySource` (Options Value quotes; SPX/VIX from the owner's minute files and recorded data; Cboe closes) |
 | `quality.py` | Data-quality gates Q1–Q6 on a vendor dataset, Helios side by side (`vendor-quality`) |
@@ -469,6 +470,14 @@ checks the chain.
   `git_sha`, `git_dirty` and the dataset's current `dataset_hash` (None if the dataset is not
   exported yet). The holdout unseal requires a clean tree and development-only data, so a
   registration without these can never unseal anything.
+- **Fitted values at registration** (2026-09-29, D9).
+  - A fitted rule (for example HTS1) is fitted on its own window when it is registered, under
+    `--profile` (default `vendor_1m`).
+  - The record stores `fitted` and `fit_profile`, and the holdout evaluation checks its
+    re-fit against them.
+  - All fits happen before anything is appended, so a failed fit registers nothing.
+  - On `spx_0dte_thetadata` @ `93bbe58e`, HTS1 fits to `{threshold: 0.9181935615930604,
+    fit_n: 528}` (checked in-process on 2026-09-29; nothing was registered).
 
 ```bash
 uv run python -m butterfly_guy.research register --variants HLV1 --note "before the H-LV1 test"
@@ -847,6 +856,61 @@ closes, fetched in stage 3) spans 1990 → today, holdout dates included. It is 
 through `features.SessionFeatures`, for a session being replayed, and holdout sessions
 cannot be replayed without an unseal. H-TS1's threshold is fitted through a
 `WindowedLoader` confined to the development window.
+
+### The holdout evaluation (`protocol.py`, `holdout`; D9, built 2026-09-29)
+
+`holdout --unseal-holdout SEQ` is the only command that replays holdout sessions. `run`,
+`shadow` and `diagnose` take no unseal, so for them the holdout stays sealed.
+
+```bash
+uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata holdout --unseal-holdout <SEQ>
+```
+
+**What it evaluates.** Exactly the variants registered up to record `SEQ`, each paired with E0
+on identical sessions. There is no `--variants` option. The draft's choices are constants in
+`protocol.py`, not parameters:
+- `vendor_1m`, over 2024-07-01 → 2026-03-12;
+- stressed exits floored at $0 (Revision 1), delayed exit one clock time;
+- 10-session blocks, 10,000 reps, seed 1;
+- halves split after 2025-04-30;
+- k = the number of variants registered, gate 1 at 1 − 0.10/k;
+- gates 2–4 as drafted.
+
+**Choices the draft left open, fixed in the code** (so frozen by the register record's
+`git_sha`):
+- **Gate 3 reads "the three largest-P&L sessions of either arm" as the union** of each arm's
+  top three sessions, removed from both arms.
+- **Gate 5 (H-SN1's noise secondary) has no statistic in the draft.** So a registered H-SN1
+  (or `HSN1_c148`/`HSN1_c168`) is refused rather than evaluated with an invented one.
+- **Each arm's own stressed net is reported beside the gates, not gated** (owner decision D2
+  is open).
+
+**Refusals, all before any holdout session is replayed:**
+- the unseal does not verify;
+- nothing is registered, or E0 is registered as a hypothesis;
+- a registered definition hash no longer matches the catalog;
+- a fitted rule has no registered fitted values, or its re-fit on the development window
+  differs from them (or was made under another profile);
+- `src/` or `configs/` has uncommitted changes, or differs from the registration commit;
+- the dataset holds no holdout sessions;
+- the holdout was already evaluated and this run is not an exact reproduction: it differs in
+  the unseal, the dataset hash, the arms, or the code since the first run.
+
+**Recording.** Every evaluation, reproductions included, appends an `evaluate` record per arm
+to the registration registry, and there is no `--no-registry`. Each record carries:
+- `scope: holdout`, `unseal_seq` and `k`;
+- the gates, or `None` for E0, whose stage is `post` because it is the baseline, not a
+  hypothesis;
+- `reproduction`: the first run's id, and whether the results hash matched.
+
+**Artifacts** go to `reports/research/<dataset>/holdout/<run id>/`. The report opens with a
+"Pre-registered holdout verdict" table (gates 1–4, own and E0 nets, PASS/FAIL), then the
+standard run report and tie-sets.
+
+**Tests.** `tests/test_research_protocol.py` covers the gate arithmetic and each refusal. It
+also runs the command end to end on a synthetic vendor dataset: register, refused before a
+holdout pull, then a synthetic holdout pull and evaluation. A monkeypatched replay function
+proves that no refusal replays a session. It never touches a real dataset or registry.
 
 ### Fidelity validation (`validate.py`)
 

@@ -1618,3 +1618,51 @@ It now holds 25 records; the variant count is still 8.
 - D7: ThetaData licence.
 - D9 (new): no command can evaluate a registered rule on holdout sessions yet (`run` has no
   `--unseal-holdout`). It must be built and committed before any registration.
+
+## 2026-09-29 (later) — D9: the pre-registered holdout evaluation command (built; nothing run)
+
+Built at the owner's request. Nothing was registered, unsealed, pulled or evaluated, and no
+holdout data was read. The command was exercised only on a synthetic vendor dataset in tests.
+
+### The command
+
+`holdout --unseal-holdout SEQ` (`protocol.py`, commit `6f02a86`) is the only command that
+replays holdout sessions.
+- **What it evaluates.** Exactly the variants registered up to `SEQ`, each paired with E0.
+- **Fixed, not parameters:** `vendor_1m`, stressed exits floored at $0, 10-session blocks,
+  10,000 reps, seed 1, halves split after 2025-04-30, k = number registered, and gates 1–4 as
+  drafted.
+- **Recording.** Every evaluation is recorded (scope `holdout`, k, gates, reproduction), and
+  there is no `--no-registry`.
+
+### Refusals, all before any holdout session is replayed
+
+- the unseal does not verify;
+- a registered definition no longer matches the catalog;
+- E0 or H-SN1 is registered (gate 5 has no statistic);
+- the tree is dirty, or `src/`/`configs/` changed since the registration commit;
+- no holdout sessions have been pulled;
+- a fitted rule's re-fit differs from its registered value;
+- a second evaluation is not an exact reproduction of the first.
+
+### Also changed
+
+- **`register` records fitted values.** It now fits a fitted rule on its window before
+  appending anything, and records `fitted` and `fit_profile` (`--profile`, default
+  `vendor_1m`).
+- **Checked on the real dataset, in-process, with nothing registered:** HTS1 fits to
+  `{threshold: 0.9181935615930604, fit_n: 528}`, the frozen value.
+
+### Readings the draft left open, now fixed in code, for the owner to review before registering
+
+- **Gate 3:** "either arm" is the union of each arm's three largest sessions, removed from
+  both.
+- **"No re-runs after edits":** a second evaluation is allowed only as an exact reproduction,
+  and it is recorded.
+
+### Tests
+
+- `tests/test_research_protocol.py`, 13 tests.
+- A bug the tests caught: the recorded gate-1 level was rounded to 0.97 instead of 0.975
+  (label only; the bound itself was right). Fixed.
+- The full suite (1046) and ruff pass.

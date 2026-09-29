@@ -74,6 +74,26 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 >   unchanged.
 > - **Owner's decision D1, same day:** nothing is registered yet.
 
+> **[Fact update, 2026-09-29, marked; no hypothesis, split, metric or gate changed]**
+> - **The holdout evaluation is built:** `holdout --unseal-holdout SEQ` (`protocol.py`,
+>   commit `6f02a86`). It is the only command that replays holdout sessions.
+>   - It evaluates exactly the variants registered up to `SEQ` against E0.
+>   - Every choice fixed above is a constant, not a parameter.
+>   - Every evaluation is recorded.
+> - **Details this draft leaves open, fixed in that code** (the owner should review them
+>   before registering, since the register record's `git_sha` freezes them):
+>   - **Gate 3's "either arm"** is the union of each arm's three largest-P&L sessions,
+>     removed from both.
+>   - **Gate 5 still has no statistic**, so a registered H-SN1 is refused, not evaluated.
+>   - **"No re-runs after edits"** means a second evaluation is refused unless it exactly
+>     reproduces the first: same unseal, dataset hash, arms, and `src/`/`configs/`. An exact
+>     reproduction is allowed and recorded as another look.
+>   - **The code must be the registration commit's:** `src/` and `configs/` are unchanged
+>     since it, and the tree is clean.
+>   - **A fitted rule's registered value is checked.** `register` now fits it on its window
+>     and records the value. The holdout run re-fits and refuses on any difference. HTS1 on
+>     `spx_0dte_thetadata` @ `93bbe58e` fits to 0.9181935615930604 (n = 528).
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).
