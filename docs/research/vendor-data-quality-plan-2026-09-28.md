@@ -224,8 +224,13 @@ What the two Q1 failures are:
   How far a smoothed level can be off at that moment cannot be measured without an
   independent intraday VIX source.
 
-Decisions these raise for the owner: whether to exclude the two Q1 sessions from research,
-and whether the VIX file is good enough or needs checking against real intraday VIX (see D3).
+**Owner's decisions (2026-09-29):**
+- **The two Q1 sessions are excluded** (`exclude-sessions`, evidence `7139b93acd39`). Their
+  files moved to `excluded/`, nothing was deleted, and later pulls skip them. The dataset
+  is now `spx_0dte_thetadata` @ `93bbe58e`: 713 sessions, 585 of them development.
+- **Indices on hold.** The VIX file stays in use, with its smoothed intraday range recorded
+  above as a known limitation. D3 (the Dec 2025 → Mar 2026 gap) and a real intraday VIX
+  cross-check remain open until an Indices month is bought.
 
 ## Decisions for the owner
 
