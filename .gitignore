@@ -48,6 +48,9 @@ htmlcov/
 data/schwab/*.json
 data/equity_market_data/
 
+# Schwab gateway 1-minute index archive (tools/run_gateway_minute_backfill.sh)
+data/gateway_minute/
+
 # Real option chain cache
 data/chains/*.json
 data/chains/*/*.json
