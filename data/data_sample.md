@@ -69,7 +69,7 @@ but are not consumed by ButterflyGuy code.
 | `configs/daily_report_card.yaml` | Daily report-card settings | `report_dir: reports/daily_report_cards` |
 | `.env` and environment variables | Credentials, endpoints, feature flags, notification destinations | `SCHWAB_API_KEY=<redacted>\nALLOW_LIVE_TRADING=false` |
 | `tokens.json` | Schwab OAuth client authentication | `<opaque secret OAuth JSON; intentionally not sampled>` |
-| `data/{spx,ndx,xsp,vix}_1min.csv` | Optional `CsvDataLoader` research input | `ts,open,high,low,close\n2026-07-13 09:30:00,6300.00,6304.25,6298.75,6302.50` |
+| `data/{spx,ndx,xsp,vix}_1min.csv` | Optional `CsvDataLoader` research input (naive Chicago bar-end time) | `ts,open,high,low,close\n2026-07-13 08:31:00,6300.00,6304.25,6298.75,6302.50` |
 | `data/schwab/YYYY-MM-DD.json` | Optional cached Schwab/yfinance backtest day | `{"date":"2026-07-13","vix":17.8,"prev_close":6294.11,"bars":[{"ts":"2026-07-13T13:30:00Z","close":6302.5}]}` |
 | `data/chains/[UNDERLYING/]YYYY-MM-DD.json` | Local option-chain backtest cache | `{"date":"2026-07-13","snapshots":{"2026-07-13T14:30:00Z":{"spot":6312.42,"quotes":[{"strike":6315.0,"type":"CALL","mark":7.25}]}}}` |
 | `reports/results/*.csv` | Previously generated research results; not a runtime feed | `date,asset,wing_width,pnl\n2026-07-13,SPX,20,1.35` |

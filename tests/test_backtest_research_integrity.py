@@ -233,21 +233,63 @@ def test_marketable_accounting_never_uses_a_future_quote():
     assert result.entry_snapshot_time is None
 
 
+def test_csv_loader_reads_chicago_bar_end_timestamps(tmp_path):
+    asset_path = tmp_path / "spx_1min.csv"
+    vix_path = tmp_path / "vix_1min.csv"
+    _write_bars(
+        asset_path,
+        [
+            ("2026-01-02 15:00:00", 6800.0),
+            ("2026-01-05 08:31:00", 6810.0),
+            ("2026-01-05 15:00:00", 6820.0),
+            ("2026-07-01 15:00:00", 6200.0),
+            ("2026-07-02 08:31:00", 6210.0),
+            ("2026-07-02 15:00:00", 6220.0),
+        ],
+    )
+    _write_bars(
+        vix_path,
+        [
+            ("2026-01-02 15:15:00", 17.0),
+            ("2026-01-05 15:15:00", 18.0),
+            ("2026-07-01 15:15:00", 16.0),
+            ("2026-07-02 15:15:00", 19.0),
+        ],
+    )
+    loader = CsvDataLoader(asset_path, vix_path)
+
+    winter = loader.load_day(dt.date(2026, 1, 5))
+    summer = loader.load_day(dt.date(2026, 7, 2))
+
+    # 08:31 / 15:00 Chicago bar ends are the 09:31 ET first bar and the 16:00 ET close.
+    utc = dt.timezone.utc
+    assert winter is not None and summer is not None
+    assert [bar.ts for bar in winter.bars] == [
+        dt.datetime(2026, 1, 5, 14, 31, tzinfo=utc),
+        dt.datetime(2026, 1, 5, 21, 0, tzinfo=utc),
+    ]
+    assert [bar.ts for bar in summer.bars] == [
+        dt.datetime(2026, 7, 2, 13, 31, tzinfo=utc),
+        dt.datetime(2026, 7, 2, 20, 0, tzinfo=utc),
+    ]
+    assert [bar.ts for bar in winter.vix_bars] == [dt.datetime(2026, 1, 5, 21, 15, tzinfo=utc)]
+
+
 def test_csv_loader_uses_prior_vix_close_and_preserves_underlying(tmp_path):
     asset_path = tmp_path / "ndx_1min.csv"
     vix_path = tmp_path / "vix_1min.csv"
     _write_bars(
         asset_path,
         [
-            ("2026-07-01 16:00:00", 25000.0),
-            ("2026-07-02 10:00:00", 25100.0),
+            ("2026-07-01 15:00:00", 25000.0),
+            ("2026-07-02 09:00:00", 25100.0),
         ],
     )
     _write_bars(
         vix_path,
         [
-            ("2026-07-01 16:00:00", 18.0),
-            ("2026-07-02 16:00:00", 30.0),
+            ("2026-07-01 15:15:00", 18.0),
+            ("2026-07-02 15:15:00", 30.0),
         ],
     )
 
@@ -263,8 +305,8 @@ def test_csv_loader_uses_prior_vix_close_and_preserves_underlying(tmp_path):
 def test_csv_loader_rejects_a_day_without_prior_inputs(tmp_path):
     asset_path = tmp_path / "spx_1min.csv"
     vix_path = tmp_path / "vix_1min.csv"
-    _write_bars(asset_path, [("2026-07-01 10:00:00", 6200.0)])
-    _write_bars(vix_path, [("2026-07-01 10:00:00", 18.0)])
+    _write_bars(asset_path, [("2026-07-01 09:00:00", 6200.0)])
+    _write_bars(vix_path, [("2026-07-01 09:00:00", 18.0)])
 
     day = CsvDataLoader(asset_path, vix_path).load_day(dt.date(2026, 7, 1))
 

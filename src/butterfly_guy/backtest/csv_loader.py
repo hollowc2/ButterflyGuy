@@ -4,8 +4,11 @@ Reads two CSV files:
   - spx_1min.csv: columns ts, close, high, low, open  (no volume)
   - vix_1min.csv: columns ts, close, high, low, open  (no volume)
 
-Timestamps in the CSV are naive Eastern Time.  The loader converts them to
-UTC so the simulation engine's astimezone(EASTERN) calls work correctly.
+Timestamps in the CSV are naive US Central (America/Chicago) wall-clock time,
+stamped at the bar end: a regular session runs 08:31-15:00 (09:31-16:00 ET) and
+the VIX bar stamped 15:15 is Cboe's 16:15 ET close.  The loader converts them to
+UTC so the simulation engine's astimezone(EASTERN) calls work correctly, and keeps
+the bar-end stamp, so a bar's close is the price at its ts.
 
 VIX per day: last bar close of the prior trading day (available before entry).
 prev_close: last SPX close of the prior trading day.
@@ -105,9 +108,9 @@ class CsvDataLoader:
     @staticmethod
     def _read_csv(path: Path) -> pd.DataFrame:
         df = pd.read_csv(path, parse_dates=["ts"])
-        # Timestamps are naive ET — localize, then convert to UTC
+        # Timestamps are naive Chicago bar-end time — localize, then convert to UTC
         df["ts"] = df["ts"].dt.tz_localize(
-            "America/New_York", ambiguous="NaT", nonexistent="NaT"
+            "America/Chicago", ambiguous="NaT", nonexistent="NaT"
         )
         df = df.dropna(subset=["ts"])
         df["ts"] = df["ts"].dt.tz_convert("UTC")

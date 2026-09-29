@@ -454,9 +454,8 @@ class SimulationEngine:
                 pending_drawdown_reason = None
                 pending_drawdown_count = 0
 
-        # Data ended before the session close — exit at last available bar
-        # (handles CSV sources that stop at 15:15 ET; no-op for full-day data
-        # when no explicit pre-close exit was configured)
+        # Held through the last bar: settle at it if the data reaches
+        # MIN_END_OF_DAY_DATA_TIME; shorter sessions are excluded below.
         if day.bars:
             last_bar = day.bars[-1]
             last_bar_et = last_bar.ts.astimezone(EASTERN)
