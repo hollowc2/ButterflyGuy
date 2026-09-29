@@ -17,9 +17,11 @@ Operational details the plan leaves open, fixed here:
   for both vertical bounds (the lower strike's call is worth at least the higher's and at
   most the strike gap more; mirrored for puts), and each 5-point butterfly. A violation is
   one you could trade at the quoted prices for a riskless credit.
-- **Q4** looks at contracts within `STALE_BAND` of SPX: a run of rows with identical bid
-  and ask, all within the band, lasting `STALE_MIN` minutes or more while SPX's range over
-  the run is `STALE_MOVE` points or more, makes that contract-session stale.
+- **Q4** looks at contracts within `STALE_BAND` of SPX quoted with an ask of at least
+  `STALE_MIN_ASK` (amendment 2, 2026-09-28: a quote pinned at the minimum tick legitimately
+  stays put). A run of rows with identical bid and ask, all within the band, starting at
+  such an ask, lasting `STALE_MIN` minutes or more while SPX's range over the run is
+  `STALE_MOVE` points or more, makes that contract-session stale.
 - **Q5** needs SPX prints exactly on the grid minutes (the owner's bar-end minute files).
   With the call nearest the session's median SPX, it finds the lag (-3..+3 min) at which
   the call mid's 1-minute changes correlate best with SPX's. A session without exact-minute
@@ -50,6 +52,7 @@ FRESH_S = 60.0
 STALE_BAND = 50.0
 STALE_MIN = 30
 STALE_MOVE = 10.0
+STALE_MIN_ASK = 0.50  # amendment 2: below this a quote may sit at the minimum tick
 LAGS = tuple(range(-3, 4))
 EXACT_SHARE = 0.9  # share of grid minutes with an exact SPX print for Q5 to be evaluable
 MATCH_S = 5
@@ -62,6 +65,7 @@ THRESHOLDS = {
     "Q2_max_share": 0.001,
     "Q3_max_share": 0.001,
     "Q4_max_share": 0.001,
+    "Q4_min_ask": STALE_MIN_ASK,
     "Q5_min_lag0_share": 0.95,
     "Q5_max_abs_lag": 1,
     "Q6_max_mismatches": 0,
@@ -72,8 +76,9 @@ CRITERIA = {
     "Q2": "Crossed quotes (bid > ask) among quoted cells <= 0.1% overall",
     "Q3": "Executable arbitrage (vertical buyable for a credit or beyond its width; 5-point "
           "butterfly buyable for a credit) <= 0.1% of checks overall",
-    "Q4": "Stale quotes: contract within ±50 of SPX with bid and ask unchanged for 30+ minutes "
-          "while SPX moves 10+ points <= 0.1% of contract-sessions",
+    "Q4": "Stale quotes: contract within ±50 of SPX, ask >= $0.50 (amendment 2), with bid and "
+          "ask unchanged for 30+ minutes while SPX moves 10+ points <= 0.1% of "
+          "contract-sessions",
     "Q5": "Timestamps: best lag of the nearest-to-SPX call's 1-minute mid changes against "
           "SPX's is 0 on >= 95% of sessions, none beyond ±1 min",
     "Q6": "Official closes equal Cboe's SPX close: 0 mismatches",
@@ -140,14 +145,15 @@ def arbitrage(bid: np.ndarray, ask: np.ndarray, ks: np.ndarray, ok: np.ndarray, 
 
 
 def _stale(chain: SessionChain, rows: np.ndarray, quoted: dict) -> tuple[int, int]:
-    """(contract-sessions near SPX, stale ones)."""
+    """(contract-sessions near SPX with an ask of at least `STALE_MIN_ASK`, stale ones)."""
     ts, spot, ks = chain.ts[rows], chain.spot[rows], chain.strikes
     near = np.isfinite(spot)[:, None] & (np.abs(ks[None, :] - spot[:, None]) <= STALE_BAND)
     evaluated = stale = 0
     for t in OPTION_TYPES:
         bid, ask = chain.fields[f"{t}_bid"][rows], chain.fields[f"{t}_ask"][rows]
         ok = quoted[t] & near
-        for j in np.flatnonzero(ok.any(axis=0)):
+        priced = ok & (ask >= STALE_MIN_ASK)
+        for j in np.flatnonzero(priced.any(axis=0)):
             evaluated += 1
             m, b, a = ok[:, j], bid[:, j], ask[:, j]
             start = None
@@ -158,7 +164,8 @@ def _stale(chain: SessionChain, rows: np.ndarray, quoted: dict) -> tuple[int, in
                     continue
                 if start is not None and i - 1 > start:
                     run = slice(start, i)
-                    if (ts[i - 1] - ts[start] >= STALE_MIN * MIN_US
+                    if (a[start] >= STALE_MIN_ASK
+                            and ts[i - 1] - ts[start] >= STALE_MIN * MIN_US
                             and np.nanmax(spot[run]) - np.nanmin(spot[run]) >= STALE_MOVE):
                         stale += 1
                         break

@@ -127,12 +127,60 @@ Details the plan left open, fixed in code before any Q metric was computed:
   validation window SPX comes from Schwab ticks at random seconds, and with 1-minute option
   data lags 0 and +1 would then tie on average. So Q5 reports `n/a` there and gates
   nothing; it becomes a hard gate on the development data (Phase 3), including the
-  DST-change weeks. **This is a correction to the approved plan; the owner is asked to
-  confirm it.**
+  DST-change weeks. This correction to the approved plan was **confirmed by the owner on
+  2026-09-28.**
 - **The quality lock:** `write_history` refuses any pull before 2026-03-13 unless the
   manifest history holds a `vendor_quality` entry with `pass: true` over exactly
   2026-03-13 → 2026-09-25. Such an entry carries no `holdout_sessions` key, so it can never
   count towards an unseal.
+
+## Phase 2 result (2026-09-28): FAIL on Q4
+
+Re-pull `spx_0dte_thetadata` @ `a2b83101`: 128 sessions, 8 skipped for a missing real SPX or
+10:00 VIX, all because our recorder missed them (2026-03-13, 03-16, 03-18, 04-27, 05-04,
+05-18, 06-01, 06-02). Quality run `47d6ff416e7a`:
+
+| Gate | ThetaData | Helios (report only) | Result |
+|---|---|---|---|
+| Q1 coverage | min 99.998% per session | min 95.5% | PASS |
+| Q2 crossed | 0.0000% | 0.0000% | PASS |
+| Q3 arbitrage | 0.0001% of 23.2M checks | 0.0002% of 23.9M | PASS |
+| Q4 stale | 0.80% of 8,364 contract-sessions | 0.63% of 8,605 | **FAIL** |
+| Q5 timestamps | n/a (no exact-minute SPX in this window) | — | n/a |
+| Q6 closes | 128 compared, 0 mismatches | — | PASS |
+
+The lock on earlier pulls stays closed.
+
+**What Q4 caught.** Every one of the 67 flagged contract-sessions is an out-of-the-money
+option 26–50 points from SPX, quoted at or next to the minimum price (bid $0.00–0.10, ask
+$0.05–0.15), 53 of them in the last hour. Helios flags 54 cases of exactly the same kind,
+50 of them the same contract on the same day. No near-the-money or in-the-money contract is
+flagged in either source. A quote pinned at the minimum tick legitimately stays put while
+SPX moves 10 points, so Q4 as written measures that, not stale data. The definition was
+at fault, not the data.
+
+**Matched instants (report only):** 48.8% of 528,874 pairs agree within $0.05, and no
+disagreement has either side breaking a Q2/Q3 rule. By moneyness:
+
+| Zone (points from SPX) | Agree within $0.05 | Median price | Median mid difference |
+|---|---|---|---|
+| OTM 150–200 | 99.9% | 0.08 | 0.00 |
+| OTM 50–150 | 96.5% | 0.12 | 0.00 |
+| OTM 10–50 | 65.3% | 1.52 | 0.025 |
+| ATM ±10 | 17.4% | 9.75 | 0.15 |
+| ITM 10–50 | 7.7% | 32.80 | 0.25 |
+| ITM > 50 | 11.0% | 124.40 | 0.25 |
+
+The differences grow with the option's price and sensitivity to SPX, which is what a few
+seconds of timing difference between the two sources produces. Helios' in-the-money
+spreads are wider ($1.10 vs $1.00 median beyond 50 points).
+
+**Amendment 2 (approved by the owner on 2026-09-28, after seeing this result):** Q4 counts
+only contracts quoted with an ask of at least $0.50 at the start of the unchanged run, so
+that a 10-point SPX move must move the quote by at least one tick. Thresholds unchanged.
+Under this definition none of today's flags remain (the largest flagged ask was $0.15), so
+this amendment is plainly post hoc. Its justification is the evidence above, which holds
+for both sources.
 
 ## Decisions for the owner
 

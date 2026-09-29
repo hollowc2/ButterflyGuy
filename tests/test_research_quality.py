@@ -167,3 +167,23 @@ def test_a_quality_run_never_reads_the_holdout(tmp_path):
     ds = _write(tmp_path, {D1: _day(D1)})
     with pytest.raises(Exception, match="holdout"):
         quality.run(ds, ds, dt.date(2026, 3, 1), D1, _cboe(ds))
+
+
+def test_q4_ignores_quotes_pinned_near_the_minimum_tick():
+    from butterfly_guy.research.dataset import SessionChain
+
+    n = 45
+    ts = et_us(D1, 14, 0) + np.arange(n, dtype=np.int64) * 60_000_000
+    spot = 6000.0 + np.linspace(0.0, 12.0, n)
+    ks = np.array([6030.0])
+
+    def chain(bid: float, ask: float) -> SessionChain:
+        f = {f"{t}_{x}": np.full((n, 1), np.nan) for t in "CP" for x in ("bid", "ask")}
+        f["C_bid"][:], f["C_ask"][:] = bid, ask
+        return SessionChain(D1, ts, ks, spot, f)
+
+    rows = np.ones(n, dtype=bool)
+    for (bid, ask), expected in (((0.05, 0.10), (0, 0)), ((1.00, 1.10), (1, 1))):
+        c = chain(bid, ask)
+        _, quoted = quality._cells(c, rows)
+        assert quality._stale(c, rows, quoted) == expected
