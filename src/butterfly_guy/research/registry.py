@@ -26,6 +26,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -150,6 +151,24 @@ class Registry:
             out["this_hash"] = len({key(r) for r in recs
                                     if r.get("dataset_hash") == dataset_hash})
         return out
+
+    def history(self, variant: str, definition_hash: str) -> dict:
+        """What this registry holds for one variant definition: its records counted by
+        `event:stage` (a ported definition includes its placeholder's records), the latest
+        `recorded_at`, and any other definition hashes recorded under the same name (a
+        changed definition, or an unported placeholder)."""
+        records = self.records()
+        same = {definition_hash} | {r["ported_from"] for r in records
+                                    if r["event"] == "port"
+                                    and r["definition_hash"] == definition_hash}
+        mine = [r for r in records if r["definition_hash"] in same]
+        return {
+            "events": dict(Counter(f"{r['event']}:{r['stage']}" for r in mine)),
+            "last": max((r["recorded_at"] for r in mine), default=None),
+            "other_hashes": sorted({r["definition_hash"] for r in records
+                                    if r["variant"] == variant
+                                    and r["definition_hash"] not in same}),
+        }
 
     def placeholder(self, variant: str) -> dict | None:
         """The unported backfill record describing `variant` only in words (no executable
