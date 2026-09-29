@@ -27,8 +27,8 @@ review:
 
 What is still not unified:
 
-1. **It is not on `main`.** Twenty commits and about 17.8k lines sit on a branch. Eleven
-   of them (`be58025`..`fa9d34e`) are not pushed. `main` still presents
+1. **It is not on `main`.** Twenty commits and about 17.8k lines sit on a branch. Thirteen
+   of them (`a1c86c4` through `fa9d34e`) are not pushed. `main` still presents
    `run_backtest_db.py --sweep` as the research tool.
 2. **There are three copies of the exit loop:** `SimulationEngine.simulate_day`,
    `SimulationEngine.simulate_day_from_entry`, and `research/exits.py`, which "mirrors"
@@ -100,7 +100,7 @@ The rules this plan holds to:
 
 No behaviour change. One PR each.
 
-1. **Push `research/unified-core`** (11 unpushed commits), and open a PR into `main`.
+1. **Push `research/unified-core`** (13 unpushed commits), and open a PR into `main`.
    - Review it module by module, following `research-core.md`'s module table.
    - Verification:
      - `uv run pytest`;
