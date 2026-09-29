@@ -759,9 +759,15 @@ seed 1). Results, power and the owner's open decisions are in
   `reports/research/registry/development/spx_0dte_thetadata.jsonl` (owner-confirmed). The
   registration registry `reports/research/registry/spx_0dte_thetadata.jsonl` does not exist
   yet. The unseal reads only the latter.
-- **Runs:** `9eccee6a6aa5` (E0, HLV1, HEV1, HEV2, HTS1; `results.json` `2c042505…`) and
-  `da7a9163c0fa` (E0, HLV1, HSN1, HSN1_c148, HSN1_c168, HEV1, HEV2; `results.json`
-  `429d0829…`).
+- **Runs, floored (primary since Revision 1):**
+  - `7d7f91ad9ba5` (E0, HLV1, HEV1, HEV2, HTS1; `results.json` `f361f0f1…`);
+  - `9971c5db1313` (E0, HLV1, HSN1, HSN1_c148, HSN1_c168, HEV1, HEV2; `results.json`
+    `415a3b2d…`).
+- **Runs, unfloored (first version):**
+  - `9eccee6a6aa5` (`results.json` `2c042505…`);
+  - `da7a9163c0fa` (`results.json` `429d0829…`).
+- **Owner's decisions (2026-09-29):** nothing is registered yet, and stressed exits are floored
+  at $0 (`--floor-stressed-exits`).
 - **Early closes.** The replay marks a trade still held when a shortened session's clock
   ends (13:00) as `incomplete_data` (`MIN_END_OF_DAY_DATA_TIME` is 15:00), so the session
   is dropped from every compared arm: 2023-07-03 for E0, and 2022-11-25 for HSN1.

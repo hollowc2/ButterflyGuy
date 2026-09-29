@@ -1558,3 +1558,63 @@ registered before the holdout pull can ever be tested on it, so not registering 
 alternative (D1). Decide D2–D5 (pass
 meaning, exit floor, gate-1 calibration, early closes) before any registration, because the
 `git_sha` freezes them. D6 (Indices month) and D7 (ThetaData licence) stay open.
+
+## 2026-09-29 (later) — owner's decisions: no registration yet; stressed exits floored at $0
+
+Still in-sample on the development window, and nothing is registered. The package
+`registration-decision-2026-09-29.md` was revised in place: its figures now use the floored
+metric, and the first version's unfloored figures are kept for the record.
+
+### Decisions
+
+- **D1: do not register yet.**
+- **D3: floor stressed exits at $0.** This is Revision 1 of the pre-registration draft, marked
+  there as made after seeing the development results.
+
+### How the floor is implemented (`7b1f229`)
+
+- `--floor-stressed-exits` (`Costs.stressed_exit_floor = 0.0`) books a stressed or delayed
+  intraday exit whose net proceeds are below $0 at $0.
+- Such fills are marked `exit_floored` in `trades.jsonl`. The run meta records
+  `accounting.stressed_exit_floor`, and the report says so.
+- It is off by default, because Helios data has such exits too: 3 of the 118 frozen-parity
+  trades and 40 exits across the idea-sweep catalog.
+- With it off, `parity` is unchanged (118 trades, 0 mismatches, $17,691.60 / $14,170.60 /
+  $9,890.60) and the parity `trades.jsonl` is byte-identical (`b5b732ad…`).
+- The full suite passes (1033), as do the `research_data` parity and sweep-port tests.
+
+### Re-run under the floor
+
+Runs `7d7f91ad9ba5` and `9971c5db1313` (git `7b1f229`), recorded in the development registry.
+It now holds 25 records; the variant count is still 8.
+
+| | Floored | Unfloored (first version) |
+|---|---:|---:|
+| E0 stressed net (361 trades) | −9,685 | −13,085 |
+| E0 $0.10 tie-set 5–95% | −10,150 … −9,345 | −13,561 … −10,965 |
+| H-TS1 Δ (90% lower bound) | +7,402 (+859) | +9,960 (+3,011) |
+| H-TS1 Δ, H1 / H2; delayed | +3,517 / +3,885; +7,317 | +6,075 / +3,885; +7,815 |
+| H-EV2 Δ | +1,366 (fails gate 2) | +3,831 |
+| H-EV1 / H-LV1 / H-SN1 Δ | +151 / −1,455 / −12,878 | +151 / −1,452 / −9,814 |
+
+- Exits floored:
+  - E0: 6.
+  - H-TS1: 3.
+  - H-EV2: 4.
+  - H-SN1: 14.
+- Under the floor, H-TS1 passes gate 1 in-sample only at k = 1. 13% of random 69-trade skips
+  gain as much.
+- Holdout power for H-TS1 alone (k = 1, 358 sessions, all gates):
+  - 49% if the development effect is real, 33% if it is half as large;
+  - a false-pass rate of 18% with no effect (nominal 10%);
+  - an Indices month changes these by less than the simulation error.
+
+### Still open
+
+- D2: what a pass means against a losing E0.
+- D4: gate-1 calibration on skip filters.
+- D5: early closes.
+- D6: Indices month.
+- D7: ThetaData licence.
+- D9 (new): no command can evaluate a registered rule on holdout sessions yet (`run` has no
+  `--unseal-holdout`). It must be built and committed before any registration.
