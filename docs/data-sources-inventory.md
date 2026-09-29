@@ -553,11 +553,13 @@ NVDA
 - Expected files: SPX and VIX one-minute CSVs.
 - Required fields: `ts`, `open`, `high`, `low`, `close`; source volume is absent
   and becomes `0`.
-- Timestamps are interpreted as naive US/Eastern and converted to UTC.
+- Timestamps are naive US/Central (America/Chicago) wall-clock times stamped at
+  the bar end (the first regular bar is 08:31, i.e. 09:31 ET) and are converted
+  to UTC.
 
 ```csv
 ts,open,high,low,close
-2026-07-13 09:30:00,6300.00,6304.25,6298.75,6302.50
+2026-07-13 08:31:00,6300.00,6304.25,6298.75,6302.50
 ```
 
 ### 5.6 Local daily bar cache
