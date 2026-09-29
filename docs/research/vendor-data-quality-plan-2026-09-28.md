@@ -182,6 +182,51 @@ Under this definition none of today's flags remain (the largest flagged ask was 
 this amendment is plainly post hoc. Its justification is the evidence above, which holds
 for both sources.
 
+## Phase 2 re-run and Phase 3 result (2026-09-28)
+
+**Validation window, after amendment 2:** quality run `3fdb10e54a38` PASSED: Q1, Q2, Q3,
+Q4 and Q6 passed, and Q5 was n/a. It is recorded in the manifest and opened the
+development pull.
+
+**Development pull:** `spx_0dte_thetadata` @ `8f3617ae`, 715 sessions in total. That is
+587 development sessions (2022-01-03 → 2024-06-28), with 7 skipped on the owner's
+files' frozen days (SPX: 2022-02-25, 03-04, 05-06, 2024-05-30; VIX: 2022-10-25, 10-28,
+2024-01-31). Coverage report: every session has a real SPX level, a 10:00 VIX, and an
+official open and close.
+
+**Development quality run `7139b93acd39`:**
+
+| Gate | Result |
+|---|---|
+| Q1 coverage | **FAIL on 2 of 587 sessions**; median 100% |
+| Q2 crossed | 0.0000%: PASS |
+| Q3 arbitrage | 0.0008% of 102M checks: PASS |
+| Q4 stale (amendment 2) | 0.006% of 33,113: PASS |
+| Q5 timestamps | lag 0 on 587 of 587, including every DST-change-week session: PASS |
+| Q6 closes | 587 of 587 equal Cboe: PASS |
+
+What the two Q1 failures are:
+- **2022-02-22:** ThetaData reports no quote (0/0) on 87 strikes, including those near SPX,
+  from 09:31 to 11:35. This is a gap in the vendor's data. The day's minimum coverage is
+  67.9%.
+- **2022-06-02:** 11 odd strikes (4055, 4065, …) have no quote until 14:56, most likely because
+  they were listed during the day.
+
+**Minute-file cross-check (report only):**
+- **SPX:** the file's daily high and low match Yahoo `^GSPC` (median |Δ| 0.0001), with
+  one day of 621 over 0.5% (2022-06-13, 0.55%).
+- **VIX:** closes match Cboe (checked earlier, median |Δ| 0.01), but the file's daily
+  range is always inside Cboe's. On 194 of 625 days its high is more than 0.5% below Cboe's,
+  and on 90 its low is more than 0.5% above, with a median miss of about 1.6%. Neither
+  Cboe's 16:00–16:15 tail nor the opening print explains it (the open accounts for only 17
+  and 11 of those days). The file probably was not built from every VIX print, so short-lived
+  extremes are smoothed. The strategy reads VIX as a level at about 10:00, not an extreme.
+  How far a smoothed level can be off at that moment cannot be measured without an
+  independent intraday VIX source.
+
+Decisions these raise for the owner: whether to exclude the two Q1 sessions from research,
+and whether the VIX file is good enough or needs checking against real intraday VIX (see D3).
+
 ## Decisions for the owner
 
 - **D1: approve this plan and amendment** (the gates in Phase 2 replace validation steps 1–3
