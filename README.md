@@ -152,6 +152,17 @@ The discovery runner handles that holdout step. It crosses the recorded spread, 
 uv run python src/butterfly_guy/scripts/discover_options_strategy.py
 ```
 
+### Research core
+
+For comparing SPX rule variants, use the research core in `src/butterfly_guy/research/`. It replays a read-only Parquet export of the recorded chains with the live entry selection and profit policy. Every variant is scored against a baseline on the same sessions: stressed accounting, zero P&L on no-trade days, a paired day-block bootstrap, H1/H2 splits, top-3-removed P&L and near-tied-fly robustness. Each evaluation is recorded in an append-only registry under `reports/research/registry/`.
+
+```bash
+uv run python -m butterfly_guy.research export --start 2026-03-13 --end 2026-09-25
+uv run python -m butterfly_guy.research run --variants E0,X1,R1 --baseline E0 --tieset
+```
+
+See [docs/research/research-core.md](docs/research/research-core.md) for profiles, parity with the frozen replay, and reproduction hashes. `run_backtest_db.py` remains the live-parity reference.
+
 ### Inspection and reports
 
 ```bash
