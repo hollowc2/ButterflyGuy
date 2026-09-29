@@ -15,6 +15,8 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 - **Registration.** It happens with
   `python -m butterfly_guy.research register --dataset <vendor dataset> ...` from a clean,
   committed tree, **before any holdout-period vendor data is downloaded**.
+  *[Revision 2, 2026-09-29, marked: raw holdout files were downloaded before registration
+  into a sealed folder; see the revision block below]*
 
 > **[Fact update, 2026-09-28, marked; no hypothesis, split or gate changed]**
 > - **No vendor data has been bought yet.** The owner will likely buy ThetaData, from 2022
@@ -95,6 +97,20 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 >     and records the value. The holdout run re-fits and refuses on any difference. HTS1 on
 >     `spx_0dte_thetadata` @ `93bbe58e` fits to 0.9181935615930604 (n = 528).
 
+> **[REVISION 2, 2026-09-29, marked: the owner's decision; no hypothesis, split, metric or
+> gate changed]**
+> - **What changed.** Raw ThetaData option history (SPXW 0DTE and 1DTE, NDXP 0DTE and
+>   XSP 0DTE, 2020-01-01 onward) was downloaded before registration by
+>   `tools/thetadata_download.py` on `main`. Trade dates inside the holdout went to a
+>   separate, gitignored `data/thetadata_sealed/` in the main checkout.
+> - **Why.** To secure the data in case the subscription ends before registration.
+> - **The seal.** Nothing in either checkout reads that folder, and the tool prints row
+>   counts only, never prices. Nobody opens, charts or backtests those files until
+>   registration.
+> - **Unchanged.** The research pipeline still builds its holdout dataset only through the
+>   guarded pull after a registry-verified unseal, and it still records that dataset's file
+>   hashes before the first evaluation.
+
 > **[REVISION 3, 2026-09-29, marked: the owner's decision D5, made AFTER seeing the
 > development-window results; no hypothesis, split, metric or gate changed]**
 > - **What changed.** A trade still held when a 13:00 early-close session ends now settles on
@@ -129,7 +145,9 @@ evaluation; fly-choice noise).
   - It spans 2022's bear market and 2023's low volatility.
 - **Holdout period: 2024-07-01 → 2026-03-12** (about 430 sessions, about the 400 trades
   the power analysis asks for).
-  - Downloaded only after registration.
+  - Downloaded only after registration. *[Revision 2, 2026-09-29, marked: raw vendor
+    files were downloaded before registration into a sealed folder; see the revision block
+    above]*
   - Its file hashes go into the registry record before the first evaluation.
   - It is evaluated once per registered hypothesis, with no re-runs after edits.
   - It includes the 2025 tariff shock.
