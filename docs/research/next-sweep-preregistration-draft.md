@@ -46,7 +46,8 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 >   Anything in this draft that is changed from here on is made after seeing those results
 >   and must be marked as a revision.
 > - **Usable development sessions:** 585; E0 replays 584 (2023-07-03, an early close, is
->   `incomplete_data`).
+>   `incomplete_data`). *[Revision 3, 2026-09-29, marked: E0 now replays all 585; see the
+>   revision block below]*
 > - **H-TS1's fitted threshold:** 0.9181935615930604 (n = 528 sessions with a prior VIX1D).
 > - **Built for the development runs:** optional H-EV2 as `HEV2` (`b0c670c0…`, FOMC statement
 >   days at any time) and H-SN1's noise secondary as `HSN1_c148` / `HSN1_c168`.
@@ -93,6 +94,26 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 >   - **A fitted rule's registered value is checked.** `register` now fits it on its window
 >     and records the value. The holdout run re-fits and refuses on any difference. HTS1 on
 >     `spx_0dte_thetadata` @ `93bbe58e` fits to 0.9181935615930604 (n = 528).
+
+> **[REVISION 3, 2026-09-29, marked: the owner's decision D5, made AFTER seeing the
+> development-window results; no hypothesis, split, metric or gate changed]**
+> - **What changed.** A trade still held when a 13:00 early-close session ends now settles on
+>   that session's official close, like any held trade. Before, the replay required data up
+>   to 15:00 ET for every session. Such a trade was `incomplete_data`, and the rule "sessions
+>   any arm cannot replay … are dropped from every arm" removed the session.
+> - **Why.** Nothing is missing: the session closes at 13:00 and SPXW settles on that close,
+>   so settling it imputes nothing.
+> - **Rule.** The data must reach one hour before the session's scheduled close: 15:00 on a
+>   regular day, unchanged (`SimulationEngine`'s rule), and 12:00 on an early close. The
+>   scheduled close is the vendor dataset's `session_close_et`, from calendar v1's early-close
+>   rows. Commit `6891317`.
+> - **Effect.**
+>   - On development, 2023-07-03 (E0, a held put, −$238) and 2022-11-25 (H-SN1) are now
+>     evaluated, and all 585 sessions replay (`registration-decision-2026-09-29.md` §6.4).
+>   - On the holdout, its five early closes with data can no longer drop.
+> - **Unchanged.** Helios datasets record no scheduled close, so their replays and the
+>   frozen-replay parity are unchanged. So are the hypotheses, split, halves, metric,
+>   bootstrap, the k rule and the gates.
 
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
@@ -176,7 +197,8 @@ registration.
   - *[Revision 1, 2026-09-29, marked: see the revision block above]* An intraday exit's
     net proceeds are floored at $0 (`--floor-stressed-exits`).
   - Sessions any arm cannot replay without imputing data are dropped from every arm, as
-    the core does now.
+    the core does now. *[Revision 3, 2026-09-29, marked: a trade held on an early close is
+    not missing data; it settles on that day's official close]*
 - **Test:** the moving-block bootstrap of the total paired difference.
   - 10-session blocks, 10,000 reps, one index draw applied to both arms, seed 1.
 - **Multiple testing:** k = the number of hypotheses actually registered (4 as drafted; 5
