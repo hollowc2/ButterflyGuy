@@ -5,6 +5,7 @@
   register           pre-register catalog variants before evaluating them
   port               link ported variants to their placeholder backfill records
   run                evaluate variants against a baseline and write artifacts
+  holdout            the pre-registered holdout evaluation of the registered variants
   shadow             exploratory paired shadow on an open cohort's recorded sessions
   parity             replay E0 under the frozen profile against the frozen replay ledger
   calibrate-latency  read-only exit latency of recorded paper trades
@@ -140,18 +141,42 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 1 if problems else 0
 
 
+def _fit_for_registration(v, ds: Dataset | None, profile_name: str) -> dict:
+    """A fitted rule's values, fitted on its own window as a run would fit them, so that the
+    holdout evaluation can check its re-fit against the registered value."""
+    from butterfly_guy.research.features import SessionFeatures
+    from butterfly_guy.research.hypotheses import uses_features
+    from butterfly_guy.research.simulate import fit_variants
+
+    if ds is None:
+        raise SystemExit(f"{v.name} is fitted on its window: export the dataset before "
+                         "registering it")
+    features = SessionFeatures.load(ds) if uses_features(v.entry) else None
+    ctx = RunContext(load_spx_config(), features=features)
+    (fitted,) = fit_variants([v], SessionLoader(ds, PROFILES[profile_name]), ctx)
+    return fitted.definition()["entry"]["fitted"]
+
+
 def cmd_register(args: argparse.Namespace) -> int:
     reg = Registry.for_dataset(Path(args.registry), args.dataset)
     git_sha, dirty = _git()
     try:
-        dataset_hash = _dataset(args).hash
+        ds = _dataset(args)
     except FileNotFoundError:
-        dataset_hash = None  # not exported yet
-    for v in resolve(args.variants.split(",")):
+        ds = None  # not exported yet
+    variants = resolve(args.variants.split(","))
+    # Fit every fitted rule before appending anything, so a failed fit registers nothing.
+    fitted = {v.name: _fit_for_registration(v, ds, args.profile)
+              for v in variants if v.fit_window is not None}
+    for v in variants:
+        extra = ({"fitted": fitted[v.name], "fit_profile": args.profile}
+                 if v.name in fitted else {})
         rec = reg.append("register", variant=v.name, definition=v.definition(),
                          definition_hash=v.definition_hash(), note=args.note or "",
-                         git_sha=git_sha, git_dirty=dirty, dataset_hash=dataset_hash)
-        print(f"registered {v.name} {rec['definition_hash'][:12]} (seq {rec['seq']})")
+                         git_sha=git_sha, git_dirty=dirty,
+                         dataset_hash=ds.hash if ds is not None else None, **extra)
+        shown = f"; fitted {rec['fitted']} under {args.profile}" if "fitted" in rec else ""
+        print(f"registered {v.name} {rec['definition_hash'][:12]} (seq {rec['seq']}){shown}")
     return 0
 
 
@@ -263,6 +288,136 @@ def cmd_run(args: argparse.Namespace) -> int:
     provenance["run_seconds"] = round(time.monotonic() - t0, 1)
     _finish(out_dir, results, result, provenance)
     print(f"run time {provenance['run_seconds']} s")
+    return 0
+
+
+def _code_unchanged_since(sha: str) -> bool:
+    """Whether `src/` and `configs/` at HEAD are identical to those at commit `sha`."""
+    if not sha:
+        return False
+    diff = subprocess.run(["git", "diff", "--quiet", sha, "HEAD", "--", "src", "configs"],
+                          capture_output=True, cwd=REPO_ROOT)
+    return diff.returncode == 0
+
+
+def cmd_holdout(args: argparse.Namespace) -> int:
+    """The pre-registered holdout evaluation (`protocol.py`). Every check that can refuse
+    runs before any holdout session is replayed, and every evaluation is recorded."""
+    from butterfly_guy.research import protocol
+    from butterfly_guy.research.evaluate import session_vector
+    from butterfly_guy.research.features import SessionFeatures
+    from butterfly_guy.research.hypotheses import uses_features
+    from butterfly_guy.research.report import markdown
+    from butterfly_guy.research.simulate import fit_variants
+
+    _quiet_logs()
+    t0 = time.monotonic()
+    ds = _dataset(args)
+    reg = Registry.for_dataset(Path(args.registry), ds.name)
+    unseal = _unseal(args, ds.name)
+    records = reg.records()
+    regs = protocol.registrations(records, unseal.registry_seq)
+    protocol.check_registered(regs, CATALOG)
+    git_sha, dirty = _git()
+    if dirty:
+        raise protocol.ProtocolError("src/ or configs/ has uncommitted changes")
+    for sha in sorted({r.get("git_sha", "") for r in regs}):
+        if not _code_unchanged_since(sha):
+            raise protocol.ProtocolError(
+                f"src/ or configs/ changed since the registration commit {sha[:12]}")
+    if not any(h.get("holdout_sessions", 0) > 0 for h in ds.manifest.history):
+        raise protocol.ProtocolError(f"{ds.name} holds no holdout sessions yet")
+    names = [protocol.BASELINE, *(r["variant"] for r in regs)]
+    first = protocol.check_rerun(records, unseal_seq=unseal.registry_seq,
+                                 dataset_hash=ds.hash, variants=names,
+                                 code_unchanged_since=_code_unchanged_since)
+
+    variants = resolve(names)
+    features = (SessionFeatures.load(ds) if any(uses_features(v.entry) for v in variants)
+                else None)
+    ctx = RunContext(load_spx_config(), features=features)
+    profile = PROFILES[protocol.PROFILE]
+    loader = SessionLoader(ds, profile, unseal)
+    variants = fit_variants(variants, loader, ctx)  # each on its own development window
+    fitted = {v.name: v.definition()["entry"]["fitted"] for v in variants
+              if v.fit_window is not None}
+    protocol.check_fitted(regs, fitted)
+
+    costs = Costs(ctx.config.execution.paper_commission_per_contract,
+                  stressed_exit_floor=protocol.STRESSED_EXIT_FLOOR)
+    scorer = TiesetScorer()
+    result = run_variants(loader, variants, ctx, start=protocol.WINDOW[0],
+                          end=protocol.WINDOW[1], costs=costs, exit_delay=protocol.EXIT_DELAY,
+                          tieset=scorer)
+    params = EvalParams(split=protocol.SPLIT, bootstrap_reps=protocol.REPS,
+                        bootstrap_block=protocol.BLOCK, bootstrap_seed=protocol.SEED)
+    ev = evaluate(result, protocol.BASELINE, params)
+    dates, _ = common_dates(result, list(result.runs))
+    if not dates:
+        raise protocol.ProtocolError("no holdout session could be evaluated")
+    vec = {n: {m: session_vector(r.trades, dates, m) for m in ("stressed", "stressed_delayed")}
+           for n, r in result.runs.items()}
+    base = vec[protocol.BASELINE]
+    gate_rows = {r["variant"]: protocol.gates(
+        vec[r["variant"]]["stressed"], base["stressed"], vec[r["variant"]]["stressed_delayed"],
+        base["stressed_delayed"], dates, len(regs)) for r in regs}
+
+    meta = {
+        "dataset": ds.name, "dataset_hash": ds.hash, "profile": asdict(profile),
+        "config_sha256": sha256_file(SPX_CONFIG), "start": str(protocol.WINDOW[0]),
+        "end": str(protocol.WINDOW[1]), "baseline": protocol.BASELINE, "eval": params.as_dict(),
+        "accounting": {"exit_delay_snapshots": protocol.EXIT_DELAY,
+                       "stressed_exit_floor": protocol.STRESSED_EXIT_FLOOR},
+        "variants": {n: {"definition": r.variant.definition(),
+                         "definition_hash": r.variant.definition_hash()}
+                     for n, r in result.runs.items()},
+        "protocol": protocol.describe(),
+        "unseal": {"registry_seq": unseal.registry_seq, "registered": list(unseal.registered)},
+        "tieset": scorer.params(),
+    }
+    if features is not None:
+        meta["inputs"] = features.inputs
+    results = {"meta": meta, "evaluation": ev, "gates": gate_rows,
+               "tiesets": scorer.summary(list(result.runs), dates)}
+
+    run_id = hashlib.sha256(canonical_json(meta).encode()).hexdigest()[:12]
+    out_dir = Path(args.out) / ds.name / "holdout" / run_id
+    results_hash = hashlib.sha256(dump_canonical(results).encode()).hexdigest()
+    reproduction = None
+    if first is not None:
+        reproduction = {"of": first["run_id"],
+                        "same_results": first.get("results_sha256") == results_hash}
+    stages = {}
+    for name, run in result.runs.items():
+        rec = reg.append(
+            "evaluate", variant=name, definition=run.variant.definition(),
+            definition_hash=run.variant.definition_hash(), dataset_hash=ds.hash,
+            git_sha=git_sha, git_dirty=dirty, run_id=run_id, profile=protocol.PROFILE,
+            config_sha256=meta["config_sha256"], results_sha256=results_hash,
+            scope=protocol.SCOPE, unseal_seq=unseal.registry_seq, k=len(regs),
+            gates=gate_rows.get(name), reproduction=reproduction)
+        stages[name] = rec["stage"]
+    provenance = {
+        "run_id": run_id, "git_sha": git_sha, "git_dirty": dirty,
+        "command": " ".join(shlex.quote(a) for a in ["python", "-m", "butterfly_guy.research",
+                                                      *sys.argv[1:]]),
+        "created_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        "registry": {"path": str(reg.path.relative_to(REPO_ROOT)) if reg.path.is_relative_to(
+            REPO_ROOT) else str(reg.path), "tried": reg.tried(ds.hash), "recorded": True},
+        "stages": stages, "reproduction": reproduction,
+        "run_seconds": round(time.monotonic() - t0, 1),
+    }
+
+    def render(res: dict, prov: dict) -> str:
+        text = markdown(res, prov)
+        cut = text.index("Primary accounting")
+        section = protocol.markdown_section(res["gates"], fitted,
+                                            reproduction["of"] if reproduction else None)
+        return text[:cut] + "\n".join(section) + "\n" + text[cut:]
+
+    _finish(out_dir, results, result, provenance, render)
+    if reproduction and not reproduction["same_results"]:
+        print(f"WARNING: results differ from the first holdout run {reproduction['of']}")
     return 0
 
 
@@ -655,6 +810,9 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("register", help="pre-register catalog variants")
     r.add_argument("--variants", required=True, help=f"comma list from {', '.join(CATALOG)}")
     r.add_argument("--note", default="")
+    r.add_argument("--profile", choices=sorted(PROFILES), default="vendor_1m",
+                   help="profile a fitted rule is fitted under (recorded; the holdout "
+                        "evaluation requires vendor_1m)")
     r.set_defaults(func=cmd_register)
 
     po = sub.add_parser("port", help="link ported variants to their placeholder backfill")
@@ -685,6 +843,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--end", type=_date, default=None)
     run.add_argument("--no-tieset", action="store_true", help="skip near-tied fly scoring")
     run.set_defaults(func=cmd_run)
+
+    ho = sub.add_parser("holdout", help="the pre-registered holdout evaluation (registered "
+                        "variants only; every look is recorded)")
+    ho.add_argument("--unseal-holdout", type=int, required=True, metavar="SEQ",
+                    help="registry seq of the last register record; verified against the "
+                         "registry and the dataset history before the holdout opens")
+    ho.add_argument("--out", default=str(REPORTS))
+    ho.set_defaults(func=cmd_holdout)
 
     sh = sub.add_parser("shadow", help="exploratory shadow on a cohort's recorded sessions")
     evaluation_args(sh)
