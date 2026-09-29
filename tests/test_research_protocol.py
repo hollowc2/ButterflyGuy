@@ -24,10 +24,14 @@ from butterfly_guy.research.volindex import DAILY_FILE, write_aux
 from tests.research_synth import FakeSource, synthetic_day
 
 DEV_DAY = dt.date(2024, 6, 27)
+# Enough development sessions for the gate-1 calibration (Revision 4): 2024-05-28 -> DEV_DAY
+DEV_DAYS = [d.date() for d in pd.bdate_range("2024-05-28", DEV_DAY)
+            if d.date() != dt.date(2024, 6, 19)]
 HOLD_DAY = dt.date(2024, 7, 2)
 NAME = "spx_0dte_fake"
-PRIOR = [{"date": dt.date(2024, 6, 26), "underlying": u, "open": 1.0, "high": 1.0,
+PRIOR = [{"date": dt.date(2024, 5, 24), "underlying": u, "open": 1.0, "high": 1.0,
           "low": 1.0, "close": c} for u, c in (("SPX", 5990.0), ("$VIX", 17.0))]
+LEVELS = {str(k): 0.10 / k for k in range(1, 6)}
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +79,43 @@ def test_gate_1_is_the_drafted_bootstrap_at_one_minus_alpha_over_k():
     assert g4["lower_bound"] < g1["lower_bound"]
 
 
+def test_gate_1_uses_the_calibrated_tail_and_never_a_looser_one():
+    diff = np.random.default_rng(3).normal(50, 400, 40)
+    totals = diff[block_bootstrap_indices(40, 10_000, 10, 1)].sum(axis=1)
+    g = _gates(diff, k=1) | {}
+    cal = protocol.gates(diff, np.zeros(40), diff, np.zeros(40), DATES, 1, tail=0.025)
+    assert cal["level"] == pytest.approx(0.975) and cal["drafted_level"] == pytest.approx(0.9)
+    assert cal["lower_bound"] == round(float(np.percentile(totals, 2.5)), 2) < g["lower_bound"]
+    with pytest.raises(ValueError, match="tail"):
+        protocol.gates(diff, np.zeros(40), diff, np.zeros(40), DATES, 1, tail=0.2)
+
+
+def test_calibration_picks_the_loosest_level_within_the_target_and_tightens_skewed_rules():
+    rng = np.random.default_rng(5)
+    # Skip-filter-like: mostly zero, some small gains, rare large losses; mean about zero.
+    u = rng.random(585)
+    sparse = np.where(u < 0.05, 400.0, np.where(u < 0.06, -2000.0, 0.0))
+    dense = rng.normal(0, 300, 585)
+    cs = protocol.calibrate_gate1(sparse, 358, sims=400, reps=1000)
+    cd = protocol.calibrate_gate1(dense, 358, sims=400, reps=1000)
+    assert cs["false_pass"]["0.1"] > 0.10 and cs["levels"]["1"] < 0.10  # tightened
+    for c in (cs, cd):
+        levels = [c["levels"][str(k)] for k in range(1, 6)]
+        assert levels == sorted(levels, reverse=True)
+        for k, lv in enumerate(levels, start=1):
+            target = 0.10 / k
+            assert lv <= target + 1e-12  # never looser than drafted
+            assert not c["reached"][str(k)] or c["false_pass"][f"{lv:g}"] <= target
+            looser = [g for g in protocol.CAL_GRID if lv < g <= target + 1e-12]
+            assert all(c["false_pass"][f"{g:g}"] > target for g in looser)  # the loosest
+        assert c["holdout_sessions"] == 358 and c["development_sessions"] == 585
+    assert protocol.calibrate_gate1(sparse, 358, sims=400, reps=1000) == cs  # deterministic
+    zeros = protocol.calibrate_gate1(np.zeros(40), 100, sims=50, reps=100)
+    assert zeros["levels"] == LEVELS and set(zeros["false_pass"].values()) == {0.0}
+    with pytest.raises(ProtocolError, match="too few"):
+        protocol.calibrate_gate1(np.zeros(19), 358)
+
+
 def test_gate_3_removes_the_top_sessions_of_either_arm_from_both():
     base = np.zeros(40)
     base[5] = 5000.0  # the baseline's best session is removed too
@@ -94,7 +135,7 @@ def test_gate_3_removes_the_top_sessions_of_either_arm_from_both():
 def _reg(name, **kw):
     v = CATALOG[name]
     return {"event": "register", "variant": name, "definition_hash": v.definition_hash(),
-            "git_sha": "a" * 40, **kw}
+            "git_sha": "a" * 40, "gate1": {"levels": LEVELS}, **kw}
 
 
 def test_only_evaluable_registered_catalog_definitions_pass():
@@ -110,6 +151,8 @@ def test_only_evaluable_registered_catalog_definitions_pass():
     with pytest.raises(ProtocolError, match="without its fitted values"):
         protocol.check_registered([_reg("HTS1")], CATALOG)
     protocol.check_registered([_reg("HTS1", fitted={"fit_n": 3, "threshold": 0.9})], CATALOG)
+    with pytest.raises(ProtocolError, match="gate-1 calibration for k = 1"):
+        protocol.check_registered([{**_reg("HLV1"), "gate1": {}}], CATALOG)
 
 
 def test_registrations_are_those_up_to_the_unseal_record():
@@ -153,12 +196,14 @@ def test_a_second_evaluation_is_only_an_exact_reproduction():
 
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    src = FakeSource({DEV_DAY: synthetic_day(DEV_DAY), HOLD_DAY: synthetic_day(HOLD_DAY)},
-                     extra_bars=PRIOR)
-    write_history(src, HistoryPlan(DEV_DAY, DEV_DAY, NAME, log=io.StringIO(),
+    days = {d: synthetic_day(d) for d in [*DEV_DAYS, HOLD_DAY]}
+    src = FakeSource(days, extra_bars=PRIOR)
+    write_history(src, HistoryPlan(DEV_DAYS[0], DEV_DAY, NAME, log=io.StringIO(),
                                    require_quality=False), tmp_path)
     monkeypatch.setattr(cli, "_git", lambda: ("a" * 40, False))
     monkeypatch.setattr(cli, "_code_unchanged_since", lambda sha: True)
+    monkeypatch.setattr(protocol, "CAL_SIMS", 40)  # the calibration's size, not its logic
+    monkeypatch.setattr(protocol, "CAL_REPS", 100)
     return SimpleNamespace(src=src, root=tmp_path, registry=tmp_path / "registry",
                            out=tmp_path / "out")
 
@@ -192,6 +237,10 @@ def _no_replay(monkeypatch):
 def test_evaluates_the_registered_set_once_and_records_every_look(world, monkeypatch):
     w = world
     assert _cli(w, "register", "--variants", "HLV1,HEV1") == 0
+    for rec in _records(w):
+        assert rec["gate1"]["holdout_sessions"] == 358
+        assert rec["gate1"]["development_sessions"] == len(DEV_DAYS)
+        assert set(rec["gate1"]["levels"]) == {"1", "2", "3", "4", "5"}
     with pytest.raises(ProtocolError, match="no holdout sessions"):
         _holdout(w, 1)
     _pull_holdout(w, 1)
@@ -204,6 +253,7 @@ def test_evaluates_the_registered_set_once_and_records_every_look(world, monkeyp
     assert all(r["k"] == 2 and r["unseal_seq"] == 1 and r["reproduction"] is None
                for r in runs)
     assert runs[0]["gates"] is None and set(runs[1]["gates"]) >= {"gate1", "passed"}
+    assert runs[1]["gates"]["level"] == pytest.approx(1 - _records(w)[0]["gate1"]["levels"]["2"])
     (results,) = w.out.glob(f"{NAME}/holdout/*/results.json")
     res = json.loads(results.read_text())
     assert res["meta"]["protocol"] == protocol.describe()

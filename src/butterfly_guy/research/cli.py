@@ -157,6 +157,36 @@ def _fit_for_registration(v, ds: Dataset | None, profile_name: str) -> dict:
     return fitted.definition()["entry"]["fitted"]
 
 
+def _calibrate_for_registration(variants, ds: Dataset, holdout_sessions: int) -> dict:
+    """Gate-1 levels (protocol Revision 4) from each rule's development-window paired
+    difference against E0, replayed as the holdout evaluation replays. Empty when the dataset
+    has too few development sessions (a Helios dataset); the holdout command then refuses."""
+    from butterfly_guy.research import protocol
+    from butterfly_guy.research.evaluate import session_vector
+    from butterfly_guy.research.features import SessionFeatures
+    from butterfly_guy.research.holdout import DEVELOPMENT
+    from butterfly_guy.research.hypotheses import uses_features
+
+    names = [v.name for v in variants if v.name != protocol.BASELINE]
+    dev = [d for d in ds.sessions()["date"] if DEVELOPMENT[0] <= d <= DEVELOPMENT[1]]
+    if not names or len(dev) < 2 * protocol.BLOCK:
+        return {}
+    arms = resolve([protocol.BASELINE, *names])
+    features = (SessionFeatures.load(ds) if any(uses_features(v.entry) for v in arms)
+                else None)
+    ctx = RunContext(load_spx_config(), features=features)
+    costs = Costs(ctx.config.execution.paper_commission_per_contract,
+                  stressed_exit_floor=protocol.STRESSED_EXIT_FLOOR)
+    result = run_variants(SessionLoader(ds, PROFILES[protocol.PROFILE]), arms, ctx,
+                          start=DEVELOPMENT[0], end=DEVELOPMENT[1], costs=costs,
+                          exit_delay=protocol.EXIT_DELAY)
+    dates, _ = common_dates(result, list(result.runs))
+    base = session_vector(result.runs[protocol.BASELINE].trades, dates, "stressed")
+    return {n: protocol.calibrate_gate1(
+        session_vector(result.runs[n].trades, dates, "stressed") - base, holdout_sessions)
+        for n in names}
+
+
 def cmd_register(args: argparse.Namespace) -> int:
     reg = Registry.for_dataset(Path(args.registry), args.dataset)
     git_sha, dirty = _git()
@@ -168,14 +198,19 @@ def cmd_register(args: argparse.Namespace) -> int:
     # Fit every fitted rule before appending anything, so a failed fit registers nothing.
     fitted = {v.name: _fit_for_registration(v, ds, args.profile)
               for v in variants if v.fit_window is not None}
+    gate1 = _calibrate_for_registration(variants, ds, args.holdout_sessions) if ds else {}
     for v in variants:
         extra = ({"fitted": fitted[v.name], "fit_profile": args.profile}
                  if v.name in fitted else {})
+        if v.name in gate1:
+            extra["gate1"] = gate1[v.name]
         rec = reg.append("register", variant=v.name, definition=v.definition(),
                          definition_hash=v.definition_hash(), note=args.note or "",
                          git_sha=git_sha, git_dirty=dirty,
                          dataset_hash=ds.hash if ds is not None else None, **extra)
         shown = f"; fitted {rec['fitted']} under {args.profile}" if "fitted" in rec else ""
+        if "gate1" in rec:
+            shown += f"; gate-1 levels {rec['gate1']['levels']}"
         print(f"registered {v.name} {rec['definition_hash'][:12]} (seq {rec['seq']}){shown}")
     return 0
 
@@ -358,9 +393,11 @@ def cmd_holdout(args: argparse.Namespace) -> int:
     vec = {n: {m: session_vector(r.trades, dates, m) for m in ("stressed", "stressed_delayed")}
            for n, r in result.runs.items()}
     base = vec[protocol.BASELINE]
+    k = len(regs)
     gate_rows = {r["variant"]: protocol.gates(
         vec[r["variant"]]["stressed"], base["stressed"], vec[r["variant"]]["stressed_delayed"],
-        base["stressed_delayed"], dates, len(regs)) for r in regs}
+        base["stressed_delayed"], dates, k, tail=float(r["gate1"]["levels"][str(k)]))
+        for r in regs}
 
     meta = {
         "dataset": ds.name, "dataset_hash": ds.hash, "profile": asdict(profile),
@@ -813,6 +850,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--profile", choices=sorted(PROFILES), default="vendor_1m",
                    help="profile a fitted rule is fitted under (recorded; the holdout "
                         "evaluation requires vendor_1m)")
+    r.add_argument("--holdout-sessions", type=int, default=358,
+                   help="planned holdout size the gate-1 calibration simulates (recorded; "
+                        "358 without an Indices month, 421 with one)")
     r.set_defaults(func=cmd_register)
 
     po = sub.add_parser("port", help="link ported variants to their placeholder backfill")
