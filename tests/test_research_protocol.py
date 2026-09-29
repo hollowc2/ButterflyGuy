@@ -32,6 +32,7 @@ NAME = "spx_0dte_fake"
 PRIOR = [{"date": dt.date(2024, 5, 24), "underlying": u, "open": 1.0, "high": 1.0,
           "low": 1.0, "close": c} for u, c in (("SPX", 5990.0), ("$VIX", 17.0))]
 LEVELS = {str(k): 0.10 / k for k in range(1, 6)}
+REACHED = {str(k): True for k in range(1, 6)}
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +136,7 @@ def test_gate_3_removes_the_top_sessions_of_either_arm_from_both():
 def _reg(name, **kw):
     v = CATALOG[name]
     return {"event": "register", "variant": name, "definition_hash": v.definition_hash(),
-            "git_sha": "a" * 40, "gate1": {"levels": LEVELS}, **kw}
+            "git_sha": "a" * 40, "gate1": {"levels": LEVELS, "reached": REACHED}, **kw}
 
 
 def test_only_evaluable_registered_catalog_definitions_pass():
@@ -153,6 +154,12 @@ def test_only_evaluable_registered_catalog_definitions_pass():
     protocol.check_registered([_reg("HTS1", fitted={"fit_n": 3, "threshold": 0.9})], CATALOG)
     with pytest.raises(ProtocolError, match="gate-1 calibration for k = 1"):
         protocol.check_registered([{**_reg("HLV1"), "gate1": {}}], CATALOG)
+    # A level that could not be calibrated to 0.10/k refuses rather than over-passing.
+    unreached = {"levels": LEVELS | {"2": 0.001}, "reached": REACHED | {"2": False},
+                 "false_pass": {"0.001": 0.061}}
+    protocol.check_registered([_reg("HLV1", gate1=unreached)], CATALOG)  # k = 1: fine
+    with pytest.raises(ProtocolError, match="cannot be calibrated to 0.10/2.*0.061"):
+        protocol.check_registered([_reg("HLV1", gate1=unreached), _reg("HEV1")], CATALOG)
 
 
 def test_registrations_are_those_up_to_the_unseal_record():

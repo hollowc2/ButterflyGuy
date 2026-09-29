@@ -152,9 +152,16 @@ def check_registered(regs: list[dict], catalog: dict) -> None:
         if v.fit_window is not None and "fitted" not in r:
             raise ProtocolError(f"{name} is a fitted rule registered without its fitted "
                                 "values; they cannot be checked")
-        if k not in r.get("gate1", {}).get("levels", {}):
+        cal = r.get("gate1", {})
+        if k not in cal.get("levels", {}):
             raise ProtocolError(f"{name} was registered without a gate-1 calibration for "
                                 f"k = {k} (Revision 4)")
+        if not cal.get("reached", {}).get(k, False):
+            level = cal["levels"][k]
+            raise ProtocolError(
+                f"{name}: gate 1 cannot be calibrated to 0.10/{k}; even the {level:g} level "
+                f"passes a no-effect rule {cal['false_pass'].get(f'{level:g}')} of the time "
+                "on development data. Register fewer rules.")
 
 
 def check_fitted(regs: list[dict], fitted_now: dict[str, dict]) -> None:

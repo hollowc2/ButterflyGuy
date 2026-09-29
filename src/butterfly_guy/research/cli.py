@@ -211,6 +211,9 @@ def cmd_register(args: argparse.Namespace) -> int:
         shown = f"; fitted {rec['fitted']} under {args.profile}" if "fitted" in rec else ""
         if "gate1" in rec:
             shown += f"; gate-1 levels {rec['gate1']['levels']}"
+            missed = [k for k, ok in rec["gate1"]["reached"].items() if not ok]
+            if missed:
+                shown += f" (cannot be calibrated for k = {', '.join(missed)})"
         print(f"registered {v.name} {rec['definition_hash'][:12]} (seq {rec['seq']}){shown}")
     return 0
 
