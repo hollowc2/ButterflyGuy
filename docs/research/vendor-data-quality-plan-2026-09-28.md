@@ -232,6 +232,30 @@ What the two Q1 failures are:
   above as a known limitation. D3 (the Dec 2025 → Mar 2026 gap) and a real intraday VIX
   cross-check remain open until an Indices month is bought.
 
+## P&L replay (report only, 2026-09-29)
+
+Stressed-P&L totals over the 126 validation sessions that both sources have.
+
+| Data | Clock | Stressed total | $0.10 tie-set band (5–95%) |
+|---|---|---|---|
+| Helios, native (`spx_0dte`) | Helios snapshots | $10,319 (123 trades) | $9.0k – $13.2k |
+| Helios on the 1-minute grid (`spx_0dte_recorded` @ `501683f0`) | 1-minute | $9,614 (123) | $5.2k – $11.1k |
+| ThetaData (`spx_0dte_thetadata` @ `93bbe58e`) | 1-minute | $4,881 (126) | $2.8k – $7.4k |
+
+Runs: calibration `818a35c609ef`, ThetaData against native Helios `17304d08065e`, and
+ThetaData against 1-minute Helios `b41290589484`.
+
+At the same clock, the ThetaData total lies inside our own data's tie-set band (step 3 PASS
+against the 1-minute reference). The same fly is chosen on about 57% of entries.
+
+ThetaData's tie-set average is still about $3.2k (roughly $25 a trade) below our 1-minute
+data's. The two sources' quotes agree on spreads and within 0–3 cents on mids, so a gap this
+size means either a small systematic price difference that the strategy amplifies, or that
+the rules were tuned on Schwab data (2026-03 → 09). This window cannot tell the two apart.
+
+**Consequence for research:** results on the vendor data should be compared only with other
+vendor-data results, never with Helios-based figures.
+
 ## Decisions for the owner
 
 - **D1: approve this plan and amendment** (the gates in Phase 2 replace validation steps 1–3
