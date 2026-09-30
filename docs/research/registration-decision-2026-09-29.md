@@ -499,7 +499,7 @@ unsealed or pulled.
 
 ## 7. Recommendation and frozen definitions
 
-**Status: not registered (owner's decision D1, 2026-09-29).**
+**Status: registered 2026-09-30, H-TS1 alone, k = 1 (registry seq 0, git `9051357`).** Next: pull the holdout with `--unseal-holdout 0`, then run `holdout --unseal-holdout 0` once.
 
 **If and when you register: H-TS1 alone, k = 1.**
 - Gate 1 is then the lower bound at H-TS1's calibrated level (Revision 4), recorded by
@@ -577,7 +577,7 @@ validated on the development window against dataset `93bbe58e…`, and allowed b
 
 | # | Decision | Status and options | Before |
 |---|---|---|---|
-| D1 | Register now, or not yet? | **Decided 2026-09-29: not yet.** When you do: H-TS1 alone, k = 1 is recommended. Only what is registered before the holdout pull can ever be tested on it | — |
+| D1 | Register now, or not yet? | **Registered 2026-09-30: H-TS1 alone, k = 1** (registry `spx_0dte_thetadata.jsonl` seq 0, record hash `06360534…`, git `9051357`, definition `fab8bf3e…`, threshold 0.9181935615930604, n = 528; gate 1 at 2.5% for 358 sessions). First decided 2026-09-29: not yet | done |
 | D3 | Stressed exits below zero | **Decided 2026-09-29: floor at $0** (draft Revision 1; `--floor-stressed-exits`; §6.1) | done |
 | D8 | Development registry | **Confirmed 2026-09-29:** development runs are recorded in `registry/development/` | done |
 | D2 | Meaning of a pass against a losing E0 | **Decided 2026-09-29: gate 6, own stressed P&L above zero** (draft Revision 5; `362a728`; §6.3) | done |
