@@ -15,9 +15,10 @@ onward were not used.
   `c59e6bd`). This is Revision 4.
 - **D2: add gate 6.** A rule's own stressed P&L on the holdout must be above zero (code
   `362a728`). This is Revision 5.
-- All four were decided after seeing these results.
 - **D6: no Indices month.** The holdout is 358 sessions, and the intraday VIX cross-check stays
   undone.
+- **D9: the `holdout` command is built** (commit `6f02a86`, §6.5).
+- D3, D5, D4 and D2 were all decided after seeing these results.
 
 Every figure below uses the floored metric (`--floor-stressed-exits`) and the early-close fix,
 unless it is marked "unfloored". The first version's unfloored figures are kept in §3 and §9
@@ -51,8 +52,8 @@ each hypothesis's frozen implementation choices and the 2026 descriptive evidenc
    - H-TS1 itself still lost money (−$2,283).
 4. **Status: not registered (D1).** If and when you register, the recommendation stays: H-TS1
    alone, k = 1.
-   - Its gate 1 is then the 97.5% bound, calibrated so that a no-effect H-TS1 passes about
-     10% of the time.
+   - Its gate 1 is then the 97.5% bound, calibrated so that gate 1 alone passes a no-effect
+     H-TS1 about 10% of the time.
    - A pass now means H-TS1 beat E0 **and** made money on the holdout (gate 6, Revision 5).
    - Power with all gates is about 18% if the development effect is real, and 8% if it is
      half as large.
@@ -181,9 +182,9 @@ identical in both.
 | Δ, top three of either arm removed | +10,999 | +1,366 | +151 | −1,455 | −19,459 |
 | Δ, delayed exits | +7,554 | +1,326 | +116 | −1,787 | −13,290 |
 | Bootstrap P(Δ > 0) | 0.927 | 0.984 | 0.503 | 0.403 | 0.158 |
-| Lower bound 90% (k = 1) | **+1,078** | +498 | −5,696 | −10,253 | −29,136 |
-| Lower bound 95% (k = 2) | −1,074 | +283 | −7,451 | −12,838 | −33,925 |
-| Lower bound 97.5% (k = 4) | −2,916 | +135 | −8,869 | −15,129 | −37,385 |
+| Lower bound 90% (drafted level, k = 1) | **+1,078** | +498 | −5,696 | −10,253 | −29,136 |
+| Lower bound 95% (drafted level, k = 2) | −1,074 | +283 | −7,451 | −12,838 | −33,925 |
+| Lower bound 97.5% (drafted k = 4; H-TS1's calibrated k = 1) | −2,916 | +135 | −8,869 | −15,129 | −37,385 |
 | Calibrated gate-1 level at k = 1 (358 sessions; Revision 4) | 2.5% | 10% | 5% | 6% | — |
 | Draft gates 1–4 on dev, gate 1 at the calibrated level | fail g1 (97.5% bound −2,916) | fail g2 (H2 Δ = 0) | fail g1, g2 | fail all | fail all |
 | Gate 6 on dev: own stressed net > 0 (Revision 5) | fail (−2,283) | fail (−8,557) | fail (−9,771) | fail (−11,377) | fail (−22,658) |
@@ -299,10 +300,12 @@ The other rules at the drafted levels, full gate set, 358 sessions:
 | H-EV2 | half the development effect | 17% | 9.1% | 5.8% | 4.7% | 3.0% |
 | H-SN1 | development effect (negative) | 1.2% | 0.4% | 0.3% | 0.1% | 0.1% |
 
-*(D6: no Indices month will be bought, so the 421-session figures are for the record only.)*
+*(D6: no Indices month will be bought, so every 421-session figure in this section is for the
+record only; 358 is the only live option.)*
 
-**With the calibration, an Indices month would have bought power.** H-TS1 goes from 33% to 40% at the
-development effect.
+**For the record: with the calibration, an Indices month would have bought power.** H-TS1's
+gates 1–4 go from 36% to 42% at the development effect in the table above (33% to 40% in the
+second run).
 - At the drafted level, 63 more sessions changed little: 51% → 52%.
 - The skewness that forces the tighter level shrinks with more sessions, so the calibrated
   level loosens from the 97.5% bound to the 96% bound.
@@ -422,8 +425,10 @@ Computed in-process on this dataset, with nothing registered:
 | H-LV1, 358 | 13.2% | 6.0% | 2.5% | 1.5%, 1.0%, 0.75% |
 | H-EV2, 358 | 5.7% | 10% (drafted) | 5% | drafted |
 
-- At H-TS1's calibrated k = 1 level, a no-effect H-TS1 passes 10.6% of the time with all gates
-  (target 10%).
+- At H-TS1's calibrated k = 1 level, gate 1 alone passes a no-effect H-TS1 10.6% of the time
+  (target 10%; §4). Gates 2–4 and 6 then trim it further.
+- The 17.7% here and the 19% in the first table are two simulations of the same quantity at
+  the drafted level; read both as about 18%.
 - The calibration assumes the holdout's paired difference is shaped like the development
   window's.
 - The negative-baseline effect of §6.3 is handled separately, by gate 6 (D2).
