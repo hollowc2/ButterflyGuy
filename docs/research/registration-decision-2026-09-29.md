@@ -62,7 +62,7 @@ each hypothesis's frozen implementation choices and the 2026 descriptive evidenc
 5. **Still open before any registration:**
    - D9: the holdout evaluation command is **built** (`holdout`, commit `6f02a86`, §6.5).
      Review the details it fixes (gate 3's reading, the re-run rule) before registering.
-   - D7 (ThetaData licence) remains open. D6 is decided: no Indices month.
+   - D7 is decided: the local data is kept (owner, 2026-09-30). D6 is decided: no Indices month.
    - **Keep Options Value until the holdout is pulled** (owner, 2026-09-29; §7). The pull
      goes through the live ThetaData API, and nothing imports the raw sealed files.
    - D5 (early closes), D4 (gate-1 calibration) and D2 (gate 6) are fixed (§6.4, §6.2, §6.3).
@@ -587,7 +587,7 @@ validated on the development window against dataset `93bbe58e…`, and allowed b
 | D6 | ThetaData Indices month ($50) | **Decided 2026-09-29: not bought.** The holdout is 358 sessions (H1 204 / H2 154). The 63 gap sessions are skipped under the no-derived-data rule, and the intraday VIX cross-check stays undone (§5; H-TS1 is not affected). Register with `--holdout-sessions 358` (the default) | done |
 | D10 | Holdout pull path | **Decided 2026-09-29: keep the Options Value subscription until the holdout is pulled** (live API; no import from the raw sealed files is built; §7) | cancelling |
 | D11 | Minute-file provenance | **Answered 2026-09-29: unknown.** `spx_1min.csv`/`vix_1min.csv` are **not** the owner's Schwab capture (that has run about six months). The owner downloaded them from a third-party source they no longer remember, so the vendor and licence are unknown and cannot be established | done |
-| D7 | ThetaData licence | Open. Terms §2.1(i) and §12.2: may the local cache outlive a cancelled subscription? The holdout result's reproducibility and any later audit depend on the answer | holdout pull |
+| D7 | ThetaData licence | **Decided 2026-09-30: the owner keeps the local data** (raw archive and research cache), so the holdout result stays reproducible and auditable. Asked under Terms §2.1(i) and §12.2; no written ThetaData answer is on file | done |
 
 ## 9. Variant count and provenance
 

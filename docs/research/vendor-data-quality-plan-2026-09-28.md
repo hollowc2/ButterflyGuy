@@ -273,8 +273,8 @@ vendor-data results, never with Helios-based figures.
     VIX, which could also cross-check the owner's files over 2022-09 → 2025-12;
   - (c) leave those sessions out: the holdout shrinks from about 425 to about 363 sessions.
   Needed before registration, not before Phase 1–3.
-- **Still open**: ThetaData's written answer on keeping a local cache after cancelling (Terms
-  §2.1(i), §12.2).
+- **Local cache after cancelling (Terms §2.1(i), §12.2): decided 2026-09-30, the owner keeps
+  the data.** No written ThetaData answer is on file.
 - **Holdout pull (2026-09-29):** the owner keeps Options Value until registration and the
   holdout pull. `export-history` needs the live Terminal, and there is no import from the raw
   sealed files.
