@@ -63,6 +63,8 @@ each hypothesis's frozen implementation choices and the 2026 descriptive evidenc
    - D9: the holdout evaluation command is **built** (`holdout`, commit `6f02a86`, §6.5).
      Review the details it fixes (gate 3's reading, the re-run rule) before registering.
    - D7 (ThetaData licence) remains open. D6 is decided: no Indices month.
+   - **Keep Options Value until the holdout is pulled** (owner, 2026-09-29; §7). The pull
+     goes through the live ThetaData API, and nothing imports the raw sealed files.
    - D5 (early closes), D4 (gate-1 calibration) and D2 (gate 6) are fixed (§6.4, §6.2, §6.3).
 
 ## 1. Data and integrity
@@ -565,6 +567,12 @@ uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata holdout --u
 This writes the first record of `reports/research/registry/spx_0dte_thetadata.jsonl`. The
 development registry is a separate file and is never read by the unseal.
 
+**The pull needs a live subscription.** `export-history` builds the holdout dataset only
+through the Theta Terminal. The raw sealed archive (`data/thetadata_sealed/`, main checkout)
+has no import path. **Decided 2026-09-29: keep Options Value until registration and the pull
+are done.** An import from the raw files was the alternative. It would have to be built,
+validated on the development window against dataset `93bbe58e…`, and allowed by D7.
+
 ## 8. Owner decisions
 
 | # | Decision | Status and options | Before |
@@ -577,6 +585,8 @@ development registry is a separate file and is never read by the unseal.
 | D5 | Early closes (§6.4) | **Decided 2026-09-29: settle held trades on the early close** (`6891317`) | done |
 | D9 | Holdout evaluation command (§6.5) | **Built 2026-09-29** (`holdout`, `6f02a86`). Review its two fixed readings (gate 3 union; exact-reproduction re-run rule) | registration |
 | D6 | ThetaData Indices month ($50) | **Decided 2026-09-29: not bought.** The holdout is 358 sessions (H1 204 / H2 154). The 63 gap sessions are skipped under the no-derived-data rule, and the intraday VIX cross-check stays undone (§5; H-TS1 is not affected). Register with `--holdout-sessions 358` (the default) | done |
+| D10 | Holdout pull path | **Decided 2026-09-29: keep the Options Value subscription until the holdout is pulled** (live API; no import from the raw sealed files is built; §7) | cancelling |
+| D11 | Minute-file provenance | **Partly answered 2026-09-29:** `spx_1min.csv`/`vix_1min.csv` are **not** the owner's Schwab capture (that has run about six months). The owner downloaded them from a third-party source, not yet named. Vendor and licence still open | registration |
 | D7 | ThetaData licence | Open. Terms §2.1(i) and §12.2: may the local cache outlive a cancelled subscription? The holdout result's reproducibility and any later audit depend on the answer | holdout pull |
 
 ## 9. Variant count and provenance
@@ -617,8 +627,11 @@ uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata \
   --floor-stressed-exits
 ```
 
-**Ad hoc analysis** was not committed: the breakdowns, the random-skip comparison and the power
-simulation. They are scratch scripts that read the same runs in-process with the same
+**Ad hoc analysis.** The random-skip comparison, the gate-1 calibration curves and the power
+simulation are now reproducible with `tools/research_studies/dev_studies.py`. The calibration and
+random-skip figures match exactly. The power tool's null rows come out lower than §4's, because
+the original scenarios were built differently (see its README). The breakdowns and the original
+power runs were scratch scripts that read the same runs in-process with the same
 accounting. The in-process replay matched every CLI run's totals exactly.
 - The power simulation draws 10-session blocks from the development pairs to 358 or 421
   sessions.
