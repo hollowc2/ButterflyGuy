@@ -755,6 +755,8 @@ manifest history shows a passing `vendor-quality` run over the whole validation 
 
 **Known gap:** 2025-12-10 → 2026-03-12 (about 62 holdout sessions) has no SPX or VIX minute
 data, so those sessions are skipped until a real source is found (plan, D3).
+*(2026-09-29: the owner decided not to buy an Indices month (D6), so these sessions stay
+skipped; the holdout is 358 sessions.)*
 
 **Licence.** ThetaData's individual terms forbid archiving content (§2.1(i)) and require
 deleting all copies at termination (§12.2). Whether the local research cache may outlive a

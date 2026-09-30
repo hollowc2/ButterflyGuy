@@ -1813,3 +1813,15 @@ Scratch simulation, H-TS1 alone, k = 1, calibrated gate 1, 358 sessions. Two can
 
 - D6: Indices month.
 - D7: ThetaData licence.
+
+## 2026-09-29 (later) — D6: no Indices month
+
+- **Decision (owner): no more data will be bought.**
+- **The holdout is 358 usable sessions** (H1 204 / H2 154). The 63 sessions from 2025-12-10 to
+  2026-03-12 have no SPX/VIX minute data, and the no-derived-data rule skips them.
+- **Registration uses `--holdout-sessions 358`,** the default. H-TS1's calibrated gate 1 is then
+  the 97.5% bound.
+- **Power for H-TS1 alone, all gates:** about 18% if the development effect is real.
+- **The intraday VIX cross-check stays undone.** It is a known limitation, and it does not
+  affect H-TS1.
+- **Still open:** D7, the ThetaData licence.

@@ -183,6 +183,16 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 > - **Unchanged.** The metric, the test and its calibration (Revision 4), the k rule and
 >   gates 1–5.
 
+> **[Fact update, 2026-09-29, marked; no hypothesis, split, metric or gate changed]**
+> - **Owner's decision D6: no ThetaData Indices month.** Holdout sessions 2025-12-10 →
+>   2026-03-12 (63) have no SPX/VIX minute data, so the no-derived-data rule skips them.
+> - **Expected holdout:** 358 usable sessions (H1 204 / H2 154). Gate 1's calibration
+>   (Revision 4) is made for that size, which is `register --holdout-sessions` 358, the
+>   default.
+> - **The intraday VIX cross-check of the owner's minute file stays undone.** It is a known
+>   limitation (`registration-decision-2026-09-29.md` §5). H-TS1 is not affected: it reads
+>   Cboe's daily closes.
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).

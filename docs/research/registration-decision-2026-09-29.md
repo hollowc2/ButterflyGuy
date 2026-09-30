@@ -16,6 +16,8 @@ onward were not used.
 - **D2: add gate 6.** A rule's own stressed P&L on the holdout must be above zero (code
   `362a728`). This is Revision 5.
 - All four were decided after seeing these results.
+- **D6: no Indices month.** The holdout is 358 sessions, and the intraday VIX cross-check stays
+  undone.
 
 Every figure below uses the floored metric (`--floor-stressed-exits`) and the early-close fix,
 unless it is marked "unfloored". The first version's unfloored figures are kept in §3 and §9
@@ -54,13 +56,12 @@ each hypothesis's frozen implementation choices and the 2026 descriptive evidenc
    - A pass now means H-TS1 beat E0 **and** made money on the holdout (gate 6, Revision 5).
    - Power with all gates is about 18% if the development effect is real, and 8% if it is
      half as large.
-   - With an Indices month (421 sessions) that is about 22% and 10% (§4).
    - A rule with no mechanism, while E0 loses, passes about 5% of the time.
    - At k ≥ 3 its gate 1 cannot be calibrated at all, and the holdout command refuses.
 5. **Still open before any registration:**
    - D9: the holdout evaluation command is **built** (`holdout`, commit `6f02a86`, §6.5).
      Review the details it fixes (gate 3's reading, the re-run rule) before registering.
-   - D6 (Indices month) and D7 (ThetaData licence) also remain open.
+   - D7 (ThetaData licence) remains open. D6 is decided: no Indices month.
    - D5 (early closes), D4 (gate-1 calibration) and D2 (gate 6) are fixed (§6.4, §6.2, §6.3).
 
 ## 1. Data and integrity
@@ -246,7 +247,7 @@ something. To compare, E0 trades were drawn at random (20,000 draws of the same 
 **Size.** These counts come from the exchange calendar and the known gaps only. No holdout data
 was read.
 
-| | Without Indices | With an Indices month (gap filled) |
+| | Without Indices (**decided, D6**) | With an Indices month (not bought) |
 |---|---:|---:|
 | Trading days 2024-07-01 → 2026-03-12 | 426 | 426 |
 | Gap 2025-12-10 → 2026-03-12 (no SPX/VIX minutes) | −63 | 0 |
@@ -298,7 +299,9 @@ The other rules at the drafted levels, full gate set, 358 sessions:
 | H-EV2 | half the development effect | 17% | 9.1% | 5.8% | 4.7% | 3.0% |
 | H-SN1 | development effect (negative) | 1.2% | 0.4% | 0.3% | 0.1% | 0.1% |
 
-**With the calibration, an Indices month does buy power.** H-TS1 goes from 33% to 40% at the
+*(D6: no Indices month will be bought, so the 421-session figures are for the record only.)*
+
+**With the calibration, an Indices month would have bought power.** H-TS1 goes from 33% to 40% at the
 development effect.
 - At the drafted level, 63 more sessions changed little: 51% → 52%.
 - The skewness that forces the tighter level shrinks with more sessions, so the calibrated
@@ -493,7 +496,7 @@ unsealed or pulled.
 
 **If and when you register: H-TS1 alone, k = 1.**
 - Gate 1 is then the lower bound at H-TS1's calibrated level (Revision 4), recorded by
-  `register`: the 97.5% bound at 358 sessions, the 96% bound at 421.
+  `register`: the 97.5% bound at 358 sessions (D6: no Indices month).
 - Gates 2–4 as drafted, and gate 6 (own stressed P&L above zero, Revision 5), on the floored
   metric.
 - Holdout halves as drafted: H1 2024-07-01 → 2025-04-30, H2 2025-05-01 → 2026-03-12.
@@ -523,7 +526,7 @@ is unchanged by the floor and the early-close fix):
 | Config | `configs/config.yaml` sha256 `d120b63fd4e12ed812cc2742d602f9e531a1f5ca38e28c30628ab149f5d1b397` |
 | Dataset | `spx_0dte_thetadata` @ `93bbe58eb799c516f2a65bd5b20b7fdbc686e65681378d56c9279c8955a05d30` (manifest shows `holdout_sessions: 0`) |
 | Profile | `vendor_1m` |
-| Gate-1 level (Revision 4) | calibrated at registration: k = 1 gives 2.5% (358 sessions) or 4.0% (421); recorded as `gate1` in the register record |
+| Gate-1 level (Revision 4) | calibrated at registration for 358 holdout sessions: k = 1 gives 2.5%; recorded as `gate1` in the register record |
 | Replay | early-close sessions settle held trades (D5, `6891317`) |
 
 **What the hash does not cover.** E0's code, `features.py` and the config are frozen by the
@@ -549,7 +552,7 @@ evaluate once:
 
 ```bash
 uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata register --variants HTS1 \
-  --holdout-sessions 358 --note "H-TS1 alone, k=1; halves 2025-04-30; <D6 choice>"
+  --holdout-sessions 358 --note "H-TS1 alone, k=1; halves 2025-04-30; no Indices month (358 sessions)"
 # (the holdout pull: export-history ... --unseal-holdout <SEQ>, as research-core documents)
 uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata holdout --unseal-holdout <SEQ>
 ```
@@ -568,7 +571,7 @@ development registry is a separate file and is never read by the unseal.
 | D4 | Gate 1 on skip filters (§6.2) | **Decided 2026-09-29: calibrate the level on development data at registration** (draft Revision 4; `b18ca94`, `c59e6bd`) | done |
 | D5 | Early closes (§6.4) | **Decided 2026-09-29: settle held trades on the early close** (`6891317`) | done |
 | D9 | Holdout evaluation command (§6.5) | **Built 2026-09-29** (`holdout`, `6f02a86`). Review its two fixed readings (gate 3 union; exact-reproduction re-run rule) | registration |
-| D6 | ThetaData Indices month ($50) | Open. Fills the 63-session gap: 358 → 421 sessions, H2 154 → 217; with the calibrated gate 1, H-TS1's power rises from 33% to 40% (§4). Register with `--holdout-sessions 421` if you buy it. Gives a real intraday VIX to check the smoothing (§5; H-TS1 is not affected) and cross-checks the owner's files. The gap pull is holdout data, so it can happen only after registration, but whether the holdout includes those sessions should be fixed in the register note | registration |
+| D6 | ThetaData Indices month ($50) | **Decided 2026-09-29: not bought.** The holdout is 358 sessions (H1 204 / H2 154). The 63 gap sessions are skipped under the no-derived-data rule, and the intraday VIX cross-check stays undone (§5; H-TS1 is not affected). Register with `--holdout-sessions 358` (the default) | done |
 | D7 | ThetaData licence | Open. Terms §2.1(i) and §12.2: may the local cache outlive a cancelled subscription? The holdout result's reproducibility and any later audit depend on the answer | holdout pull |
 
 ## 9. Variant count and provenance
