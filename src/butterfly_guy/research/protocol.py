@@ -17,7 +17,10 @@ holdout session. Nothing here takes a parameter that the draft fixes:
   calibrated level recorded at registration (below);
 - gates 2–4: positive in both halves (split after 2025-04-30); positive with the three
   largest-P&L sessions of either arm removed (the union of each arm's top three, removed
-  from both); delayed-exit point estimate positive.
+  from both); delayed-exit point estimate positive;
+- gate 6 (Revision 5, the owner's decision D2 of 2026-09-29): the rule's own stressed P&L
+  over the evaluated holdout sessions is above zero. Against a losing E0 a paired gain alone
+  means only "loses less than E0"; a pass now also means the rule made money.
 
 Gate 5 (H-SN1's noise secondary) has no statistic in the draft, so a registered H-SN1
 variant is refused rather than evaluated with an invented one.
@@ -73,7 +76,9 @@ def describe() -> dict:
             "window": [WINDOW[0].isoformat(), WINDOW[1].isoformat()],
             "gate1": "percentile block bootstrap at the level calibrated on development data "
                      "at registration (Revision 4)",
-            "gate3": "union of each arm's three largest-P&L sessions removed from both arms"}
+            "gate3": "union of each arm's three largest-P&L sessions removed from both arms",
+            "gate6": "the rule's own stressed P&L over the evaluated sessions above zero "
+                     "(Revision 5)"}
 
 
 def _blocks(rng: np.random.Generator, n_src: int, n_out: int, reps: int) -> np.ndarray:
@@ -246,7 +251,9 @@ def gates(arm: np.ndarray, base: np.ndarray, arm_delayed: np.ndarray,
     out["gate2"] = out["h1_diff"] > 0 and out["h2_diff"] > 0
     out["gate3"] = out["top3_removed_diff"] > 0
     out["gate4"] = out["delayed_diff"] > 0
-    out["passed"] = out["gate1"] and out["gate2"] and out["gate3"] and out["gate4"]
+    out["gate6"] = out["own_net"] > 0
+    out["passed"] = (out["gate1"] and out["gate2"] and out["gate3"] and out["gate4"]
+                     and out["gate6"])
     # Dollars to the cent; the level and P(better) to 4 decimals (0.975 must stay 0.975).
     return {key: (round(v, 6 if key in {"level", "drafted_level", "p_better"} else 2)
                   if isinstance(v, float) else v) for key, v in out.items()}
@@ -266,8 +273,8 @@ def markdown_section(gate_rows: dict[str, dict], fitted: dict[str, dict],
         f"{SPLIT}.",
         "",
         "| Variant | Δ vs E0 | Gate-1 level | Lower bound | G1 | H1 Δ | H2 Δ | G2 "
-        "| Δ top-3 removed | G3 | Delayed Δ | G4 | Own net | E0 net | Verdict |",
-        "|---|---:|---:|---:|---|---:|---:|---|---:|---|---:|---|---:|---:|---|",
+        "| Δ top-3 removed | G3 | Delayed Δ | G4 | Own net | G6 | E0 net | Verdict |",
+        "|---|---:|---:|---:|---|---:|---:|---|---:|---|---:|---|---:|---|---:|---|",
     ]
 
     def mark(ok: bool) -> str:
@@ -279,7 +286,8 @@ def markdown_section(gate_rows: dict[str, dict], fitted: dict[str, dict],
             f"{mark(g['gate1'])} | "
             f"{g['h1_diff']:,.0f} | {g['h2_diff']:,.0f} | {mark(g['gate2'])} | "
             f"{g['top3_removed_diff']:,.0f} | {mark(g['gate3'])} | {g['delayed_diff']:,.0f} | "
-            f"{mark(g['gate4'])} | {g['own_net']:,.0f} | {g['baseline_net']:,.0f} | "
+            f"{mark(g['gate4'])} | {g['own_net']:,.0f} | {mark(g['gate6'])} | "
+            f"{g['baseline_net']:,.0f} | "
             f"**{'PASS' if g['passed'] else 'FAIL'}** |")
     if fitted:
         lines += ["", "Fitted values re-fitted on the development window and checked equal to "
@@ -288,6 +296,6 @@ def markdown_section(gate_rows: dict[str, dict], fitted: dict[str, dict],
     if reproduction_of:
         lines += ["", f"This run reproduces holdout run {reproduction_of} (same unseal, "
                   "dataset, arms and code); it is recorded as another look."]
-    lines += ["", "\"Own net\" is each arm's own stressed P&L. It is reported, not gated (D2).",
-              ""]
+    lines += ["", "\"Own net\" is the rule's own stressed P&L; gate 6 (Revision 5) requires it "
+              "above zero.", ""]
     return lines

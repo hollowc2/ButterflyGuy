@@ -55,7 +55,8 @@ def test_a_steady_gain_passes_every_gate():
     assert g["lower_bound"] == 4000 and g["h1_diff"] == g["h2_diff"] == 2000
     assert (g["h1_sessions"], g["h2_sessions"]) == (20, 20)
     assert g["top3_removed_diff"] == 3700  # the tied top sessions: the last three
-    assert g["gate1"] and g["gate2"] and g["gate3"] and g["gate4"] and g["passed"]
+    assert g["gate1"] and g["gate2"] and g["gate3"] and g["gate4"] and g["gate6"]
+    assert g["passed"]
 
 
 def test_each_gate_can_fail_on_its_own():
@@ -68,6 +69,10 @@ def test_each_gate_can_fail_on_its_own():
     g = _gates(np.full(40, 100.0), arm_d=np.full(40, -1.0))
     assert not g["gate4"] and not g["passed"]
     assert not _gates(np.full(40, -100.0))["gate1"]
+    # Gate 6 (Revision 5): beating a losing baseline is not enough; the rule must make money.
+    g = _gates(np.full(40, -50.0), base=np.full(40, -150.0), base_d=np.full(40, -150.0))
+    assert g["gate1"] and g["gate2"] and g["gate3"] and g["gate4"]
+    assert g["own_net"] == -2000 and not g["gate6"] and not g["passed"]
 
 
 def test_gate_1_is_the_drafted_bootstrap_at_one_minus_alpha_over_k():
