@@ -1709,3 +1709,64 @@ In-sample on the development window. Nothing registered, unsealed or pulled.
 - D4: gate-1 calibration on skip filters.
 - D6: Indices month.
 - D7: ThetaData licence.
+
+## 2026-09-29 (later) — D4: gate 1's level calibrated on development data (Revision 4; nothing registered)
+
+In-sample, development window only. Nothing registered, unsealed or pulled.
+
+### The calibration study (scratch, development data)
+
+Simulated holdouts of 358 sessions, drawn in 10-session blocks from the development pairs.
+For H-TS1 at k = 1:
+
+| Gate-1 method | Passes with no effect (target 10%) | Power, development effect | Power, half effect |
+|---|---:|---:|---:|
+| Percentile bootstrap at the drafted 90% bound | 17–19% | 49–52% | 32–34% |
+| Same test at the 97.5% bound | 9–11% | 31–33% | 17–20% |
+| Bootstrap-t at the 90% bound | 14–16% | 35–39% | 23–27% |
+
+- **Bootstrap-t has no advantage** at the same real false-pass rate.
+- **A circular-shift skip test could not be validated.** The block resampling lines both series
+  up on block boundaries only at the observed alignment, which biases the test. On clean
+  synthetic data it is conservative.
+- **One scenario of mine was wrong and was replaced.** Halving every paired difference cannot
+  change a sign-based test.
+
+### Decision and change
+
+- **Decision (owner): D4, the calibrated level.**
+- **Change (`b18ca94`, `c59e6bd`).**
+  - At registration, `register` replays E0 and each rule on the development window under the
+    protocol's settings, and shifts each paired difference to mean zero.
+  - It resamples that difference to the planned holdout size and runs the percentile test on
+    a grid of levels: 2,000 simulated holdouts, 10,000 reps each, seed 1.
+  - For each k = 1..5 it records the loosest level with a simulated false-pass rate of at most
+    0.10/k, never looser than 0.10/k.
+  - `holdout` uses the recorded level. It refuses a registration without one, or one whose
+    target could not be reached for its k.
+  - Marked in the draft as Revision 4.
+  - Tests: 1052 pass, ruff is clean.
+
+### What it gives on the real dataset (in-process, nothing registered)
+
+| | k = 1 | k = 2 | k ≥ 3 |
+|---|---:|---:|---|
+| H-TS1, 358 sessions | 2.5% (97.5% bound) | 0.25% | cannot be calibrated |
+| H-TS1, 421 sessions | 4.0% | 0.5% | cannot be calibrated |
+| H-EV1 / H-LV1 / H-EV2 (358) | 5% / 6% / 10% | 1.5% / 2.5% / 5% | |
+
+### Consequences
+
+- **Power for H-TS1 alone (k = 1, all gates):**
+  - 33% if the development effect is real, 20% if it is half as large;
+  - 10.6% with no effect, against a 10% target;
+  - with an Indices month: 40% and 22%. Under calibration the month now buys power.
+- **In-sample, H-TS1 would fail gate 1 at its calibrated level:** its 97.5% bound is −$2,916.
+- **The negative-baseline effect (D2) remains.** A no-mechanism skip passes about 15% of the
+  time while E0 loses.
+
+### Still open
+
+- D2: what a pass means against a losing E0.
+- D6: Indices month; register with `--holdout-sessions 421` if bought.
+- D7: ThetaData licence.

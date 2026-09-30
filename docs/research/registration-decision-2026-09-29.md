@@ -10,7 +10,10 @@ onward were not used.
 - **D3: floor stressed exits at $0.** This is Revision 1 of the pre-registration draft, marked
   there. It was made after seeing these results.
 - **D5: settle held trades on early closes** instead of dropping the session (code `6891317`).
-  It too was decided after seeing these results.
+  This is Revision 3.
+- **D4: calibrate gate 1's level on development data at registration** (code `b18ca94`,
+  `c59e6bd`). This is Revision 4.
+- All three were decided after seeing these results.
 
 Every figure below uses the floored metric (`--floor-stressed-exits`) and the early-close fix,
 unless it is marked "unfloored". The first version's unfloored figures are kept in §3 and §9
@@ -35,23 +38,27 @@ each hypothesis's frozen implementation choices and the 2026 descriptive evidenc
    - H-EV1 is flat (+$151).
    - H-EV2 gains +$1,366 from 4 skipped trades but fails gate 2 (its H2 difference is 0).
 3. **Even H-TS1 is weak evidence.**
-   - In-sample it passes gate 1 only at k = 1 (+$1,078 at 90%); from k = 2 it fails.
+   - In-sample it fails gate 1 at its calibrated level: its 97.5% lower bound is −$2,916. It
+     passes only at the drafted 90% (+$1,078), which over-passes rules like it (§6.2).
    - Its threshold is fitted on these sessions.
    - Its stage-5 mechanism check was "not supported".
    - Because E0 loses, trading less helps by itself: skipping 70 random E0 trades gains $1.9k
      on average, and 12% of such skips gain as much as H-TS1 did.
    - H-TS1 itself still lost money (−$2,283).
 4. **Status: not registered (D1).** If and when you register, the recommendation stays: H-TS1
-   alone, k = 1. Its power on the holdout is about 51% if the development effect is
-   real, and about 33% if it is half as large. A pass would show that H-TS1 loses less
-   than E0, not that it makes money.
+   alone, k = 1.
+   - Its gate 1 is then the 97.5% bound, calibrated so that a no-effect H-TS1 passes about
+     10% of the time.
+   - Power is about 33% if the development effect is real, and 20% if it is half as large.
+   - With an Indices month (421 sessions) that rises to about 40% and 22% (§4).
+   - At k ≥ 3 its gate 1 cannot be calibrated at all, and the holdout command refuses.
+   - A pass would show that H-TS1 loses less than E0, not that it makes money.
 5. **Still open before any registration:**
    - D2: what a paired pass means against a losing E0.
-   - D4: gate 1 over-passes on skip filters.
    - D9: the holdout evaluation command is **built** (`holdout`, commit `6f02a86`, §6.5).
      Review the details it fixes (gate 3's reading, the re-run rule) before registering.
    - D6 (Indices month) and D7 (ThetaData licence) also remain open.
-   - D5 (early closes) is fixed (§6.4).
+   - D5 (early closes) and D4 (gate-1 calibration) are fixed (§6.4, §6.2).
 
 ## 1. Data and integrity
 
@@ -173,7 +180,8 @@ identical in both.
 | Lower bound 90% (k = 1) | **+1,078** | +498 | −5,696 | −10,253 | −29,136 |
 | Lower bound 95% (k = 2) | −1,074 | +283 | −7,451 | −12,838 | −33,925 |
 | Lower bound 97.5% (k = 4) | −2,916 | +135 | −8,869 | −15,129 | −37,385 |
-| Draft gates 1–4 on dev | pass at k = 1; fail g1 at k ≥ 2 | fail g2 (H2 Δ = 0) | fail g1, g2 | fail all | fail all |
+| Calibrated gate-1 level at k = 1 (358 sessions; Revision 4) | 2.5% | 10% | 5% | 6% | — |
+| Draft gates 1–4 on dev, gate 1 at the calibrated level | fail g1 (97.5% bound −2,916) | fail g2 (H2 Δ = 0) | fail g1, g2 | fail all | fail all |
 | Fly choice: Δ across paired draws, 5–95% | +7.4k … +7.6k | +1.3k … +1.4k | +116 … +151 | −1,465 … −1,455 | n/a |
 | Fly choice: share of draws beating E0 | 100% | 100% | 100% | 0% | n/a |
 | Exits floored (stressed) | 3 | 4 | 6 | 5 | 14 |
@@ -249,29 +257,39 @@ The trade rate depends on VIX: E0 barely trades at 24.5 or above. The holdout's 
 
 **Power, from the development-window paired vectors** (floored metric, early closes settled).
 - Simulated holdouts resample development sessions in 10-session blocks.
-- Each simulated holdout then gets the draft's percentile bootstrap (2,000 reps) at the level
-  for k, plus gates 2–4.
+- Each simulated holdout then gets the draft's percentile bootstrap (2,000 reps) plus gates
+  2–4.
+- H-TS1's gate 1 is at its calibrated level for each k (Revision 4, §6.2). The other rules'
+  rows use the drafted 0.10/k, because they are not recommended.
 - There are 1,000 simulations per cell, so each figure is good to about ±1.5 points.
 - All of this assumes 2022–24 is representative of 2024–26.
 
-Full gate set, 358 sessions:
+H-TS1 at its calibrated gate-1 level, full gate set:
+
+| Scenario | 358 sessions, k = 1 (97.5% bound) | 358, k = 2 (99.75%) | 421 sessions, k = 1 (96% bound) |
+|---|---:|---:|---:|
+| development effect is real (+$13.06/session) | **33%** | 19% | **40%** |
+| half the development effect | 20% | 11% | 22% |
+| no effect (false pass; target 0.10/k) | 10.6% | 5.5% | 9.3% |
+| no mechanism, E0 negative as on dev (random skip) | 15% | 8.2% | 15% |
+
+At k ≥ 3 H-TS1's gate 1 cannot be calibrated (§6.2), so the holdout command refuses it.
+
+The other rules at the drafted levels, full gate set, 358 sessions:
 
 | Hypothesis | Scenario | k = 1 | k = 2 | k = 3 | k = 4 | k = 5 |
 |---|---|---:|---:|---:|---:|---:|
-| H-TS1 | development effect is real (+$13.06/session) | 51% | 41% | 36% | 33% | 32% |
-| H-TS1 | half the development effect | 33% | 26% | 22% | 20% | 19% |
-| H-TS1 | no effect (false pass) | 18% | 14% | 11% | 11% | 9.7% |
-| H-TS1 | no mechanism, E0 negative as on dev (random skip) | 25% | 19% | 17% | 15% | 14% |
 | H-EV1 | development effect (≈ none) | 14% | 9.7% | 7.2% | 6.3% | 5.7% |
 | H-LV1 | development effect (negative) | 8.9% | 5.6% | 4.1% | 3.5% | 3.0% |
 | H-EV2 | development effect (4 trades; unreliable) | 39% | 36% | 23% | 21% | 20% |
 | H-EV2 | half the development effect | 17% | 9.1% | 5.8% | 4.7% | 3.0% |
 | H-SN1 | development effect (negative) | 1.2% | 0.4% | 0.3% | 0.1% | 0.1% |
 
-**An Indices month (421 sessions) buys no measurable power.** H-TS1 is at 52% at k = 1 and
-34% at k = 4, against 51% and 33%, which is within simulation error. A real effect grows the
-total with n but the noise with √n, so 63 more sessions change little. The month would buy data
-quality and the VIX cross-check, not power.
+**With the calibration, an Indices month does buy power.** H-TS1 goes from 33% to 40% at the
+development effect.
+- At the drafted level, 63 more sessions changed little: 51% → 52%.
+- The skewness that forces the tighter level shrinks with more sessions, so the calibrated
+  level loosens from the 97.5% bound to the 96% bound.
 
 H-EV2's development-effect row overstates it: its four trades are all in development H1, but
 resampling spreads them across both simulated halves.
@@ -282,13 +300,14 @@ development dispersion):
 | | k = 1 | k = 4 | k = 5 | Development effect scaled to 358 sessions |
 |---|---:|---:|---:|---:|
 | H-TS1 | $8.2k ($23/session) | $10.9k | $11.2k | $4.7k |
+| H-TS1 at its calibrated k = 1 level (97.5% bound; 96% with 421 sessions) | $10.9k ($30/session) | — | — | $4.7k ($5.5k at 421) |
 | H-EV1 | $6.9k | $9.1k | $9.4k | $0.1k |
 | H-LV1 | $10.8k | $14.2k | $14.7k | −$0.9k |
 | H-EV2 | $1.2k | $1.6k | $1.7k | $0.8k |
 | H-SN1 | $21.2k | $28.0k | $29.0k | −$7.8k |
 
-H-TS1's in-sample effect is a little over half its minimum detectable effect at k = 1, and
-in-sample winners usually shrink out of sample.
+At its calibrated level, H-TS1's in-sample effect is under half its minimum detectable effect,
+and in-sample winners usually shrink out of sample.
 
 ## 5. VIX-smoothing sensitivity
 
@@ -345,7 +364,7 @@ the development window did this: −$5,476 stressed, against −$514 at midpoint
 The floor is conservative: it books $0, not the settlement value the fly could still have
 reached if held.
 
-### 6.2 Gate 1 passes skip filters too often under the null (D4, open)
+### 6.2 Gate 1 passed skip filters too often under the null: decided, now calibrated (D4, draft Revision 4)
 
 The draft expects a per-test false-pass rate of α/k. With a skip filter the paired difference is
 zero on most sessions, and a few large settled winners dominate it. In that case the percentile
@@ -365,6 +384,33 @@ sessions, floored, with no true effect:
   would be up to about 22% (union bound at k = 5), not the draft's "at most about 10%".
 - If E0 also loses in the holdout as it did here, skip filters with no real mechanism would
   pass even more often (the random-skip rows in §4). The union bound then reaches about 33%.
+
+**What was done (Revision 4, commits `b18ca94` and `c59e6bd`).** Gate 1 keeps the draft's
+statistic and null, but at a level calibrated per rule.
+- **At registration.** `register` replays E0 and each rule on the development window under the
+  protocol's settings. It shifts the paired difference to mean zero, resamples it in 10-session
+  blocks to holdouts of the planned size (`--holdout-sessions`), and runs the percentile test at
+  every level of a fixed grid: 2,000 simulated holdouts, 10,000 reps each, seed 1.
+- **What it records.** For each k = 1..5, the loosest level whose simulated false-pass rate is
+  at most 0.10/k, never looser than 0.10/k, together with the whole curve.
+- **At the holdout.** The command uses the recorded level for its k. It refuses a registration
+  with no calibration, or one whose target could not be reached for that k.
+
+Computed in-process on this dataset, with nothing registered:
+
+| Rule | Passes with no effect at the drafted 10% | Calibrated level: k = 1 | k = 2 | k ≥ 3 |
+|---|---:|---:|---:|---|
+| H-TS1, 358 sessions | 17.7% | **2.5%** | 0.25% | cannot be calibrated |
+| H-TS1, 421 sessions | 16.3% | **4.0%** | 0.5% | cannot be calibrated |
+| H-EV1, 358 | 14.4% | 5.0% | 1.5% | 0.25% at k = 3; not at 4–5 |
+| H-LV1, 358 | 13.2% | 6.0% | 2.5% | 1.5%, 1.0%, 0.75% |
+| H-EV2, 358 | 5.7% | 10% (drafted) | 5% | drafted |
+
+- At H-TS1's calibrated k = 1 level, a no-effect H-TS1 passes 10.6% of the time with all gates
+  (target 10%).
+- The calibration assumes the holdout's paired difference is shaped like the development
+  window's.
+- It does not address the negative-baseline effect of §6.3, which is D2's.
 
 ### 6.3 A paired pass against a losing baseline (D2, open)
 
@@ -418,7 +464,8 @@ unsealed or pulled.
 **Status: not registered (owner's decision D1, 2026-09-29).**
 
 **If and when you register: H-TS1 alone, k = 1.**
-- Gate 1 is then the 90% one-sided lower bound.
+- Gate 1 is then the lower bound at H-TS1's calibrated level (Revision 4), recorded by
+  `register`: the 97.5% bound at 358 sessions, the 96% bound at 421.
 - Gates 2–4 as drafted, on the floored metric.
 - Holdout halves as drafted: H1 2024-07-01 → 2025-04-30, H2 2025-05-01 → 2026-03-12.
 
@@ -447,6 +494,7 @@ is unchanged by the floor and the early-close fix):
 | Config | `configs/config.yaml` sha256 `d120b63fd4e12ed812cc2742d602f9e531a1f5ca38e28c30628ab149f5d1b397` |
 | Dataset | `spx_0dte_thetadata` @ `93bbe58eb799c516f2a65bd5b20b7fdbc686e65681378d56c9279c8955a05d30` (manifest shows `holdout_sessions: 0`) |
 | Profile | `vendor_1m` |
+| Gate-1 level (Revision 4) | calibrated at registration: k = 1 gives 2.5% (358 sessions) or 4.0% (421); recorded as `gate1` in the register record |
 | Replay | early-close sessions settle held trades (D5, `6891317`) |
 
 **What the hash does not cover.** E0's code, `features.py` and the config are frozen by the
@@ -461,7 +509,9 @@ committed before `register`.
 `research-core.md`).
 
 **The multiple-testing k.** The draft sets k to the number actually registered. The
-recommendation gives k = 1. Each extra hypothesis raises k by one and costs H-TS1 power (§4).
+recommendation gives k = 1. Each extra hypothesis raises k by one and costs H-TS1 power:
+under calibration its gate-1 level falls to 0.25% at k = 2, and it cannot be calibrated at
+k ≥ 3 (§6.2).
 The variant count on this dataset (8, §9) is reported alongside; it is not k.
 
 **How to register and evaluate, if and when you decide to.** Register from a clean,
@@ -470,7 +520,7 @@ evaluate once:
 
 ```bash
 uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata register --variants HTS1 \
-  --note "H-TS1 alone, k=1; halves 2025-04-30; <D2/D4/D6 choices>"
+  --holdout-sessions 358 --note "H-TS1 alone, k=1; halves 2025-04-30; <D2/D6 choices>"
 # (the holdout pull: export-history ... --unseal-holdout <SEQ>, as research-core documents)
 uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata holdout --unseal-holdout <SEQ>
 ```
@@ -486,10 +536,10 @@ development registry is a separate file and is never read by the unseal.
 | D3 | Stressed exits below zero | **Decided 2026-09-29: floor at $0** (draft Revision 1; `--floor-stressed-exits`; §6.1) | done |
 | D8 | Development registry | **Confirmed 2026-09-29:** development runs are recorded in `registry/development/` | done |
 | D2 | Meaning of a pass against a losing E0 | Open. Accept that a pass means "loses less than E0", or add the rule's own stressed P&L as a reported (or gating) secondary. A new gate is a marked revision of the draft | registration |
-| D4 | Gate 1 on skip filters (§6.2) | Open. Accept and state the real false-pass rates, or change the test (for example a random-skip null of the same size). A marked revision | registration |
+| D4 | Gate 1 on skip filters (§6.2) | **Decided 2026-09-29: calibrate the level on development data at registration** (draft Revision 4; `b18ca94`, `c59e6bd`) | done |
 | D5 | Early closes (§6.4) | **Decided 2026-09-29: settle held trades on the early close** (`6891317`) | done |
 | D9 | Holdout evaluation command (§6.5) | **Built 2026-09-29** (`holdout`, `6f02a86`). Review its two fixed readings (gate 3 union; exact-reproduction re-run rule) | registration |
-| D6 | ThetaData Indices month ($50) | Open. Fills the 63-session gap: 358 → 421 sessions, H2 154 → 217 (no measurable power gain, §4). Gives a real intraday VIX to check the smoothing (§5; H-TS1 is not affected) and cross-checks the owner's files. The gap pull is holdout data, so it can happen only after registration, but whether the holdout includes those sessions should be fixed in the register note | registration |
+| D6 | ThetaData Indices month ($50) | Open. Fills the 63-session gap: 358 → 421 sessions, H2 154 → 217; with the calibrated gate 1, H-TS1's power rises from 33% to 40% (§4). Register with `--holdout-sessions 421` if you buy it. Gives a real intraday VIX to check the smoothing (§5; H-TS1 is not affected) and cross-checks the owner's files. The gap pull is holdout data, so it can happen only after registration, but whether the holdout includes those sessions should be fixed in the register note | registration |
 | D7 | ThetaData licence | Open. Terms §2.1(i) and §12.2: may the local cache outlive a cancelled subscription? The holdout result's reproducibility and any later audit depend on the answer | holdout pull |
 
 ## 9. Variant count and provenance

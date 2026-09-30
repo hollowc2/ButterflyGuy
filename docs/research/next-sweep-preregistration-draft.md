@@ -131,6 +131,38 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 >   frozen-replay parity are unchanged. So are the hypotheses, split, halves, metric,
 >   bootstrap, the k rule and the gates.
 
+> **[REVISION 4, 2026-09-29, marked: the owner's decision D4, made AFTER seeing the
+> development-window results. Gate 1's level changes; its statistic, its null, the bootstrap,
+> the k rule and gates 2–5 do not]**
+> - **What changed.** Gate 1 still requires the moving-block bootstrap lower bound of the
+>   total paired difference to be above zero, but at a calibrated level instead of
+>   1 − 0.10/k.
+> - **Why.** For a skip filter the paired difference is zero on most sessions and dominated
+>   by a few large settled winners. The percentile bootstrap then passes a rule with no effect
+>   too often. At the drafted 10% level, over 358 holdout sessions: H-TS1 17.7%, H-EV1 14.4%,
+>   H-LV1 13.2% (`registration-decision-2026-09-29.md` §6.2).
+> - **How** (commits `b18ca94` and `c59e6bd`).
+>   - At registration, `register` replays E0 and each rule on the development window under
+>     the protocol's settings, and shifts each paired difference to mean zero.
+>   - It resamples that difference in 10-session blocks to holdouts of the planned size
+>     (`--holdout-sessions`: 358 without an Indices month, 421 with one).
+>   - It runs the percentile test at every level of a fixed grid: 2,000 simulated holdouts,
+>     10,000 reps each, seed 1.
+>   - For each k = 1..5 it records the loosest level whose simulated false-pass rate is at
+>     most 0.10/k, never looser than 0.10/k.
+>   - The holdout evaluation uses the recorded level for its k, and refuses a registration
+>     that has none.
+>   - It also refuses when no grid level reaches 0.10/k for the registered k, rather than
+>     run a test that cannot hold its error rate.
+> - **What it gives.** Computed in-process on `spx_0dte_thetadata` @ `93bbe58e`, with
+>   nothing registered:
+>   - H-TS1 alone (k = 1) gets the 97.5% bound at 358 sessions, and the 96% bound at 421.
+>   - At k = 2 its level would fall to 0.25%. Its heavy tail keeps false passes high at any
+>     moderate level.
+>   - At k ≥ 3 no level reaches the target, so it cannot be evaluated.
+> - **Unchanged.** The statistic, the null (no paired difference), the blocks, reps and seed,
+>   the k rule, gates 2–5, the metric (Revision 1) and the early-close rule (Revision 3).
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).
@@ -223,6 +255,8 @@ registration.
   with H-EV2). Bonferroni at family α = 0.10, one-sided.
 - **A hypothesis passes only if all of these hold:**
   1. the bootstrap lower bound at 1 − 0.10/k is above 0 (97.5% for k = 4);
+     *[Revision 4, 2026-09-29, marked: at the level calibrated on development data at
+     registration, never looser than 1 − 0.10/k; see the revision block above]*
   2. the paired difference is positive in both holdout halves;
   3. the paired difference is still positive with the three largest-P&L sessions of
      either arm removed;
@@ -233,6 +267,8 @@ registration.
   the 49 definitions already tried on `spx_0dte` for context.
 - **Expected false positives:** with k = 4 and a Bonferroni family α of 0.10, at most
   about a 10% chance that any one of the four passes by luck alone.
+  *[Revision 4, 2026-09-29, marked: the drafted percentile test did not achieve this on skip
+  filters, which is why gate 1's level is now calibrated]*
 
 ## Out of scope for this sweep
 

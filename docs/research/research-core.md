@@ -478,6 +478,13 @@ checks the chain.
   - All fits happen before anything is appended, so a failed fit registers nothing.
   - On `spx_0dte_thetadata` @ `93bbe58e`, HTS1 fits to `{threshold: 0.9181935615930604,
     fit_n: 528}` (checked in-process on 2026-09-29; nothing was registered).
+- **Gate-1 calibration at registration** (2026-09-29, D4, draft Revision 4).
+  - On a dataset with development sessions, `register` replays E0 and the registered rules on
+    the development window under the protocol's settings.
+  - It records `gate1` for each rule: the calibrated level for each k = 1..5, the whole
+    false-pass curve, and the planned holdout size (`--holdout-sessions`, default 358).
+    See "The holdout evaluation" below.
+  - This takes about 90 s per rule, plus the development replay.
 
 ```bash
 uv run python -m butterfly_guy.research register --variants HLV1 --note "before the H-LV1 test"
@@ -884,7 +891,9 @@ on identical sessions. There is no `--variants` option. The draft's choices are 
 - stressed exits floored at $0 (Revision 1), delayed exit one clock time;
 - 10-session blocks, 10,000 reps, seed 1;
 - halves split after 2025-04-30;
-- k = the number of variants registered, gate 1 at 1 − 0.10/k;
+- k = the number of variants registered;
+- gate 1 at each rule's calibrated level for that k (Revision 4, below), never looser than the
+  drafted 1 − 0.10/k;
 - gates 2–4 as drafted.
 
 **Choices the draft left open, fixed in the code** (so frozen by the register record's
@@ -902,10 +911,26 @@ on identical sessions. There is no `--variants` option. The draft's choices are 
 - a registered definition hash no longer matches the catalog;
 - a fitted rule has no registered fitted values, or its re-fit on the development window
   differs from them (or was made under another profile);
+- a registered rule has no gate-1 calibration for the registered k, or its calibration could not
+  reach 0.10/k;
 - `src/` or `configs/` has uncommitted changes, or differs from the registration commit;
 - the dataset holds no holdout sessions;
 - the holdout was already evaluated and this run is not an exact reproduction: it differs in
   the unseal, the dataset hash, the arms, or the code since the first run.
+
+**Gate-1 calibration (Revision 4, commits `b18ca94` and `c59e6bd`).** A skip filter's paired
+difference is zero on most sessions and dominated by a few large settled winners, and the
+percentile bootstrap then passes a no-effect rule too often: H-TS1 17.7% at the drafted 10%, for
+358 sessions. So `protocol.calibrate_gate1` works from the development-window difference:
+- it shifts the difference to mean zero and resamples it in 10-session moving blocks to the
+  planned holdout size;
+- it runs the percentile test at every level of `CAL_GRID`, which includes every 0.10/k:
+  2,000 simulated holdouts, 10,000 reps each, seed 1;
+- for each k it keeps the loosest level whose simulated false-pass rate is at most 0.10/k,
+  never looser than 0.10/k.
+
+On `spx_0dte_thetadata`, computed in-process with nothing registered, H-TS1 gets 2.5% at k = 1
+(4.0% with 421 sessions) and 0.25% at k = 2, and cannot be calibrated at k ≥ 3.
 
 **Recording.** Every evaluation, reproductions included, appends an `evaluate` record per arm
 to the registration registry, and there is no `--no-registry`. Each record carries:
