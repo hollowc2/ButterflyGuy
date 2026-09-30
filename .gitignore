@@ -53,6 +53,11 @@ data/equity_market_data/
 # Schwab gateway 1-minute index archive (tools/run_gateway_minute_backfill.sh)
 data/gateway_minute/
 
+# ThetaData option history (vendor licence: personal use only; never commit)
+data/thetadata/*
+!data/thetadata/README.md
+data/thetadata_sealed/
+
 # Real option chain cache
 data/chains/*.json
 data/chains/*/*.json
