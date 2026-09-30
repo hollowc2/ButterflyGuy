@@ -36,7 +36,7 @@ here changes live-trading code.
 | `validate.py` | Fidelity validation of a vendor dataset against the Helios export (readiness doc steps 1–4) |
 | `hypotheses.py` | Drafted hypothesis rules H-SN1, H-EV1, H-TS1 and optional H-EV2 (catalog `HSN1`, `HEV1`, `HTS1`, `HEV2`; not registered) |
 | `mechanism.py` | DESCRIPTIVE H-TS1 mechanism check on Cboe daily closes, development window only (no registry record) |
-| `report.py`, `cli.py` | Artifacts and the `python -m butterfly_guy.research` CLI |
+| `report.py`, `cli.py` | Artifacts and the `python -m butterfly_guy.research` CLI (`catalog` lists variants and their registry history) |
 
 ## Data
 
@@ -479,7 +479,14 @@ checks the chain.
   - On `spx_0dte_thetadata` @ `93bbe58e`, HTS1 fits to `{threshold: 0.9181935615930604,
     fit_n: 528}` (checked in-process on 2026-09-29; nothing was registered).
 
+`catalog` lists every catalog variant with its definition hash and what each registry file
+holds for that exact definition, counted by `event:stage` (a port includes its
+placeholder). It also lists other hashes recorded under the same name, which means the
+definition changed since, or a placeholder was never ported. It ends with each registry's
+variant count and exits non-zero if a chain is broken.
+
 ```bash
+uv run python -m butterfly_guy.research catalog
 uv run python -m butterfly_guy.research register --variants HLV1 --note "before the H-LV1 test"
 uv run python -m butterfly_guy.research port --variants C1,C2 --note "ported in stage 2"
 ```

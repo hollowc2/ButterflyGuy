@@ -1,8 +1,13 @@
 """Unified DB backtest for SPX and NDX butterflies.
 
-Supports single-config mode (detailed per-day output) and parameter sweep
-mode (grid search over comma-separated param lists, sorted by Sharpe, with
-CSV export).
+Supports single-config mode (detailed per-day output), which is the live-parity
+reference, and a legacy parameter sweep mode for NDX and XSP (grid search over
+comma-separated param lists, midpoint accounting, sorted by per-trade Sharpe,
+with CSV export). Sweep winners are hypotheses only.
+
+SPX rule research runs through the research core instead
+(`python -m butterfly_guy.research`; see docs/research/research-core.md), so
+`--sweep --asset SPX` is refused.
 
 Usage
 -----
@@ -297,6 +302,22 @@ def _dd_schedule_label(schedule: tuple[DrawdownWindow, ...] | None) -> str:
     return ",".join(f"{w.start_min:g}-{w.end_min:g}:{w.threshold:g}:{w.label}" for w in schedule)
 
 
+def spx_sweep_retired_message(start: dt.date | None, end: dt.date | None) -> str:
+    window = "".join(f" --{flag} {value}" for flag, value in (("start", start), ("end", end))
+                     if value is not None)
+    return (
+        "--sweep is retired for SPX. SPX rule research runs through the research core, "
+        "which scores named variants paired against E0 with stressed accounting, a "
+        "day-block bootstrap and near-tied fly robustness, and records every variant "
+        "tried in the registry:\n"
+        "  uv run python -m butterfly_guy.research catalog\n"
+        "  uv run python -m butterfly_guy.research run --variants E0,<VARIANT> "
+        f"--baseline E0{window}\n"
+        "A parameter this grid swept becomes a named catalog variant first. See "
+        "docs/research/research-core.md."
+    )
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Unified SPX/NDX/XSP DB backtest — single-config or parameter sweep",
@@ -398,7 +419,10 @@ def parse_args() -> argparse.Namespace:
                    help="Enable absolute loss stop. Default: asset live config.")
 
     p.add_argument("--sweep", action="store_true",
-                   help="Run grid search over all comma-separated param combos.")
+                   help="(NDX/XSP only, legacy) Run grid search over all comma-separated "
+                        "param combos: midpoint accounting, ranked by per-trade Sharpe, so "
+                        "winners are hypotheses only. Refused for SPX; use "
+                        "`python -m butterfly_guy.research run`.")
     p.add_argument("--top", type=int, default=20,
                    help="(Sweep) top N rows to print, sorted by Sharpe.")
     p.add_argument("--csv", type=Path, default=None,
@@ -446,6 +470,8 @@ def parse_args() -> argparse.Namespace:
                    help="Skip days where |gap vs prev close| < PCT (e.g. 0.0025 = 0.25%%).")
 
     args = p.parse_args()
+    if args.sweep and args.asset == "SPX":
+        p.error(spx_sweep_retired_message(args.start, args.end))
 
     # Apply defaults that depend on asset (must be done after parsing)
     asset_cfg = ASSET_DEFAULTS[args.asset]
@@ -2691,7 +2717,9 @@ async def run_sweep(args: argparse.Namespace) -> None:
 
     entry_strs = [f"{t.hour:02d}:{t.minute:02d}" for t in args.entry_time]
     print(f"\n{'='*72}")
-    print(f"  PARAMETER SWEEP  |  {args.asset}  |  {total_combos} combos")
+    print(f"  PARAMETER SWEEP (LEGACY)  |  {args.asset}  |  {total_combos} combos")
+    print("  Midpoint accounting, ranked by per-trade Sharpe on the sample it evaluates:")
+    print("  treat winners as hypotheses, not evidence.")
     print(f"  Live config: {ASSET_CONFIG_PATHS[args.asset]}")
     width_label = _live_width_label(
         wing_provided=args.wing_provided,

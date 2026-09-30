@@ -127,12 +127,13 @@ does not cover this work.
 
 ### Phase 1: one command surface
 
-1. **Retire `--sweep`.** `run_backtest_db.py --sweep` prints the equivalent `research run`
-   invocation and exits non-zero.
-   - The sweep-only code in `run_sweep` (about 330 lines) and `_summarize_combo` goes.
-   - `metrics.sharpe` loses its last ranking use.
-   - Any flag the core lacks (for example drawdown schedules) becomes a core variant
-     first.
+1. **Retire `--sweep` for SPX (O3).** `run_backtest_db.py --sweep --asset SPX` prints the
+   equivalent `research run` invocation and exits non-zero.
+   - NDX and XSP keep the sweep, labelled legacy (midpoint, Sharpe-ranked, hypotheses
+     only), because the core exports SPX only. `run_sweep` and `_summarize_combo` are
+     deleted once the core covers those assets.
+   - A grid parameter needed for SPX research (for example a drawdown schedule) becomes
+     a named core variant first.
 2. **Add a `research catalog` command** that lists variants, their hashes, registry stage
    and data sets. It replaces reading `variants.py` and the JSONL registry by hand.
 3. **Mark `discover_options_strategy.py` and the synthetic scripts legacy** in their
@@ -233,7 +234,7 @@ holdout run, a registration and a development run by following record ids.
 |---|---|---|
 | O1 | Where the cohort ledger lives (Phase 0.2) | Phase 0 |
 | O2 | Pinned-worktree registration (Phase 2 constraint), or freeze `src/` between register and holdout | Phase 2 |
-| O3 | Retire `--sweep` outright, or keep it one release with a deprecation warning | Phase 1 |
+| O3 | How to retire `--sweep` | **Decided 2026-09-29:** refuse it for SPX (pointing to `research run`); keep it for NDX/XSP, labelled legacy, until the core supports them. The core is SPX-only and has no parameter grid |
 | D2, D4, D5, D6, D7 | As listed in `registration-decision-2026-09-29.md` §8 | Registration |
 
 ## What unification does not change
