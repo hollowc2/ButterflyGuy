@@ -163,6 +163,26 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 > - **Unchanged.** The statistic, the null (no paired difference), the blocks, reps and seed,
 >   the k rule, gates 2–5, the metric (Revision 1) and the early-close rule (Revision 3).
 
+> **[REVISION 5, 2026-09-29, marked: the owner's decision D2, made AFTER seeing the
+> development-window results. A gate is added; the metric, the test and gates 1–5 do not
+> change]**
+> - **What changed.** A hypothesis now also passes only if its own stressed P&L over the
+>   evaluated holdout sessions is above zero (gate 6, a point estimate like gate 4).
+> - **Why.** E0 lost money on the development window (−$9,922 stressed, floored). Against a
+>   losing baseline, gates 1–4 alone mean only "loses less than E0". H-TS1 itself lost
+>   −$2,283 there.
+> - **Cost** (in-sample simulation, H-TS1 alone, k = 1, gate 1 at its calibrated level, 358
+>   sessions):
+>   - power at the development effect falls from about 36% to 18%, and at half the effect
+>     from 27% to 8%;
+>   - a rule with no mechanism, while E0 loses as on development, passes about 4.7% of the
+>     time instead of 16%;
+>   - with an Indices month (421 sessions): 22% and 10%.
+> - **Implementation.** `protocol.gates` (`gate6`), commit `362a728`. The holdout verdict
+>   shows it.
+> - **Unchanged.** The metric, the test and its calibration (Revision 4), the k rule and
+>   gates 1–5.
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).
@@ -261,7 +281,9 @@ registration.
   3. the paired difference is still positive with the three largest-P&L sessions of
      either arm removed;
   4. the delayed-exit stressed model's point estimate is also positive;
-  5. for H-SN1 only, the noise secondary is lower than E0's.
+  5. for H-SN1 only, the noise secondary is lower than E0's;
+  6. *[Revision 5, 2026-09-29, marked: see the revision block above]* the hypothesis's own
+     stressed P&L over the evaluated holdout sessions is above zero.
 - **Reporting:** everything is reported whatever the result, including the development
   figures (labelled in-sample), the cumulative variant count on the vendor dataset, and
   the 49 definitions already tried on `spx_0dte` for context.

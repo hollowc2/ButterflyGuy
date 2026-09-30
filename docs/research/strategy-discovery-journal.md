@@ -1770,3 +1770,46 @@ For H-TS1 at k = 1:
 - D2: what a pass means against a losing E0.
 - D6: Indices month; register with `--holdout-sessions 421` if bought.
 - D7: ThetaData licence.
+
+## 2026-09-29 (later) — D2: a pass must also make money (gate 6, Revision 5; nothing registered)
+
+In-sample, development window only. Nothing registered, unsealed or pulled.
+
+### Study before the decision
+
+Scratch simulation, H-TS1 alone, k = 1, calibrated gate 1, 358 sessions. Two candidate gates:
+
+| Scenario | Gates 1–4 | + own P&L > 0 | + beats a random skip |
+|---|---:|---:|---:|
+| Development effect | 36% | 18% | 36% |
+| Half the effect | 27% | 8% | 27% |
+| No mechanism, E0 losing | 16% | 4.7% | 16% |
+| No mechanism, E0 breaking even | 13% | 13% | 13% |
+
+- **"Beats a random skip" changed no verdict.** The calibrated gate 1 already requires the
+  skipped trades to be much worse than average.
+- **With gate 1 calibrated, trading less adds only about 2.5 points** of false passes.
+- **So D2 was a choice of meaning.**
+
+### Decision and change
+
+- **Decision (owner): D2, gate 6.** A registered rule's own stressed P&L over the evaluated
+  holdout sessions must be above zero.
+- **Change (`362a728`).** `protocol.gates` adds `gate6`, and the holdout verdict shows G6.
+- Marked in the draft as Revision 5.
+- Tests: 1052 pass, ruff is clean.
+
+### Consequences for H-TS1 alone (k = 1)
+
+- **A pass now means it beat E0 and made money on the holdout.**
+- **Power with all gates:**
+  - 18% if the development effect is real, 8% at half;
+  - 22% and 10% with an Indices month;
+  - a no-mechanism rule passes about 5% of the time while E0 loses.
+- **In-sample it fails gate 6:** its own net is −$2,283. It also fails gate 1 at its calibrated
+  level.
+
+### Still open
+
+- D6: Indices month.
+- D7: ThetaData licence.

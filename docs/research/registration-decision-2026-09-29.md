@@ -13,7 +13,9 @@ onward were not used.
   This is Revision 3.
 - **D4: calibrate gate 1's level on development data at registration** (code `b18ca94`,
   `c59e6bd`). This is Revision 4.
-- All three were decided after seeing these results.
+- **D2: add gate 6.** A rule's own stressed P&L on the holdout must be above zero (code
+  `362a728`). This is Revision 5.
+- All four were decided after seeing these results.
 
 Every figure below uses the floored metric (`--floor-stressed-exits`) and the early-close fix,
 unless it is marked "unfloored". The first version's unfloored figures are kept in §3 and §9
@@ -49,16 +51,17 @@ each hypothesis's frozen implementation choices and the 2026 descriptive evidenc
    alone, k = 1.
    - Its gate 1 is then the 97.5% bound, calibrated so that a no-effect H-TS1 passes about
      10% of the time.
-   - Power is about 33% if the development effect is real, and 20% if it is half as large.
-   - With an Indices month (421 sessions) that rises to about 40% and 22% (§4).
+   - A pass now means H-TS1 beat E0 **and** made money on the holdout (gate 6, Revision 5).
+   - Power with all gates is about 18% if the development effect is real, and 8% if it is
+     half as large.
+   - With an Indices month (421 sessions) that is about 22% and 10% (§4).
+   - A rule with no mechanism, while E0 loses, passes about 5% of the time.
    - At k ≥ 3 its gate 1 cannot be calibrated at all, and the holdout command refuses.
-   - A pass would show that H-TS1 loses less than E0, not that it makes money.
 5. **Still open before any registration:**
-   - D2: what a paired pass means against a losing E0.
    - D9: the holdout evaluation command is **built** (`holdout`, commit `6f02a86`, §6.5).
      Review the details it fixes (gate 3's reading, the re-run rule) before registering.
    - D6 (Indices month) and D7 (ThetaData licence) also remain open.
-   - D5 (early closes) and D4 (gate-1 calibration) are fixed (§6.4, §6.2).
+   - D5 (early closes), D4 (gate-1 calibration) and D2 (gate 6) are fixed (§6.4, §6.2, §6.3).
 
 ## 1. Data and integrity
 
@@ -182,6 +185,7 @@ identical in both.
 | Lower bound 97.5% (k = 4) | −2,916 | +135 | −8,869 | −15,129 | −37,385 |
 | Calibrated gate-1 level at k = 1 (358 sessions; Revision 4) | 2.5% | 10% | 5% | 6% | — |
 | Draft gates 1–4 on dev, gate 1 at the calibrated level | fail g1 (97.5% bound −2,916) | fail g2 (H2 Δ = 0) | fail g1, g2 | fail all | fail all |
+| Gate 6 on dev: own stressed net > 0 (Revision 5) | fail (−2,283) | fail (−8,557) | fail (−9,771) | fail (−11,377) | fail (−22,658) |
 | Fly choice: Δ across paired draws, 5–95% | +7.4k … +7.6k | +1.3k … +1.4k | +116 … +151 | −1,465 … −1,455 | n/a |
 | Fly choice: share of draws beating E0 | 100% | 100% | 100% | 0% | n/a |
 | Exits floored (stressed) | 3 | 4 | 6 | 5 | 14 |
@@ -260,20 +264,29 @@ The trade rate depends on VIX: E0 barely trades at 24.5 or above. The holdout's 
 - Each simulated holdout then gets the draft's percentile bootstrap (2,000 reps) plus gates
   2–4.
 - H-TS1's gate 1 is at its calibrated level for each k (Revision 4, §6.2). The other rules'
-  rows use the drafted 0.10/k, because they are not recommended.
+  rows use the drafted 0.10/k and omit gate 6, because they are not recommended.
 - There are 1,000 simulations per cell, so each figure is good to about ±1.5 points.
 - All of this assumes 2022–24 is representative of 2024–26.
 
-H-TS1 at its calibrated gate-1 level, full gate set:
+H-TS1 alone (k = 1) at its calibrated gate-1 level (97.5% bound for 358 sessions, 96% for
+421), with and without gate 6 (Revision 5):
 
-| Scenario | 358 sessions, k = 1 (97.5% bound) | 358, k = 2 (99.75%) | 421 sessions, k = 1 (96% bound) |
-|---|---:|---:|---:|
-| development effect is real (+$13.06/session) | **33%** | 19% | **40%** |
-| half the development effect | 20% | 11% | 22% |
-| no effect (false pass; target 0.10/k) | 10.6% | 5.5% | 9.3% |
-| no mechanism, E0 negative as on dev (random skip) | 15% | 8.2% | 15% |
+| Scenario | 358: gates 1–4 | 358: **all gates** | 421: gates 1–4 | 421: **all gates** |
+|---|---:|---:|---:|---:|
+| development effect is real (+$13.06/session) | 36% | **18%** | 42% | **22%** |
+| half the effect (half the skip pattern replaced by an unrelated one) | 27% | **8%** | 33% | **10%** |
+| no mechanism, E0 losing as on development | 16% | **4.7%** | 16% | **4.3%** |
+| no mechanism, E0 breaking even | 13% | 13% | 12% | 12% |
 
-At k ≥ 3 H-TS1's gate 1 cannot be calibrated (§6.2), so the holdout command refuses it.
+About these figures:
+- They come from one simulation run. A separate run gave 33% (358) and 40% (421) for gates
+  1–4 at the development effect, so read them as ±2–3 points.
+- **Gate 1's calibration target.** Under the paired null, gate 1 alone passes a no-effect
+  H-TS1 10.6% of the time (target 10%), or 9.3% at 421 sessions.
+- **The no-mechanism rows** run above that, partly because of how those scenarios are resampled
+  (the same block-boundary effect as in §6.2).
+- **At k = 2** (99.75% bound) gates 1–4 give 19% at the development effect. At k ≥ 3 H-TS1's
+  gate 1 cannot be calibrated (§6.2), so the holdout command refuses it.
 
 The other rules at the drafted levels, full gate set, 358 sessions:
 
@@ -410,13 +423,27 @@ Computed in-process on this dataset, with nothing registered:
   (target 10%).
 - The calibration assumes the holdout's paired difference is shaped like the development
   window's.
-- It does not address the negative-baseline effect of §6.3, which is D2's.
+- The negative-baseline effect of §6.3 is handled separately, by gate 6 (D2).
 
-### 6.3 A paired pass against a losing baseline (D2, open)
+### 6.3 A paired pass against a losing baseline: decided, gate 6 added (D2, draft Revision 5)
 
 The primary metric is the paired difference from E0. With E0 negative, any rule that trades
-less gains something without a mechanism. The draft's gates have no check on the rule's own
-P&L, so a pass would mean "loses less than E0". H-TS1's own in-sample stressed net is −$2,283.
+less gains something without a mechanism, and the drafted gates never checked the rule's own
+P&L. A pass therefore meant only "loses less than E0". H-TS1's own in-sample stressed net is
+−$2,283.
+
+**What was done (Revision 5, commit `362a728`).** Gate 6: a registered rule also needs its own
+stressed P&L over the evaluated holdout sessions above zero. It is a point estimate, like gate 4.
+
+**Alternatives looked at before the decision** (in-sample simulation, H-TS1 alone, k = 1,
+calibrated gate 1, 358 sessions):
+- **"Beats a random skip of the same size"** (the skipped trades lost more than E0's average)
+  changed no verdict. To clear the calibrated gate 1, the skipped trades already have to be
+  much worse than average.
+- **With gate 1 calibrated, trading less by itself adds only about 2.5 points of false
+  passes:** 16% with E0 losing against 13% with E0 breaking even.
+- **So the choice was about meaning, not mechanism.** Gate 6 halves power (36% → 18% at the
+  development effect) and makes a pass mean "beat E0 and made money".
 
 ### 6.4 Early closes: decided, now fixed (D5)
 
@@ -436,7 +463,8 @@ early-close session drops from the comparison.
 replays holdout sessions; `run` still cannot.
 - **What it evaluates.** Exactly the variants registered up to `SEQ`, each paired with E0.
 - **Fixed, not parameters:** every choice the draft fixes (Revision 1 included). That is the
-  floor, `vendor_1m`, the bootstrap, the halves, k and gates 1–4.
+  floor, `vendor_1m`, the bootstrap, the halves, k, gates 1–4 and, since Revision 5,
+  gate 6.
 - **Recording.** Every evaluation is recorded, and there is no `--no-registry`.
 - **Refusals, all before any holdout session is replayed:**
   - a registered definition that no longer matches the catalog;
@@ -466,7 +494,8 @@ unsealed or pulled.
 **If and when you register: H-TS1 alone, k = 1.**
 - Gate 1 is then the lower bound at H-TS1's calibrated level (Revision 4), recorded by
   `register`: the 97.5% bound at 358 sessions, the 96% bound at 421.
-- Gates 2–4 as drafted, on the floored metric.
+- Gates 2–4 as drafted, and gate 6 (own stressed P&L above zero, Revision 5), on the floored
+  metric.
 - Holdout halves as drafted: H1 2024-07-01 → 2025-04-30, H2 2025-05-01 → 2026-03-12.
 
 **Drop:**
@@ -520,7 +549,7 @@ evaluate once:
 
 ```bash
 uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata register --variants HTS1 \
-  --holdout-sessions 358 --note "H-TS1 alone, k=1; halves 2025-04-30; <D2/D6 choices>"
+  --holdout-sessions 358 --note "H-TS1 alone, k=1; halves 2025-04-30; <D6 choice>"
 # (the holdout pull: export-history ... --unseal-holdout <SEQ>, as research-core documents)
 uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata holdout --unseal-holdout <SEQ>
 ```
@@ -535,7 +564,7 @@ development registry is a separate file and is never read by the unseal.
 | D1 | Register now, or not yet? | **Decided 2026-09-29: not yet.** When you do: H-TS1 alone, k = 1 is recommended. Only what is registered before the holdout pull can ever be tested on it | — |
 | D3 | Stressed exits below zero | **Decided 2026-09-29: floor at $0** (draft Revision 1; `--floor-stressed-exits`; §6.1) | done |
 | D8 | Development registry | **Confirmed 2026-09-29:** development runs are recorded in `registry/development/` | done |
-| D2 | Meaning of a pass against a losing E0 | Open. Accept that a pass means "loses less than E0", or add the rule's own stressed P&L as a reported (or gating) secondary. A new gate is a marked revision of the draft | registration |
+| D2 | Meaning of a pass against a losing E0 | **Decided 2026-09-29: gate 6, own stressed P&L above zero** (draft Revision 5; `362a728`; §6.3) | done |
 | D4 | Gate 1 on skip filters (§6.2) | **Decided 2026-09-29: calibrate the level on development data at registration** (draft Revision 4; `b18ca94`, `c59e6bd`) | done |
 | D5 | Early closes (§6.4) | **Decided 2026-09-29: settle held trades on the early close** (`6891317`) | done |
 | D9 | Holdout evaluation command (§6.5) | **Built 2026-09-29** (`holdout`, `6f02a86`). Review its two fixed readings (gate 3 union; exact-reproduction re-run rule) | registration |

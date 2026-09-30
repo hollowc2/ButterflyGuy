@@ -894,7 +894,9 @@ on identical sessions. There is no `--variants` option. The draft's choices are 
 - k = the number of variants registered;
 - gate 1 at each rule's calibrated level for that k (Revision 4, below), never looser than the
   drafted 1 − 0.10/k;
-- gates 2–4 as drafted.
+- gates 2–4 as drafted;
+- gate 6 (Revision 5, D2): the rule's own stressed P&L over the evaluated holdout sessions
+  above zero. Against a losing E0, gates 1–4 alone meant only "loses less than E0".
 
 **Choices the draft left open, fixed in the code** (so frozen by the register record's
 `git_sha`):
@@ -902,8 +904,8 @@ on identical sessions. There is no `--variants` option. The draft's choices are 
   top three sessions, removed from both arms.
 - **Gate 5 (H-SN1's noise secondary) has no statistic in the draft.** So a registered H-SN1
   (or `HSN1_c148`/`HSN1_c168`) is refused rather than evaluated with an invented one.
-- **Each arm's own stressed net is reported beside the gates, not gated** (owner decision D2
-  is open).
+- **Each arm's own stressed net is reported beside the gates, and gated by gate 6** (Revision 5,
+  commit `362a728`).
 
 **Refusals, all before any holdout session is replayed:**
 - the unseal does not verify;
