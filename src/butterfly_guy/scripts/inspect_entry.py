@@ -1,12 +1,15 @@
 """Inspect what the strategy saw at entry for a given date.
 
-Replicates the synthetic chain, all butterfly candidates, and the selected fly
-exactly as the simulation engine would have seen them.
+Shows the option chain, all butterfly candidates, and the selected fly as the
+simulation engine would have seen them. The chain is the recorded DB snapshot
+nearest the entry time. Stored SPX chains start on 2026-03-13; before that, or
+when no snapshot is found, it falls back to a synthetic Black-Scholes chain and
+says so, and that output is not evidence about recorded markets.
 
 Usage:
-    uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03
-    uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --direction CALL
-    uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 \
+    uv run python src/butterfly_guy/scripts/inspect_entry.py 2026-06-03
+    uv run python src/butterfly_guy/scripts/inspect_entry.py 2026-06-03 --direction CALL
+    uv run python src/butterfly_guy/scripts/inspect_entry.py 2026-06-03 \
         --wing 10 --rr 8.0 --method TARGET_COST
 """
 

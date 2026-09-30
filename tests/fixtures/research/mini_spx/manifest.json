@@ -1,0 +1,83 @@
+{
+ "schema_version": 1,
+ "dataset": "mini_spx",
+ "underlying": "SPX",
+ "source": {
+  "kind": "fixture",
+  "from_dataset_hash": "dd38a5ecb2cfb08df6e057167c9da06041569da20aab9c30d3bf333e348bc523"
+ },
+ "export": {
+  "underlying": "SPX",
+  "strike_margin": 400.0,
+  "min_session_snapshots": 50,
+  "spot_underlyings": [
+   "SPX",
+   "$VIX"
+  ]
+ },
+ "updated_at": "fixture",
+ "exporter_git_sha": "",
+ "dataset_hash": "bb90f79581f2c69cc4c3557a689e8dee4a9633d7a0963769d4c004e9faf8caff",
+ "files": {
+  "daily_bars.parquet": {
+   "rows": 187,
+   "sha256": "f531ff43e59d3e4a546646ee2689632b03b32a252828133cc1ea3f0e0856d152"
+  },
+  "sessions.parquet": {
+   "rows": 6,
+   "sha256": "b89f1a82a00ea0a01ce2c745b402a27f00c994293726c4ad3b2e94d23a300821"
+  },
+  "sessions/2026-03-19/chain.parquet": {
+   "rows": 55722,
+   "sha256": "404138deba41a23729d3ad932e432d79aeafb4a0a6ad4be86ef9a624b7ddc310"
+  },
+  "sessions/2026-03-19/clock.parquet": {
+   "rows": 753,
+   "sha256": "4a1a120b894cc3b6285d4803ce8ddedce1ff8f61e7f5dc0cb6ee8dc99a3d67fb"
+  },
+  "sessions/2026-03-26/chain.parquet": {
+   "rows": 27144,
+   "sha256": "b389c71baace6d0b1426f96e769408c7462496dcc8c7475dbd6be78a8573f3ac"
+  },
+  "sessions/2026-03-26/clock.parquet": {
+   "rows": 377,
+   "sha256": "97e9e309e9989b45025350d539e9a885a218f3e09a7c93c9506acb324d149197"
+  },
+  "sessions/2026-04-07/chain.parquet": {
+   "rows": 56400,
+   "sha256": "daa0b7f8600bc48bb22d4ef9ece0971db1a20dc19bf5f54008fd8a2f1dcc55f6"
+  },
+  "sessions/2026-04-07/clock.parquet": {
+   "rows": 752,
+   "sha256": "6cd47c0f82f104da0e71a9ed8531b034b8a22755fd03cd6c7a0180b24636f80c"
+  },
+  "sessions/2026-04-16/chain.parquet": {
+   "rows": 26460,
+   "sha256": "bd556068af375102881463ba38e1060bf1123cd55c6da819c08d3c497f4079ae"
+  },
+  "sessions/2026-04-16/clock.parquet": {
+   "rows": 378,
+   "sha256": "5bde0a35eaa34d1b9241d34eead0d26aa1494a402c272914a69ab5c2ab730912"
+  },
+  "sessions/2026-06-12/chain.parquet": {
+   "rows": 28348,
+   "sha256": "88ff45b5304267020fb341547ce3be2afa01573f7e15039dad5fb49950a47596"
+  },
+  "sessions/2026-06-12/clock.parquet": {
+   "rows": 373,
+   "sha256": "2e58ce9c8b5b5c0b90a930f0f0bedda4ec4d9dddc83dbd8901432702e768a92e"
+  },
+  "sessions/2026-07-13/chain.parquet": {
+   "rows": 27010,
+   "sha256": "f3ed92891af0a7a8feb32f20b4041f449b6dce392a1940cd2fa58e52fa62c975"
+  },
+  "sessions/2026-07-13/clock.parquet": {
+   "rows": 365,
+   "sha256": "81694b8205de7dca44ab0821c6680206bd1a6ac28bd5536ca31c4e21158b241e"
+  },
+  "spot_ticks.parquet": {
+   "rows": 2249,
+   "sha256": "f230842dd10bb3fe124120ddbf76c6658e47e1a45242336ff16688f940118d30"
+  }
+ }
+}

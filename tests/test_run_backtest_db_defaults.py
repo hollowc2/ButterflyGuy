@@ -156,6 +156,31 @@ def test_backtest_rejects_invalid_research_inputs(monkeypatch, argv):
         parse_args()
 
 
+def test_spx_sweep_is_refused_with_the_research_core_command(monkeypatch, capsys):
+    monkeypatch.setattr(
+        sys, "argv",
+        ["run_backtest_db.py", "2026-03-13", "2026-09-18", "--asset", "SPX", "--sweep"],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        parse_args()
+
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "--sweep is retired for SPX" in err
+    assert (
+        "python -m butterfly_guy.research run --variants E0,<VARIANT> --baseline E0 "
+        "--start 2026-03-13 --end 2026-09-18"
+    ) in err
+
+
+@pytest.mark.parametrize("asset", ["NDX", "XSP"])
+def test_legacy_sweep_still_parses_for_ndx_and_xsp(monkeypatch, asset):
+    monkeypatch.setattr(sys, "argv", ["run_backtest_db.py", "--asset", asset, "--sweep"])
+
+    assert parse_args().sweep is True
+
+
 def test_xsp_backtest_drawdown_defaults_match_live_config(monkeypatch):
     args = _parse_for_asset(monkeypatch, "XSP")
 

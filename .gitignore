@@ -43,6 +43,8 @@ htmlcov/
 
 # Generated data outputs
 *.csv
+# Versioned research inputs (the event calendar) are committed
+!/src/butterfly_guy/research/data/*.csv
 
 # Schwab day cache
 data/schwab/*.json
@@ -50,6 +52,11 @@ data/equity_market_data/
 
 # Schwab gateway 1-minute index archive (tools/run_gateway_minute_backfill.sh)
 data/gateway_minute/
+
+# ThetaData option history (vendor licence: personal use only; never commit)
+data/thetadata/*
+!data/thetadata/README.md
+data/thetadata_sealed/
 
 # Real option chain cache
 data/chains/*.json
@@ -74,10 +81,14 @@ graphify-out/cache/
 graphify-out/20??-??-??/
 
 # Local research output (intentionally untracked), except the prospective cohort
-# ledgers: they are the append-only evidence for a promote/reject decision and
-# must survive disk loss, so they are versioned.
+# ledgers and the research variant registry: they are append-only evidence (a
+# promote/reject decision; how many variants were tried on a dataset) and must
+# survive disk loss, so they are versioned. Research run artifacts stay local.
 /reports/*
 !/reports/prospective_execution/
+!/reports/research/
+/reports/research/*
+!/reports/research/registry/
 
 # Credential-proof and runtime-baseline evidence (mode 0600, retained on the host).
 # These are deliberately kept on Helios and must never be committed; a stray `git add -A`
