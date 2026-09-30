@@ -2,8 +2,9 @@
 
 **For the owner. Nothing is registered.** Every figure below comes from the development window
 (2022-01-03 → 2024-06-28) and is **in-sample**. None of it is evidence of an edge. The sealed
-holdout (2024-07-01 → 2026-03-12) was not downloaded, read or evaluated. Sessions from 2026-03-13
-onward were not used.
+holdout (2024-07-01 → 2026-03-12) was not read or evaluated, and no holdout dataset was built.
+Its raw vendor files were downloaded unread into `data/thetadata_sealed/` (draft Revision 2).
+*[2026-09-30 note, 1]* Sessions from 2026-03-13 onward were not used.
 
 **Revised the same day, after the owner's decisions on the first version:**
 - **D1: do not register yet.**
@@ -18,7 +19,43 @@ onward were not used.
 - **D6: no Indices month.** The holdout is 358 sessions, and the intraday VIX cross-check stays
   undone.
 - **D9: the `holdout` command is built** (commit `6f02a86`, §6.5).
+- **D10: keep Options Value until the holdout is pulled. D11: the minute files' source is
+  unknown.** Both 2026-09-29 (§8). *[2026-09-30 note, 4]*
+- **D7 (2026-09-30): the owner keeps the local ThetaData data** (§8). *[2026-09-30 note, 4]*
 - D3, D5, D4 and D2 were all decided after seeing these results.
+
+**Post-registration note (2026-09-30).** H-TS1 was registered on 2026-09-30 (registry seq 0,
+git `9051357`, commit `a33b3db`). This package was written before that, so "nothing is
+registered" above and "not registered" in the Conclusions describe it as it stood then; §7 and
+§8 carry the registered status. The four corrections below were made after registration and
+before the holdout was evaluated. They change wording only: no figure, gate, level or
+registered value changed, and nothing was re-run. Each is marked *[2026-09-30 note, N]* where it
+applies.
+1. **Holdout files.** The opening paragraph said the holdout was "not downloaded". Its raw files
+   were downloaded before registration, unread, into `data/thetadata_sealed/` (draft
+   Revision 2). No holdout dataset had been built, and nothing was read or evaluated.
+2. **Power figures.** §4's power figures came from a scratch script that was not kept, and how
+   it built its scenarios was not recorded: §4's labels describe replacing part of the skip
+   pattern, while §9 said a constant shift per session. The reproducible tool,
+   `tools/research_studies/dev_studies.py` (constant shift, 10,000 bootstrap reps; see its
+   README), gives lower figures. H-TS1 alone, k = 1, 358 sessions, gates 1–4 / all gates:
+
+   | Scenario | §4 | Tool |
+   |---|---:|---:|
+   | development effect | 36% / 18% | 30% / 16% |
+   | half the effect | 27% / 8% | 18% / 6.8% |
+   | no mechanism (tool: no effect), E0 losing | 16% / 4.7% | 9.5% / 2.7% |
+   | no mechanism (tool: no effect), E0 breaking even | 13% / 13% | 9.5% / 5.8% |
+
+   Both put power with all gates at the development effect below 20%.
+3. **Gate 1's no-effect pass rate at the frozen level.** §4 and §6.2 say gate 1 alone passes a
+   no-effect H-TS1 10.6% of the time at its calibrated level, which reads as missing the 10%
+   target. That is not the calibration's own figure. The registered calibration (record seq 0,
+   `gate1.false_pass`) gives 9.3% at the 2.5% level for 358 sessions, and 17.65% at the drafted
+   10% (the §6.2 table's 17.7%). The calibration cannot choose a level whose rate is above 10%;
+   the 10.6% comes from the separate simulation in §4.
+4. **Revision list.** D10 and D11 (2026-09-29) and D7 (2026-09-30) were missing from the list
+   above and are now added.
 
 Every figure below uses the floored metric (`--floor-stressed-exits`) and the early-close fix,
 unless it is marked "unfloored". The first version's unfloored figures are kept in §3 and §9
@@ -58,6 +95,7 @@ each hypothesis's frozen implementation choices and the 2026 descriptive evidenc
    - Power with all gates is about 18% if the development effect is real, and 8% if it is
      half as large.
    - A rule with no mechanism, while E0 loses, passes about 5% of the time.
+     *[2026-09-30 note, 2: the reproducible tool gives 16%, 6.8% and 2.7%]*
    - At k ≥ 3 its gate 1 cannot be calibrated at all, and the holdout command refuses.
 5. **Still open before any registration:**
    - D9: the holdout evaluation command is **built** (`holdout`, commit `6f02a86`, §6.5).
@@ -284,9 +322,11 @@ H-TS1 alone (k = 1) at its calibrated gate-1 level (97.5% bound for 358 sessions
 
 About these figures:
 - They come from one simulation run. A separate run gave 33% (358) and 40% (421) for gates
-  1–4 at the development effect, so read them as ±2–3 points.
+  1–4 at the development effect, so read them as ±2–3 points. *[2026-09-30 note, 2: the
+  script was not kept; the reproducible tool gives lower figures]*
 - **Gate 1's calibration target.** Under the paired null, gate 1 alone passes a no-effect
-  H-TS1 10.6% of the time (target 10%), or 9.3% at 421 sessions.
+  H-TS1 10.6% of the time (target 10%), or 9.3% at 421 sessions. *[2026-09-30 note, 3: the
+  registered calibration gives 9.3% at 358 sessions]*
 - **The no-mechanism rows** run above that, partly because of how those scenarios are resampled
   (the same block-boundary effect as in §6.2).
 - **At k = 2** (99.75% bound) gates 1–4 give 19% at the development effect. At k ≥ 3 H-TS1's
@@ -428,7 +468,8 @@ Computed in-process on this dataset, with nothing registered:
 | H-EV2, 358 | 5.7% | 10% (drafted) | 5% | drafted |
 
 - At H-TS1's calibrated k = 1 level, gate 1 alone passes a no-effect H-TS1 10.6% of the time
-  (target 10%; §4). Gates 2–4 and 6 then trim it further.
+  (target 10%; §4). Gates 2–4 and 6 then trim it further. *[2026-09-30 note, 3: the registered
+  calibration gives 9.3%]*
 - The 17.7% here and the 19% in the first table are two simulations of the same quantity at
   the drafted level; read both as about 18%.
 - The calibration assumes the holdout's paired difference is shaped like the development
@@ -629,15 +670,17 @@ uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata \
 
 **Ad hoc analysis.** The random-skip comparison, the gate-1 calibration curves and the power
 simulation are now reproducible with `tools/research_studies/dev_studies.py`. The calibration and
-random-skip figures match exactly. The power tool's null rows come out lower than §4's, because
-the original scenarios were built differently (see its README). The breakdowns and the original
-power runs were scratch scripts that read the same runs in-process with the same
-accounting. The in-process replay matched every CLI run's totals exactly.
-- The power simulation draws 10-session blocks from the development pairs to 358 or 421
+random-skip figures match exactly. The power tool's figures come out lower than §4's, most of
+all in the null and half-effect rows (see its README and the 2026-09-30 note, 2). The breakdowns
+and the original power runs were scratch scripts that read the same runs in-process with the
+same accounting. The in-process replay matched every CLI run's totals exactly.
+- The original power simulation drew 10-session blocks from the development pairs to 358 or 421
   sessions.
-- It applies the draft's percentile bootstrap (2,000 reps) and gates 2–4, with 1,000
+- It applied the draft's percentile bootstrap (2,000 reps) and gates 2–4, with 1,000
   simulations per cell.
-- For "no effect" and "half effect" it shifts the paired difference by a constant per session.
+- How it built "no effect" and "half effect" was not recorded. This section first said a
+  constant shift per session. That is how the tool builds them, and the tool's lower figures
+  suggest the original did not. *[2026-09-30 note, 2]*
 
 ## Appendix: E0 monthly equity curve (stressed, floored, early closes settled, development window)
 
