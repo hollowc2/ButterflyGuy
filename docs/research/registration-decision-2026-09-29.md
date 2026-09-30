@@ -586,7 +586,7 @@ validated on the development window against dataset `93bbe58e…`, and allowed b
 | D9 | Holdout evaluation command (§6.5) | **Built 2026-09-29** (`holdout`, `6f02a86`). Review its two fixed readings (gate 3 union; exact-reproduction re-run rule) | registration |
 | D6 | ThetaData Indices month ($50) | **Decided 2026-09-29: not bought.** The holdout is 358 sessions (H1 204 / H2 154). The 63 gap sessions are skipped under the no-derived-data rule, and the intraday VIX cross-check stays undone (§5; H-TS1 is not affected). Register with `--holdout-sessions 358` (the default) | done |
 | D10 | Holdout pull path | **Decided 2026-09-29: keep the Options Value subscription until the holdout is pulled** (live API; no import from the raw sealed files is built; §7) | cancelling |
-| D11 | Minute-file provenance | **Partly answered 2026-09-29:** `spx_1min.csv`/`vix_1min.csv` are **not** the owner's Schwab capture (that has run about six months). The owner downloaded them from a third-party source, not yet named. Vendor and licence still open | registration |
+| D11 | Minute-file provenance | **Answered 2026-09-29: unknown.** `spx_1min.csv`/`vix_1min.csv` are **not** the owner's Schwab capture (that has run about six months). The owner downloaded them from a third-party source they no longer remember, so the vendor and licence are unknown and cannot be established | done |
 | D7 | ThetaData licence | Open. Terms §2.1(i) and §12.2: may the local cache outlive a cancelled subscription? The holdout result's reproducibility and any later audit depend on the answer | holdout pull |
 
 ## 9. Variant count and provenance
