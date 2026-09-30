@@ -1825,3 +1825,53 @@ Scratch simulation, H-TS1 alone, k = 1, calibrated gate 1, 358 sessions. Two can
 - **The intraday VIX cross-check stays undone.** It is a known limitation, and it does not
   affect H-TS1.
 - **Still open:** D7, the ThetaData licence.
+
+## 2026-09-29/30 — Package review, provenance, D7, D10
+
+- **Consistency pass on the registration package (`56bb99d`).** Every figure was re-checked
+  against runs `7d7f91ad9ba5` and `9971c5db1313` (git `6891317`) and the development registry
+  (37 records, 7 runs). The fixes are presentation only.
+- **D10 (owner): keep Options Value until the holdout is pulled.** The pull needs the live
+  Terminal. No import from the raw sealed files was built.
+- **Minute-file provenance (owner): unknown.** `spx_1min.csv`/`vix_1min.csv` are a
+  third-party download whose source the owner does not remember. They are not the Schwab
+  capture. This is recorded in the manifest (`origin`, `licence: unknown`), and the dataset
+  hash is unchanged.
+- **D7 (owner, 2026-09-30): the local ThetaData data is kept.** No written ThetaData answer is
+  on file.
+- **Studies made reproducible (`3baf6eb`).** They are in
+  `tools/research_studies/dev_studies.py`. Calibration and random-skip reproduce exactly.
+  Power reproduces only for the development-effect row: the no-effect rows come out lower,
+  because the lost scratch script built its scenarios differently (see the README).
+
+## 2026-09-30 — H-TS1 registered and evaluated on the holdout: FAIL
+
+- **Registered (owner): H-TS1 alone, k = 1.** Registry `spx_0dte_thetadata.jsonl` seq 0,
+  git `9051357`, definition `fab8bf3e…`, threshold 0.9181935615930604 (n = 528), gate 1 at
+  2.5% for 358 sessions. Pushed before the pull.
+- **Pull.** `export-history --unseal-holdout 0` over 2024-07-01 → 2026-03-12 added 358
+  sessions and skipped 69: 66 with no SPX index data, 3 with no VIX. The dataset is now
+  `15ccec37…`, and `verify` passes.
+- **Evaluation, run once.** `holdout --unseal-holdout 0` gave run `ce91c4a08efd` at git
+  `b95180d`; `src/` and `configs/` are unchanged from `9051357`. The threshold re-fit equals
+  the registered value. Registry records 1–2.
+
+| | Holdout | Development (in-sample) |
+|---|---:|---:|
+| E0 stressed net | −30,955 (334 trades, −$93/trade) | −9,922 (362, −$27) |
+| H-TS1 own net | −16,946 (261 trades) | −2,283 |
+| Δ vs E0 | +14,009 | +7,639 |
+| Lower bound at the calibrated 97.5% level | +1,030 (gate 1 pass) | −2,916 |
+| H1 / H2 Δ | +18,504 / −4,496 (gate 2 **fail**) | +3,517 / +4,122 |
+| Δ, top three removed / delayed exits | +14,009 / +14,309 (gates 3, 4 pass) | +10,999 / +7,554 |
+| Midpoint net, H-TS1 / E0 | +311 / −2,310 | +17,919 / +18,167 |
+
+- **Verdict: FAIL, on gates 2 and 6.** H-TS1 lost less than E0 but did not make money, and
+  its gain was all in H1.
+- **Reading.** The paired gain is what a skip filter gets against a losing baseline (§6.3 of
+  the package). E0's loss per trade tripled out of sample, and even at midpoint E0 was
+  negative.
+- **The holdout is now spent.** A re-run is allowed only as an exact reproduction. Anything
+  else run on 2024-07-01 → 2025-12-09 is post hoc.
+- **Artifacts.** `reports/research/spx_0dte_thetadata/holdout/ce91c4a08efd/`: `results.json`
+  `4a5078a0…`, `trades.jsonl` `048feb2b…`.
