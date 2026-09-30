@@ -716,3 +716,24 @@ same accounting. The in-process replay matched every CLI run's totals exactly.
 | 2024-04 | 22 | 16 | −342 | −9,389 |
 | 2024-05 | 21 | 19 | +836 | −8,553 |
 | 2024-06 | 19 | 18 | −1,368 | −9,922 |
+
+## Holdout result (2026-09-30): H-TS1 fails
+
+Evaluated once with `holdout --unseal-holdout 0`: run `ce91c4a08efd`, git `b95180d` (`src/` and
+`configs/` unchanged from the registration commit `9051357`), dataset `15ccec37…`, 358 sessions
+(H1 204 / H2 154). The pull added 358 sessions and skipped 69: 66 had no SPX index data (the
+2025-12-10 → 2026-03-12 gap plus frozen days) and 3 had no VIX. Registry records 1–2.
+`results.json` `4a5078a0…`, `trades.jsonl` `048feb2b…`.
+
+| | Value | Gate |
+|---|---:|---|
+| Δ vs E0 (stressed, floored) | +14,009 | |
+| Lower bound at the calibrated 97.5% level | +1,030 | 1: pass |
+| H1 / H2 Δ | +18,504 / −4,496 | 2: **fail** |
+| Δ, top three of either arm removed | +14,009 | 3: pass |
+| Δ, delayed exits | +14,309 | 4: pass |
+| H-TS1 own stressed net | −16,946 | 6: **fail** |
+| E0 stressed net | −30,955 (334 trades, −$93 a trade) | |
+
+**Verdict: FAIL** (gates 2 and 6). H-TS1 lost less than E0 but did not make money, and its gain
+came from the first half only. E0 lost about three times as much per trade as on development.
