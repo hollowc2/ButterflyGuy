@@ -262,6 +262,10 @@ vendor-data results, never with Helios-based figures.
   as the condition for the development pull).
 - **D2: where did `spx_1min.csv` and `vix_1min.csv` come from?** The vendor and licence go in
   the manifest. If a fresher copy can be downloaded from the same place, it also fills D3.
+  **Answered 2026-09-29: unknown.** Not the owner's own Schwab capture (that has run only about
+  six months, and the files start in 2022). The owner downloaded them from a third-party source
+  they do not remember, so the vendor and licence are unknown. A fresher copy from the same place
+  (option (a) of D3) is therefore not possible.
 - **D3: the index gap, 2025-12-10 → 2026-03-12** (about 62 holdout sessions with no SPX or
   VIX minutes). Without derived data, the choices are:
   - (a) refresh the minute files from their source (see D2);
@@ -269,8 +273,11 @@ vendor-data results, never with Helios-based figures.
     VIX, which could also cross-check the owner's files over 2022-09 → 2025-12;
   - (c) leave those sessions out: the holdout shrinks from about 425 to about 363 sessions.
   Needed before registration, not before Phase 1–3.
-- **Still open**: ThetaData's written answer on keeping a local cache after cancelling (Terms
-  §2.1(i), §12.2).
+- **Local cache after cancelling (Terms §2.1(i), §12.2): decided 2026-09-30, the owner keeps
+  the data.** No written ThetaData answer is on file.
+- **Holdout pull (2026-09-29):** the owner keeps Options Value until registration and the
+  holdout pull. `export-history` needs the live Terminal, and there is no import from the raw
+  sealed files.
 
 ## Artifacts referenced
 

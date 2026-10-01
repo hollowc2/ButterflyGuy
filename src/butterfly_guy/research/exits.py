@@ -5,7 +5,10 @@ time after entry it reads the snapshot recorded at or before that time; an incom
 fly (any leg quote absent) is not an observation and cannot move the peak, trigger an
 exit or advance a confirmation count. The value is `max(0, fly mark)`. Rules are checked
 in order and the first that fires exits at that snapshot. With no exit the fly is held
-to the official close, provided the session's data runs to at least 15:00 ET.
+to the official close, provided the session's data runs to at least one hour before its
+scheduled close: 15:00 ET on a regular session, as `SimulationEngine` requires, and 12:00
+on a 13:00 early close (owner's decision D5, 2026-09-29). A session's scheduled close is
+16:00 unless its dataset records another (vendor datasets record 13:00 on early closes).
 
 Rules are small frozen dataclasses so a variant's exit policy has a canonical,
 hashable definition. `PeakTrailer.from_config` reads the runtime profit settings and
@@ -30,7 +33,10 @@ from butterfly_guy.position.profit_policy import (
 )
 from butterfly_guy.research.market import FlyPath, et_us
 
-MIN_END_OF_DAY_DATA_TIME = (15, 0)  # SimulationEngine.MIN_END_OF_DAY_DATA_TIME
+REGULAR_CLOSE = dt.time(16, 0)
+# Data must reach this long before the scheduled close: on a regular session that is
+# SimulationEngine's MIN_END_OF_DAY_DATA_TIME, 15:00 (a test pins the equality).
+END_OF_DAY_DATA_LEAD = dt.timedelta(hours=1)
 HELD = "cash_settled"
 INCOMPLETE = "incomplete_data"
 
@@ -218,6 +224,15 @@ class ExitDecision:
     peak: float = 0.0
 
 
+@dataclass
+class MonitorState:
+    """Explicit research continuation state; no overnight marks are invented."""
+
+    peak: float | None = None
+    memos: list[dict] = field(default_factory=list)
+    observations: list[dict] = field(default_factory=list)
+
+
 def monitor(
     *,
     date: dt.date,
@@ -227,16 +242,22 @@ def monitor(
     entry_ts_us: int,
     entry_price: float,
     rules: tuple[ExitRule, ...],
+    session_close: dt.time = REGULAR_CLOSE,
+    state: MonitorState | None = None,
 ) -> ExitDecision:
     open_us = et_us(date, 9, 30)
-    close_us = et_us(date, 16, 0)
-    peak = entry_price
-    memos: list[dict] = [{} for _ in rules]
+    close_us = et_us(date, session_close.hour, session_close.minute)
+    peak = entry_price if state is None or state.peak is None else state.peak
+    memos: list[dict] = [{} for _ in rules] if state is None or not state.memos else state.memos
+    if state is not None:
+        state.memos = memos
     start = int(np.searchsorted(clock_ts, entry_ts_us, side="right"))
     idx = np.searchsorted(snapshot_ts, clock_ts[start:], side="right") - 1
     for ts, i in zip(clock_ts[start:], idx, strict=True):
         if i < 0 or not path.observed[i]:
             continue
+        if ts > close_us:
+            break
         value = max(0.0, float(path.mark[i]))
         peak = max(peak, value)
         obs = Observation(
@@ -248,10 +269,15 @@ def monitor(
             peak=peak,
             entry_price=entry_price,
         )
+        if state is not None:
+            state.peak = peak
+            state.observations.append({"ts_us": int(ts), "value": value, "peak": peak})
         for rule, memo in zip(rules, memos, strict=True):
             why = rule.reason(obs, memo)
             if why is not None:
                 return ExitDecision(why, int(i), int(ts), value, peak)
-    if len(clock_ts) == 0 or clock_ts[-1] < et_us(date, *MIN_END_OF_DAY_DATA_TIME):
+    needed = (et_us(date, session_close.hour, session_close.minute)
+              - int(END_OF_DAY_DATA_LEAD.total_seconds() * 1e6))
+    if len(clock_ts) == 0 or clock_ts[-1] < needed:
         return ExitDecision(INCOMPLETE, peak=peak)
     return ExitDecision(HELD, peak=peak)

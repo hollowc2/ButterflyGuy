@@ -478,6 +478,13 @@ checks the chain.
   - All fits happen before anything is appended, so a failed fit registers nothing.
   - On `spx_0dte_thetadata` @ `93bbe58e`, HTS1 fits to `{threshold: 0.9181935615930604,
     fit_n: 528}` (checked in-process on 2026-09-29; nothing was registered).
+- **Gate-1 calibration at registration** (2026-09-29, D4, draft Revision 4).
+  - On a dataset with development sessions, `register` replays E0 and the registered rules on
+    the development window under the protocol's settings.
+  - It records `gate1` for each rule: the calibrated level for each k = 1..5, the whole
+    false-pass curve, and the planned holdout size (`--holdout-sessions`, default 358).
+    See "The holdout evaluation" below.
+  - This takes about 90 s per rule, plus the development replay.
 
 `catalog` lists every catalog variant with its definition hash and what each registry file
 holds for that exact definition, counted by `event:stage` (a port includes its
@@ -755,6 +762,8 @@ manifest history shows a passing `vendor-quality` run over the whole validation 
 
 **Known gap:** 2025-12-10 → 2026-03-12 (about 62 holdout sessions) has no SPX or VIX minute
 data, so those sessions are skipped until a real source is found (plan, D3).
+*(2026-09-29: the owner decided not to buy an Indices month (D6), so these sessions stay
+skipped; the holdout is 358 sessions.)*
 
 **Licence.** ThetaData's individual terms forbid archiving content (§2.1(i)) and require
 deleting all copies at termination (§12.2). Whether the local research cache may outlive a
@@ -775,18 +784,29 @@ seed 1). Results, power and the owner's open decisions are in
   `reports/research/registry/development/spx_0dte_thetadata.jsonl` (owner-confirmed). The
   registration registry `reports/research/registry/spx_0dte_thetadata.jsonl` does not exist
   yet. The unseal reads only the latter.
-- **Runs, floored (primary since Revision 1):**
-  - `7d7f91ad9ba5` (E0, HLV1, HEV1, HEV2, HTS1; `results.json` `f361f0f1…`);
+- **Runs, primary: floored, with early closes settled (git `6891317`):**
+  - `7d7f91ad9ba5` (E0, HLV1, HEV1, HEV2, HTS1; `results.json` `346a9f82…`);
   - `9971c5db1313` (E0, HLV1, HSN1, HSN1_c148, HSN1_c168, HEV1, HEV2; `results.json`
-    `415a3b2d…`).
+    `4a64d809…`).
+  - A run id does not hash the git commit, so these kept the ids of the floored runs made
+    before the early-close fix (`7b1f229`; `results.json` `f361f0f1…` and `415a3b2d…`).
 - **Runs, unfloored (first version):**
   - `9eccee6a6aa5` (`results.json` `2c042505…`);
   - `da7a9163c0fa` (`results.json` `429d0829…`).
-- **Owner's decisions (2026-09-29):** nothing is registered yet, and stressed exits are floored
-  at $0 (`--floor-stressed-exits`).
-- **Early closes.** The replay marks a trade still held when a shortened session's clock
-  ends (13:00) as `incomplete_data` (`MIN_END_OF_DAY_DATA_TIME` is 15:00), so the session
-  is dropped from every compared arm: 2023-07-03 for E0, and 2022-11-25 for HSN1.
+- **Owner's decisions (2026-09-29):**
+  - nothing is registered yet;
+  - stressed exits are floored at $0 (`--floor-stressed-exits`);
+  - held trades settle on early closes (D5).
+- **Early closes (D5, fixed in `6891317`).**
+  - Before the fix, the replay required data up to 15:00 ET before holding a trade to the
+    official close (`SimulationEngine.MIN_END_OF_DAY_DATA_TIME`). A trade held on a 13:00
+    early close was therefore `incomplete_data`, and the session dropped from every arm.
+  - Now the data must reach one hour before the session's scheduled close: 15:00 on a
+    regular day, 12:00 on an early close.
+  - `Session.scheduled_close` comes from the dataset's `session_close_et` where it records
+    one. Otherwise it is 16:00, so Helios replays and the frozen parity are unchanged.
+  - All 585 development sessions now replay. E0 gains 2023-07-03 (−$238, held), and H-SN1
+    gains 2022-11-25.
 
 ```bash
 T="--provider thetadata --spx-minutes ../Butterflyguy/data/spx_1min.csv \
@@ -880,8 +900,12 @@ on identical sessions. There is no `--variants` option. The draft's choices are 
 - stressed exits floored at $0 (Revision 1), delayed exit one clock time;
 - 10-session blocks, 10,000 reps, seed 1;
 - halves split after 2025-04-30;
-- k = the number of variants registered, gate 1 at 1 − 0.10/k;
-- gates 2–4 as drafted.
+- k = the number of variants registered;
+- gate 1 at each rule's calibrated level for that k (Revision 4, below), never looser than the
+  drafted 1 − 0.10/k;
+- gates 2–4 as drafted;
+- gate 6 (Revision 5, D2): the rule's own stressed P&L over the evaluated holdout sessions
+  above zero. Against a losing E0, gates 1–4 alone meant only "loses less than E0".
 
 **Choices the draft left open, fixed in the code** (so frozen by the register record's
 `git_sha`):
@@ -889,8 +913,8 @@ on identical sessions. There is no `--variants` option. The draft's choices are 
   top three sessions, removed from both arms.
 - **Gate 5 (H-SN1's noise secondary) has no statistic in the draft.** So a registered H-SN1
   (or `HSN1_c148`/`HSN1_c168`) is refused rather than evaluated with an invented one.
-- **Each arm's own stressed net is reported beside the gates, not gated** (owner decision D2
-  is open).
+- **Each arm's own stressed net is reported beside the gates, and gated by gate 6** (Revision 5,
+  commit `362a728`).
 
 **Refusals, all before any holdout session is replayed:**
 - the unseal does not verify;
@@ -898,10 +922,26 @@ on identical sessions. There is no `--variants` option. The draft's choices are 
 - a registered definition hash no longer matches the catalog;
 - a fitted rule has no registered fitted values, or its re-fit on the development window
   differs from them (or was made under another profile);
+- a registered rule has no gate-1 calibration for the registered k, or its calibration could not
+  reach 0.10/k;
 - `src/` or `configs/` has uncommitted changes, or differs from the registration commit;
 - the dataset holds no holdout sessions;
 - the holdout was already evaluated and this run is not an exact reproduction: it differs in
   the unseal, the dataset hash, the arms, or the code since the first run.
+
+**Gate-1 calibration (Revision 4, commits `b18ca94` and `c59e6bd`).** A skip filter's paired
+difference is zero on most sessions and dominated by a few large settled winners, and the
+percentile bootstrap then passes a no-effect rule too often: H-TS1 17.7% at the drafted 10%, for
+358 sessions. So `protocol.calibrate_gate1` works from the development-window difference:
+- it shifts the difference to mean zero and resamples it in 10-session moving blocks to the
+  planned holdout size;
+- it runs the percentile test at every level of `CAL_GRID`, which includes every 0.10/k:
+  2,000 simulated holdouts, 10,000 reps each, seed 1;
+- for each k it keeps the loosest level whose simulated false-pass rate is at most 0.10/k,
+  never looser than 0.10/k.
+
+On `spx_0dte_thetadata`, computed in-process with nothing registered, H-TS1 gets 2.5% at k = 1
+(4.0% with 421 sessions) and 0.25% at k = 2, and cannot be calibrated at k ≥ 3.
 
 **Recording.** Every evaluation, reproductions included, appends an `evaluate` record per arm
 to the registration registry, and there is no `--no-registry`. Each record carries:

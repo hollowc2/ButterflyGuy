@@ -89,6 +89,8 @@ from butterfly_guy.research.market import et_us
 BASE_URL = "http://127.0.0.1:25503/v3"
 CBOE_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{index}_History.csv"
 FILE_TZ = "America/Chicago"
+# Owner, 2026-09-29: a third-party download, source not remembered; not the Schwab capture.
+MINUTE_FILE_ORIGIN = "unknown third-party download (owner, 2026-09-29)"
 STALE_RUN = 30  # identical consecutive minute bars that mark a forward-filled day
 RETRY_STATUS = {429, 474, 500, 502, 503, 504}
 NO_DATA = 472
@@ -263,6 +265,7 @@ class ThetaDataSource:
             "index_files": {
                 s: {"path": str(p), "sha256": sha256_file(p), "tz": FILE_TZ,
                     "stamp": "bar end", "price": "bar close",
+                    "origin": MINUTE_FILE_ORIGIN, "licence": "unknown",
                     "stale_run_minutes": STALE_RUN, "stale_days_excluded": self._stale[s]}
                 for s, p in self.paths.items()},
             "recorded": None if self.recorded is None else {

@@ -1666,3 +1666,212 @@ replays holdout sessions.
 - A bug the tests caught: the recorded gate-1 level was rounded to 0.97 instead of 0.975
   (label only; the bound itself was right). Fixed.
 - The full suite (1046) and ruff pass.
+
+## 2026-09-29 (later) — D5: held trades settle on early closes (development re-run; nothing registered)
+
+In-sample on the development window. Nothing registered, unsealed or pulled.
+
+### Decision and change
+
+- **Decision (owner): D5.** A trade held on an early close settles on that day's official
+  close instead of dropping the session.
+- **Change (`6891317`).**
+  - The replay's end-of-data requirement is one hour before the session's scheduled close:
+    15:00 on a regular day, which is `SimulationEngine`'s rule, pinned by a test, and 12:00
+    on a 13:00 early close.
+  - The scheduled close comes from the vendor dataset's `session_close_et`. Helios datasets
+    have none, so their replays are unchanged: parity is 118 trades, 0 mismatches.
+  - The full suite (1050) and the `research_data` tests pass.
+- **Re-runs:** `7d7f91ad9ba5` and `9971c5db1313` at `6891317`. The ids are unchanged because
+  a run id does not hash the commit; the registry holds both versions' results hashes. The
+  development registry now holds 37 records, still 8 definitions. All 585 sessions replay.
+
+### Results
+
+| | Now | Floored, before the fix |
+|---|---:|---:|
+| E0 stressed net | −9,922 (362 trades) | −9,685 (361) |
+| H-TS1 Δ (90% lower bound) | +7,639 (+1,078) | +7,402 (+859) |
+| H-EV2 / H-EV1 / H-LV1 Δ | +1,366 / +151 / −1,455 | unchanged |
+| H-SN1 Δ | −12,736 | −12,878 |
+
+- E0 gained 2023-07-03, a held put that settled at −$238. H-TS1 had skipped that session, so
+  its Δ rose by the same amount.
+- H-SN1 gained 2022-11-25 (−$163).
+- Holdout power for H-TS1 alone (k = 1, 358 sessions, all gates) is essentially unchanged:
+  - 51% if the development effect is real, 33% if it is half as large;
+  - a false-pass rate of 18% with no effect.
+- The draft will carry D5 as Revision 3.
+
+### Still open
+
+- D2: what a pass means against a losing E0.
+- D4: gate-1 calibration on skip filters.
+- D6: Indices month.
+- D7: ThetaData licence.
+
+## 2026-09-29 (later) — D4: gate 1's level calibrated on development data (Revision 4; nothing registered)
+
+In-sample, development window only. Nothing registered, unsealed or pulled.
+
+### The calibration study (scratch, development data)
+
+Simulated holdouts of 358 sessions, drawn in 10-session blocks from the development pairs.
+For H-TS1 at k = 1:
+
+| Gate-1 method | Passes with no effect (target 10%) | Power, development effect | Power, half effect |
+|---|---:|---:|---:|
+| Percentile bootstrap at the drafted 90% bound | 17–19% | 49–52% | 32–34% |
+| Same test at the 97.5% bound | 9–11% | 31–33% | 17–20% |
+| Bootstrap-t at the 90% bound | 14–16% | 35–39% | 23–27% |
+
+- **Bootstrap-t has no advantage** at the same real false-pass rate.
+- **A circular-shift skip test could not be validated.** The block resampling lines both series
+  up on block boundaries only at the observed alignment, which biases the test. On clean
+  synthetic data it is conservative.
+- **One scenario of mine was wrong and was replaced.** Halving every paired difference cannot
+  change a sign-based test.
+
+### Decision and change
+
+- **Decision (owner): D4, the calibrated level.**
+- **Change (`b18ca94`, `c59e6bd`).**
+  - At registration, `register` replays E0 and each rule on the development window under the
+    protocol's settings, and shifts each paired difference to mean zero.
+  - It resamples that difference to the planned holdout size and runs the percentile test on
+    a grid of levels: 2,000 simulated holdouts, 10,000 reps each, seed 1.
+  - For each k = 1..5 it records the loosest level with a simulated false-pass rate of at most
+    0.10/k, never looser than 0.10/k.
+  - `holdout` uses the recorded level. It refuses a registration without one, or one whose
+    target could not be reached for its k.
+  - Marked in the draft as Revision 4.
+  - Tests: 1052 pass, ruff is clean.
+
+### What it gives on the real dataset (in-process, nothing registered)
+
+| | k = 1 | k = 2 | k ≥ 3 |
+|---|---:|---:|---|
+| H-TS1, 358 sessions | 2.5% (97.5% bound) | 0.25% | cannot be calibrated |
+| H-TS1, 421 sessions | 4.0% | 0.5% | cannot be calibrated |
+| H-EV1 / H-LV1 / H-EV2 (358) | 5% / 6% / 10% | 1.5% / 2.5% / 5% | |
+
+### Consequences
+
+- **Power for H-TS1 alone (k = 1, all gates):**
+  - 33% if the development effect is real, 20% if it is half as large;
+  - 10.6% with no effect, against a 10% target;
+  - with an Indices month: 40% and 22%. Under calibration the month now buys power.
+- **In-sample, H-TS1 would fail gate 1 at its calibrated level:** its 97.5% bound is −$2,916.
+- **The negative-baseline effect (D2) remains.** A no-mechanism skip passes about 15% of the
+  time while E0 loses.
+
+### Still open
+
+- D2: what a pass means against a losing E0.
+- D6: Indices month; register with `--holdout-sessions 421` if bought.
+- D7: ThetaData licence.
+
+## 2026-09-29 (later) — D2: a pass must also make money (gate 6, Revision 5; nothing registered)
+
+In-sample, development window only. Nothing registered, unsealed or pulled.
+
+### Study before the decision
+
+Scratch simulation, H-TS1 alone, k = 1, calibrated gate 1, 358 sessions. Two candidate gates:
+
+| Scenario | Gates 1–4 | + own P&L > 0 | + beats a random skip |
+|---|---:|---:|---:|
+| Development effect | 36% | 18% | 36% |
+| Half the effect | 27% | 8% | 27% |
+| No mechanism, E0 losing | 16% | 4.7% | 16% |
+| No mechanism, E0 breaking even | 13% | 13% | 13% |
+
+- **"Beats a random skip" changed no verdict.** The calibrated gate 1 already requires the
+  skipped trades to be much worse than average.
+- **With gate 1 calibrated, trading less adds only about 2.5 points** of false passes.
+- **So D2 was a choice of meaning.**
+
+### Decision and change
+
+- **Decision (owner): D2, gate 6.** A registered rule's own stressed P&L over the evaluated
+  holdout sessions must be above zero.
+- **Change (`362a728`).** `protocol.gates` adds `gate6`, and the holdout verdict shows G6.
+- Marked in the draft as Revision 5.
+- Tests: 1052 pass, ruff is clean.
+
+### Consequences for H-TS1 alone (k = 1)
+
+- **A pass now means it beat E0 and made money on the holdout.**
+- **Power with all gates:**
+  - 18% if the development effect is real, 8% at half;
+  - 22% and 10% with an Indices month;
+  - a no-mechanism rule passes about 5% of the time while E0 loses.
+- **In-sample it fails gate 6:** its own net is −$2,283. It also fails gate 1 at its calibrated
+  level.
+
+### Still open
+
+- D6: Indices month.
+- D7: ThetaData licence.
+
+## 2026-09-29 (later) — D6: no Indices month
+
+- **Decision (owner): no more data will be bought.**
+- **The holdout is 358 usable sessions** (H1 204 / H2 154). The 63 sessions from 2025-12-10 to
+  2026-03-12 have no SPX/VIX minute data, and the no-derived-data rule skips them.
+- **Registration uses `--holdout-sessions 358`,** the default. H-TS1's calibrated gate 1 is then
+  the 97.5% bound.
+- **Power for H-TS1 alone, all gates:** about 18% if the development effect is real.
+- **The intraday VIX cross-check stays undone.** It is a known limitation, and it does not
+  affect H-TS1.
+- **Still open:** D7, the ThetaData licence.
+
+## 2026-09-29/30 — Package review, provenance, D7, D10
+
+- **Consistency pass on the registration package (`56bb99d`).** Every figure was re-checked
+  against runs `7d7f91ad9ba5` and `9971c5db1313` (git `6891317`) and the development registry
+  (37 records, 7 runs). The fixes are presentation only.
+- **D10 (owner): keep Options Value until the holdout is pulled.** The pull needs the live
+  Terminal. No import from the raw sealed files was built.
+- **Minute-file provenance (owner): unknown.** `spx_1min.csv`/`vix_1min.csv` are a
+  third-party download whose source the owner does not remember. They are not the Schwab
+  capture. This is recorded in the manifest (`origin`, `licence: unknown`), and the dataset
+  hash is unchanged.
+- **D7 (owner, 2026-09-30): the local ThetaData data is kept.** No written ThetaData answer is
+  on file.
+- **Studies made reproducible (`3baf6eb`).** They are in
+  `tools/research_studies/dev_studies.py`. Calibration and random-skip reproduce exactly.
+  Power reproduces only for the development-effect row: the no-effect rows come out lower,
+  because the lost scratch script built its scenarios differently (see the README).
+
+## 2026-09-30 — H-TS1 registered and evaluated on the holdout: FAIL
+
+- **Registered (owner): H-TS1 alone, k = 1.** Registry `spx_0dte_thetadata.jsonl` seq 0,
+  git `9051357`, definition `fab8bf3e…`, threshold 0.9181935615930604 (n = 528), gate 1 at
+  2.5% for 358 sessions. Pushed before the pull.
+- **Pull.** `export-history --unseal-holdout 0` over 2024-07-01 → 2026-03-12 added 358
+  sessions and skipped 69: 66 with no SPX index data, 3 with no VIX. The dataset is now
+  `15ccec37…`, and `verify` passes.
+- **Evaluation, run once.** `holdout --unseal-holdout 0` gave run `ce91c4a08efd` at git
+  `b95180d`; `src/` and `configs/` are unchanged from `9051357`. The threshold re-fit equals
+  the registered value. Registry records 1–2.
+
+| | Holdout | Development (in-sample) |
+|---|---:|---:|
+| E0 stressed net | −30,955 (334 trades, −$93/trade) | −9,922 (362, −$27) |
+| H-TS1 own net | −16,946 (261 trades) | −2,283 |
+| Δ vs E0 | +14,009 | +7,639 |
+| Lower bound at the calibrated 97.5% level | +1,030 (gate 1 pass) | −2,916 |
+| H1 / H2 Δ | +18,504 / −4,496 (gate 2 **fail**) | +3,517 / +4,122 |
+| Δ, top three removed / delayed exits | +14,009 / +14,309 (gates 3, 4 pass) | +10,999 / +7,554 |
+| Midpoint net, H-TS1 / E0 | +311 / −2,310 | +17,919 / +18,167 |
+
+- **Verdict: FAIL, on gates 2 and 6.** H-TS1 lost less than E0 but did not make money, and
+  its gain was all in H1.
+- **Reading.** The paired gain is what a skip filter gets against a losing baseline (§6.3 of
+  the package). E0's loss per trade tripled out of sample, and even at midpoint E0 was
+  negative.
+- **The holdout is now spent.** A re-run is allowed only as an exact reproduction. Anything
+  else run on 2024-07-01 → 2025-12-09 is post hoc.
+- **Artifacts.** `reports/research/spx_0dte_thetadata/holdout/ce91c4a08efd/`: `results.json`
+  `4a5078a0…`, `trades.jsonl` `048feb2b…`.
