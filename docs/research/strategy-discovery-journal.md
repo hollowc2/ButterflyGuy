@@ -1135,3 +1135,50 @@ Two observations outside the test (not gating, not to be acted on without their 
   cost caps on ThetaData quotes reject many sessions. This was not investigated.
 - T6 (any-profit start plus a breakeven floor after +75%) was +$2,186 better than B, but was
   reported only and is post-hoc.
+
+## 2026-10-01 — why the frozen baseline loses after costs on 2022–24 (diagnostic)
+
+`cost_breakdown.py` splits each baseline trade (baseline exit B) into midpoint P&L
+(commissions included), the entry spread (fly ask − mid), the exit spread (mid − bid,
+trailed exits only) and the stress add-on ($0.05 per contract per executed side). It was run
+on ThetaData 2022-05-02 → 2024-06-28, where the H-TR1 test is already spent, and on the
+Schwab 2026-03-13 → 2026-09-18 sessions. This is diagnostic and nothing is applied.
+
+| Data | Trades | Midpoint | Entry spread | Exit spread | Stress | Stressed | Midpoint/trade | Cost/trade |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ThetaData 2022–24 | 334 | +19,622 | −9,920 | −7,383 | −11,860 | −9,541 | +59 | 87 |
+| Schwab 2026 | 118 | +17,635 | −2,071 | −1,453 | −4,280 | +9,831 | +149 | 66 |
+
+Three causes, in order of size:
+
+1. **Zombieland (VIX < 17) has no edge even at midpoint.** It made +$11 per trade on 2022–24
+   (230 trades) and +$10 per trade in 2026 (51 trades); the two sources agree. About $67 per
+   trade of cost makes it −$12,838 stressed on 2022–24, more than the whole −$9,541 loss.
+   Goldilocks 1 made +$152 midpoint per trade (2022–24) and +$204 (2026). This supports the
+   2026-09-25 low-VIX diagnosis and H-LV1, and suggests a broader form: skip all VIX < 17
+   entries, not only calls.
+2. **Trailed exits carry the costs and lose before them.** 259 of 334 trades (78%) were
+   trailed out, at −$140 midpoint per trade, and they pay costs twice (about $101 per trade
+   against $42 for settled trades). The 75 settled trades made +$52.8k stressed and the
+   trailed trades −$62.3k. 2026 has the same shape (−$144 midpoint per trailed trade). This
+   is the strategy's tail-bet structure: most trades are small trailed losers, and costs
+   land on them.
+3. **The selector is attracted to badly quoted flies.** Selection ranks on marks. One wing
+   with a wide quote (for example 13.40 / 23.20) can make a fly's mid look cheap enough to
+   pass the 10% cost cap when its ask is several times higher. 13 of 334 entries (4%) had
+   an entry spread above 25% of the mid debit; the median is 5–6%. Those 13 lost $5,788
+   stressed and $5,308 marketable. Without them, 2022–24 is −$3,752 stressed and +$7,628
+   marketable. The 2026 Schwab sample had none. The live `quote_quality` settings only gate
+   exits, so nothing checks the spread at entry.
+
+Also: the stress add-on is the largest single cost line on both sources ($36 per trade on
+2022–24). Marketable accounting, which crosses the quoted spread with no add-on, gives
++$2,319 on 2022–24. Whether real fills land nearer the mid is what the open execution
+cohort measures.
+
+Candidate hypotheses for future registered tests (not applied, cohort untouched):
+- **H-LV2:** skip all entries with VIX < 17.
+- **H-SP1:** at entry, reject flies whose (ask − mid) exceeds 25% of the mid debit and take
+  the next candidate.
+
+Not investigated: why only 334 of 537 2022–24 sessions produced a qualifying fly.
