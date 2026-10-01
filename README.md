@@ -107,6 +107,9 @@ Everything else about the gateway (building, deploying, monitoring, keys, rollba
 
 ## Backtesting and research
 
+Local ThetaData Parquet import, input audits, offline replay and explicit 1-DTE
+lifecycles are documented in [Offline ThetaData research](docs/research/thetadata-local-backtesting.md).
+
 `run_backtest_db.py` replays TimescaleDB history through the same strategy components the live system uses.
 
 ```bash

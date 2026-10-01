@@ -44,7 +44,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 SCHEMA_VERSION = 2
-SUPPORTED_SCHEMAS = (1, 2)  # 1: no aux files; 2 adds `aux` and `aux_hash`
+SUPPORTED_SCHEMAS = (1, 2, 3)  # 3: local archive contract identity / observation age
 OPTION_TYPES = ("C", "P")
 PRICE_FIELDS = ("bid", "ask", "mark")
 GREEK_FIELDS = ("iv", "delta")
@@ -81,6 +81,9 @@ class SessionChain:
     strikes: np.ndarray  # float64, ascending
     spot: np.ndarray  # float64 per snapshot (chain spot_price)
     fields: dict[str, np.ndarray]  # "C_bid" -> (n_ts, n_strike)
+    underlying: str = "SPX"
+    expiration: dt.date | None = None
+    option_root: str | None = None
 
     def column(self, strike: float) -> int | None:
         j = int(np.searchsorted(self.strikes, strike))
@@ -112,6 +115,14 @@ def chain_to_table(chain: SessionChain) -> pa.Table:
     for t in OPTION_TYPES:
         if f"{t}_{AGE_FIELD}" in chain.fields:
             cols[f"{t}_{AGE_FIELD}"] = chain.fields[f"{t}_{AGE_FIELD}"].astype(np.float32).ravel()
+    if chain.option_root is not None:
+        cols.update(underlying=[chain.underlying] * (n_ts * n_k),
+                    expiration=[chain.expiration or chain.date] * (n_ts * n_k),
+                    option_root=[chain.option_root] * (n_ts * n_k))
+    for t in OPTION_TYPES:
+        for f in ("bid_size", "ask_size", "open_interest", "observation_age_s"):
+            if f"{t}_{f}" in chain.fields:
+                cols[f"{t}_{f}"] = chain.fields[f"{t}_{f}"].ravel()
     return pa.table(cols)
 
 
@@ -132,7 +143,19 @@ def table_to_chain(table: pa.Table, date: dt.date) -> SessionChain:
         if name in table.column_names:
             fields[name] = table.column(name).to_numpy(zero_copy_only=False).reshape(n_ts, n_k)
     spot = table.column("spot").to_numpy().reshape(n_ts, n_k)[:, 0]
-    return SessionChain(date=date, ts=ts, strikes=strikes, spot=spot, fields=fields)
+    for t in OPTION_TYPES:
+        for f in ("bid_size", "ask_size", "open_interest", "observation_age_s"):
+            name = f"{t}_{f}"
+            if name in table.column_names:
+                fields[name] = table.column(name).to_numpy().reshape(n_ts, n_k)
+    identity = {}
+    for name in ("underlying", "expiration", "option_root"):
+        if name in table.column_names and table.num_rows:
+            values = table.column(name).unique().to_pylist()
+            if len(values) != 1:
+                raise ValueError(f"mixed contract {name}")
+            identity[name] = values[0]
+    return SessionChain(date=date, ts=ts, strikes=strikes, spot=spot, fields=fields, **identity)
 
 
 def dense_chain_from_rows(rows: pd.DataFrame, date: dt.date) -> SessionChain:
@@ -192,6 +215,8 @@ class Manifest:
 
     @property
     def schema_version(self) -> int:
+        if self.export.get("kind") == "local_parquet":
+            return 3
         return SCHEMA_VERSION if self.aux else 1
 
     def to_json(self) -> str:

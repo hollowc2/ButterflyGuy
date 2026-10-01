@@ -256,7 +256,7 @@ def _state_index(ts: np.ndarray, grid: np.ndarray) -> np.ndarray:
 
 
 def carry_quotes(updates: pd.DataFrame, grid: np.ndarray, d: dt.date,
-                 strikes: tuple[float, float]) -> pd.DataFrame:
+                 strikes: tuple[float, float], *, integer_strikes: bool = True) -> pd.DataFrame:
     """Long rows on `grid`: each (strike, type) carries its last vendor quote state from
     the same session, with its age. Integer strikes in `strikes` (inclusive) only.
 
@@ -272,7 +272,8 @@ def carry_quotes(updates: pd.DataFrame, grid: np.ndarray, d: dt.date,
     day_start = et_us(d, 0, 0)
     keep = ((u["ts_us"] >= day_start) & (u["ts_us"] <= grid[-1])
             & (u["strike"] >= strikes[0]) & (u["strike"] <= strikes[1])
-            & (u["strike"] == np.round(u["strike"])) & u["t"].isin(OPTION_TYPES))
+            & ((u["strike"] == np.round(u["strike"])) if integer_strikes else True)
+            & u["t"].isin(OPTION_TYPES))
     u = u[keep].sort_values(["t", "strike", "ts_us"], kind="stable")
     u = u.drop_duplicates(["t", "strike", "ts_us"], keep="last")
     frames = []
@@ -348,19 +349,21 @@ class BuiltSession:
 
 
 def build_session(source: GuardedSource, d: dt.date, close: dt.time,
-                  margin: float = DEFAULT_STRIKE_MARGIN) -> BuiltSession | str:
+                  margin: float = DEFAULT_STRIKE_MARGIN, *, underlying: str = "SPX",
+                  integer_strikes: bool = True) -> BuiltSession | str:
     """One session's chain, clock and index ticks, or the reason it was skipped."""
     grid = minute_grid(d, close)
-    spx = source.index_bars(d, "SPX")
+    spx = source.index_bars(d, underlying)
     spot = index_on_grid(spx, grid, d, INDEX_MAX_AGE_S)
     if not np.isfinite(spot).any():
-        return "no_spx_index"
+        return f"no_{underlying.lower()}_index"
     vix = source.index_bars(d, "$VIX")
     if not has_print(vix, d, VIX_BY):
         return "no_vix"
     lo, hi = float(np.nanmin(spot)), float(np.nanmax(spot))
     strikes = strike_range(lo, hi, margin)
-    rows = carry_quotes(source.quotes(d, strikes), grid, d, strikes)
+    rows = carry_quotes(source.quotes(d, strikes), grid, d, strikes,
+                        integer_strikes=integer_strikes)
     if rows.empty:
         return "no_quotes"
     rows["spot"] = spot[np.searchsorted(grid, rows["ts_us"].to_numpy())]
@@ -372,7 +375,7 @@ def build_session(source: GuardedSource, d: dt.date, close: dt.time,
     ticks = pd.concat([
         pd.DataFrame({"ts_us": b["ts_us"].astype("int64"), "underlying": u,
                       "price": b["price"].astype("float64")})
-        for u, b in (("SPX", spx), ("$VIX", vix)) if b is not None and not b.empty
+        for u, b in ((underlying, spx), ("$VIX", vix)) if b is not None and not b.empty
     ] or [pd.DataFrame({"ts_us": pd.Series(dtype="int64"),
                         "underlying": pd.Series(dtype=str),
                         "price": pd.Series(dtype="float64")})], ignore_index=True)

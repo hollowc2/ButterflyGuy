@@ -224,6 +224,15 @@ class ExitDecision:
     peak: float = 0.0
 
 
+@dataclass
+class MonitorState:
+    """Explicit research continuation state; no overnight marks are invented."""
+
+    peak: float | None = None
+    memos: list[dict] = field(default_factory=list)
+    observations: list[dict] = field(default_factory=list)
+
+
 def monitor(
     *,
     date: dt.date,
@@ -234,16 +243,21 @@ def monitor(
     entry_price: float,
     rules: tuple[ExitRule, ...],
     session_close: dt.time = REGULAR_CLOSE,
+    state: MonitorState | None = None,
 ) -> ExitDecision:
     open_us = et_us(date, 9, 30)
-    close_us = et_us(date, 16, 0)
-    peak = entry_price
-    memos: list[dict] = [{} for _ in rules]
+    close_us = et_us(date, session_close.hour, session_close.minute)
+    peak = entry_price if state is None or state.peak is None else state.peak
+    memos: list[dict] = [{} for _ in rules] if state is None or not state.memos else state.memos
+    if state is not None:
+        state.memos = memos
     start = int(np.searchsorted(clock_ts, entry_ts_us, side="right"))
     idx = np.searchsorted(snapshot_ts, clock_ts[start:], side="right") - 1
     for ts, i in zip(clock_ts[start:], idx, strict=True):
         if i < 0 or not path.observed[i]:
             continue
+        if ts > close_us:
+            break
         value = max(0.0, float(path.mark[i]))
         peak = max(peak, value)
         obs = Observation(
@@ -255,6 +269,9 @@ def monitor(
             peak=peak,
             entry_price=entry_price,
         )
+        if state is not None:
+            state.peak = peak
+            state.observations.append({"ts_us": int(ts), "value": value, "peak": peak})
         for rule, memo in zip(rules, memos, strict=True):
             why = rule.reason(obs, memo)
             if why is not None:

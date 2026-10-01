@@ -238,6 +238,8 @@ def _simulate(args: argparse.Namespace, ds: Dataset, profile_name: str, names: l
     from butterfly_guy.research.features import SessionFeatures
     from butterfly_guy.research.hypotheses import uses_features
 
+    if ds.manifest.underlying != "SPX":
+        raise ValueError("alternate instruments require replay-local with their own config")
     profile = PROFILES[profile_name]
     names = [n for n in names if n != args.baseline]
     variants = resolve([args.baseline, *names])
@@ -728,7 +730,11 @@ def cmd_validate_vendor(args: argparse.Namespace) -> int:
     cache = Path(args.cache) if args.cache else None
     helios = Dataset.open(args.reference, cache)
     vendor = Dataset.open(args.vendor_dataset, cache)
-    url, raw = fetch_cboe(("SPX",))["SPX"]
+    if getattr(args, "cboe_spx", None):
+        raw = Path(args.cboe_spx).read_bytes()
+        url = "explicit cached Cboe SPX_History.csv"
+    else:
+        url, raw = fetch_cboe(("SPX",))["SPX"]
     t0 = time.monotonic()
     results = validate.validate(helios, vendor, args.start, args.end,
                                 RunContext(load_spx_config()), validate.parse_cboe_spx(raw))
@@ -789,13 +795,21 @@ def cmd_vendor_quality(args: argparse.Namespace) -> int:
     cache = Path(args.cache) if args.cache else None
     helios = Dataset.open(args.reference, cache)
     vendor = Dataset.open(args.vendor_dataset, cache)
-    url, raw = fetch_cboe(("SPX",))["SPX"]
+    if getattr(args, "cboe_spx", None):
+        raw = Path(args.cboe_spx).read_bytes()
+        url = "explicit cached Cboe SPX_History.csv"
+    else:
+        url, raw = fetch_cboe(("SPX",))["SPX"]
     t0 = time.monotonic()
     results = quality.run(vendor, helios, args.start, args.end, parse_cboe_spx(raw))
     results["meta"]["cboe_spx"] = {"url": url, "sha256": hashlib.sha256(raw).hexdigest()}
     files = vendor.manifest.source.get("index_files")
     if files and args.start < VALIDATION[0]:
-        results["index_files_crosscheck"] = _index_crosscheck(files, args.start, args.end)
+        if getattr(args, "cboe_spx", None):
+            results["index_files_crosscheck"] = {"sources": {"status": "not acquired",
+                "reason": "offline quality run; independent daily OHLC cross-check is separate"}}
+        else:
+            results["index_files_crosscheck"] = _index_crosscheck(files, args.start, args.end)
     run_id = hashlib.sha256(canonical_json({"meta": results["meta"], "range": results["range"],
                                             "thresholds": results["thresholds"]}).encode()
                             ).hexdigest()[:12]
@@ -827,6 +841,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--cache", default=None, help=f"cache root (default {default_cache_root()})")
     p.add_argument("--registry", default=str(REGISTRY_DIR))
     sub = p.add_subparsers(dest="command", required=True)
+    from butterfly_guy.research.archive_cli import add_commands
+    add_commands(sub, _date, REPORTS)
 
     e = sub.add_parser("export", help="read-only export into the Parquet cache")
     e.add_argument("--start", type=_date, required=True)
@@ -967,6 +983,7 @@ def build_parser() -> argparse.ArgumentParser:
     vq.add_argument("--start", type=_date, default=VALIDATION[0])
     vq.add_argument("--end", type=_date, default=VALIDATION[1])
     vq.add_argument("--out", default=str(REPORTS))
+    vq.add_argument("--cboe-spx", help="explicit cached Cboe daily CSV; avoids network")
     vq.set_defaults(func=cmd_vendor_quality)
 
     vv = sub.add_parser("validate-vendor", help="fidelity validation against the Helios export")
@@ -990,4 +1007,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (ValueError, FileNotFoundError, RuntimeError) as exc:
+        if args.command not in {"inventory-local", "audit-local", "import-local",
+                                "cache-inputs", "cache-daily", "replay-local"}:
+            raise
+        print(str(exc), file=sys.stderr)
+        return 2

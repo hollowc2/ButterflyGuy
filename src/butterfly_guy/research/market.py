@@ -92,6 +92,8 @@ class DayMarket:
         self.ts = chain.ts
         self.strikes = chain.strikes
         self.spot = chain.spot
+        self.underlying = chain.underlying
+        self.expiration = chain.expiration or chain.date
 
     def at_or_before(self, ts_us: int) -> int:
         """Index of the last snapshot recorded no later than `ts_us`, or -1."""
@@ -170,10 +172,10 @@ class DayMarket:
         out = []
         for j in np.flatnonzero(ok):
             out.append(OptionQuote(
-                symbol="", underlying="SPX", expiration=self.date,
+                symbol="", underlying=self.underlying, expiration=self.expiration,
                 strike=float(self.strikes[j]), option_type=direction,
                 bid=float(bid[j]), ask=float(ask[j]), mark=float(mark[j]),
-                iv=float(np.nan_to_num(iv[j])), delta=float(np.nan_to_num(delta[j])),
+                iv=float(iv[j]), delta=float(delta[j]),
             ))
         return out
 
@@ -205,4 +207,6 @@ def restrict_view(
         outside = np.abs(strikes[None, :] - spot[:, None]) > strike_band
         for v in fields.values():
             v[outside] = np.nan
-    return SessionChain(date=chain.date, ts=ts, strikes=strikes, spot=spot, fields=fields)
+    return SessionChain(date=chain.date, ts=ts, strikes=strikes, spot=spot, fields=fields,
+                        underlying=chain.underlying, expiration=chain.expiration,
+                        option_root=chain.option_root)

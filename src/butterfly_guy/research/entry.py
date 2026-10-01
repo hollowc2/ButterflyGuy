@@ -144,18 +144,19 @@ class SessionLoader:
     holdout (`holdout.py`) are refused unless a verified `unseal` is given."""
 
     def __init__(self, dataset: Dataset, profile: DecisionProfile,
-                 unseal: Unseal | None = None) -> None:
+                 unseal: Unseal | None = None, *, lifecycle: str = "0dte") -> None:
+        self.lifecycle = lifecycle
         self.dataset = dataset
         self.profile = profile
         self.unseal = unseal
         bars = dataset.daily_bars()
-        spx = bars[bars["underlying"] == "SPX"]
+        spx = bars[bars["underlying"] == dataset.manifest.underlying]
         vix = bars[bars["underlying"] == "$VIX"]
         self.opens = dict(zip(spx["date"], spx["open"], strict=True))
         self.closes = dict(zip(spx["date"], spx["close"], strict=True))
         self.vix_closes = dict(zip(vix["date"], vix["close"], strict=True))
         self.vix = Series(*self._ticks(dataset, "$VIX"))
-        self.spx = Series(*self._ticks(dataset, "SPX"))
+        self.spx = Series(*self._ticks(dataset, dataset.manifest.underlying))
         self.sessions = dataset.sessions()
         self.scheduled_close: dict[dt.date, dt.time] = (
             {d: dt.time.fromisoformat(c) for d, c in zip(
@@ -233,6 +234,9 @@ class SessionLoader:
             self.skipped[d] = "no_data"
             return None
 
+        if chain.option_root and chain.expiration != d and self.lifecycle == "0dte":
+            raise ValueError("1-DTE requires replay-local with an explicit lifecycle")
+
         if p.require_replay_prerequisites:
             # run_backtest_db.load_date_data needs chain rows in 09:30-15:30 ET.
             window = (chain.ts >= et_us(d, 9, 30)) & (chain.ts <= et_us(d, 15, 30))
@@ -267,7 +271,7 @@ class SessionLoader:
                 self.skipped[d] = "no_vix_prev_close"
                 return None
 
-        close = self.closes.get(d)
+        close = self.closes.get(d) if market.expiration == d else None
         return Session(
             date=d, market=market, clock_ts=clock_ts, clock_spot=clock_spot, open=open_,
             prev_close=prev_close, close=None if close is None else float(close),
