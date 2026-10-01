@@ -2,3 +2,4 @@ data/
 __pycache__/
 e0_trades*.csv
 sessions.csv
+data_theta/
