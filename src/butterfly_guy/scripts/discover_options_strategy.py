@@ -4,6 +4,11 @@ This intentionally uses a small, fixed hypothesis set. Every leg crosses the
 recorded spread and pays round-trip commission; selection uses entry-time data
 only. Run from the host with DATABASE__HOST=127.0.0.1 when TimescaleDB is in
 Docker.
+
+LEGACY: this is the July 2026 discovery pass, kept so its reports under
+`reports/strategy_discovery/` can be reproduced. For SPX it is superseded by the
+research core (`python -m butterfly_guy.research`), whose registry and sealed
+holdout replace these chronological splits.
 """
 
 from __future__ import annotations
@@ -76,7 +81,9 @@ class Trade:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Discover simple 0-DTE option strategies")
+    parser = argparse.ArgumentParser(
+        description="LEGACY (July 2026): discover simple 0-DTE option strategies"
+    )
     parser.add_argument(
         "--assets", default="SPX,NDX,XSP", help="Comma-separated subset of SPX,NDX,XSP"
     )

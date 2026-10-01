@@ -41,18 +41,25 @@ Run lint checks:
 uv run ruff check .
 ```
 
-Run a DB backtest:
+Run a live-parity DB backtest (stored SPX chains start 2026-03-13):
 
 ```bash
-uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-15 2025-01-15 --asset SPX
-uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-06-03 2026-06-03 --asset SPX
+```
+
+Research SPX rule variants with the research core (`run_backtest_db.py --sweep` is refused
+for SPX; it remains a legacy NDX/XSP tool). See `docs/research/research-core.md`:
+
+```bash
+uv run python -m butterfly_guy.research catalog
+uv run python -m butterfly_guy.research run --variants E0,X1 --baseline E0
 ```
 
 Inspect historical entry selection:
 
 ```bash
-uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03
-uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --method VIX
+uv run python src/butterfly_guy/scripts/inspect_entry.py 2026-06-03
+uv run python src/butterfly_guy/scripts/inspect_entry.py 2026-06-03 --method VIX
 ```
 
 Docker stack:
@@ -81,7 +88,8 @@ Useful container names:
 - `risk/`: daily trade count, loss limits, halt logic, account/buying-power guards.
 - `services/`: entry and position orchestration, notifications.
 - `quant_engine/`: pricing, IV skew, synthetic chain generation.
-- `backtest/`: simulation engine, sweeps, loaders.
+- `backtest/`: live-parity simulation engine, execution accounting, cohort ledger, loaders.
+- `research/`: the research core for SPX rule research (datasets, variants, registry, holdout).
 - `scripts/`: runnable entry points.
 
 ## Configuration Notes

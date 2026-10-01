@@ -8,6 +8,7 @@ from butterfly_guy.core.time_utils import (
     get_0dte_expiration,
     get_time_regime,
     get_us_market_early_closes,
+    get_us_market_holidays,
     is_market_open,
     is_trading_day,
     market_close_time,
@@ -84,6 +85,16 @@ def test_market_closed_on_holiday():
     # Independence Day 2026 is observed on Friday, July 3.
     assert not is_trading_day(dt.date(2026, 7, 3))
     assert not is_market_open(at=et(2026, 7, 3, 10, 0))
+
+
+def test_new_years_day_on_saturday_is_not_observed_on_friday():
+    # NYSE Rule 7.2: a Saturday New Year's Day is not moved to the prior Friday.
+    assert is_trading_day(dt.date(2021, 12, 31))
+    assert is_trading_day(dt.date(2027, 12, 31))
+    assert not is_trading_day(dt.date(2022, 12, 26))  # Christmas observed Monday
+    assert not is_trading_day(dt.date(2023, 1, 2))  # New Year's observed Monday
+    for year in (2021, 2022, 2027, 2028, 2033):
+        assert all(day.year == year for day in get_us_market_holidays(year))
 
 
 def test_is_trading_day_monday():

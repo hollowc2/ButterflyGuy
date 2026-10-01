@@ -1,5 +1,9 @@
 """Multi-day DB backtest across all dates with full chain data.
 
+LEGACY: this path has its own defaults and is not live-parity evidence. Use
+`run_backtest_db.py` for live parity and `python -m butterfly_guy.research` for
+SPX rule research.
+
 Runs multiple wing widths + direction modes across every day that has
 complete chain data in the DB (entry window 10:00–10:30 ET covered).
 
@@ -55,7 +59,9 @@ ASSET_CONFIGS: dict[str, dict] = {
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Entry analysis backtest")
+    parser = argparse.ArgumentParser(
+        description="LEGACY entry analysis backtest (not live-parity evidence)"
+    )
     parser.add_argument(
         "--asset", "-a",
         nargs="+",
