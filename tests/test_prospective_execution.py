@@ -17,6 +17,7 @@ from butterfly_guy.backtest.prospective_execution import (
     build_manifest,
     build_trade_record,
     daily_runs_path,
+    deferred_runs_path,
     leg_provenance,
     manifest_drift,
     read_jsonl,
@@ -146,6 +147,9 @@ def _cohort(tmp_path: Path, *, start: dt.date = START) -> tuple[Path, dict, Path
     )
     cohort_dir = tmp_path / "cohort"
     write_manifest(cohort_dir, manifest)
+    trades_path(cohort_dir).touch()
+    daily_runs_path(cohort_dir).touch()
+    deferred_runs_path(cohort_dir).touch()
     return cohort_dir, manifest, repo_root
 
 
@@ -667,3 +671,268 @@ def test_default_prospective_start_uses_the_exchange_calendar_not_utc():
     # Friday evening rolls past the weekend to Monday.
     friday_evening_et = dt.datetime(2026, 9, 26, 1, 5, tzinfo=dt.timezone.utc)
     assert default_prospective_start(friday_evening_et) == dt.date(2026, 9, 28)
+
+
+# Regression cases from the prospective cohort review.
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["incomplete_data", "missing_settlement"])
+async def test_selected_entry_with_incomplete_simulation_is_deferred(monkeypatch, reason):
+    from unittest.mock import AsyncMock
+
+    from butterfly_guy.backtest.chain_cache import ChainDay
+    from butterfly_guy.backtest.data_loader import DayData, MinuteBar
+    from butterfly_guy.scripts import run_prospective_execution as cli
+
+    outcome = _session(START)
+    bar = MinuteBar(
+        ts=outcome.baseline.entry_time, open=100, high=100, low=100, close=100, volume=0
+    )
+    day = DayData(
+        date=START, bars=[bar], vix=20, prev_close=100, recent_closes=[],
+        underlying="SPX", settlement_spot=100,
+    )
+    monkeypatch.setattr(cli, "load_date_data", AsyncMock(return_value={
+        "chains": outcome.chains, "bars": [bar], "day": day,
+    }))
+    monkeypatch.setattr(cli, "find_entry_in_window", AsyncMock(return_value=(
+        bar, 20, "CALL", outcome.candidate,
+    )))
+    monkeypatch.setattr(cli, "load_monitoring_chains", AsyncMock(return_value=ChainDay({})))
+    monkeypatch.setattr(cli.SimulationEngine, "simulate_day_from_entry", lambda *a, **k: DayResult(
+        date=START, traded=False, exit_reason=reason,
+    ))
+    result = await cli.evaluate_session(
+        None, date=START, asset="SPX", args=cli.frozen_backtest_args("SPX"),
+        commission_per_contract=COMMISSION,
+    )
+    assert result.status == "incomplete_data"
+
+
+def test_deferred_backfill_does_not_understate_drawdown(tmp_path):
+    cohort_dir, manifest, _ = _recorded_cohort(tmp_path)
+    trades = read_jsonl(trades_path(cohort_dir))
+    for trade, pnl in zip(trades, [100, -80, -80], strict=True):
+        for accounting in trade["accounting"].values():
+            accounting["net_pnl"] = pnl
+    summary = summarize_cohort(
+        manifest=manifest, trades=[trades[1], trades[0], trades[2]],
+        daily_runs=read_jsonl(daily_runs_path(cohort_dir)),
+    )
+    assert summary["models"]["stressed_marketable"]["max_drawdown"] == 160
+    assert summary["breakdowns"]["stressed_marketable"]["direction"]["CALL"][
+        "max_drawdown"
+    ] == 160
+
+
+@pytest.mark.parametrize("delete_file", [False, True])
+def test_verify_rejects_dangling_daily_trade_references(tmp_path, delete_file):
+    cohort_dir, _, repo = _recorded_cohort(tmp_path)
+    if delete_file:
+        trades_path(cohort_dir).unlink()
+    else:
+        trades_path(cohort_dir).write_text("")
+    problems = verify_cohort(cohort_dir, repo)
+    assert any("missing trade" in problem for problem in problems)
+
+
+@pytest.mark.parametrize("relative", [
+    "src/butterfly_guy/data/schemas.py",
+    "src/butterfly_guy/core/config.py",
+    "src/butterfly_guy/core/time_utils.py",
+    "src/butterfly_guy/backtest/metrics.py",
+    "src/butterfly_guy/quant_engine/black_scholes.py",
+    "pyproject.toml",
+    "uv.lock",
+])
+def test_freeze_includes_pricing_calendar_and_dependency_versions(tmp_path, relative):
+    _, manifest, repo = _cohort(tmp_path)
+    path = repo / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("changed dependency\n")
+    assert any(relative in reason for reason in manifest_drift(manifest, repo))
+
+
+def _mock_cohort_update(tmp_path, monkeypatch):
+    import argparse
+    from unittest.mock import AsyncMock
+
+    from butterfly_guy.scripts import run_prospective_execution as cli
+
+    cohort_dir, manifest, repo = _cohort(tmp_path)
+    frozen = cli.frozen_backtest_args("SPX")
+    manifest["strategy_parameters"] = cli.strategy_parameter_snapshot(frozen)
+    manifest["endpoint"].update(
+        target_trades=1, min_cash_settlements=0, min_stressed_winners=0,
+    )
+    write_manifest(cohort_dir, manifest)
+    trades_path(cohort_dir).touch()
+    daily_runs_path(cohort_dir).touch()
+    monkeypatch.setattr(cli, "REPO_ROOT", repo)
+    connection = AsyncMock()
+    monkeypatch.setattr(cli.asyncpg, "connect", AsyncMock(return_value=connection))
+    monkeypatch.setattr(cli, "resolve_db_dsn", lambda: "unused")
+    args = argparse.Namespace(cohort=cohort_dir, through=START + dt.timedelta(days=1))
+    return cli, args, manifest, repo
+
+
+@pytest.mark.asyncio
+async def test_update_freezes_sample_at_first_endpoint_and_never_reconnects(tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    cli, args, _, _ = _mock_cohort_update(tmp_path, monkeypatch)
+    evaluate = AsyncMock(side_effect=lambda *a, date, **k: _session(date))
+    monkeypatch.setattr(cli, "evaluate_session", evaluate)
+    # Legacy snapshot discovery may return both dates, but must not control the endpoint.
+    monkeypatch.setattr(cli, "discover_dates", AsyncMock(return_value=[
+        START, START + dt.timedelta(days=1),
+    ]), raising=False)
+    await cli.command_update(args)
+    assert len(read_jsonl(trades_path(args.cohort))) == 1
+    assert evaluate.await_count == 1
+    cli.asyncpg.connect.reset_mock()
+    await cli.command_update(args)
+    cli.asyncpg.connect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_session_is_reported_and_retried_before_later_dates(tmp_path, monkeypatch):
+    import json
+    from unittest.mock import AsyncMock
+
+    cli, args, _, _ = _mock_cohort_update(tmp_path, monkeypatch)
+    # There is no discovered DB date for the outage. Calendar discovery must still try it.
+    monkeypatch.setattr(cli, "discover_dates", AsyncMock(return_value=[]), raising=False)
+    evaluate = AsyncMock(return_value=SessionOutcome(
+        session_date=START, status="incomplete_data", detail="collector outage",
+    ))
+    monkeypatch.setattr(cli, "evaluate_session", evaluate)
+    await cli.command_update(args)
+    assert evaluate.await_args.kwargs["date"] == START
+    assert read_jsonl(daily_runs_path(args.cohort)) == []
+    summary = json.loads((args.cohort / "summary.json").read_text())
+    assert summary["sessions_with_incomplete_data"] == 1
+    assert summary["deferred_session_dates"] == [START.isoformat()]
+    assert summary["session_completion_coverage"] == 0
+    evaluate.side_effect = lambda *a, date, **k: _session(date)
+    evaluate.return_value = None
+    await cli.command_update(args)
+    assert evaluate.await_args.kwargs["date"] == START
+    summary = json.loads((args.cohort / "summary.json").read_text())
+    assert summary["sessions_with_incomplete_data"] == 0
+    assert summary["session_completion_coverage"] == 1
+    assert len(read_jsonl(args.cohort / "deferred_runs.jsonl")) == 1
+
+
+def test_calendar_discovery_skips_holidays_and_unfinished_sessions():
+    from butterfly_guy.core.time_utils import EASTERN
+    from butterfly_guy.scripts.run_prospective_execution import prospective_session_dates
+
+    # Friday July 3 is the observed Independence Day holiday in 2026.
+    assert prospective_session_dates(
+        dt.date(2026, 7, 2), dt.date(2026, 7, 10),
+        now=dt.datetime(2026, 7, 6, 15, 59, tzinfo=EASTERN),
+    ) == [dt.date(2026, 7, 2)]
+    assert prospective_session_dates(
+        dt.date(2026, 7, 2), dt.date(2026, 7, 10),
+        now=dt.datetime(2026, 7, 6, 16, 0, tzinfo=EASTERN),
+    ) == [dt.date(2026, 7, 2), dt.date(2026, 7, 6)]
+    # The Friday after Thanksgiving closes at 13:00 ET.
+    assert prospective_session_dates(
+        dt.date(2026, 11, 26), dt.date(2026, 11, 30),
+        now=dt.datetime(2026, 11, 27, 13, 0, tzinfo=EASTERN),
+    ) == [dt.date(2026, 11, 27)]
+    assert default_prospective_start(
+        dt.datetime(2026, 7, 2, 18, 0, tzinfo=EASTERN),
+    ) == dt.date(2026, 7, 6)
+
+
+@pytest.mark.asyncio
+async def test_update_waits_for_all_endpoint_conditions(tmp_path, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    cli, args, manifest, _ = _mock_cohort_update(tmp_path, monkeypatch)
+    manifest["endpoint"].update(min_cash_settlements=1, min_stressed_winners=1)
+    write_manifest(args.cohort, manifest)
+    args.through = START + dt.timedelta(days=2)
+
+    def evaluate(*a, date, **k):
+        if date == START:
+            return _session(date)
+        return _session(date, exit_reason="cash_settled", exit_price=3, settlement_spot=105)
+
+    evaluator = AsyncMock(side_effect=evaluate)
+    monkeypatch.setattr(cli, "evaluate_session", evaluator)
+    await cli.command_update(args)
+    assert len(read_jsonl(trades_path(args.cohort))) == 2
+    assert evaluator.await_count == 2
+
+
+@pytest.mark.parametrize("key, value", [
+    ("config_sha256", "incorrect configuration"),
+    ("git_commit", "incorrect version"),
+    ("status", "no_signal"),
+])
+def test_verify_rejects_consistently_hashed_invalid_daily_metadata(tmp_path, key, value):
+    import json
+
+    from butterfly_guy.backtest.prospective_execution import canonical_hash
+
+    cohort_dir, _, repo = _recorded_cohort(tmp_path)
+    records = read_jsonl(daily_runs_path(cohort_dir))
+    records[0][key] = value
+    records[0].pop("record_hash")
+    records[0]["record_hash"] = canonical_hash(records[0])
+    daily_runs_path(cohort_dir).write_text("".join(json.dumps(row) + "\n" for row in records))
+    assert verify_cohort(cohort_dir, repo)
+
+
+@pytest.mark.asyncio
+async def test_update_refuses_invalid_ledger_before_database_access(tmp_path, monkeypatch):
+    cli, args, manifest, repo = _mock_cohort_update(tmp_path, monkeypatch)
+    record_session(
+        cohort_dir=args.cohort, manifest=manifest, outcome=_session(START),
+        repo_root=repo, command="test",
+    )
+    trades_path(args.cohort).write_text("")
+    from butterfly_guy.backtest.prospective_execution import CohortError
+
+    with pytest.raises(CohortError, match="missing trade"):
+        await cli.command_update(args)
+    cli.asyncpg.connect.assert_not_awaited()
+
+
+def test_unresolved_deferral_prevents_endpoint_acceptance(tmp_path):
+    cohort_dir, manifest, repo = _recorded_cohort(tmp_path)
+    manifest["endpoint"].update(target_trades=1, min_cash_settlements=0, min_stressed_winners=0)
+    record_session(
+        cohort_dir=cohort_dir, manifest=manifest, repo_root=repo, command="update",
+        outcome=SessionOutcome(
+            session_date=START + dt.timedelta(days=3),
+            status="incomplete_data", detail="missing evidence",
+        ),
+    )
+    summary = summarize_cohort(
+        manifest=manifest, trades=read_jsonl(trades_path(cohort_dir)),
+        daily_runs=read_jsonl(daily_runs_path(cohort_dir)),
+        deferred_runs=read_jsonl(deferred_runs_path(cohort_dir)),
+    )
+    assert summary["endpoint"]["reached"] is False
+    assert summary["endpoint"]["blocked_by_incomplete_sessions"] is True
+    assert summary["gates"]["checks"]["session_data_complete"] is False
+
+
+def test_existing_cohort_accounting_results_are_preserved():
+    import json
+
+    from butterfly_guy.backtest.prospective_execution import load_manifest
+
+    root = Path(__file__).resolve().parents[1]
+    cohort_dir = root / "reports/prospective_execution/spx-prospective-2026-09-22"
+    recorded = json.loads((cohort_dir / "summary.json").read_text())
+    summary = summarize_cohort(
+        manifest=load_manifest(cohort_dir), trades=read_jsonl(trades_path(cohort_dir)),
+        daily_runs=read_jsonl(daily_runs_path(cohort_dir)),
+    )
+    assert summary["models"] == recorded["models"]
+    assert summary["breakdowns"] == recorded["breakdowns"]

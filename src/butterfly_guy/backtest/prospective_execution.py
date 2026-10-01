@@ -28,7 +28,7 @@ from butterfly_guy.backtest.metrics import max_drawdown, profit_factor
 from butterfly_guy.backtest.simulation_engine import DayResult
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 COHORT_ROOT = Path("reports/prospective_execution")
 MIDPOINT_MODEL = "corrected_midpoint"
 EXECUTABLE_MODELS = ("marketable", "stressed_marketable")
@@ -36,6 +36,7 @@ ACCOUNTING_MODELS = (MIDPOINT_MODEL, *EXECUTABLE_MODELS)
 PRIMARY_MODEL = "stressed_marketable"
 CONTRACT_MULTIPLIER = 100.0
 DAILY_RUNS_FILE = "daily_runs.jsonl"
+DEFERRED_RUNS_FILE = "deferred_runs.jsonl"
 TRADES_FILE = "trades.jsonl"
 MANIFEST_FILE = "manifest.json"
 SUMMARY_JSON_FILE = "summary.json"
@@ -45,6 +46,12 @@ SessionStatus = Literal["no_signal", "incomplete_data", "traded"]
 
 #: Source files whose content defines the frozen decision and its accounting.
 TRACKED_SOURCES: tuple[str, ...] = (
+    "pyproject.toml",
+    "uv.lock",
+    "src/butterfly_guy/__init__.py",
+    "src/butterfly_guy/backtest/__init__.py",
+    "src/butterfly_guy/backtest/data_loader.py",
+    "src/butterfly_guy/backtest/metrics.py",
     "src/butterfly_guy/backtest/execution_accounting.py",
     "src/butterfly_guy/backtest/prospective_execution.py",
     "src/butterfly_guy/backtest/simulation_engine.py",
@@ -52,6 +59,22 @@ TRACKED_SOURCES: tuple[str, ...] = (
     "src/butterfly_guy/backtest/chain_cache.py",
     "src/butterfly_guy/scripts/run_backtest_db.py",
     "src/butterfly_guy/scripts/run_prospective_execution.py",
+    "src/butterfly_guy/scripts/__init__.py",
+    "src/butterfly_guy/core/__init__.py",
+    "src/butterfly_guy/core/config.py",
+    "src/butterfly_guy/core/logging.py",
+    "src/butterfly_guy/core/metrics.py",
+    "src/butterfly_guy/core/time_utils.py",
+    "src/butterfly_guy/data/__init__.py",
+    "src/butterfly_guy/data/chain_utils.py",
+    "src/butterfly_guy/data/schemas.py",
+    "src/butterfly_guy/quant_engine/__init__.py",
+    "src/butterfly_guy/quant_engine/black_scholes.py",
+    "src/butterfly_guy/quant_engine/iv_model.py",
+    "src/butterfly_guy/quant_engine/synthetic_chain.py",
+    "src/butterfly_guy/strategy/__init__.py",
+    "src/butterfly_guy/strategy/bias_filter.py",
+    "src/butterfly_guy/strategy/regime_filter.py",
     "src/butterfly_guy/strategy/entry_selection.py",
     "src/butterfly_guy/strategy/butterfly_builder.py",
     "src/butterfly_guy/strategy/butterfly_selector.py",
@@ -60,6 +83,7 @@ TRACKED_SOURCES: tuple[str, ...] = (
     "src/butterfly_guy/strategy/regime_classifier.py",
     "src/butterfly_guy/strategy/width_selection.py",
     "src/butterfly_guy/position/position_manager.py",
+    "src/butterfly_guy/position/__init__.py",
     "src/butterfly_guy/position/profit_policy.py",
 )
 
@@ -203,7 +227,7 @@ def build_manifest(
             "target_trades": spec.target_trades,
             "min_cash_settlements": spec.min_cash_settlements,
             "min_stressed_winners": spec.min_stressed_winners,
-            "rule": "continue until every endpoint condition is met",
+            "rule": "stop at the first complete chronological sample meeting every condition",
         },
         "decision_rules": {
             "primary_model": PRIMARY_MODEL,
@@ -667,6 +691,10 @@ def daily_runs_path(cohort_dir: Path) -> Path:
     return cohort_dir / DAILY_RUNS_FILE
 
 
+def deferred_runs_path(cohort_dir: Path) -> Path:
+    return cohort_dir / DEFERRED_RUNS_FILE
+
+
 def record_session(
     *,
     cohort_dir: Path,
@@ -678,12 +706,19 @@ def record_session(
 ) -> dict[str, Any]:
     """Validate, then append one session to both ledgers. Reruns are idempotent.
 
-    Sessions whose quotes or official settlement are still incomplete are reported
-    but never appended, so a later complete run records them without amending history.
+    Incomplete attempts go to a separate audit ledger. They do not complete the
+    session, so a later run can record it without amending trade or daily history.
     """
     require_frozen_manifest(manifest, repo_root)
     require_session_in_cohort(manifest, outcome.session_date)
+    run_at = run_timestamp or dt.datetime.now(dt.timezone.utc)
+    commit = manifest["git"].get("commit")
+    config_sha = manifest["config"]["sha256"]
     if outcome.status == "incomplete_data":
+        append_jsonl(deferred_runs_path(cohort_dir), build_daily_run_record(
+            cohort_id=manifest["cohort_id"], outcome=outcome, run_timestamp=run_at,
+            git_commit=commit, config_sha256=config_sha, command=command, trade_id=None,
+        ))
         return {
             "session_date": outcome.session_date.isoformat(),
             "status": outcome.status,
@@ -693,9 +728,6 @@ def record_session(
             "deferred": True,
         }
 
-    run_at = run_timestamp or dt.datetime.now(dt.timezone.utc)
-    commit = manifest["git"].get("commit")
-    config_sha = manifest["config"]["sha256"]
     commission = manifest["assumptions"]["commission_per_contract"]
 
     trade_record: dict[str, Any] | None = None
@@ -856,8 +888,16 @@ def summarize_cohort(
     manifest: dict[str, Any],
     trades: list[dict[str, Any]],
     daily_runs: list[dict[str, Any]],
+    deferred_runs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build the cumulative report over every appended record."""
+    trades = sorted(trades, key=lambda trade: (trade["session_date"], trade["decision_time"]))
+    completed_dates = {run["session_date"] for run in daily_runs}
+    deferred_dates = sorted({
+        run["session_date"] for run in deferred_runs or []
+        if run["session_date"] not in completed_dates
+    })
+    observed_sessions = len(daily_runs) + len(deferred_dates)
     halves = _half_label(trades)
     models = {model: _model_summary(trades, daily_runs, model) for model in ACCOUNTING_MODELS}
     breakdowns = {
@@ -886,8 +926,11 @@ def summarize_cohort(
         "sessions_without_signal": sum(
             1 for run in daily_runs if run["status"] == "no_signal"
         ),
-        "sessions_with_incomplete_data": sum(
-            1 for run in daily_runs if run["status"] == "incomplete_data"
+        "sessions_with_incomplete_data": len(deferred_dates),
+        "deferred_session_dates": deferred_dates,
+        "sessions_observed": observed_sessions,
+        "session_completion_coverage": (
+            round(len(daily_runs) / observed_sessions, 4) if observed_sessions else 0.0
         ),
         "eligible_trades": len(trades),
         "cash_settled_trades": sum(1 for trade in trades if trade["cash_settled"]),
@@ -917,7 +960,9 @@ def evaluate_endpoint(manifest: dict[str, Any], summary: dict[str, Any]) -> dict
             name: {"observed": observed, "required": required, "met": observed >= required}
             for name, (observed, required) in conditions.items()
         },
-        "reached": all(observed >= required for observed, required in conditions.values()),
+        "reached": all(observed >= required for observed, required in conditions.values())
+        and summary["sessions_with_incomplete_data"] == 0,
+        "blocked_by_incomplete_sessions": summary["sessions_with_incomplete_data"] > 0,
     }
 
 
@@ -933,6 +978,7 @@ def evaluate_gates(manifest: dict[str, Any], summary: dict[str, Any]) -> dict[st
         else 0.0
     )
     checks = {
+        "session_data_complete": summary["sessions_with_incomplete_data"] == 0,
         "stressed_net_pnl_positive": stressed["net_pnl"] > 0,
         "stressed_expectancy_positive": stressed["expectancy"] > 0,
         "stressed_profit_factor_above_one": stressed["profit_factor"] > rules["min_profit_factor"],
@@ -983,6 +1029,8 @@ def render_summary_markdown(summary: dict[str, Any]) -> str:
         f"- Sessions recorded: {summary['sessions_recorded']}",
         f"- No signal: {summary['sessions_without_signal']}",
         f"- Incomplete data: {summary['sessions_with_incomplete_data']}",
+        f"- Session completion coverage: {summary['session_completion_coverage'] * 100:.1f}%",
+        f"- Deferred sessions: {', '.join(summary['deferred_session_dates']) or 'none'}",
         f"- Eligible trades: {summary['eligible_trades']}",
         f"- Cash-settled trades: {summary['cash_settled_trades']}",
         "",
@@ -1084,15 +1132,23 @@ def verify_cohort(cohort_dir: Path, repo_root: Path) -> list[str]:
     start = dt.date.fromisoformat(manifest["prospective_start_date"])
     trades = read_jsonl(trades_path(cohort_dir))
     daily_runs = read_jsonl(daily_runs_path(cohort_dir))
+    deferred_runs = read_jsonl(deferred_runs_path(cohort_dir))
+    required_paths = [trades_path(cohort_dir), daily_runs_path(cohort_dir)]
+    if manifest["schema_version"] >= 2:
+        required_paths.append(deferred_runs_path(cohort_dir))
+    for path in required_paths:
+        if not path.exists():
+            problems.append(f"missing ledger: {path.name}")
 
     for label, records, key in (
         ("trades.jsonl", trades, "trade_id"),
         ("daily_runs.jsonl", daily_runs, "session_date"),
+        ("deferred_runs.jsonl", deferred_runs, "record_hash"),
     ):
         seen: set[str] = set()
         for record in records:
             identity = record.get(key)
-            if identity in seen:
+            if identity in seen and label != "deferred_runs.jsonl":
                 problems.append(f"{label}: duplicate {key}={identity}")
             seen.add(identity)
             stored = dict(record)
@@ -1101,9 +1157,32 @@ def verify_cohort(cohort_dir: Path, repo_root: Path) -> list[str]:
                 problems.append(f"{label}: record hash mismatch for {key}={identity}")
             if record.get("cohort_id") != manifest["cohort_id"]:
                 problems.append(f"{label}: foreign cohort_id for {key}={identity}")
+            if record.get("config_sha256") != manifest["config"]["sha256"]:
+                problems.append(f"{label}: config hash mismatch for {key}={identity}")
+            if record.get("git_commit") != manifest["git"].get("commit"):
+                problems.append(f"{label}: Git commit mismatch for {key}={identity}")
             session = dt.date.fromisoformat(record["session_date"])
             if session < start:
                 problems.append(f"{label}: session {session} predates cohort start {start}")
+
+    trade_by_id = {trade["trade_id"]: trade for trade in trades}
+    for run in daily_runs:
+        trade_id = run.get("trade_id")
+        if run["status"] == "traded":
+            trade = trade_by_id.get(trade_id)
+            if trade is None:
+                problems.append(
+                    f"daily_runs.jsonl: missing trade for session {run['session_date']}"
+                )
+            elif trade["session_date"] != run["session_date"]:
+                problems.append(f"daily_runs.jsonl: trade belongs to another session: {trade_id}")
+        elif run["status"] != "no_signal" or trade_id is not None:
+            problems.append(f"daily_runs.jsonl: invalid completed status for {run['session_date']}")
+    for run in deferred_runs:
+        if run["status"] != "incomplete_data" or run.get("trade_id") is not None:
+            problems.append(
+                f"deferred_runs.jsonl: invalid deferred status for {run['session_date']}"
+            )
 
     run_by_date = {run["session_date"]: run for run in daily_runs}
     for trade in trades:
