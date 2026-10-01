@@ -7,6 +7,14 @@ Keeps the open prospective execution-validation cohort filling itself.
   to the replay database.
 - `butterfly-cohort-update.service` — runs `tools/cohort_daily_update.sh`, which
   appends completed sessions, verifies ledger integrity, then commits and pushes.
+  It runs from the dedicated worktree `/mnt/Repos/Trading/Butterflyguy-cohort` on
+  branch `cohort/spx-prospective-2026-09-22`, which sits on the cohort's frozen commit
+  `6ffbfe7`. Ledger commits go to that branch, never to `main`, so research work on
+  `main` cannot make the frozen sources drift. Merge the branch into `main` when you
+  want the ledger there.
+  The copy on `main` is a reporting snapshot. Its frozen-source check can report
+  drift as `main` changes; verify and append from the dedicated cohort worktree.
+  Keep the cohort branch and worktree until the study closes.
 - `butterfly-cohort-update.timer` — weekdays at 18:30 PT (21:30 ET), after the close
   and after settlement data lands. `Persistent=true` catches missed runs after a
   reboot or suspend.
