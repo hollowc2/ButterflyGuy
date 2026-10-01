@@ -60,7 +60,6 @@ def _easter_sunday(year: int) -> dt.date:
 
 def get_us_market_holidays(year: int) -> set[dt.date]:
     holidays = {
-        _observed_date(dt.date(year, 1, 1)),
         _observed_date(dt.date(year, 7, 4)),
         _observed_date(dt.date(year, 12, 25)),
         _nth_weekday(year, 1, 0, 3),
@@ -72,9 +71,10 @@ def get_us_market_holidays(year: int) -> set[dt.date]:
     }
     if year >= 2022:
         holidays.add(_observed_date(dt.date(year, 6, 19)))
-    next_nyny = _observed_date(dt.date(year + 1, 1, 1))
-    if next_nyny.year == year:
-        holidays.add(next_nyny)
+    new_years_day = dt.date(year, 1, 1)
+    # NYSE Rule 7.2: a Saturday New Year's Day is not observed on the prior Friday.
+    if new_years_day.weekday() != 5:
+        holidays.add(_observed_date(new_years_day))
     return holidays
 
 

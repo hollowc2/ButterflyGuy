@@ -110,19 +110,43 @@ Everything else about the gateway (building, deploying, monitoring, keys, rollba
 Local ThetaData Parquet import, input audits, offline replay and explicit 1-DTE
 lifecycles are documented in [Offline ThetaData research](docs/research/thetadata-local-backtesting.md).
 
-`run_backtest_db.py` replays TimescaleDB history through the same strategy components the live system uses.
+There are two tools, with separate jobs:
+
+- **The research core** (`python -m butterfly_guy.research`) is where SPX rule research happens: comparing variants, testing hypotheses, and the holdout protocol.
+- **`run_backtest_db.py`** is the live-parity reference. It replays TimescaleDB history through the same strategy components the live system uses.
+
+Stored SPX chains start on 2026-03-13. Earlier dates have no recorded chains to replay.
+
+### Research core
+
+The research core lives in `src/butterfly_guy/research/`. It replays a read-only Parquet export of the recorded chains (or vendor history) with the live entry selection and profit policy.
+
+Every variant is scored against a baseline on the same sessions, with:
+- stressed accounting and zero P&L on no-trade days;
+- a paired day-block bootstrap and H1/H2 splits;
+- top-3-removed P&L;
+- near-tied-fly robustness.
+
+Variants are named catalog entries with stable hashes, and each evaluation is recorded in an append-only registry under `reports/research/registry/`.
+
+```bash
+uv run python -m butterfly_guy.research export --start 2026-03-13 --end 2026-09-25
+uv run python -m butterfly_guy.research catalog
+uv run python -m butterfly_guy.research run --variants E0,X1,R1 --baseline E0
+```
+
+See [docs/research/research-core.md](docs/research/research-core.md) for profiles, parity with the frozen replay, vendor history, the sealed holdout, and reproduction hashes.
+
+### Live-parity replay
 
 ```bash
 # One day, or a date range
-uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-15 2025-01-15 --asset SPX
-uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 --asset SPX
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-06-03 2026-06-03 --asset SPX
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-03-13 2026-09-18 --asset SPX
 
 # Compare midpoint, executable bid/ask, and bid/ask plus $0.05 slippage
-uv run python src/butterfly_guy/scripts/run_backtest_db.py 2025-01-01 2025-03-31 \
+uv run python src/butterfly_guy/scripts/run_backtest_db.py 2026-03-13 2026-09-18 \
   --asset SPX --execution-accounting-report
-
-# Parameter sweep
-uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset SPX --sweep
 
 # Same backtest inside the running container
 docker exec butterfly_spx_app python -m butterfly_guy.scripts.run_backtest_db 2026-05-05 2026-05-05 --asset SPX
@@ -130,7 +154,17 @@ docker exec butterfly_spx_app python -m butterfly_guy.scripts.run_backtest_db 20
 
 `--asset NDX` and `--asset XSP` also work, but treat them as experimental.
 
-> `run_entry_analysis.py` and `SimulationEngine.simulate_day()` are legacy paths with their own defaults. They are not live-parity evidence. Use `run_backtest_db.py` instead.
+**Legacy parameter sweep (NDX and XSP only).** `--sweep` grids comma-separated parameters, prices fills at the midpoint, and ranks combos by per-trade Sharpe on the same sample it evaluates. Treat its winners as hypotheses only. It is refused for SPX, which uses the research core instead:
+
+```bash
+uv run python src/butterfly_guy/scripts/run_backtest_db.py --asset NDX --sweep --wing 25,50,75
+```
+
+> These are legacy paths with their own defaults, and are not live-parity evidence:
+> - `run_entry_analysis.py`;
+> - `run_classifier_sweep.py` (synthetic Black–Scholes chains over CSV history);
+> - `discover_options_strategy.py` (the July 2026 discovery pass, superseded for SPX by the research core's holdout protocol);
+> - `SimulationEngine.simulate_day()`.
 
 ### Safeguards against misleading results
 
@@ -145,32 +179,13 @@ docker exec butterfly_spx_app python -m butterfly_guy.scripts.run_backtest_db 20
   - charges $0.65 per contract per side.
 
   The stress case moves every fill $0.05 against you. Missing or crossed markets are reported and excluded, never filled at the midpoint.
-- **Reproducibility.** Sweep CSVs record the Git SHA, command, config, data coverage, exposure, expectancy, average win and loss, and cost drag.
-
-A sweep ranks the same sample it evaluates, so treat its winners as hypotheses. Freeze a candidate and confirm it on chronological holdouts before considering it for paper trading.
-
-The discovery runner handles that holdout step. It crosses the recorded spread, includes commissions, reports train, validation, and test splits in chronological order, and writes reproducible artifacts to `reports/strategy_discovery/`:
-
-```bash
-uv run python src/butterfly_guy/scripts/discover_options_strategy.py
-```
-
-### Research core
-
-For comparing SPX rule variants, use the research core in `src/butterfly_guy/research/`. It replays a read-only Parquet export of the recorded chains with the live entry selection and profit policy. Every variant is scored against a baseline on the same sessions: stressed accounting, zero P&L on no-trade days, a paired day-block bootstrap, H1/H2 splits, top-3-removed P&L and near-tied-fly robustness. Each evaluation is recorded in an append-only registry under `reports/research/registry/`.
-
-```bash
-uv run python -m butterfly_guy.research export --start 2026-03-13 --end 2026-09-25
-uv run python -m butterfly_guy.research run --variants E0,X1,R1 --baseline E0 --tieset
-```
-
-See [docs/research/research-core.md](docs/research/research-core.md) for profiles, parity with the frozen replay, and reproduction hashes. `run_backtest_db.py` remains the live-parity reference.
+- **Reproducibility.** Research-core runs record the dataset hash, variant definition hashes, Git SHA and config hash. Legacy sweep CSVs record the Git SHA, command, config, data coverage, exposure, expectancy, average win and loss, and cost drag.
 
 ### Inspection and reports
 
 ```bash
-uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03
-uv run python src/butterfly_guy/scripts/inspect_entry.py 2025-06-03 --method VIX
+uv run python src/butterfly_guy/scripts/inspect_entry.py 2026-06-03
+uv run python src/butterfly_guy/scripts/inspect_entry.py 2026-06-03 --method VIX
 uv run python src/butterfly_guy/scripts/report_trade_ladders.py 2026-05-20 --underlying SPX
 uv run python src/butterfly_guy/scripts/report_selection_parity.py 2026-05-15 2026-05-29 --asset SPX
 uv run python src/butterfly_guy/scripts/report_exit_mark_parity.py --trade-id 87

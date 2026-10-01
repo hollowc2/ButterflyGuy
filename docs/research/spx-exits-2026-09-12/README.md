@@ -1,6 +1,8 @@
 # Reproduce the SPX exit-policy experiment
 
-Read [REPORT.md](REPORT.md) for the decision. All timestamps in raw files include
+Read [REPORT.md](REPORT.md) for the decision. This package is frozen evidence; new SPX
+rule research, exit variants included, runs through the research core
+(`docs/research/research-core.md`). All timestamps in raw files include
 UTC offsets; trading sessions and displayed clock times use America/New_York.
 The inclusive development window is March 17–September 11, 2026. No later market
 observations enter the experiment. Both directions are recorded long debit

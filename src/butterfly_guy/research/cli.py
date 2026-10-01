@@ -2,6 +2,7 @@
 
   export             read-only export of SPX 0-DTE data into the Parquet cache
   verify             check the dataset manifest hashes and the registry chain
+  catalog            list catalog variants, their definition hashes and registry history
   register           pre-register catalog variants before evaluating them
   port               link ported variants to their placeholder backfill records
   run                evaluate variants against a baseline and write artifacts
@@ -139,6 +140,39 @@ def cmd_verify(args: argparse.Namespace) -> int:
         print("  PROBLEM", p)
     print("OK" if not problems else f"{len(problems)} problem(s)")
     return 1 if problems else 0
+
+
+def cmd_catalog(args: argparse.Namespace) -> int:
+    """Every catalog variant (or those named) with its definition hash and what each
+    registry under `--registry` holds for that exact definition."""
+    root = Path(args.registry)
+    registries = {str(p.relative_to(root).with_suffix("")): Registry(p)
+                  for p in sorted(root.rglob("*.jsonl"))}
+    names = args.variants.split(",") if args.variants else list(CATALOG)
+    for v in resolve(names):
+        h = v.definition_hash()
+        print(f"{v.name}  {h[:12]}")
+        print(f"    {v.description}")
+        lines = []
+        for label, reg in registries.items():
+            hist = reg.history(v.name, h)
+            if hist["events"]:
+                events = ", ".join(f"{k} x{n}" for k, n in sorted(hist["events"].items()))
+                lines.append(f"    {label}: {events}; last {hist['last'][:10]}")
+            if hist["other_hashes"]:
+                lines.append(f"    {label}: other definitions under this name: "
+                             + ", ".join(x[:12] for x in hist["other_hashes"]))
+        print("\n".join(lines) if lines else "    not in any registry")
+    print()
+    broken = 0
+    for label, reg in registries.items():
+        problems = reg.verify()
+        broken += bool(problems)
+        tried = reg.tried()
+        print(f"{label}: {tried['dataset']} distinct definitions tried "
+              f"({tried['post_hoc']} post hoc)"
+              + (f"; CHAIN BROKEN: {len(problems)} problem(s)" if problems else ""))
+    return 1 if broken else 0
 
 
 def _fit_for_registration(v, ds: Dataset | None, profile_name: str) -> dict:
@@ -862,6 +896,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     v = sub.add_parser("verify", help="check dataset hashes and the registry chain")
     v.set_defaults(func=cmd_verify)
+
+    ca = sub.add_parser("catalog", help="list catalog variants with their definition "
+                        "hashes and registry history")
+    ca.add_argument("--variants", default=None, help="comma list (default: all)")
+    ca.set_defaults(func=cmd_catalog)
 
     r = sub.add_parser("register", help="pre-register catalog variants")
     r.add_argument("--variants", required=True, help=f"comma list from {', '.join(CATALOG)}")

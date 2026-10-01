@@ -1,0 +1,7 @@
+# Schwab gateway 1-minute index archive — 1st of each month, 23:00 UTC (19:00 EDT /
+# 18:00 EST, after every close). Schwab keeps ~30 sessions of minute bars, so a monthly
+# run leaves ~10 days to re-run a failed one; the wrapper sends a Telegram alert.
+# Vixie cron ignores CRON_TZ in user crontabs; use UTC slot.
+# Install:
+#   crontab -l 2>/dev/null | grep -v run_gateway_minute_backfill | cat - infra/cron/gateway_minute_backfill.cron | crontab -
+0 23 1 * * cd /opt/butterflyguy && tools/run_gateway_minute_backfill.sh >> /opt/butterflyguy/gateway_minute_backfill.log 2>&1

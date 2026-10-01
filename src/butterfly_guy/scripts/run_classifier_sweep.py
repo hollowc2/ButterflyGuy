@@ -1,5 +1,10 @@
 """Sweep classifier thresholds to optimize regime-adaptive trading over 25 years.
 
+LEGACY: prices come from `SimulationEngine.simulate_day`, which uses a synthetic
+Black-Scholes chain wherever no recorded chain exists, that is, on every session
+before 2026-03-13. Results over this CSV history are therefore not evidence about
+tradable prices. Use `python -m butterfly_guy.research` for SPX rule research.
+
 Per-regime SimulationParams are fixed to the historical regime-sweep winners:
   BULL:    PUT  gap_dir  rr_min=10  vix_max=20.0  (TODO: revisit — CALL may be more intuitive)
   BEAR:    auto gap_dir  rr_min=8   vix_max=20.0
@@ -79,7 +84,9 @@ BULL_VIX_THRESH    = [15.0,  18.0]
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Sweep classifier thresholds over historical CSV data")
+    p = argparse.ArgumentParser(
+        description="LEGACY: sweep classifier thresholds over CSV history (synthetic chains)"
+    )
     p.add_argument("start", nargs="?", type=dt.date.fromisoformat, help="Start date (YYYY-MM-DD)")
     p.add_argument("end", nargs="?", type=dt.date.fromisoformat, help="End date (YYYY-MM-DD)")
     p.add_argument("--top", type=int, default=30, help="Number of top results to display")
