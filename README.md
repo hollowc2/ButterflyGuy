@@ -110,6 +110,10 @@ Everything else about the gateway (building, deploying, monitoring, keys, rollba
 Local ThetaData Parquet import, input audits, offline replay and explicit 1-DTE
 lifecycles are documented in [Offline ThetaData research](docs/research/thetadata-local-backtesting.md).
 
+The [2026-10-01 completion record](docs/research/thetadata-backtesting-completion-2026-10-01.md)
+records the durable 585-session SPXW development baseline, quality checks, and
+reproduction commands.
+
 There are two tools, with separate jobs:
 
 - **The research core** (`python -m butterfly_guy.research`) is where SPX rule research happens: comparing variants, testing hypotheses, and the holdout protocol.
