@@ -2,10 +2,14 @@
 # Append every completed session to the open prospective cohort, then commit the
 # ledgers. Safe to run repeatedly: recorded sessions are skipped, and sessions
 # whose data is incomplete are deferred until a later run.
+#
+# Runs from a dedicated worktree on the cohort branch, which sits on the cohort's
+# frozen commit, so research work on main can never make the sources drift.
 set -uo pipefail
 
-REPO=${BUTTERFLY_REPO:-/mnt/Repos/Trading/Butterflyguy}
+REPO=${BUTTERFLY_REPO:-/mnt/Repos/Trading/Butterflyguy-cohort}
 COHORT=${BUTTERFLY_COHORT:-reports/prospective_execution/spx-prospective-2026-09-22}
+COHORT_BRANCH=${BUTTERFLY_COHORT_BRANCH:-cohort/spx-prospective-2026-09-22}
 UV=${UV_BIN:-/home/corey/.local/bin/uv}
 STATE=${XDG_STATE_HOME:-$HOME/.local/state}/butterfly-cohort
 LOG=$STATE/update.log
@@ -19,10 +23,10 @@ flock -n 9 || { echo "$(date -Is) SKIP: another update is running" >>"$LOG"; exi
 
 echo "$(date -Is) === update start ===" >>"$LOG"
 
-# Ledgers belong on main only; never commit or push onto a feature branch.
+# Ledgers belong on the cohort branch only; never commit or push anywhere else.
 BRANCH=$(git symbolic-ref --short -q HEAD)
-if [ "$BRANCH" != "main" ]; then
-    echo "$(date -Is) SKIP: checkout is on '${BRANCH:-detached HEAD}', not main" >>"$LOG"
+if [ "$BRANCH" != "$COHORT_BRANCH" ]; then
+    echo "$(date -Is) SKIP: checkout is on '${BRANCH:-detached HEAD}', not $COHORT_BRANCH" >>"$LOG"
     exit 0
 fi
 
@@ -44,7 +48,7 @@ if [ -n "$(git status --porcelain -- "$COHORT")" ]; then
     git commit -q -m "Record prospective cohort sessions through $(date +%F)" \
                   -m "Automated append by cohort_daily_update.sh. Ledger verified before commit." \
         >>"$LOG" 2>&1 || echo "$(date -Is) WARN: commit failed" >>"$LOG"
-    if git push -q origin HEAD:main >>"$LOG" 2>&1; then
+    if git push -q origin "HEAD:$COHORT_BRANCH" >>"$LOG" 2>&1; then
         echo "$(date -Is) committed and pushed" >>"$LOG"
     else
         echo "$(date -Is) WARN: push failed (commit is local; ssh key may be locked)" >>"$LOG"
