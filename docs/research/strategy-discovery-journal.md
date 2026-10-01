@@ -1115,3 +1115,23 @@ of rows. The rules below were written before running:
   nothing about his discretionary version.
 
 Conclusion: keep the 10:00–10:45 entry. No change proposed.
+
+## 2026-10-01 — H-TR1 registered test: FAIL
+
+The registered one-shot test (`docs/research/ernie-comparison-2026-10-01/H-TR1-registration.md`,
+commit `b0b7215`) failed all four criteria on ThetaData SPXW 2022-05-02 → 2024-06-28
+(334 traded sessions). T5 − B stressed was −$1,208 over the full window and negative in both
+halves. It was −$6,030 without the top 3 sessions, and the drawdown was $2,827 deeper. The
++$6.1k gain on the 2026 Schwab sessions, where the rule was found, did not carry over.
+Results are in the registration file.
+
+Two observations outside the test (not gating, not to be acted on without their own test):
+
+- The frozen baseline itself is negative after costs on this window: −$9,541 stressed against
+  +$19,622 at midpoint, with a −$20.8k drawdown. 2023, a mostly low-VIX year, accounts for
+  −$15.9k. This is consistent with the 09-25 low-VIX diagnosis: costs of roughly $66 per fly
+  outweigh a small midpoint edge.
+- Only 334 of 537 sessions produced a qualifying fly (48 in 2022). The selector's RR ≥ 8 and
+  cost caps on ThetaData quotes reject many sessions. This was not investigated.
+- T6 (any-profit start plus a breakeven floor after +75%) was +$2,186 better than B, but was
+  reported only and is post-hoc.

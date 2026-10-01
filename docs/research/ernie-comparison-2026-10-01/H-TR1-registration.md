@@ -77,3 +77,25 @@ SWEEP_DATA=data_theta/htr1 python htr1_run.py 2022-05-02 2024-06-28
 
 Needs pandas and pyarrow. The data directory is ThetaData-derived, gitignored, and must
 never be committed.
+
+## Result (run once, 2026-10-01, at b0b7215)
+
+**FAIL on all four criteria.** 334 sessions with a trade (2022-05-06 → 2024-06-28) out of 537
+data sessions.
+
+| Criterion | T5 − B (stressed) | Result |
+|---|---:|---|
+| 1 Full window | −1,208 | FAIL |
+| 2a First half (< 2023-09-05) | −647 | FAIL |
+| 2b Second half | −560 | FAIL |
+| 3 Without the top 3 sessions | −6,030 | FAIL |
+| 4 Max drawdown (T5 − B) | +2,827 (deeper) | FAIL |
+
+| Exit | Stressed net | Midpoint net | Max DD | Settled | Floor exits |
+|---|---:|---:|---:|---:|---:|
+| B baseline | −9,541 | +19,622 | −20,835 | 75 | — |
+| T5 (H-TR1) | −10,749 | +12,286 | −23,662 | 212 | 103 |
+| T6 (reported only) | −7,355 | +22,150 | −20,646 | 71 | 88 |
+
+By year, T5 − B was +3,220 (2022), −4,703 (2023) and +275 (2024). 230 of the 334 trades
+were in Zombieland. H-TR1 is rejected. The 2026 Schwab gain did not generalize.
