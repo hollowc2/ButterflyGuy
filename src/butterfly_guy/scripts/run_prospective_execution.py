@@ -30,6 +30,7 @@ from butterfly_guy.backtest.prospective_execution import (
     SessionOutcome,
     build_manifest,
     daily_runs_path,
+    deferred_runs_path,
     load_manifest,
     read_jsonl,
     record_session,
@@ -42,14 +43,13 @@ from butterfly_guy.backtest.prospective_execution import (
 )
 from butterfly_guy.backtest.simulation_engine import SimulationEngine, SimulationParams
 from butterfly_guy.core.logging import get_logger
-from butterfly_guy.core.time_utils import EASTERN
+from butterfly_guy.core.time_utils import EASTERN, is_trading_day, market_close_time
 from butterfly_guy.scripts.run_backtest_db import (
     ASSET_CONFIG_PATHS,
     _patch_chain_cache,
     _sim_parity_fields_from_args,
     backtest_entry_price,
     day_with_monitoring_bars,
-    discover_dates,
     find_entry_in_window,
     load_asset_config,
     load_date_data,
@@ -263,7 +263,7 @@ async def evaluate_session(
     if not result.traded:
         return SessionOutcome(
             session_date=date,
-            status="no_signal",
+            status="incomplete_data",
             detail=f"frozen decision produced no completed trade: {result.exit_reason}",
             data_range=data_range,
             row_counts=row_counts,
@@ -311,11 +311,27 @@ async def evaluate_session(
 # ---------------------------------------------------------------------------
 
 def _next_session_after(day: dt.date) -> dt.date:
-    """Next weekday after *day*; holidays simply record no session."""
+    """Next trading session after *day*, using the shared market calendar."""
     nxt = day + dt.timedelta(days=1)
-    while nxt.weekday() >= 5:
+    while not is_trading_day(nxt):
         nxt += dt.timedelta(days=1)
     return nxt
+
+
+def prospective_session_dates(
+    start: dt.date, through: dt.date, *, now: dt.datetime | None = None,
+) -> list[dt.date]:
+    """Completed calendar sessions, including dates with no database snapshots."""
+    current = (now or dt.datetime.now(EASTERN)).astimezone(EASTERN)
+    end = min(through, current.date())
+    dates = []
+    day = start
+    while day <= end:
+        close = dt.datetime.combine(day, market_close_time(day), tzinfo=EASTERN)
+        if is_trading_day(day) and close <= current:
+            dates.append(day)
+        day += dt.timedelta(days=1)
+    return dates
 
 
 def default_prospective_start(now: dt.datetime | None = None) -> dt.date:
@@ -378,6 +394,7 @@ def command_init(args: argparse.Namespace) -> int:
     path = write_manifest(cohort_dir, manifest)
     trades_path(cohort_dir).touch()
     daily_runs_path(cohort_dir).touch()
+    deferred_runs_path(cohort_dir).touch()
     print(f"Cohort {cohort_id} initialized at {cohort_dir}")
     print(f"  manifest        : {path}")
     print(f"  git commit      : {manifest['git']['commit']} (dirty={manifest['git']['dirty']})")
@@ -398,9 +415,23 @@ async def command_update(args: argparse.Namespace) -> int:
     require_frozen_manifest(manifest, REPO_ROOT)
     frozen = frozen_backtest_args(manifest["asset"])
     require_frozen_parameters(manifest, frozen)
+    problems = verify_cohort(cohort_dir, REPO_ROOT)
+    if problems:
+        raise CohortError("cohort integrity check failed: " + "; ".join(problems))
+
+    def current_summary() -> dict:
+        return summarize_cohort(
+            manifest=manifest, trades=read_jsonl(trades_path(cohort_dir)),
+            daily_runs=read_jsonl(daily_runs_path(cohort_dir)),
+            deferred_runs=read_jsonl(deferred_runs_path(cohort_dir)),
+        )
+
+    if current_summary()["endpoint"]["reached"]:
+        print("Registered endpoint already reached; the cohort sample is closed.")
+        return command_report(args)
 
     start = dt.date.fromisoformat(manifest["prospective_start_date"])
-    through = args.through or dt.date.today()
+    through = args.through or dt.datetime.now(EASTERN).date()
     recorded = {run["session_date"] for run in read_jsonl(daily_runs_path(cohort_dir))}
     command = " ".join([Path(sys.argv[0]).name, *sys.argv[1:]])
 
@@ -408,7 +439,7 @@ async def command_update(args: argparse.Namespace) -> int:
     appended = 0
     deferred = 0
     try:
-        dates = await discover_dates(conn, manifest["asset"], start, through)
+        dates = prospective_session_dates(start, through)
         pending = [date for date in dates if date.isoformat() not in recorded]
         if not pending:
             print(f"No unrecorded sessions in {start} → {through}.")
@@ -430,10 +461,14 @@ async def command_update(args: argparse.Namespace) -> int:
             if written["deferred"]:
                 deferred += 1
                 print(f"  {date}: deferred ({outcome.detail})")
-                continue
+                # Do not let an outage exclude earlier sessions from the endpoint.
+                break
             appended += 1
             suffix = f" trade={written['trade_id']}" if written["trade_id"] else ""
             print(f"  {date}: {outcome.status}{suffix}")
+            if current_summary()["endpoint"]["reached"]:
+                print("Registered endpoint reached; the cohort sample is closed.")
+                break
     finally:
         await conn.close()
 
@@ -444,10 +479,14 @@ async def command_update(args: argparse.Namespace) -> int:
 def command_report(args: argparse.Namespace) -> int:
     cohort_dir = args.cohort
     manifest = load_manifest(cohort_dir)
+    problems = verify_cohort(cohort_dir, REPO_ROOT)
+    if problems:
+        raise CohortError("cohort integrity check failed: " + "; ".join(problems))
     summary = summarize_cohort(
         manifest=manifest,
         trades=read_jsonl(trades_path(cohort_dir)),
         daily_runs=read_jsonl(daily_runs_path(cohort_dir)),
+        deferred_runs=read_jsonl(deferred_runs_path(cohort_dir)),
     )
     json_path, md_path = write_reports(cohort_dir, summary)
     primary = summary["models"][summary["primary_model"]]
