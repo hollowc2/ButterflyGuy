@@ -191,6 +191,36 @@ def _fit_for_registration(v, ds: Dataset | None, profile_name: str) -> dict:
     return fitted.definition()["entry"]["fitted"]
 
 
+def _calibrate_for_registration(variants, ds: Dataset, holdout_sessions: int) -> dict:
+    """Gate-1 levels (protocol Revision 4) from each rule's development-window paired
+    difference against E0, replayed as the holdout evaluation replays. Empty when the dataset
+    has too few development sessions (a Helios dataset); the holdout command then refuses."""
+    from butterfly_guy.research import protocol
+    from butterfly_guy.research.evaluate import session_vector
+    from butterfly_guy.research.features import SessionFeatures
+    from butterfly_guy.research.holdout import DEVELOPMENT
+    from butterfly_guy.research.hypotheses import uses_features
+
+    names = [v.name for v in variants if v.name != protocol.BASELINE]
+    dev = [d for d in ds.sessions()["date"] if DEVELOPMENT[0] <= d <= DEVELOPMENT[1]]
+    if not names or len(dev) < 2 * protocol.BLOCK:
+        return {}
+    arms = resolve([protocol.BASELINE, *names])
+    features = (SessionFeatures.load(ds) if any(uses_features(v.entry) for v in arms)
+                else None)
+    ctx = RunContext(load_spx_config(), features=features)
+    costs = Costs(ctx.config.execution.paper_commission_per_contract,
+                  stressed_exit_floor=protocol.STRESSED_EXIT_FLOOR)
+    result = run_variants(SessionLoader(ds, PROFILES[protocol.PROFILE]), arms, ctx,
+                          start=DEVELOPMENT[0], end=DEVELOPMENT[1], costs=costs,
+                          exit_delay=protocol.EXIT_DELAY)
+    dates, _ = common_dates(result, list(result.runs))
+    base = session_vector(result.runs[protocol.BASELINE].trades, dates, "stressed")
+    return {n: protocol.calibrate_gate1(
+        session_vector(result.runs[n].trades, dates, "stressed") - base, holdout_sessions)
+        for n in names}
+
+
 def cmd_register(args: argparse.Namespace) -> int:
     reg = Registry.for_dataset(Path(args.registry), args.dataset)
     git_sha, dirty = _git()
@@ -202,14 +232,22 @@ def cmd_register(args: argparse.Namespace) -> int:
     # Fit every fitted rule before appending anything, so a failed fit registers nothing.
     fitted = {v.name: _fit_for_registration(v, ds, args.profile)
               for v in variants if v.fit_window is not None}
+    gate1 = _calibrate_for_registration(variants, ds, args.holdout_sessions) if ds else {}
     for v in variants:
         extra = ({"fitted": fitted[v.name], "fit_profile": args.profile}
                  if v.name in fitted else {})
+        if v.name in gate1:
+            extra["gate1"] = gate1[v.name]
         rec = reg.append("register", variant=v.name, definition=v.definition(),
                          definition_hash=v.definition_hash(), note=args.note or "",
                          git_sha=git_sha, git_dirty=dirty,
                          dataset_hash=ds.hash if ds is not None else None, **extra)
         shown = f"; fitted {rec['fitted']} under {args.profile}" if "fitted" in rec else ""
+        if "gate1" in rec:
+            shown += f"; gate-1 levels {rec['gate1']['levels']}"
+            missed = [k for k, ok in rec["gate1"]["reached"].items() if not ok]
+            if missed:
+                shown += f" (cannot be calibrated for k = {', '.join(missed)})"
         print(f"registered {v.name} {rec['definition_hash'][:12]} (seq {rec['seq']}){shown}")
     return 0
 
@@ -234,6 +272,8 @@ def _simulate(args: argparse.Namespace, ds: Dataset, profile_name: str, names: l
     from butterfly_guy.research.features import SessionFeatures
     from butterfly_guy.research.hypotheses import uses_features
 
+    if ds.manifest.underlying != "SPX":
+        raise ValueError("alternate instruments require replay-local with their own config")
     profile = PROFILES[profile_name]
     names = [n for n in names if n != args.baseline]
     variants = resolve([args.baseline, *names])
@@ -392,9 +432,11 @@ def cmd_holdout(args: argparse.Namespace) -> int:
     vec = {n: {m: session_vector(r.trades, dates, m) for m in ("stressed", "stressed_delayed")}
            for n, r in result.runs.items()}
     base = vec[protocol.BASELINE]
+    k = len(regs)
     gate_rows = {r["variant"]: protocol.gates(
         vec[r["variant"]]["stressed"], base["stressed"], vec[r["variant"]]["stressed_delayed"],
-        base["stressed_delayed"], dates, len(regs)) for r in regs}
+        base["stressed_delayed"], dates, k, tail=float(r["gate1"]["levels"][str(k)]))
+        for r in regs}
 
     meta = {
         "dataset": ds.name, "dataset_hash": ds.hash, "profile": asdict(profile),
@@ -722,7 +764,11 @@ def cmd_validate_vendor(args: argparse.Namespace) -> int:
     cache = Path(args.cache) if args.cache else None
     helios = Dataset.open(args.reference, cache)
     vendor = Dataset.open(args.vendor_dataset, cache)
-    url, raw = fetch_cboe(("SPX",))["SPX"]
+    if getattr(args, "cboe_spx", None):
+        raw = Path(args.cboe_spx).read_bytes()
+        url = "explicit cached Cboe SPX_History.csv"
+    else:
+        url, raw = fetch_cboe(("SPX",))["SPX"]
     t0 = time.monotonic()
     results = validate.validate(helios, vendor, args.start, args.end,
                                 RunContext(load_spx_config()), validate.parse_cboe_spx(raw))
@@ -783,13 +829,21 @@ def cmd_vendor_quality(args: argparse.Namespace) -> int:
     cache = Path(args.cache) if args.cache else None
     helios = Dataset.open(args.reference, cache)
     vendor = Dataset.open(args.vendor_dataset, cache)
-    url, raw = fetch_cboe(("SPX",))["SPX"]
+    if getattr(args, "cboe_spx", None):
+        raw = Path(args.cboe_spx).read_bytes()
+        url = "explicit cached Cboe SPX_History.csv"
+    else:
+        url, raw = fetch_cboe(("SPX",))["SPX"]
     t0 = time.monotonic()
     results = quality.run(vendor, helios, args.start, args.end, parse_cboe_spx(raw))
     results["meta"]["cboe_spx"] = {"url": url, "sha256": hashlib.sha256(raw).hexdigest()}
     files = vendor.manifest.source.get("index_files")
     if files and args.start < VALIDATION[0]:
-        results["index_files_crosscheck"] = _index_crosscheck(files, args.start, args.end)
+        if getattr(args, "cboe_spx", None):
+            results["index_files_crosscheck"] = {"sources": {"status": "not acquired",
+                "reason": "offline quality run; independent daily OHLC cross-check is separate"}}
+        else:
+            results["index_files_crosscheck"] = _index_crosscheck(files, args.start, args.end)
     run_id = hashlib.sha256(canonical_json({"meta": results["meta"], "range": results["range"],
                                             "thresholds": results["thresholds"]}).encode()
                             ).hexdigest()[:12]
@@ -821,6 +875,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--cache", default=None, help=f"cache root (default {default_cache_root()})")
     p.add_argument("--registry", default=str(REGISTRY_DIR))
     sub = p.add_subparsers(dest="command", required=True)
+    from butterfly_guy.research.archive_cli import add_commands
+    add_commands(sub, _date, REPORTS)
 
     e = sub.add_parser("export", help="read-only export into the Parquet cache")
     e.add_argument("--start", type=_date, required=True)
@@ -852,6 +908,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--profile", choices=sorted(PROFILES), default="vendor_1m",
                    help="profile a fitted rule is fitted under (recorded; the holdout "
                         "evaluation requires vendor_1m)")
+    r.add_argument("--holdout-sessions", type=int, default=358,
+                   help="planned holdout size the gate-1 calibration simulates (recorded; "
+                        "358 without an Indices month, 421 with one)")
     r.set_defaults(func=cmd_register)
 
     po = sub.add_parser("port", help="link ported variants to their placeholder backfill")
@@ -963,6 +1022,7 @@ def build_parser() -> argparse.ArgumentParser:
     vq.add_argument("--start", type=_date, default=VALIDATION[0])
     vq.add_argument("--end", type=_date, default=VALIDATION[1])
     vq.add_argument("--out", default=str(REPORTS))
+    vq.add_argument("--cboe-spx", help="explicit cached Cboe daily CSV; avoids network")
     vq.set_defaults(func=cmd_vendor_quality)
 
     vv = sub.add_parser("validate-vendor", help="fidelity validation against the Helios export")
@@ -986,4 +1046,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (ValueError, FileNotFoundError, RuntimeError) as exc:
+        if args.command not in {"inventory-local", "audit-local", "import-local",
+                                "cache-inputs", "cache-daily", "replay-local"}:
+            raise
+        print(str(exc), file=sys.stderr)
+        return 2

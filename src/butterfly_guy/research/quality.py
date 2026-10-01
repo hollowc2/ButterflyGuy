@@ -112,7 +112,7 @@ def _cells(chain: SessionChain, rows: np.ndarray) -> tuple[np.ndarray, dict]:
     for t in OPTION_TYPES:
         bid, ask = chain.fields[f"{t}_bid"][rows], chain.fields[f"{t}_ask"][rows]
         q = np.isfinite(bid) & np.isfinite(ask)
-        age = chain.fields.get(f"{t}_{AGE_FIELD}")
+        age = chain.fields.get(f"{t}_observation_age_s", chain.fields.get(f"{t}_{AGE_FIELD}"))
         if age is not None:
             q &= np.nan_to_num(age[rows], nan=np.inf) <= FRESH_S
         quoted[t] = q & band

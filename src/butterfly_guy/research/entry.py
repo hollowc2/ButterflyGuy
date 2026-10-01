@@ -37,6 +37,7 @@ import numpy as np
 from butterfly_guy.core.config import AppConfig, VixWidthBucket, load_config
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.research.dataset import Dataset, SessionChain
+from butterfly_guy.research.exits import REGULAR_CLOSE
 from butterfly_guy.research.holdout import Unseal, guard, in_holdout
 from butterfly_guy.research.market import (
     EASTERN,
@@ -129,6 +130,9 @@ class Session:
     close: float | None  # official same-session close (cash settlement), if recorded
     vix: Series
     profile: DecisionProfile
+    # The session's scheduled close: the dataset's `session_close_et` where it records one
+    # (vendor datasets: 13:00 on early closes), else 16:00.
+    scheduled_close: dt.time = REGULAR_CLOSE
     cache: dict = field(default_factory=dict)
 
     def clock_index(self, ts_us: int) -> int:
@@ -140,19 +144,25 @@ class SessionLoader:
     holdout (`holdout.py`) are refused unless a verified `unseal` is given."""
 
     def __init__(self, dataset: Dataset, profile: DecisionProfile,
-                 unseal: Unseal | None = None) -> None:
+                 unseal: Unseal | None = None, *, lifecycle: str = "0dte") -> None:
+        self.lifecycle = lifecycle
         self.dataset = dataset
         self.profile = profile
         self.unseal = unseal
         bars = dataset.daily_bars()
-        spx = bars[bars["underlying"] == "SPX"]
+        spx = bars[bars["underlying"] == dataset.manifest.underlying]
         vix = bars[bars["underlying"] == "$VIX"]
         self.opens = dict(zip(spx["date"], spx["open"], strict=True))
         self.closes = dict(zip(spx["date"], spx["close"], strict=True))
         self.vix_closes = dict(zip(vix["date"], vix["close"], strict=True))
         self.vix = Series(*self._ticks(dataset, "$VIX"))
-        self.spx = Series(*self._ticks(dataset, "SPX"))
+        self.spx = Series(*self._ticks(dataset, dataset.manifest.underlying))
         self.sessions = dataset.sessions()
+        self.scheduled_close: dict[dt.date, dt.time] = (
+            {d: dt.time.fromisoformat(c) for d, c in zip(
+                self.sessions["date"], self.sessions["session_close_et"], strict=True)
+             if isinstance(c, str)}
+            if "session_close_et" in self.sessions.columns else {})
         self.skipped: dict[dt.date, str] = {}
 
     def _ticks(self, dataset: Dataset, underlying: str) -> tuple[np.ndarray, np.ndarray]:
@@ -224,6 +234,9 @@ class SessionLoader:
             self.skipped[d] = "no_data"
             return None
 
+        if chain.option_root and chain.expiration != d and self.lifecycle == "0dte":
+            raise ValueError("1-DTE requires replay-local with an explicit lifecycle")
+
         if p.require_replay_prerequisites:
             # run_backtest_db.load_date_data needs chain rows in 09:30-15:30 ET.
             window = (chain.ts >= et_us(d, 9, 30)) & (chain.ts <= et_us(d, 15, 30))
@@ -258,11 +271,11 @@ class SessionLoader:
                 self.skipped[d] = "no_vix_prev_close"
                 return None
 
-        close = self.closes.get(d)
+        close = self.closes.get(d) if market.expiration == d else None
         return Session(
             date=d, market=market, clock_ts=clock_ts, clock_spot=clock_spot, open=open_,
             prev_close=prev_close, close=None if close is None else float(close),
-            vix=self.vix, profile=p,
+            vix=self.vix, profile=p, scheduled_close=self.scheduled_close.get(d, REGULAR_CLOSE),
         )
 
 

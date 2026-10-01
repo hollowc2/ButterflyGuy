@@ -15,6 +15,8 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 - **Registration.** It happens with
   `python -m butterfly_guy.research register --dataset <vendor dataset> ...` from a clean,
   committed tree, **before any holdout-period vendor data is downloaded**.
+  *[Revision 2, 2026-09-29, marked: raw holdout files were downloaded before registration
+  into a sealed folder; see the revision block below]*
 
 > **[Fact update, 2026-09-28, marked; no hypothesis, split or gate changed]**
 > - **No vendor data has been bought yet.** The owner will likely buy ThetaData, from 2022
@@ -46,7 +48,8 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 >   Anything in this draft that is changed from here on is made after seeing those results
 >   and must be marked as a revision.
 > - **Usable development sessions:** 585; E0 replays 584 (2023-07-03, an early close, is
->   `incomplete_data`).
+>   `incomplete_data`). *[Revision 3, 2026-09-29, marked: E0 now replays all 585; see the
+>   revision block below]*
 > - **H-TS1's fitted threshold:** 0.9181935615930604 (n = 528 sessions with a prior VIX1D).
 > - **Built for the development runs:** optional H-EV2 as `HEV2` (`b0c670c0…`, FOMC statement
 >   days at any time) and H-SN1's noise secondary as `HSN1_c148` / `HSN1_c168`.
@@ -94,6 +97,102 @@ decides which hypotheses, if any, to `register`, and may edit them first.
 >     and records the value. The holdout run re-fits and refuses on any difference. HTS1 on
 >     `spx_0dte_thetadata` @ `93bbe58e` fits to 0.9181935615930604 (n = 528).
 
+> **[REVISION 2, 2026-09-29, marked: the owner's decision; no hypothesis, split, metric or
+> gate changed]**
+> - **What changed.** Raw ThetaData option history (SPXW 0DTE and 1DTE, NDXP 0DTE and
+>   XSP 0DTE, 2020-01-01 onward) was downloaded before registration by
+>   `tools/thetadata_download.py` on `main`. Trade dates inside the holdout went to a
+>   separate, gitignored `data/thetadata_sealed/` in the main checkout.
+> - **Why.** To secure the data in case the subscription ends before registration.
+> - **The seal.** Nothing in either checkout reads that folder, and the tool prints row
+>   counts only, never prices. Nobody opens, charts or backtests those files until
+>   registration.
+> - **Unchanged.** The research pipeline still builds its holdout dataset only through the
+>   guarded pull after a registry-verified unseal, and it still records that dataset's file
+>   hashes before the first evaluation.
+
+> **[REVISION 3, 2026-09-29, marked: the owner's decision D5, made AFTER seeing the
+> development-window results; no hypothesis, split, metric or gate changed]**
+> - **What changed.** A trade still held when a 13:00 early-close session ends now settles on
+>   that session's official close, like any held trade. Before, the replay required data up
+>   to 15:00 ET for every session. Such a trade was `incomplete_data`, and the rule "sessions
+>   any arm cannot replay … are dropped from every arm" removed the session.
+> - **Why.** Nothing is missing: the session closes at 13:00 and SPXW settles on that close,
+>   so settling it imputes nothing.
+> - **Rule.** The data must reach one hour before the session's scheduled close: 15:00 on a
+>   regular day, unchanged (`SimulationEngine`'s rule), and 12:00 on an early close. The
+>   scheduled close is the vendor dataset's `session_close_et`, from calendar v1's early-close
+>   rows. Commit `6891317`.
+> - **Effect.**
+>   - On development, 2023-07-03 (E0, a held put, −$238) and 2022-11-25 (H-SN1) are now
+>     evaluated, and all 585 sessions replay (`registration-decision-2026-09-29.md` §6.4).
+>   - On the holdout, its five early closes with data can no longer drop.
+> - **Unchanged.** Helios datasets record no scheduled close, so their replays and the
+>   frozen-replay parity are unchanged. So are the hypotheses, split, halves, metric,
+>   bootstrap, the k rule and the gates.
+
+> **[REVISION 4, 2026-09-29, marked: the owner's decision D4, made AFTER seeing the
+> development-window results. Gate 1's level changes; its statistic, its null, the bootstrap,
+> the k rule and gates 2–5 do not]**
+> - **What changed.** Gate 1 still requires the moving-block bootstrap lower bound of the
+>   total paired difference to be above zero, but at a calibrated level instead of
+>   1 − 0.10/k.
+> - **Why.** For a skip filter the paired difference is zero on most sessions and dominated
+>   by a few large settled winners. The percentile bootstrap then passes a rule with no effect
+>   too often. At the drafted 10% level, over 358 holdout sessions: H-TS1 17.7%, H-EV1 14.4%,
+>   H-LV1 13.2% (`registration-decision-2026-09-29.md` §6.2).
+> - **How** (commits `b18ca94` and `c59e6bd`).
+>   - At registration, `register` replays E0 and each rule on the development window under
+>     the protocol's settings, and shifts each paired difference to mean zero.
+>   - It resamples that difference in 10-session blocks to holdouts of the planned size
+>     (`--holdout-sessions`: 358 without an Indices month, 421 with one).
+>   - It runs the percentile test at every level of a fixed grid: 2,000 simulated holdouts,
+>     10,000 reps each, seed 1.
+>   - For each k = 1..5 it records the loosest level whose simulated false-pass rate is at
+>     most 0.10/k, never looser than 0.10/k.
+>   - The holdout evaluation uses the recorded level for its k, and refuses a registration
+>     that has none.
+>   - It also refuses when no grid level reaches 0.10/k for the registered k, rather than
+>     run a test that cannot hold its error rate.
+> - **What it gives.** Computed in-process on `spx_0dte_thetadata` @ `93bbe58e`, with
+>   nothing registered:
+>   - H-TS1 alone (k = 1) gets the 97.5% bound at 358 sessions, and the 96% bound at 421.
+>   - At k = 2 its level would fall to 0.25%. Its heavy tail keeps false passes high at any
+>     moderate level.
+>   - At k ≥ 3 no level reaches the target, so it cannot be evaluated.
+> - **Unchanged.** The statistic, the null (no paired difference), the blocks, reps and seed,
+>   the k rule, gates 2–5, the metric (Revision 1) and the early-close rule (Revision 3).
+
+> **[REVISION 5, 2026-09-29, marked: the owner's decision D2, made AFTER seeing the
+> development-window results. A gate is added; the metric, the test and gates 1–5 do not
+> change]**
+> - **What changed.** A hypothesis now also passes only if its own stressed P&L over the
+>   evaluated holdout sessions is above zero (gate 6, a point estimate like gate 4).
+> - **Why.** E0 lost money on the development window (−$9,922 stressed, floored). Against a
+>   losing baseline, gates 1–4 alone mean only "loses less than E0". H-TS1 itself lost
+>   −$2,283 there.
+> - **Cost** (in-sample simulation, H-TS1 alone, k = 1, gate 1 at its calibrated level, 358
+>   sessions):
+>   - power at the development effect falls from about 36% to 18%, and at half the effect
+>     from 27% to 8%;
+>   - a rule with no mechanism, while E0 loses as on development, passes about 4.7% of the
+>     time instead of 16%;
+>   - with an Indices month (421 sessions): 22% and 10%.
+> - **Implementation.** `protocol.gates` (`gate6`), commit `362a728`. The holdout verdict
+>   shows it.
+> - **Unchanged.** The metric, the test and its calibration (Revision 4), the k rule and
+>   gates 1–5.
+
+> **[Fact update, 2026-09-29, marked; no hypothesis, split, metric or gate changed]**
+> - **Owner's decision D6: no ThetaData Indices month.** Holdout sessions 2025-12-10 →
+>   2026-03-12 (63) have no SPX/VIX minute data, so the no-derived-data rule skips them.
+> - **Expected holdout:** 358 usable sessions (H1 204 / H2 154). Gate 1's calibration
+>   (Revision 4) is made for that size, which is `register --holdout-sessions` 358, the
+>   default.
+> - **The intraday VIX cross-check of the owner's minute file stays undone.** It is a known
+>   limitation (`registration-decision-2026-09-29.md` §5). H-TS1 is not affected: it reads
+>   Cboe's daily closes.
+
 Style follows `docs/research/spx-idea-sweep-2026-09-25/REGISTRY.md`. Design rationale:
 `docs/reviews/2026-09-27-research-pipeline-review.md` §2 (power) and §3 (paired, stressed
 evaluation; fly-choice noise).
@@ -108,7 +207,9 @@ evaluation; fly-choice noise).
   - It spans 2022's bear market and 2023's low volatility.
 - **Holdout period: 2024-07-01 → 2026-03-12** (about 430 sessions, about the 400 trades
   the power analysis asks for).
-  - Downloaded only after registration.
+  - Downloaded only after registration. *[Revision 2, 2026-09-29, marked: raw vendor
+    files were downloaded before registration into a sealed folder; see the revision block
+    above]*
   - Its file hashes go into the registry record before the first evaluation.
   - It is evaluated once per registered hypothesis, with no re-runs after edits.
   - It includes the 2025 tariff shock.
@@ -176,23 +277,30 @@ registration.
   - *[Revision 1, 2026-09-29, marked: see the revision block above]* An intraday exit's
     net proceeds are floored at $0 (`--floor-stressed-exits`).
   - Sessions any arm cannot replay without imputing data are dropped from every arm, as
-    the core does now.
+    the core does now. *[Revision 3, 2026-09-29, marked: a trade held on an early close is
+    not missing data; it settles on that day's official close]*
 - **Test:** the moving-block bootstrap of the total paired difference.
   - 10-session blocks, 10,000 reps, one index draw applied to both arms, seed 1.
 - **Multiple testing:** k = the number of hypotheses actually registered (4 as drafted; 5
   with H-EV2). Bonferroni at family α = 0.10, one-sided.
 - **A hypothesis passes only if all of these hold:**
   1. the bootstrap lower bound at 1 − 0.10/k is above 0 (97.5% for k = 4);
+     *[Revision 4, 2026-09-29, marked: at the level calibrated on development data at
+     registration, never looser than 1 − 0.10/k; see the revision block above]*
   2. the paired difference is positive in both holdout halves;
   3. the paired difference is still positive with the three largest-P&L sessions of
      either arm removed;
   4. the delayed-exit stressed model's point estimate is also positive;
-  5. for H-SN1 only, the noise secondary is lower than E0's.
+  5. for H-SN1 only, the noise secondary is lower than E0's;
+  6. *[Revision 5, 2026-09-29, marked: see the revision block above]* the hypothesis's own
+     stressed P&L over the evaluated holdout sessions is above zero.
 - **Reporting:** everything is reported whatever the result, including the development
   figures (labelled in-sample), the cumulative variant count on the vendor dataset, and
   the 49 definitions already tried on `spx_0dte` for context.
 - **Expected false positives:** with k = 4 and a Bonferroni family α of 0.10, at most
   about a 10% chance that any one of the four passes by luck alone.
+  *[Revision 4, 2026-09-29, marked: the drafted percentile test did not achieve this on skip
+  filters, which is why gate 1's level is now calibrated]*
 
 ## Out of scope for this sweep
 
