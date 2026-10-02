@@ -67,7 +67,8 @@ V1 is preserved at `d6d4da8ddaeb213908e1587fbed132a59ef2145c` on its original
 branch and checkout; the pinned v1 CLI passed ledger verification. Its final
 recorded dates are September 22–30: seven trades, two settlements, one stressed
 winner, stressed net -$174.20 and drawdown $1,113.40. October 1 was attempted but
-not recorded, so its absence must not be interpreted as a verified no-signal
+deferred because official settlement was not yet available. Its absence from the
+ledger must not be interpreted as a verified no-signal
 session. No v1 artifact was rewritten for this closure.
 
 Helios paper services `infra/app_spx`, `infra/app_ndx`, and `infra/app_xsp` were
@@ -98,3 +99,41 @@ bash /opt/butterflyguy/.rollbacks/prospective-v2-20261001/rollback.sh
 ```
 
 The original images are retained. No pruning or persistent-volume cleanup was run.
+
+The new user service was run manually on October 1 at 18:50 Pacific. It returned
+`Result=success`, `ExecMainStatus=0`, verified all ledgers, and committed and pushed
+its empty report on the dedicated cohort branch. The tunnel and both frozen
+checkouts remain available; the old timer remains disabled.
+
+## Completed development baseline
+
+The candidate image completed the March 13–September 18 read-only replay with
+118 trades and 23 cash settlements. Full output is in
+`spx-v2-baseline-20260313-20260918.txt`; command, source/config/lock hashes,
+coverage and output checksum are in its `.provenance.json` companion. All 39
+registered source/lock hashes match deployed commit `f4fad7d`.
+
+Corrected midpoint: net $21,952.20, expectancy $186.04, profit factor 2.344,
+win rate 19.5%, drawdown $3,789.80. Marketable: net $18,468.20, expectancy
+$156.51, profit factor 1.952, win rate 16.1%, drawdown $5,048.80. Stressed
+marketable: net $14,208.20, expectancy $120.41, profit factor 1.611, win rate
+15.3%, drawdown $7,108.00. Midpoint commission drag is $553.80 and exposure is
+42.9% of available session time; average winner/loser are $1,664.55/-$171.92.
+The 23 settlements contribute $36,005.20 under midpoint, leaving intraday exits
+negative in aggregate. This is already-seen development evidence.
+
+The historical CLI discovered 128 dates against 131 calendar sessions. It skipped
+two discovered dates for missing usable data and eight for no qualifying entry.
+All 118 entries were executable, but 17 of 22,182 exit-path observations lacked
+required quotes and were skipped. No raw quote export was created; database-row
+immutability is not established by this replay's output checksum. These historical
+coverage limitations remain disclosed separately from v2's future calendar-first
+completion guard.
+
+This reproduces the newly frozen source against current database evidence, and
+does **not** reproduce the older September 20 fixture's $17,691.60 midpoint net
+and 22 settlements. Midpoint net is $4,260.60 higher; the contribution of earlier
+shared-code changes versus database revisions has not been attributed. Preserve
+both records. Do not treat that difference as strategy improvement or pool this
+historical run with the new prospective cohort. Its registered parameters and
+decision criteria were not tuned using this replay.
