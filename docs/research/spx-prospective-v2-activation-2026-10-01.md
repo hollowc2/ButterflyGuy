@@ -53,3 +53,48 @@ systemctl --user list-timers butterfly-cohort-v2-update.timer
 Do not rebase this branch, merge a later main into it, or edit frozen source,
 configuration or dependency files. Close and register a separate study if they
 must change. Ledger/report commits stay on this cohort branch.
+
+## Activation and paper deployment evidence
+
+Registered at `2026-10-02T01:45:53.345174Z` (October 1 Pacific/Eastern), from
+clean commit `8b276f18cbab99874c316e773e3ad1e594983284`. Manifest schema 2;
+initial ledgers contain zero sessions, trades, and deferrals. Report and ledger
+verification passed. The updater also passed a no-eligible-session run through
+October 1. The v2 timer is enabled; its first scheduled run is October 2 at
+18:31:35 Pacific. The original v1 timer is disabled.
+
+V1 is preserved at `d6d4da8ddaeb213908e1587fbed132a59ef2145c` on its original
+branch and checkout; the pinned v1 CLI passed ledger verification. Its final
+recorded dates are September 22–30: seven trades, two settlements, one stressed
+winner, stressed net -$174.20 and drawdown $1,113.40. October 1 was attempted but
+not recorded, so its absence must not be interpreted as a verified no-signal
+session. No v1 artifact was rewritten for this closure.
+
+Helios paper services `infra/app_spx`, `infra/app_ndx`, and `infra/app_xsp` were
+targeted individually with `up --no-deps --no-build --pull never`, using the
+existing Compose configuration plus an image-only overlay. Deployment source:
+`f4fad7d9f97e966d9e76d72d67a1ff5a76d61ece`; image:
+`sha256:8d6f67ba1812488836aa66f2d61af69e6220514e745ae5e4b7e6999f64db5d58`.
+The unrelated staged gateway-backfill checkout was preserved. Runtime configs,
+paper mode, account/order routing, mounts and data services were retained.
+All migration checksums already matched, so no new migration was required.
+
+The initial SPX attempt rolled back when `/ready` failed. Investigation showed
+the restored release fails the same gateway spot-freshness check after the market
+close. The final rollout therefore validated `/health` and normal startup while
+accepting only the explicit after-close stale-spot condition; it did not bypass or
+change the freshness guard. All three apps remain entry-gated until fresh market
+data is available. `/ready` during a regular session remains a follow-up check.
+Pre- and post-deployment read-only audits found no open database trades,
+nonterminal intents, broker option positions, or active orders. Each strategy has
+one running app; the existing SPX candidate container remains stopped.
+
+Helios rollback record and overlays:
+`/opt/butterflyguy/.rollbacks/prospective-v2-20261001/`.
+Restore the recorded app images with:
+
+```bash
+bash /opt/butterflyguy/.rollbacks/prospective-v2-20261001/rollback.sh
+```
+
+The original images are retained. No pruning or persistent-volume cleanup was run.
