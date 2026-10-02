@@ -107,6 +107,9 @@ Everything else about the gateway (building, deploying, monitoring, keys, rollba
 
 ## Backtesting and research
 
+For historical-data inventory and the offline SPXW session quality ledger, see
+[Historical data management](docs/data-management.md).
+
 Local ThetaData Parquet import, input audits, offline replay and explicit 1-DTE
 lifecycles are documented in [Offline ThetaData research](docs/research/thetadata-local-backtesting.md).
 

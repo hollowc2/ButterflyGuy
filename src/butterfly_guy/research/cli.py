@@ -877,6 +877,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
     from butterfly_guy.research.archive_cli import add_commands
     add_commands(sub, _date, REPORTS)
+    from butterfly_guy.research.session_ledger import add_command
+    add_command(sub, _date)
 
     e = sub.add_parser("export", help="read-only export into the Parquet cache")
     e.add_argument("--start", type=_date, required=True)
@@ -1045,12 +1047,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    arguments = sys.argv[1:] if argv is None else argv
+    args = parser.parse_args(arguments)
+    if args.command == "session-quality-ledger":
+        if not any(x == "--dataset" or x.startswith("--dataset=") for x in arguments):
+            parser.error("session-quality-ledger requires an explicit --dataset")
+        if args.cache is None:
+            parser.error("session-quality-ledger requires an explicit --cache")
     try:
         return args.func(args)
     except (ValueError, FileNotFoundError, RuntimeError) as exc:
         if args.command not in {"inventory-local", "audit-local", "import-local",
-                                "cache-inputs", "cache-daily", "replay-local"}:
+                                "cache-inputs", "cache-daily", "replay-local",
+                                "session-quality-ledger"}:
             raise
         print(str(exc), file=sys.stderr)
         return 2
