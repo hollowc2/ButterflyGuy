@@ -33,8 +33,11 @@ operator reviews remain manual. No observations from v1 are pooled into v2.
 
 ## Retiring v1
 
-Disable `butterfly-cohort-update.timer` when v2 has been registered, verified,
-and its new timer installed. The original checkout, branch, manifest and ledgers
+The v1 timer was disabled when v2 was registered and verified. At Corey's explicit
+request on October 1, its installed service and timer definitions were then
+removed, and both unit names masked to prevent accidental starts. The legacy unit
+definitions were removed from this v2 branch's active infrastructure directory;
+installation instructions now select only v2. The original checkout, branch, manifest and ledgers
 remain intact at `/mnt/Repos/Trading/Butterflyguy-cohort`. This closes v1 as an
 unfinished experiment with the documented version 1 harness limitations; it
 does not mean v1 reached its registered endpoint or established profitability.
