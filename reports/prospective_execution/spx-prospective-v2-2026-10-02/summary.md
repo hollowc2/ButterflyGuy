@@ -3,16 +3,16 @@
 - Asset: SPX
 - Cohort label: prospective
 - Prospective start: 2026-10-02
-- Generated: 2026-10-02T01:50:18.966931+00:00
+- Generated: 2026-10-03T01:36:53.238081+00:00
 - Primary result: **stressed_marketable** (corrected midpoint is a comparison baseline only)
 
 ## Sessions
 
 - Sessions recorded: 0
 - No signal: 0
-- Incomplete data: 0
+- Incomplete data: 1
 - Session completion coverage: 0.0%
-- Deferred sessions: none
+- Deferred sessions: 2026-10-02
 - Eligible trades: 0
 - Cash-settled trades: 0
 
@@ -59,7 +59,7 @@ _No priced trades yet._
 
 ## Decision gates
 
-- session_data_complete: pass
+- session_data_complete: fail
 - stressed_net_pnl_positive: fail
 - stressed_expectancy_positive: fail
 - stressed_profit_factor_above_one: fail

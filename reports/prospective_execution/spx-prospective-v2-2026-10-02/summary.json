@@ -25,10 +25,12 @@
   },
   "cash_settled_trades": 0,
   "cohort_id": "spx-prospective-v2-2026-10-02",
-  "deferred_session_dates": [],
+  "deferred_session_dates": [
+    "2026-10-02"
+  ],
   "eligible_trades": 0,
   "endpoint": {
-    "blocked_by_incomplete_sessions": false,
+    "blocked_by_incomplete_sessions": true,
     "conditions": {
       "cash_settled_trades": {
         "met": false,
@@ -53,7 +55,7 @@
       "drawdown_within_limit": true,
       "executable_entry_coverage": false,
       "marketable_positive_in_both_halves": false,
-      "session_data_complete": true,
+      "session_data_complete": false,
       "stressed_expectancy_positive": false,
       "stressed_net_pnl_positive": false,
       "stressed_profit_factor_above_one": false,
@@ -65,7 +67,7 @@
     "integrity_checkpoint_due": false,
     "passed": false
   },
-  "generated_at": "2026-10-02T01:50:18.966931+00:00",
+  "generated_at": "2026-10-03T01:36:53.238081+00:00",
   "label": "prospective",
   "models": {
     "corrected_midpoint": {
@@ -151,8 +153,8 @@
   "prospective_start_date": "2026-10-02",
   "schema_version": 2,
   "session_completion_coverage": 0.0,
-  "sessions_observed": 0,
+  "sessions_observed": 1,
   "sessions_recorded": 0,
-  "sessions_with_incomplete_data": 0,
+  "sessions_with_incomplete_data": 1,
   "sessions_without_signal": 0
 }
