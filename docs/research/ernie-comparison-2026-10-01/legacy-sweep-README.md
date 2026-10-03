@@ -3,15 +3,6 @@
 Findings are in `docs/research/strategy-discovery-journal.md` (2026-09-25 entries).
 `REGISTRY.md` is the variant list, written before round 1 ran; round 2 is marked post-hoc.
 
-This package is frozen evidence. The original 2026-09-25 sweep variants are ported to the research core
-(`python -m butterfly_guy.research`; see `docs/research/research-core.md`), which is where
-new SPX rule research runs. `research catalog` lists the ported definitions.
-
-The later Ernie comparison scripts are historical artifacts, not additional core
-variants or supported import commands. Read
-[`../ernie-comparison-2026-10-01/RECONCILIATION.md`](../ernie-comparison-2026-10-01/RECONCILIATION.md)
-for their rejected registered result and provenance limits.
-
 ## Reproduce
 
 The exported market data (about 140 MB) is not committed. Re-export it read-only from

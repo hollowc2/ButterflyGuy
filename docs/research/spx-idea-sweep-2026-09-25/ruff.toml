@@ -3,3 +3,8 @@ extend = "../../../pyproject.toml"
 
 [lint]
 ignore = ["E501", "E701", "E702", "F403", "F405", "N806"]
+
+# Preserve the original Ernie experiment source and its provenance hashes.
+[lint.per-file-ignores]
+"direction_compare.py" = ["N811"]
+"gex_compare.py" = ["N811"]

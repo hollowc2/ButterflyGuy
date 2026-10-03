@@ -1,0 +1,36 @@
+{
+  "journal_delta_sha256": "3be6ac127186ae53240998c5e214a2dcf51113dcb2e7fca288464d9c0a5c8e0a",
+  "original_base": "bb0408f",
+  "original_branch": "research/ernie-comparison",
+  "original_file_sha256": {
+    "docs/research/ernie-comparison-2026-10-01/H-TR1-registration.md": "19dae6574cc2330889b3f14bc4b36f1a4cb0de5ea2b74ca79ec69f0576353da7",
+    "docs/research/ernie-comparison-2026-10-01/PLAN.md": "cb3ada1f40aa18ba03d7fa5c34777482010383da24e0d6ff89e935ab370a7636",
+    "docs/research/ernie-comparison-2026-10-01/legacy-sweep-README.md": "eda4ad214bfb5fb8b4142b64c8cf04c33c994ee8b3d8127a52e78f7bea3160da",
+    "docs/research/spx-idea-sweep-2026-09-25/cost_breakdown.py": "60ef68f570122b214ec376ab38108815f01fd10e0443dda2d822eb02a9bca759",
+    "docs/research/spx-idea-sweep-2026-09-25/direction_compare.py": "12f1436dcb8933c95d4b4d30d9b637b8ea9ae48200f19449b3a77e9073567bb7",
+    "docs/research/spx-idea-sweep-2026-09-25/dump_trades.py": "658f2b67519dfff3310807889aeb5deac841d8bf5195e5aef76318eee80bc86a",
+    "docs/research/spx-idea-sweep-2026-09-25/gex_compare.py": "9c445a6dabb8dd71c035e4b55e0478973ba6dd09ec92c40813531b9341c37ffc",
+    "docs/research/spx-idea-sweep-2026-09-25/htr1_run.py": "090078702221a2b8cb773d18899a30c479d4d617fd5496c87c49c913552d035d",
+    "docs/research/spx-idea-sweep-2026-09-25/placement_compare.py": "59fbbb7180698804a8d05c667df5e08cf44a88481beb84698a52036e4327f5b1",
+    "docs/research/spx-idea-sweep-2026-09-25/thetadata_prep.py": "71a084c70095f4fae54b542fa6a5692e1d739be21d0612a31aaaa5c98297c67c",
+    "docs/research/spx-idea-sweep-2026-09-25/trail_compare.py": "33916bb3b63a89b45597e4974dbe73f7eef75cedb8772dd199d8ab727d4ddeb7"
+  },
+  "original_tip": "15a8bce0c1f3988ae068e80408ff4e0f02ad2f9b",
+  "raw_or_normalized_dataset_hash": null,
+  "reconciled_on": "2026-10-02",
+  "record_type": "historical_branch_reconciliation",
+  "registration_commit": "b0b7215abd6958bca630b917f627220ea9ebafa1",
+  "rerun_performed": false,
+  "results_commit": "06a75d31e52ad3160e82ec5d069e6a63778967c7",
+  "unchanged_shared_module_sha256": {
+    "docs/research/spx-idea-sweep-2026-09-25/baseline.py": "2069e3951bedf1f1a953ec0ad166c686fa2a93e4aba531b76c0145c137aac344",
+    "docs/research/spx-idea-sweep-2026-09-25/h2.py": "7d6bbda85849e6eabd60740b94fa12829f9751fdbc4e1a0157cb50795b603418",
+    "docs/research/spx-idea-sweep-2026-09-25/h2b.py": "87b241515e4a8166a70c4149fee1862938c554ed9a9fb953d2f8b5eb5b6f824f",
+    "docs/research/spx-idea-sweep-2026-09-25/lowvix.py": "154f2741a1488065ae157ba08cb804f082e898375ebc082fa8ae1397e78cbe7a",
+    "docs/research/spx-idea-sweep-2026-09-25/lowvix2.py": "e08fed5780047c3cfcd8c3ee8bfa1aba101f58d669704a363878a2cd97fc1610",
+    "docs/research/spx-idea-sweep-2026-09-25/prep.py": "1cd7b974ce5b0a8ef699db17d588672fb7e8850ce59cada0aed43534594d0c87",
+    "docs/research/spx-idea-sweep-2026-09-25/round2.py": "8b490b77465ff071ee9d1053ea92cc9ba7b0b61d7d63dd13fd92a11b0a195b3a",
+    "docs/research/spx-idea-sweep-2026-09-25/sim.py": "c57000a0b2d06d4e0269f6e6a620bb72ddd3f183e43a3bbd66d3ef971800e628",
+    "docs/research/spx-idea-sweep-2026-09-25/variants.py": "89cf6f5c5f9dc7593f4f69ae304544f86fb9da8633efaf9f72a51caf86f8ec7c"
+  }
+}
