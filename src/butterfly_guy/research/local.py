@@ -40,7 +40,7 @@ from butterfly_guy.research.history import (
     quality_passed,
     session_close,
 )
-from butterfly_guy.research.holdout import Unseal, guard, in_holdout
+from butterfly_guy.research.holdout import Unseal, guard, in_holdout, is_sealed
 from butterfly_guy.research.market import et_us
 from butterfly_guy.research.thetadata import (
     FILE_TZ,
@@ -172,10 +172,10 @@ class LocalThetaDataSource:
             if m.empty:
                 return pd.DataFrame(columns=["ts_us", "price"])
             day = m.loc[m.date == d, ["ts_us", "price"]]
-            if not day.empty or d <= m.date.max() or in_holdout(d):
+            if not day.empty or d <= m.date.max() or is_sealed(d):
                 return day.reset_index(drop=True)
-        # Never fill the protected index gap with recorded observations.
-        if in_holdout(d):
+        # Never fill a sealed index gap with recorded observations.
+        if is_sealed(d):
             return pd.DataFrame(columns=["ts_us", "price"])
         ts, px = self.support.spot_ticks(symbol)
         keep = (ts >= et_us(d, 9, 30)) & (ts <= et_us(d, 16, 0))
@@ -293,7 +293,7 @@ def inventory(roots: list[Path]) -> dict:
                 continue
             bucket["files"] += 1
             bucket["bytes"] += path.stat().st_size
-            if in_holdout(dt.date.fromisoformat(date)):
+            if is_sealed(dt.date.fromisoformat(date)):
                 bucket["protected_metadata_unchecked"] += 1
                 continue
             try:
@@ -486,7 +486,10 @@ def import_local(source: LocalThetaDataSource, plan: HistoryPlan, cache: Path | 
         m.history.append({"mode": "local_import", "range": identity["range"],
                           "raw_inputs": source.raw_refs, "requested_raw_inputs": raw_inputs,
                           "sessions_skipped": excluded,
-                          "dataset_hash": m.dataset_hash, "holdout_sessions": 0})
+                          "dataset_hash": m.dataset_hash,
+                          # Spent-holdout sessions are readable but post hoc; count them so a
+                          # registration on this hash can never pass `verify_unseal`.
+                          "holdout_sessions": sum(in_holdout(r["date"]) for r in rows)})
         m.updated_at = dt.datetime.now(dt.UTC).isoformat()
         import subprocess
         m.exporter_git_sha = subprocess.check_output(["git", "rev-parse", "HEAD"],

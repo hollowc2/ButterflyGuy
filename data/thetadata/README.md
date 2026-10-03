@@ -40,12 +40,14 @@ SPXW until 2022-05, NDXP until 2022-09 and XSP until 2022-10. Days with no expir
 - **Not included:** there are no greeks, IV or underlying index levels. Greeks, IV and trade
   ticks need the Standard plan, and index levels need the Indices plan.
 
-## Sealed dates
+## The spent holdout (2024-07-01 to 2026-03-12)
 
-Trade dates from **2024-07-01 to 2026-03-12** are in `data/thetadata_sealed/`, not here. That
-period is the research holdout: the dates are kept unseen until the research sweep is
-registered, so that its one final test is fair. Don't read, chart or backtest those files
-until then. After registration, move them into this folder.
+These trade dates were the research holdout and were kept apart in `data/thetadata_sealed/`
+until H-TS1 was registered. H-TS1 then used them for its one evaluation (run
+`ce91c4a08efd`, 2026-09-30, FAIL), so they now live here with everything else and can be
+read. Any result on them is post hoc: it can never be presented as an unseen test.
+`catalog.holdout-20261003.jsonl` keeps the sealed folder's catalog byte for byte, for
+reproducing records that cite it. `catalog.jsonl` holds every request, including these.
 
 ## Reading
 

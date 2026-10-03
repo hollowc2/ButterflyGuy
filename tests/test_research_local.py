@@ -56,6 +56,7 @@ def normalize(src, tmp_path, d=FRIDAY):
     return import_local(src, HistoryPlan(d, d, src.dataset, log=io.StringIO()), tmp_path)
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_guard_before_any_raw_io_and_cli_construction(tmp_path, monkeypatch):
     src = source(tmp_path)
     def fail(*args, **kwargs):
@@ -72,6 +73,16 @@ def test_guard_before_any_raw_io_and_cli_construction(tmp_path, monkeypatch):
     assert main(["--dataset", src.dataset, "import-local", "--archive", "/missing",
                  "--set", "spxw_0dte", "--support", "missing", "--start", "2025-01-02",
                  "--end", "2025-01-02"]) == 2
+
+
+def test_a_spent_holdout_session_imports_and_is_counted(tmp_path):
+    d = dt.date(2025, 1, 2)
+    src = source(tmp_path, dates=(d, dt.date(2025, 1, 3)))
+    raw(tmp_path, d)
+    m = import_local(src, HistoryPlan(d, d, src.dataset, require_quality=False,
+                                      log=io.StringIO()), tmp_path)
+    assert m.history[-1]["holdout_sessions"] == 1
+    assert Dataset.open(m.dataset, tmp_path).verify() == []
 
 
 def test_no_quote_missing_greeks_sizes_and_identity(tmp_path):
@@ -310,6 +321,7 @@ def test_alternate_instrument_replay_with_attributable_inputs(tmp_path, asset, r
     assert {r["underlying"] for r in out["entry_legs"]} == {asset}
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_one_dte_guard_checks_protected_expiry_before_parquet_open(tmp_path, monkeypatch):
     import json
     friday = dt.date(2024, 6, 28)

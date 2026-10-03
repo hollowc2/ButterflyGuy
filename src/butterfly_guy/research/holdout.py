@@ -1,15 +1,22 @@
-"""The sealed holdout period of the next SPX sweep, and the only way to unseal it.
+"""The SPX holdout split, the window currently sealed, and the only way to unseal it.
 
-`docs/research/next-sweep-preregistration-draft.md` fixes the split before any vendor data
-is seen:
+`docs/research/next-sweep-preregistration-draft.md` fixed the split before any vendor data
+was seen:
 
 - development: 2022-01-03 -> 2024-06-28 (exploration, debugging, threshold fitting);
 - holdout: 2024-07-01 -> 2026-03-12, downloaded and evaluated only after registration.
 
-Every vendor request, every write into a dataset and every session load checks its dates
-with `guard`. Anything touching the holdout raises `HoldoutSealedError` unless it carries an
-`Unseal`, and an `Unseal` exists only as the result of `verify_unseal`, which checks the
-registry:
+The holdout is spent. H-TS1 was registered (registry seq 0, git `9051357`) and evaluated
+once on 2026-09-30 as run `ce91c4a08efd` (FAIL). `HOLDOUT` stays as the label of that
+window: manifests count its sessions, and the registered evaluation (`protocol.py`) still
+reproduces on it. Its data may now be read, but any result on it is post hoc and can never
+be presented as an unseen test.
+
+`SEALED` is the window that is actually closed. It is `None` until a new holdout is fixed.
+While it is set, every vendor request, every write into a dataset and every session load
+checks its dates with `guard`. Anything touching it raises `HoldoutSealedError` unless it
+carries an `Unseal`, and an `Unseal` exists only as the result of `verify_unseal`, which
+checks the registry:
 
 - the registry's hash chain is intact;
 - the named record is a `register` event, and every `register` record for the dataset up
@@ -30,6 +37,8 @@ from butterfly_guy.research.registry import Registry
 
 DEVELOPMENT = (dt.date(2022, 1, 3), dt.date(2024, 6, 28))
 HOLDOUT = (dt.date(2024, 7, 1), dt.date(2026, 3, 12))
+# H-TS1 spent HOLDOUT on 2026-09-30 (run ce91c4a08efd). Set a new window here to seal it.
+SEALED: tuple[dt.date, dt.date] | None = None
 # Already-seen recorded sessions used to check a vendor's data quality
 # (docs/research/vendor-data-quality-plan-2026-09-28.md).
 VALIDATION = (dt.date(2026, 3, 13), dt.date(2026, 9, 25))
@@ -57,6 +66,7 @@ class Unseal:
 
 
 def in_holdout(d: dt.date) -> bool:
+    """Whether `d` is in the (spent) H-TS1 holdout window. A label, not a lock."""
     return HOLDOUT[0] <= d <= HOLDOUT[1]
 
 
@@ -66,15 +76,25 @@ def touches_holdout(start: dt.date, end: dt.date) -> bool:
     return start <= HOLDOUT[1] and end >= HOLDOUT[0]
 
 
+def is_sealed(d: dt.date) -> bool:
+    return SEALED is not None and SEALED[0] <= d <= SEALED[1]
+
+
+def touches_sealed(start: dt.date, end: dt.date) -> bool:
+    if end < start:
+        raise ValueError(f"empty range {start}..{end}")
+    return SEALED is not None and start <= SEALED[1] and end >= SEALED[0]
+
+
 def guard(start: dt.date, end: dt.date, *, what: str, dataset: str | None = None,
           unseal: Unseal | None = None) -> None:
-    """Raise unless `start..end` (inclusive) avoids the holdout, or `unseal` is a verified
-    unseal for `dataset`."""
-    if not touches_holdout(start, end):
+    """Raise unless `start..end` (inclusive) avoids the sealed window, or `unseal` is a
+    verified unseal for `dataset`."""
+    if not touches_sealed(start, end):
         return
     if unseal is None:
         raise HoldoutSealedError(
-            f"{what} for {start}..{end} touches the sealed holdout {HOLDOUT[0]}..{HOLDOUT[1]}; "
+            f"{what} for {start}..{end} touches the sealed holdout {SEALED[0]}..{SEALED[1]}; "
             "it opens only with a registry-verified unseal (after registration)")
     if unseal.dataset != dataset:
         raise HoldoutSealedError(f"{what}: the unseal is for {unseal.dataset!r}, not {dataset!r}")

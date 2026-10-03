@@ -83,7 +83,7 @@ import numpy as np
 import pandas as pd
 
 from butterfly_guy.research.dataset import Dataset, sha256_file
-from butterfly_guy.research.holdout import in_holdout
+from butterfly_guy.research.holdout import is_sealed
 from butterfly_guy.research.market import et_us
 
 BASE_URL = "http://127.0.0.1:25503/v3"
@@ -314,7 +314,7 @@ class ThetaDataSource:
         m = self._minute(symbol)
         day = m.loc[m["date"] == d, ["ts_us", "price"]].reset_index(drop=True)
         if (day.empty and self.recorded is not None and d > m["date"].max()
-                and not in_holdout(d)):
+                and not is_sealed(d)):
             return self._recorded_ticks(d, symbol)
         return day
 
@@ -330,7 +330,7 @@ class ThetaDataSource:
             rec = self.recorded.daily_bars()
             after = max(self._minute("SPX")["date"].max() + dt.timedelta(days=1), start)
             rec = rec[(rec["underlying"] == "SPX") & (rec["date"] >= after)
-                      & (rec["date"] <= end) & ~rec["date"].map(in_holdout)].set_index("date")
+                      & (rec["date"] <= end) & ~rec["date"].map(is_sealed)].set_index("date")
             intraday = pd.concat([intraday, rec[["open", "high", "low"]]])
         spx = spx.join(intraday, on="date").assign(underlying="SPX")
         vix = self._daily("VIX")

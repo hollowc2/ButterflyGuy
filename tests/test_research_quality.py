@@ -164,6 +164,7 @@ def test_only_a_full_window_pass_opens_earlier_pulls(tmp_path):
     assert quality_passed(ds.manifest)
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_a_quality_run_never_reads_the_holdout(tmp_path):
     ds = _write(tmp_path, {D1: _day(D1)})
     with pytest.raises(Exception, match="holdout"):

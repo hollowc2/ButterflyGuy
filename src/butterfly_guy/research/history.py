@@ -56,6 +56,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from butterfly_guy.research import holdout as _holdout
 from butterfly_guy.research.dataset import (
     AGE_FIELD,
     DEFAULT_DATASET,
@@ -76,7 +77,8 @@ from butterfly_guy.research.holdout import (
     Unseal,
     guard,
     in_holdout,
-    touches_holdout,
+    is_sealed,
+    touches_sealed,
 )
 from butterfly_guy.research.market import et_us
 
@@ -409,11 +411,11 @@ class HistoryPlan:
 
 def daily_range(plan: HistoryPlan) -> tuple[tuple[dt.date, dt.date], bool]:
     """The daily-bar request range, and whether its lookback was clipped so that it does
-    not reach into the sealed holdout while the pull itself avoids it."""
+    not reach into the sealed window while the pull itself avoids it."""
     lo = plan.start - dt.timedelta(days=plan.daily_lookback_days)
-    if (plan.unseal is None and touches_holdout(lo, plan.end)
-            and not touches_holdout(plan.start, plan.end)):
-        return (max(lo, HOLDOUT[1] + dt.timedelta(days=1)), plan.end), True
+    if (plan.unseal is None and touches_sealed(lo, plan.end)
+            and not touches_sealed(plan.start, plan.end)):
+        return (max(lo, _holdout.SEALED[1] + dt.timedelta(days=1)), plan.end), True
     return (lo, plan.end), False
 
 
@@ -658,11 +660,11 @@ def session_coverage(ds: Dataset, d: dt.date, band: float = COVERAGE_BAND) -> di
 
 def coverage(ds: Dataset, start: dt.date | None = None, end: dt.date | None = None,
              unseal: Unseal | None = None) -> dict:
-    """Coverage by session and a summary. Holdout sessions need a verified unseal."""
+    """Coverage by session and a summary. Sealed sessions need a verified unseal."""
     dates = [d for d in ds.sessions()["date"]
              if (start is None or d >= start) and (end is None or d <= end)]
     for d in dates:
-        if in_holdout(d):
+        if is_sealed(d):
             guard(d, d, what=f"coverage of {d}", dataset=ds.name, unseal=unseal)
     rows = [session_coverage(ds, d) for d in dates]
 
