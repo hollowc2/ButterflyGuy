@@ -249,6 +249,7 @@ def test_a_usage_billed_pull_over_the_approved_cost_stops_before_any_data(tmp_pa
     assert [c[0] for c in src.calls] == ["cost_estimate", "cost_estimate"]
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_the_daily_lookback_is_clipped_at_the_holdout_for_the_validation_window():
     (lo, hi), clipped = daily_range(HistoryPlan(dt.date(2026, 3, 13), dt.date(2026, 9, 25), "x"))
     assert clipped and lo == dt.date(2026, 3, 13) and hi == dt.date(2026, 9, 25)

@@ -38,7 +38,7 @@ from butterfly_guy.core.config import AppConfig, VixWidthBucket, load_config
 from butterfly_guy.data.schemas import ButterflyCandidate
 from butterfly_guy.research.dataset import Dataset, SessionChain
 from butterfly_guy.research.exits import REGULAR_CLOSE
-from butterfly_guy.research.holdout import Unseal, guard, in_holdout
+from butterfly_guy.research.holdout import Unseal, guard, is_sealed
 from butterfly_guy.research.market import (
     EASTERN,
     DayMarket,
@@ -187,7 +187,7 @@ class SessionLoader:
         return out
 
     def _guard(self, d: dt.date) -> None:
-        if in_holdout(d):
+        if is_sealed(d):
             guard(d, d, what=f"loading session {d}", dataset=self.dataset.name,
                   unseal=self.unseal)
 

@@ -28,10 +28,9 @@ Kinds, one Parquet file per set, kind and trade date, with the vendor's columns 
 not pulled; the Options Value plan starts at 2020-01-01.
 
 Layout: `data/thetadata/<set>/<kind>/<YYYY>/<YYYY-MM-DD>.parquet`, plus `catalog.jsonl`
-(one line per request: status, rows, strikes). Trade dates inside the research holdout go to
-`data/thetadata_sealed/` with the same layout. That folder is not to be read until the
-research sweep is registered (docs/research/next-sweep-preregistration-draft.md on
-research/unified-core). This tool never prints prices.
+(one line per request: status, rows, strikes). The 2024-07-01 -> 2026-03-12 research holdout
+was once kept apart in `data/thetadata_sealed/`; H-TS1 spent it on 2026-09-30 and it now
+lives here with everything else. This tool never prints prices.
 
 Trading sessions come from Cboe's official SPX daily file. The Theta Terminal must be
 running locally; Options Value allows 2 concurrent requests, which is the worker default.
@@ -57,9 +56,6 @@ BASE_URL = "http://127.0.0.1:25503/v3"  # 127.0.0.1, not localhost: the terminal
 CBOE_SPX = "https://cdn.cboe.com/api/global/us_indices/daily_prices/SPX_History.csv"
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 OPEN_DIR = DATA_DIR / "thetadata"
-SEALED_DIR = DATA_DIR / "thetadata_sealed"
-# Research holdout, from src/butterfly_guy/research/holdout.py on research/unified-core.
-HOLDOUT = (dt.date(2024, 7, 1), dt.date(2026, 3, 12))
 VALUE_START = dt.date(2020, 1, 1)
 SETS = {"spxw_0dte": ("SPXW", 0), "spxw_1dte": ("SPXW", 1),
         "ndxp_0dte": ("NDXP", 0), "xsp_0dte": ("XSP", 0)}
@@ -120,12 +116,8 @@ def fetch(kind: str, symbol: str, exp: dt.date, d: dt.date) -> pd.DataFrame | No
     return df if not df.empty else None
 
 
-def base_dir(d: dt.date) -> Path:
-    return SEALED_DIR if HOLDOUT[0] <= d <= HOLDOUT[1] else OPEN_DIR
-
-
 def file_path(set_name: str, kind: str, d: dt.date) -> Path:
-    return base_dir(d) / set_name / kind / f"{d:%Y}" / f"{d.isoformat()}.parquet"
+    return OPEN_DIR / set_name / kind / f"{d:%Y}" / f"{d.isoformat()}.parquet"
 
 
 def run_job(set_name: str, symbol: str, exp: dt.date, d: dt.date, kinds: list[str]) -> list[dict]:
@@ -180,13 +172,12 @@ def plan(set_name: str, sessions: list[dt.date], start: dt.date, end: dt.date) -
 
 def load_no_data() -> set[tuple[str, str, str]]:
     seen = set()
-    for base in (OPEN_DIR, SEALED_DIR):
-        catalog = base / "catalog.jsonl"
-        if catalog.exists():
-            for line in catalog.read_text().splitlines():
-                r = json.loads(line)
-                if r["status"] == "no_data":
-                    seen.add((r["set"], r["date"], r["kind"]))
+    catalog = OPEN_DIR / "catalog.jsonl"
+    if catalog.exists():
+        for line in catalog.read_text().splitlines():
+            r = json.loads(line)
+            if r["status"] == "no_data":
+                seen.add((r["set"], r["date"], r["kind"]))
     return seen
 
 
@@ -216,8 +207,7 @@ def main() -> int:
             if kinds:
                 jobs.append((set_name, SETS[set_name][0], exp, d, kinds))
                 todo += 1
-        sealed = sum(HOLDOUT[0] <= d <= HOLDOUT[1] for _, d in pairs)
-        summary.append(f"{set_name:10} {len(pairs):5} sessions ({sealed} sealed), {todo} to fetch")
+        summary.append(f"{set_name:10} {len(pairs):5} sessions, {todo} to fetch")
     print(f"trade dates {start} -> {end}")
     print("\n".join(summary), flush=True)
     if args.dry_run or not jobs:
@@ -235,14 +225,13 @@ def main() -> int:
                 failed += 1
                 print(f"[{n}/{len(jobs)}] {set_name} {d} FAILED: {e}", flush=True)
                 continue
-            base_dir(d).mkdir(parents=True, exist_ok=True)
-            with (base_dir(d) / "catalog.jsonl").open("a") as fh:
+            OPEN_DIR.mkdir(parents=True, exist_ok=True)
+            with (OPEN_DIR / "catalog.jsonl").open("a") as fh:
                 for rec in records:
                     fh.write(json.dumps(rec) + "\n")
             parts = " ".join(f"{r['kind']}={r['rows'] if r['status'] == 'ok' else 'none'}"
                              for r in records)
-            tag = " sealed" if base_dir(d) == SEALED_DIR else ""
-            print(f"[{n}/{len(jobs)}] {set_name} {d}{tag} {parts}", flush=True)
+            print(f"[{n}/{len(jobs)}] {set_name} {d} {parts}", flush=True)
     print(f"done: {len(jobs) - failed} sessions fetched, {failed} failed", flush=True)
     return 1 if failed else 0
 

@@ -274,6 +274,7 @@ def test_validation_pull_writes_real_levels_only_and_skips_the_stale_day(files, 
     assert m.source["plan"] == "Options Value"
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_a_holdout_pull_stops_before_any_terminal_request(files, tmp_path):
     term = Terminal({"/option/list/expirations": [EXPIRATIONS]})
     plan = history.HistoryPlan(HOLD, HOLD, "spx_0dte_thetadata", log=io.StringIO())
@@ -326,6 +327,7 @@ def test_without_a_recorded_dataset_nothing_is_served_after_the_files_end(files)
     assert src.describe()["recorded"] is None
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_recorded_levels_are_never_served_inside_the_holdout(files):
     class InHoldout(Recorded):
         LATER = dt.date(2026, 3, 11)  # after the files end, inside the holdout

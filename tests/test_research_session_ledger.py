@@ -107,6 +107,7 @@ def test_conflicts_are_visible(status):
     assert summary["issues"]
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_protected_request_rejected_before_input_read(monkeypatch, tmp_path):
     def forbidden(*a, **kw):
         pytest.fail("opened input before guard")
@@ -255,6 +256,7 @@ def test_normalized_acceptance_cannot_override_approved_exclusion():
     assert summary["status"] == "blocked"
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_protected_raw_path_in_unprotected_metadata_rejected(evidence, monkeypatch):
     cache, dataset = evidence["cache"], evidence["dataset"]
     path = cache / dataset / "manifest.json"

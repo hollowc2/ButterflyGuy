@@ -1,5 +1,7 @@
-"""The sealed holdout (2024-07-01 -> 2026-03-12): every request, write and load touching
-it raises unless a registry-verified unseal is passed. Synthetic data only."""
+"""The holdout guard. With a window sealed (the `sealed_holdout` fixture re-seals the spent
+H-TS1 window), every request, write and load touching it raises unless a registry-verified
+unseal is passed. In production nothing is sealed since H-TS1 spent the holdout. Synthetic
+data only."""
 
 from __future__ import annotations
 
@@ -9,6 +11,7 @@ import json
 
 import pytest
 
+from butterfly_guy.research import holdout
 from butterfly_guy.research.dataset import Dataset, Manifest
 from butterfly_guy.research.entry import PROFILES, SessionLoader
 from butterfly_guy.research.history import GuardedSource, HistoryPlan, coverage, write_history
@@ -30,11 +33,29 @@ PRIOR = [{"date": dt.date(2024, 6, 26), "underlying": u, "open": 1.0, "high": 1.
           "low": 1.0, "close": c} for u, c in (("SPX", 5990.0), ("$VIX", 17.0))]
 
 
+def test_the_spent_holdout_is_labelled_but_not_sealed():
+    assert holdout.SEALED is None
+    assert holdout.in_holdout(HOLD_DAY) and not holdout.is_sealed(HOLD_DAY)
+    guard(HOLDOUT[0], HOLDOUT[1], what="test")  # readable, without any unseal
+
+
+def test_the_spent_holdout_loads_and_is_still_counted(tmp_path):
+    src = FakeSource({DEV_DAY: synthetic_day(DEV_DAY), HOLD_DAY: synthetic_day(HOLD_DAY)},
+                     extra_bars=PRIOR)
+    m = write_history(src, HistoryPlan(DEV_DAY, HOLD_DAY, NAME, log=io.StringIO(),
+                                       require_quality=False), tmp_path)
+    assert m.history[-1]["holdout_sessions"] == 1  # so it can never back an unseal
+    ds = Dataset.open(NAME, tmp_path)
+    assert SessionLoader(ds, PROFILES["vendor_1m"]).dates() == [DEV_DAY, HOLD_DAY]
+    assert coverage(ds)["summary"]["sessions"] == 2
+
+
 def test_the_split_is_the_drafted_one():
     assert DEVELOPMENT == (dt.date(2022, 1, 3), dt.date(2024, 6, 28))
     assert HOLDOUT == (dt.date(2024, 7, 1), dt.date(2026, 3, 12))
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 @pytest.mark.parametrize("start,end", [
     ("2024-07-01", "2024-07-01"), ("2026-03-12", "2026-03-12"),
     ("2024-06-28", "2024-07-01"),  # straddles the start
@@ -58,6 +79,7 @@ def test_an_unseal_cannot_be_made_by_hand():
         Unseal(NAME, 0, ("HLV1",))
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_guarded_source_refuses_before_the_vendor_is_called():
     src = FakeSource({HOLD_DAY: synthetic_day(HOLD_DAY)}, cost=1.0)
     g = GuardedSource(src, NAME, None)
@@ -71,6 +93,7 @@ def test_guarded_source_refuses_before_the_vendor_is_called():
     assert src.calls == [] and g.requests == []
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_a_pull_touching_the_holdout_raises_before_any_request(tmp_path):
     src = FakeSource({DEV_DAY: synthetic_day(DEV_DAY), HOLD_DAY: synthetic_day(HOLD_DAY)})
     with pytest.raises(HoldoutSealedError):
@@ -135,6 +158,7 @@ def test_a_tampered_registry_never_unseals(tmp_path):
         verify_unseal(reg, m, 0)
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_after_a_verified_unseal_the_holdout_opens_for_that_dataset_only(tmp_path):
     src, m = _dev_dataset(tmp_path)
     reg = Registry.for_dataset(tmp_path / "registry", NAME)

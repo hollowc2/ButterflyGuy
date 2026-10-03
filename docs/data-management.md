@@ -30,8 +30,9 @@ not a fresh computation of quality gates or a full raw-file checksum baseline.
 
 ## Sources and ownership
 
-- **ThetaData raw options:** `data/thetadata/`, with protected partitions in
-  `data/thetadata_sealed/`. See the [archive guide](../data/thetadata/README.md)
+- **ThetaData raw options:** `data/thetadata/`, including the spent 2024-07-01
+  through 2026-03-12 holdout, which was kept in `data/thetadata_sealed/` until
+  2026-10-03. See the [archive guide](../data/thetadata/README.md)
   for the four sets, file kinds, source timezone, and no-quote/no-trade conventions.
   The catalogs record successful and `no_data` requests; absent calendar dates
   do not independently prove a missing expiration or a failed download.
@@ -136,39 +137,43 @@ SPX levels and scaled ETFs are not substitutes.
 
 ## Refresh and verify
 
-The research commands are available in the durable isolated checkout
-`.worktrees/thetadata-readiness-2026-10-01`; the active checkout may not contain
-the research package. Run these commands from the repository root using that
-checkout's environment. Each command is offline and reads existing inputs.
+The research package is on `main`. Run these commands from the repository root
+of a checkout of `main`. Each command is offline and reads existing inputs.
 Choose a new dated output directory for a new inventory snapshot.
 
 ```bash
-.worktrees/thetadata-readiness-2026-10-01/.venv/bin/python \
-  -m butterfly_guy.research --dataset market_data_inventory inventory-local \
-  --archive data/thetadata --archive data/thetadata_sealed \
-  --out reports/data_management/2026-10-01
+uv run python -m butterfly_guy.research --dataset market_data_inventory \
+  inventory-local --archive data/thetadata --out reports/data_management/<date>
 
-.worktrees/thetadata-readiness-2026-10-01/.venv/bin/python \
-  -m butterfly_guy.research \
+uv run python -m butterfly_guy.research \
   --cache reports/thetadata_completion/2026-10-01/thetadata-cache \
   --dataset spx_0dte_local_durable_development_20261001 verify
 
-.worktrees/thetadata-readiness-2026-10-01/.venv/bin/python \
-  -m butterfly_guy.research \
+uv run python -m butterfly_guy.research \
   --cache reports/thetadata_completion/2026-10-01/thetadata-cache \
   --dataset spx_0dte_local_durable_validation_20261001 verify
 ```
 
-Archive reconciliation checks catalog consistency and unprotected Parquet row
-counts; protected partition contents remain closed. Canonical dataset verification
+Exact reproduction of a dated record still uses the code it names. For example,
+the 2026-10-01 completion record names `.worktrees/thetadata-readiness-2026-10-01`.
+
+Archive reconciliation checks catalog consistency and Parquet row counts for
+every partition that is not sealed. Canonical dataset verification
 checks manifest-listed hashes and row counts. Neither operation recomputes the
 quality gates or proves independent vendor expiration coverage. Update the
 consolidated inventory when canonical identities or supporting sources change;
 the raw archive command alone does not refresh its dataset/supporting-input entries.
 
-The protected 2024-07-01 through 2026-03-12 interval has already been evaluated
-in H-TS1. It remains guarded and cannot be labeled unseen again. Metadata
-inventory is not authorization to unseal, chart, or replay its prices.
+## The spent holdout
+
+The 2024-07-01 through 2026-03-12 holdout was evaluated once, by H-TS1 (run
+`ce91c4a08efd`, 2026-09-30, FAIL). Since 2026-10-03 its data is readable:
+`holdout.SEALED` is `None`, and the raw files moved into `data/thetadata/`.
+`holdout.HOLDOUT` remains its label. Manifests count its sessions as
+`holdout_sessions`, so a dataset containing them can never back a registry unseal.
+Any result on this window is post hoc and cannot be presented as an unseen test.
+A future holdout is sealed by setting `holdout.SEALED`; the guard and its tests
+are unchanged.
 
 ## Next milestones
 

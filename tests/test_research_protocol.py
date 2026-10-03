@@ -349,6 +349,7 @@ def test_a_fitted_rule_is_registered_with_its_value_and_checked_at_the_holdout(w
         _holdout(w, 0)
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_run_still_cannot_open_the_holdout(world):
     w = world
     _cli(w, "register", "--variants", "HLV1")

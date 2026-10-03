@@ -28,7 +28,7 @@ here changes live-trading code.
 | `volindex.py` | Cboe daily VIX-family history and gateway intraday bars as separately hashed `aux/` files; a gateway dump is merged, never replacing bars |
 | `features.py` | Pre-entry session features: `events` and the term structure (prior-session closes; completed intraday bars) |
 | `diagnose.py` | DESCRIPTIVE E0 breakdowns by event and term structure (no registry record) |
-| `holdout.py` | The sealed holdout (2024-07-01 → 2026-03-12) and its registry-verified unseal |
+| `holdout.py` | The development/holdout split, the currently sealed window (`SEALED`, none since H-TS1 spent the 2024-07-01 → 2026-03-12 holdout) and the registry-verified unseal |
 | `protocol.py` | The pre-registered holdout evaluation (`holdout` command): the draft's fixed choices as constants, gates 1–4, and the checks made before any holdout session is replayed |
 | `history.py` | Vendor history adapter onto the research schema (**no vendor purchased yet**), coverage report |
 | `thetadata.py` | ThetaData `HistorySource` (Options Value quotes; SPX/VIX from the owner's minute files and recorded data; Cboe closes) |
@@ -749,7 +749,7 @@ the same 1-minute grid for comparisons). Options Value's historical 1-minute quo
   forward-filled fake and is not served. On 2022 → 2025 that is SPX on 7 days and VIX on
   7 days; the list is pinned in the manifest.
 - **SPX and VIX intraday after the files end** (the validation window): our recorded Helios
-  ticks (`--recorded spx_0dte`), never inside the holdout.
+  ticks (`--recorded spx_0dte`), never inside a sealed window.
 - **Official closes:** Cboe's public `SPX_History.csv` and `VIX_History.csv`. SPX open, high
   and low come from the minute file, then from the recorded `spx_0dte` daily bars.
 
@@ -763,7 +763,9 @@ manifest history shows a passing `vendor-quality` run over the whole validation 
 **Known gap:** 2025-12-10 → 2026-03-12 (about 62 holdout sessions) has no SPX or VIX minute
 data, so those sessions are skipped until a real source is found (plan, D3).
 *(2026-09-29: the owner decided not to buy an Indices month (D6), so these sessions stay
-skipped; the holdout is 358 sessions.)*
+skipped; the holdout is 358 sessions.)* *(2026-10-03: with the holdout spent, a local import
+may fill these sessions from recorded observations where they exist, as it does for the
+validation window. H-TS1's 358 sessions are unchanged.)*
 
 **Licence.** ThetaData's individual terms forbid archiving content (§2.1(i)) and require
 deleting all copies at termination (§12.2). Whether the local research cache may outlive a
@@ -849,19 +851,28 @@ The mapping follows the readiness doc's spec:
 **Cost.** Before any data is requested, `cost_estimate` is checked. A usage-billed pull
 estimated above `--max-cost` (none approved means $0) stops with `CostNotApprovedError`.
 
-**Consequence for the validation window.** 2026-03-12 is the last day of the holdout. The
-daily-bar lookback for a pull starting 2026-03-13 is therefore clipped at the holdout's
-end, and the history entry records that. The vendor replay will have no prior close for
+**Consequence for the validation window.** While the holdout was sealed (until
+2026-10-03), 2026-03-12 was its last day, so the daily-bar lookback for a pull starting
+2026-03-13 was clipped at the holdout's end, and the history entry records that. The clip
+now applies only at the end of a window set in `SEALED`. The vendor replay will have no prior close for
 2026-03-13 and will skip that session. The frozen replay skips it anyway (missing
 prerequisites).
 
-### The sealed holdout (`holdout.py`)
+### The holdout (`holdout.py`)
 
 - **Development:** 2022-01-03 → 2024-06-28.
-- **Holdout:** 2024-07-01 → 2026-03-12.
+- **Holdout:** 2024-07-01 → 2026-03-12. **Spent:** H-TS1 was evaluated on it once
+  (run `ce91c4a08efd`, 2026-09-30, FAIL).
 
-`guard` raises `HoldoutSealedError` for any range touching the holdout. It is applied at
-every level:
+Since 2026-10-03, `SEALED` is `None`, so the holdout's data is readable and `run`, `shadow`
+and `diagnose` replay it like any other session. Results on it are post hoc. `HOLDOUT`
+stays as its label: manifests count its sessions in `holdout_sessions`, so a dataset that
+contains them can never back an unseal. The rest of this section describes the guard as it
+works whenever a window is set in `SEALED`; the tests re-seal the H-TS1 window (the
+`sealed_holdout` fixture) to keep it proven.
+
+`guard` raises `HoldoutSealedError` for any range touching the sealed window. It is applied
+at every level:
 - every vendor call, cost previews included, through `GuardedSource`, *before* the vendor
   is called;
 - every pull (`write_history`);
@@ -886,8 +897,10 @@ cannot be replayed without an unseal. H-TS1's threshold is fitted through a
 
 ### The holdout evaluation (`protocol.py`, `holdout`; D9, built 2026-09-29)
 
-`holdout --unseal-holdout SEQ` is the only command that replays holdout sessions. `run`,
-`shadow` and `diagnose` take no unseal, so for them the holdout stays sealed.
+`holdout --unseal-holdout SEQ` was the only command that could replay holdout sessions
+while they were sealed. `run`, `shadow` and `diagnose` take no unseal; since 2026-10-03
+they replay the spent holdout as post hoc data. Exact reproduction of `ce91c4a08efd` needs
+the registration commit's code: the command refuses when `src/` has changed since then.
 
 ```bash
 uv run python -m butterfly_guy.research --dataset spx_0dte_thetadata holdout --unseal-holdout <SEQ>

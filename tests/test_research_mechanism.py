@@ -87,6 +87,7 @@ def test_tercile_split_uses_numpy_quantile_and_ties_go_to_the_top():
     assert math.isnan(mechanism.statistic(np.ones(3), np.zeros(3, bool)))
 
 
+@pytest.mark.usefixtures("sealed_holdout")
 def test_window_touching_the_holdout_raises():
     spx, vol = _synthetic(end=D(2024, 7, 31))
     with pytest.raises(HoldoutSealedError):
