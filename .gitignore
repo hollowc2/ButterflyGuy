@@ -58,6 +58,10 @@ data/thetadata/*
 !data/thetadata/README.md
 data/thetadata_sealed/
 
+# Canonical research datasets: links into the private dataset caches
+data/research_cache/*
+!data/research_cache/README.md
+
 # Real option chain cache
 data/chains/*.json
 data/chains/*/*.json
