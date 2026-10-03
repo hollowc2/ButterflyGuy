@@ -1,0 +1,130 @@
+{
+  "provider": "Recorded Schwab market data",
+  "source": "Helios TimescaleDB butterfly_guy: option_chain_snapshots, spot_prices, daily_bars",
+  "inclusive_window": [
+    "2026-03-13",
+    "2026-09-18"
+  ],
+  "exchange_timezone": "America/New_York",
+  "timestamps": "TIMESTAMPTZ; UTC date filters where specified by frozen loader",
+  "interval": "native recorded chain observations and daily official-close evidence",
+  "started_at": "2026-10-02T01:27:42.073675227Z",
+  "recorded_at": "2026-10-02T02:02:42.726838+00:00",
+  "source_commit": "f4fad7d9f97e966d9e76d72d67a1ff5a76d61ece",
+  "image": "sha256:8d6f67ba1812488836aa66f2d61af69e6220514e745ae5e4b7e6999f64db5d58",
+  "python": "3.12 candidate image",
+  "source_hashes": {
+    "pyproject.toml": "db29261599f7fc9456753f62586cf7c414cf678fa3ec1f0bb554bc75e98022d4",
+    "src/butterfly_guy/__init__.py": "4e21d6b06725b9bbd8e65feabfbf0ac9daadddcd819b5c5fab7bf9eb00c5680b",
+    "src/butterfly_guy/backtest/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/butterfly_guy/backtest/chain_cache.py": "d8968e388217307bdda0a6fa33d92ae5041ec3cb3b7a4b92d52ee9324c53470d",
+    "src/butterfly_guy/backtest/data_loader.py": "ce442a5a99dbfc73b06c8c23cdf1bb6bf0524097d7a9b5d541f615bd8e4516f9",
+    "src/butterfly_guy/backtest/db_loader.py": "848026a042c0eeb6d28140556b675099870670d22d17a569be05c73568f1873b",
+    "src/butterfly_guy/backtest/execution_accounting.py": "24d90f5ff56f9c3da38a6d56f701859c3f6e1814164afd6fc2b69c594be05cdc",
+    "src/butterfly_guy/backtest/metrics.py": "c7f22b7206c5d16d2b63f0b69709be8daab888b9bcf8a7cef8ee4ef744c43d57",
+    "src/butterfly_guy/backtest/prospective_execution.py": "b781a776f634379c559091a618d67f007fd3545321795fc0aedfd0e0bf43903e",
+    "src/butterfly_guy/backtest/simulation_engine.py": "ba97b6a11532f9540ce30f98e60bb47d627e07aa70e01b8bb08e0154c6eb0218",
+    "src/butterfly_guy/core/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/butterfly_guy/core/config.py": "e9f428affd4f30730503f9310a75831e52d5b54db3193739f61fb76d511e31e3",
+    "src/butterfly_guy/core/logging.py": "9887e4d86d8155684adacf7450a74bcaf8a36b6c749e09bd204de1b9b2903879",
+    "src/butterfly_guy/core/metrics.py": "afad58f4f8e7ed3a947b8501a210a6c23359f25341bec46ce99c50d8c6347081",
+    "src/butterfly_guy/core/time_utils.py": "5df59b6eba559d85c0f7fcf09e255075ad8431232d12f331a212666e2855f94d",
+    "src/butterfly_guy/data/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/butterfly_guy/data/chain_utils.py": "6cb59446fbde6032d2175754416fb3f1ee331447d1d774fc110946eeb8f46b00",
+    "src/butterfly_guy/data/schemas.py": "c678552ed7a01c544cc125ed825b94e37f19ffd9c8f43b0d31b1b1b780d1a93f",
+    "src/butterfly_guy/position/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/butterfly_guy/position/position_manager.py": "1bf1faf014615e54513b6a0b7d97b493953e9aa0264109e8b6b447ea3ef7d8fd",
+    "src/butterfly_guy/position/profit_policy.py": "908fbd4df219fa612c953c0bbc7ecfb33a9139a58d94d5a316a3328393994289",
+    "src/butterfly_guy/quant_engine/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/butterfly_guy/quant_engine/black_scholes.py": "8b6d24fc777851ace52b1829696129b812f50fdafb5afdc039dc12be34ff7f36",
+    "src/butterfly_guy/quant_engine/iv_model.py": "dc976c3bee247046ec9eb9bf37d75df3a9859cbaec95326fcea129bbdd940f5d",
+    "src/butterfly_guy/quant_engine/synthetic_chain.py": "d9ad2d241feefa65869053a4277a687a1b090b62d310475537cb8e94872e4ca1",
+    "src/butterfly_guy/scripts/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/butterfly_guy/scripts/run_backtest_db.py": "96fc4e900e36475f15924b1320ca0217172898cbf61b43ce7943de9b4dfca6b5",
+    "src/butterfly_guy/scripts/run_prospective_execution.py": "965d2dce6cf6ce849f49c8382752491d8d5651cde85a5fa8565f6442ec842c00",
+    "src/butterfly_guy/strategy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/butterfly_guy/strategy/bias_filter.py": "44d4b7a44f758ebf18d0160949003b56afba679ac66b6c93ee61a02060b50975",
+    "src/butterfly_guy/strategy/butterfly_builder.py": "d2517f8b691838779061f0ae103bfcb9aa5851835d7524fb6dc99dc073496ce6",
+    "src/butterfly_guy/strategy/butterfly_selector.py": "d0ee2bc7ec8b9488cdcb15a97516cea276eb85e31c32aa5e82f209a4efc001e0",
+    "src/butterfly_guy/strategy/direction_filter.py": "caccfc26e84d573216e032c6fc9756ba0bb90982cb93864b8d0f91dd8659fa99",
+    "src/butterfly_guy/strategy/entry_selection.py": "a5e943fdaf471ab4f68ff3c4e51d2baa185e34a92a30753196b40e3d28f398ad",
+    "src/butterfly_guy/strategy/gap_regime_filter.py": "5a08c4106f2b1b08960233b256591aae6a7abdf3e8758dca04333321f1fc9a66",
+    "src/butterfly_guy/strategy/regime_classifier.py": "98953554b37db06b6cbfaa9e92a43264fd445b935b4ecd981f77e98cb1483631",
+    "src/butterfly_guy/strategy/regime_filter.py": "8b9d65fda38a30c261e1ebb72666eef79d2db382d9668778b499049e48152596",
+    "src/butterfly_guy/strategy/width_selection.py": "9e9c5207f8d59f7c54a1979b5c3ed330e446d7c8156b18249217f6c2451831d9",
+    "uv.lock": "8422e3d61861aa68f3690dfefe99179b4974c7359f5c015711bd8deaba7589b2"
+  },
+  "config": {
+    "path": "configs/config.yaml",
+    "sha256": "d120b63fd4e12ed812cc2742d602f9e531a1f5ca38e28c30628ab149f5d1b397"
+  },
+  "command": "python -u -m butterfly_guy.scripts.run_backtest_db 2026-03-13 2026-09-18 --asset SPX --execution-accounting-report",
+  "calendar_sessions": 131,
+  "discovered_dates": 128,
+  "dates_absent_from_discovery": [
+    "2026-06-01",
+    "2026-09-03",
+    "2026-09-04"
+  ],
+  "skipped_dates": [
+    {
+      "date": "2026-03-13",
+      "reason": "no data"
+    },
+    {
+      "date": "2026-03-16",
+      "reason": "no data"
+    },
+    {
+      "date": "2026-03-18",
+      "reason": "no qualifying entry in window"
+    },
+    {
+      "date": "2026-04-27",
+      "reason": "no qualifying entry in window"
+    },
+    {
+      "date": "2026-05-04",
+      "reason": "no qualifying entry in window"
+    },
+    {
+      "date": "2026-05-18",
+      "reason": "no qualifying entry in window"
+    },
+    {
+      "date": "2026-06-02",
+      "reason": "no qualifying entry in window"
+    },
+    {
+      "date": "2026-06-12",
+      "reason": "no qualifying entry in window"
+    },
+    {
+      "date": "2026-08-25",
+      "reason": "no qualifying entry in window"
+    },
+    {
+      "date": "2026-09-08",
+      "reason": "no qualifying entry in window"
+    }
+  ],
+  "daily_bar_rows_in_window": {
+    "SPX": 131,
+    "$VIX": 135
+  },
+  "trade_count": 118,
+  "cash_settlements": 23,
+  "output": {
+    "path": "docs/research/spx-v2-baseline-20260313-20260918.txt",
+    "sha256": "e0b06596704b502781af4b904fc60ec084951774b97792c03a7b3f19afc387ea",
+    "bytes": 31533
+  },
+  "limitations": [
+    "Current database evidence, not an immutable full quote export. Source hashes pin code, not database rows.",
+    "Daily-close lookbacks precede replay start; no dates after the end are used.",
+    "Three calendar dates are absent from historical discovery; no gaps are substituted.",
+    "17 of 22182 exit-path observations lack required quotes and are skipped.",
+    "Historical result differs from the old fixture; code-versus-data attribution has not been established.",
+    "Previously seen development data, not prospective observations or broker fills."
+  ]
+}

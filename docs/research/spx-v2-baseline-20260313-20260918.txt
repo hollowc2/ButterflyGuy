@@ -1,0 +1,401 @@
+
+========================================================================
+  DB BACKTEST  |  SPX  auto butterfly
+  Live config: configs/config.yaml
+  Widths: live VIX bucket  rr_min: 8.0  DD: 0.6/0.9/0.75
+  DD schedule: default
+  Profit strategy: peakvaluetrailer
+  Method: VIX  abs_stop: OFF  slippage: 0.0  vix_max: none
+  Held-to-close valuation: official close cash-settlement intrinsic
+========================================================================
+
+  128 trading day(s): 2026-03-13 → 2026-09-18
+
+  Loading 2026-03-13... SKIPPED (no data)
+  Loading 2026-03-16... SKIPPED (no data)
+  Loading 2026-03-17... 40W CALL center=6810  R/R=9.3  cost=$3.87
+  Loading 2026-03-18... SKIPPED (no qualifying entry in window)
+  Loading 2026-03-19... 50W PUT center=6505  R/R=10.1  cost=$4.49
+  Loading 2026-03-20... 50W PUT center=6470  R/R=9.8  cost=$4.63
+  Loading 2026-03-23... 40W CALL center=6710  R/R=10.0  cost=$3.63
+  Loading 2026-03-24... 50W PUT center=6455  R/R=10.6  cost=$4.32
+  Loading 2026-03-25... 50W CALL center=6685  R/R=9.6  cost=$4.72
+  Loading 2026-03-26... 50W PUT center=6480  R/R=10.5  cost=$4.35
+  Loading 2026-03-27... 50W PUT center=6325  R/R=10.6  cost=$4.30
+  Loading 2026-03-30... 50W CALL center=6470  R/R=9.9  cost=$4.59
+  Loading 2026-03-31... 50W CALL center=6540  R/R=9.9  cost=$4.59
+  Loading 2026-04-01... 50W CALL center=6650  R/R=9.6  cost=$4.73
+  Loading 2026-04-02... 50W PUT center=6435  R/R=9.8  cost=$4.63
+  Loading 2026-04-06... 40W CALL center=6690  R/R=10.9  cost=$3.36
+  Loading 2026-04-07... 50W PUT center=6480  R/R=9.3  cost=$4.86
+  Loading 2026-04-08... 40W CALL center=6850  R/R=12.4  cost=$2.99
+  Loading 2026-04-09... 30W CALL center=6830  R/R=10.9  cost=$2.52
+  Loading 2026-04-10... 40W CALL center=6885  R/R=9.4  cost=$3.83
+  Loading 2026-04-13... 40W PUT center=6765  R/R=10.3  cost=$3.53
+  Loading 2026-04-14... 40W CALL center=6975  R/R=9.3  cost=$3.89
+  Loading 2026-04-15... 40W CALL center=7035  R/R=9.4  cost=$3.86
+  Loading 2026-04-16... 30W CALL center=7075  R/R=9.8  cost=$2.78
+  Loading 2026-04-17... 30W CALL center=7160  R/R=9.5  cost=$2.86
+  Loading 2026-04-20... 30W PUT center=7070  R/R=9.8  cost=$2.78
+  Loading 2026-04-21... 30W CALL center=7185  R/R=10.4  cost=$2.63
+  Loading 2026-04-22... 30W CALL center=7170  R/R=9.3  cost=$2.92
+  Loading 2026-04-23... 20W PUT center=7085  R/R=9.9  cost=$1.83
+  Loading 2026-04-24... 40W CALL center=7185  R/R=9.6  cost=$3.77
+  Loading 2026-04-27... SKIPPED (no qualifying entry in window)
+  Loading 2026-04-28... 30W PUT center=7085  R/R=9.8  cost=$2.77
+  Loading 2026-04-29... 30W PUT center=7075  R/R=9.6  cost=$2.82
+  Loading 2026-04-30... 40W CALL center=7210  R/R=9.1  cost=$3.97
+  Loading 2026-05-01... 25W CALL center=7310  R/R=10.5  cost=$2.18
+  Loading 2026-05-04... SKIPPED (no qualifying entry in window)
+  Loading 2026-05-05... 30W CALL center=7295  R/R=10.6  cost=$2.58
+  Loading 2026-05-06... 30W CALL center=7370  R/R=9.3  cost=$2.92
+  Loading 2026-05-07... 40W CALL center=7425  R/R=10.4  cost=$3.51
+  Loading 2026-05-08... 40W CALL center=7445  R/R=10.4  cost=$3.52
+  Loading 2026-05-11... 40W PUT center=7355  R/R=9.7  cost=$3.74
+  Loading 2026-05-12... 30W PUT center=7315  R/R=9.9  cost=$2.75
+  Loading 2026-05-13... 30W CALL center=7450  R/R=10.9  cost=$2.53
+  Loading 2026-05-14... 40W CALL center=7540  R/R=11.2  cost=$3.27
+  Loading 2026-05-15... 40W PUT center=7330  R/R=10.2  cost=$3.57
+  Loading 2026-05-18... SKIPPED (no qualifying entry in window)
+  Loading 2026-05-19... 40W PUT center=7290  R/R=9.3  cost=$3.88
+  Loading 2026-05-20... 40W CALL center=7450  R/R=10.6  cost=$3.44
+  Loading 2026-05-21... 40W PUT center=7340  R/R=9.6  cost=$3.79
+  Loading 2026-05-22... 30W CALL center=7550  R/R=10.4  cost=$2.63
+  Loading 2026-05-26... 25W CALL center=7575  R/R=9.8  cost=$2.32
+  Loading 2026-05-27... 25W CALL center=7575  R/R=10.3  cost=$2.22
+  Loading 2026-05-28... 25W PUT center=7480  R/R=9.8  cost=$2.32
+  Loading 2026-05-29... 25W CALL center=7645  R/R=11.1  cost=$2.07
+  Loading 2026-06-02... SKIPPED (no qualifying entry in window)
+  Loading 2026-06-03... 20W PUT center=7540  R/R=9.7  cost=$1.87
+  Loading 2026-06-04... 30W PUT center=7495  R/R=10.1  cost=$2.70
+  Loading 2026-06-05... 30W PUT center=7440  R/R=10.2  cost=$2.68
+  Loading 2026-06-08... 40W CALL center=7510  R/R=9.1  cost=$3.96
+  Loading 2026-06-09... 40W CALL center=7530  R/R=11.4  cost=$3.22
+  Loading 2026-06-10... 20W PUT center=7345  R/R=9.8  cost=$1.85
+  Loading 2026-06-11... 40W CALL center=7400  R/R=9.2  cost=$3.94
+  Loading 2026-06-12... SKIPPED (no qualifying entry in window)
+  Loading 2026-06-15... 25W CALL center=7595  R/R=10.3  cost=$2.22
+  Loading 2026-06-16... 25W PUT center=7510  R/R=10.0  cost=$2.28
+  Loading 2026-06-17... 30W CALL center=7585  R/R=9.6  cost=$2.82
+  Loading 2026-06-18... 40W CALL center=7555  R/R=9.2  cost=$3.94
+  Loading 2026-06-22... 30W PUT center=7480  R/R=10.3  cost=$2.66
+  Loading 2026-06-23... 40W PUT center=7325  R/R=10.0  cost=$3.62
+  Loading 2026-06-24... 40W CALL center=7470  R/R=11.3  cost=$3.25
+  Loading 2026-06-25... 40W CALL center=7465  R/R=9.2  cost=$3.92
+  Loading 2026-06-26... 40W PUT center=7270  R/R=10.0  cost=$3.65
+  Loading 2026-06-29... 40W CALL center=7475  R/R=11.4  cost=$3.22
+  Loading 2026-06-30... 40W CALL center=7530  R/R=10.9  cost=$3.37
+  Loading 2026-07-01... 30W PUT center=7430  R/R=10.2  cost=$2.67
+  Loading 2026-07-02... 25W CALL center=7585  R/R=11.0  cost=$2.09
+  Loading 2026-07-06... 25W CALL center=7565  R/R=12.0  cost=$1.93
+  Loading 2026-07-07... 25W PUT center=7470  R/R=9.4  cost=$2.40
+  Loading 2026-07-08... 40W PUT center=7395  R/R=10.0  cost=$3.63
+  Loading 2026-07-09... 25W CALL center=7570  R/R=11.7  cost=$1.97
+  Loading 2026-07-10... 25W CALL center=7605  R/R=11.7  cost=$1.97
+  Loading 2026-07-13... 30W PUT center=7515  R/R=10.2  cost=$2.67
+  Loading 2026-07-14... 30W CALL center=7600  R/R=10.8  cost=$2.54
+  Loading 2026-07-15... 25W CALL center=7620  R/R=11.3  cost=$2.04
+  Loading 2026-07-16... 30W PUT center=7495  R/R=9.8  cost=$2.77
+  Loading 2026-07-17... 20W PUT center=7435  R/R=9.8  cost=$1.85
+  Loading 2026-07-20... 40W CALL center=7550  R/R=10.4  cost=$3.52
+  Loading 2026-07-21... 30W CALL center=7535  R/R=9.8  cost=$2.78
+  Loading 2026-07-22... 20W PUT center=7475  R/R=10.3  cost=$1.77
+  Loading 2026-07-23... 40W PUT center=7350  R/R=9.3  cost=$3.87
+  Loading 2026-07-24... 40W PUT center=7330  R/R=9.9  cost=$3.68
+  Loading 2026-07-27... 40W CALL center=7510  R/R=10.5  cost=$3.48
+  Loading 2026-07-28... 30W PUT center=7330  R/R=10.0  cost=$2.72
+  Loading 2026-07-29... 20W PUT center=7365  R/R=10.1  cost=$1.80
+  Loading 2026-07-30... 40W CALL center=7480  R/R=9.2  cost=$3.94
+  Loading 2026-07-31... 40W CALL center=7525  R/R=11.4  cost=$3.23
+  Loading 2026-08-03... 20W CALL center=7595  R/R=10.4  cost=$1.75
+  Loading 2026-08-04... 25W CALL center=7705  R/R=11.8  cost=$1.96
+  Loading 2026-08-05... 40W CALL center=7860  R/R=10.0  cost=$3.65
+  Loading 2026-08-06... 30W PUT center=7680  R/R=10.4  cost=$2.64
+  Loading 2026-08-07... 30W CALL center=7795  R/R=9.8  cost=$2.77
+  Loading 2026-08-10... 25W PUT center=7715  R/R=10.7  cost=$2.14
+  Loading 2026-08-11... 30W CALL center=7805  R/R=9.6  cost=$2.83
+  Loading 2026-08-12... 30W CALL center=7800  R/R=9.1  cost=$2.97
+  Loading 2026-08-13... 30W CALL center=7845  R/R=9.5  cost=$2.87
+  Loading 2026-08-14... 30W CALL center=7850  R/R=9.4  cost=$2.88
+  Loading 2026-08-17... 20W CALL center=7810  R/R=11.5  cost=$1.60
+  Loading 2026-08-18... 30W PUT center=7655  R/R=9.6  cost=$2.82
+  Loading 2026-08-19... 30W CALL center=7775  R/R=10.5  cost=$2.62
+  Loading 2026-08-20... 25W PUT center=7640  R/R=9.9  cost=$2.30
+  Loading 2026-08-21... 30W CALL center=7715  R/R=9.8  cost=$2.77
+  Loading 2026-08-24... 25W PUT center=7610  R/R=10.6  cost=$2.16
+  Loading 2026-08-25... SKIPPED (no qualifying entry in window)
+  Loading 2026-08-26... 25W PUT center=7645  R/R=9.9  cost=$2.29
+  Loading 2026-08-27... 25W CALL center=7755  R/R=10.8  cost=$2.12
+  Loading 2026-08-28... 30W CALL center=7810  R/R=11.4  cost=$2.42
+  Loading 2026-08-31... 25W PUT center=7635  R/R=10.6  cost=$2.16
+  Loading 2026-09-01... 30W PUT center=7590  R/R=9.1  cost=$2.97
+  Loading 2026-09-02... 25W CALL center=7690  R/R=10.5  cost=$2.17
+  Loading 2026-09-08... SKIPPED (no qualifying entry in window)
+  Loading 2026-09-09... 25W PUT center=7610  R/R=11.3  cost=$2.04
+  Loading 2026-09-10... 40W PUT center=7520  R/R=9.6  cost=$3.78
+  Loading 2026-09-11... 30W CALL center=7725  R/R=10.3  cost=$2.65
+  Loading 2026-09-14... 20W PUT center=7580  R/R=10.0  cost=$1.81
+  Loading 2026-09-15... 25W PUT center=7560  R/R=11.3  cost=$2.04
+  Loading 2026-09-16... 30W CALL center=7685  R/R=9.2  cost=$2.94
+  Loading 2026-09-17... 30W CALL center=7670  R/R=9.8  cost=$2.77
+  Loading 2026-09-18... 25W CALL center=7675  R/R=12.0  cost=$1.92
+
+==========================================================================================
+  PER-DAY RESULTS  —  SPX  CALL
+==========================================================================================
+        Date    VIX     Spot   W   Center   Entry$   Peak$   Exit$  Exit Reason               PnL/ct
+  ----------------------------------------------------------------------------------------
+  2026-03-17   22.1     6747  40     6810  $  3.90  $ 3.90  $ 0.00  cash_settled            $-389.60
+  2026-03-19   25.8     6594  50     6505  $  4.52  $ 8.63  $ 3.24  drawdown_morning        $-127.20
+  2026-03-20   25.8     6558  50     6470  $  4.66  $ 7.87  $ 3.05  drawdown_morning        $-160.20
+  2026-03-23   24.2     6627  40     6710  $  3.66  $ 6.02  $ 2.36  drawdown_morning        $-129.20
+  2026-03-24   27.1     6544  50     6455  $  4.35  $ 4.71  $ 1.69  drawdown_morning        $-265.20
+  2026-03-25   26.2     6591  50     6685  $  4.75  $ 6.67  $ 2.52  drawdown_morning        $-222.20
+  2026-03-26   26.4     6569  50     6480  $  4.38  $47.16  $47.16  cash_settled            $+4278.40
+  2026-03-27   30.0     6417  50     6325  $  4.33  $ 4.67  $ 1.79  drawdown_morning        $-253.20
+  2026-03-30   30.5     6378  50     6470  $  4.62  $ 9.12  $ 3.44  drawdown_morning        $-117.20
+  2026-03-31   27.3     6451  50     6540  $  4.62  $39.93  $38.52  cash_settled            $+3390.40
+  2026-04-01   25.0     6567  50     6650  $  4.76  $13.17  $ 2.94  drawdown_afternoon      $-181.20
+  2026-04-02   26.1     6520  50     6435  $  4.66  $ 5.08  $ 1.64  drawdown_morning        $-301.20
+  2026-04-06   24.2     6608  40     6690  $  3.39  $ 3.39  $ 0.00  cash_settled            $-338.60
+  2026-04-07   26.5     6565  50     6480  $  4.89  $10.23  $ 0.97  drawdown_late_morning   $-391.20
+  2026-04-08   20.8     6775  40     6850  $  3.02  $ 3.02  $ 0.00  cash_settled            $-301.60
+  2026-04-09   20.9     6777  30     6830  $  2.55  $25.43  $24.66  cash_settled            $+2211.40
+  2026-04-10   19.0     6828  40     6885  $  3.86  $ 7.04  $ 0.59  drawdown_late_morning   $-326.20
+  2026-04-13   20.1     6822  40     6765  $  3.56  $ 5.33  $ 1.98  drawdown_morning        $-157.20
+  2026-04-14   18.1     6919  40     6975  $  3.92  $32.38  $32.38  cash_settled            $+2846.40
+  2026-04-15   17.6     6981  40     7035  $  3.89  $30.52  $27.95  cash_settled            $+2406.40
+  2026-04-16   18.9     7018  30     7075  $  2.81  $ 9.77  $ 2.29  drawdown_afternoon      $ -51.20
+  2026-04-17   17.6     7107  30     7160  $  2.89  $13.78  $ 3.19  drawdown_afternoon      $ +30.80
+  2026-04-20   18.8     7122  30     7070  $  2.81  $ 8.03  $ 1.81  drawdown_afternoon      $ -99.20
+  2026-04-21   19.2     7130  30     7185  $  2.66  $ 3.32  $ 1.21  drawdown_morning        $-144.20
+  2026-04-22   19.1     7118  30     7170  $  2.95  $ 5.47  $ 0.42  drawdown_late_morning   $-252.20
+  2026-04-23   19.4     7124  20     7085  $  1.86  $ 2.07  $ 0.78  drawdown_morning        $-107.20
+  2026-04-24   19.1     7120  40     7185  $  3.80  $21.62  $20.08  cash_settled            $+1628.40
+  2026-04-28   18.7     7138  30     7085  $  2.80  $ 5.77  $ 1.34  drawdown_afternoon      $-145.20
+  2026-04-29   18.1     7129  30     7075  $  2.85  $ 4.97  $ 1.14  drawdown_afternoon      $-170.20
+  2026-04-30   18.1     7136  40     7210  $  4.00  $39.01  $39.01  cash_settled            $+3501.40
+  2026-05-01   16.6     7266  25     7310  $  2.21  $ 2.97  $ 1.06  drawdown_morning        $-114.20
+  2026-05-05   17.5     7246  30     7295  $  2.61  $ 8.37  $ 1.14  drawdown_afternoon      $-146.20
+  2026-05-06   17.1     7321  30     7370  $  2.95  $26.67  $25.12  cash_settled            $+2217.40
+  2026-05-07   17.2     7366  40     7425  $  3.54  $ 8.52  $ 0.77  drawdown_late_morning   $-276.20
+  2026-05-08   17.0     7388  40     7445  $  3.55  $ 6.08  $ 1.39  drawdown_afternoon      $-215.20
+  2026-05-11   18.2     7410  40     7355  $  3.77  $ 4.87  $ 1.86  drawdown_morning        $-190.20
+  2026-05-12   18.9     7368  30     7315  $  2.78  $ 7.40  $ 1.59  drawdown_afternoon      $-118.20
+  2026-05-13   18.1     7392  30     7450  $  2.56  $25.87  $24.25  cash_settled            $+2169.40
+  2026-05-14   17.9     7470  40     7540  $  3.30  $17.18  $ 3.99  drawdown_afternoon      $ +69.80
+  2026-05-15   18.7     7411  40     7330  $  3.60  $ 3.60  $ 0.00  cash_settled            $-359.60
+  2026-05-19   17.9     7366  40     7290  $  3.91  $ 7.73  $ 0.69  drawdown_late_morning   $-321.20
+  2026-05-20   17.9     7379  40     7450  $  3.47  $22.97  $22.97  cash_settled            $+1950.40
+  2026-05-21   17.4     7417  40     7340  $  3.82  $ 6.88  $ 0.43  drawdown_late_morning   $-338.20
+  2026-05-22   16.9     7484  30     7550  $  2.66  $ 2.74  $ 0.64  drawdown_afternoon      $-201.20
+  2026-05-26   16.9     7525  25     7575  $  2.35  $ 4.07  $ 1.49  drawdown_morning        $ -85.20
+  2026-05-27   17.0     7522  25     7575  $  2.25  $ 3.04  $ 0.93  drawdown_morning        $-131.20
+  2026-05-28   16.2     7523  25     7480  $  2.35  $ 2.91  $ 0.93  drawdown_morning        $-141.20
+  2026-05-29   15.6     7594  25     7645  $  2.10  $ 2.37  $ 0.86  drawdown_morning        $-123.20
+  2026-06-03   16.4     7576  20     7540  $  1.90  $ 5.42  $ 1.31  drawdown_afternoon      $ -58.20
+  2026-06-04   16.0     7548  30     7495  $  2.73  $ 4.00  $ 1.37  drawdown_morning        $-135.20
+  2026-06-05   16.7     7500  30     7440  $  2.71  $ 3.14  $ 1.09  drawdown_morning        $-161.20
+  2026-06-08   19.0     7427  40     7510  $  3.99  $ 9.24  $ 0.86  drawdown_late_morning   $-312.20
+  2026-06-09   17.8     7454  40     7530  $  3.25  $ 4.17  $ 1.32  drawdown_morning        $-192.20
+  2026-06-10   20.4     7372  20     7345  $  1.88  $ 4.15  $ 0.97  drawdown_afternoon      $ -90.20
+  2026-06-11   21.2     7310  40     7400  $  3.97  $34.88  $34.30  cash_settled            $+3033.40
+  2026-06-15   16.4     7544  25     7595  $  2.25  $ 8.45  $ 2.02  drawdown_afternoon      $ -22.20
+  2026-06-16   16.0     7553  25     7510  $  2.31  $23.65  $23.65  cash_settled            $+2134.40
+  2026-06-17   16.6     7509  30     7585  $  2.85  $ 4.65  $ 1.01  drawdown_afternoon      $-183.20
+  2026-06-18   17.3     7478  40     7555  $  3.97  $ 7.02  $ 2.60  drawdown_morning        $-136.20
+  2026-06-22   16.5     7529  30     7480  $  2.69  $24.33  $22.79  cash_settled            $+2010.40
+  2026-06-23   19.5     7399  40     7325  $  3.65  $ 7.05  $ 0.62  drawdown_late_morning   $-302.20
+  2026-06-24   19.0     7387  40     7470  $  3.28  $10.24  $ 0.97  drawdown_late_morning   $-230.20
+  2026-06-25   18.9     7383  40     7465  $  3.95  $ 7.53  $ 2.69  drawdown_morning        $-125.20
+  2026-06-26   19.6     7344  40     7270  $  3.68  $ 3.78  $ 1.39  drawdown_morning        $-228.20
+  2026-06-29   18.4     7396  40     7475  $  3.25  $ 3.42  $ 1.12  drawdown_morning        $-212.20
+  2026-06-30   17.3     7461  40     7530  $  3.40  $ 7.22  $ 2.84  drawdown_morning        $ -55.20
+  2026-07-01   16.5     7483  30     7430  $  2.70  $ 3.30  $ 1.26  drawdown_morning        $-143.20
+  2026-07-02   15.9     7533  25     7585  $  2.12  $ 2.64  $ 1.02  drawdown_morning        $-109.20
+  2026-07-06   16.3     7512  25     7565  $  1.96  $ 6.02  $ 1.24  drawdown_afternoon      $ -71.20
+  2026-07-07   16.1     7514  25     7470  $  2.43  $ 7.50  $ 0.89  drawdown_afternoon      $-153.20
+  2026-07-08   17.2     7468  40     7395  $  3.66  $10.85  $ 0.93  drawdown_late_morning   $-272.20
+  2026-07-09   16.5     7515  25     7570  $  2.00  $ 2.05  $ 0.66  drawdown_morning        $-133.20
+  2026-07-10   15.5     7557  25     7605  $  2.00  $ 2.35  $ 0.84  drawdown_morning        $-115.20
+  2026-07-13   16.0     7564  30     7515  $  2.70  $29.66  $29.66  cash_settled            $+2696.40
+  2026-07-14   16.4     7537  30     7600  $  2.57  $ 4.62  $ 1.59  drawdown_morning        $ -97.20
+  2026-07-15   16.0     7573  25     7620  $  2.07  $ 2.84  $ 1.04  drawdown_morning        $-102.20
+  2026-07-16   16.2     7548  30     7495  $  2.80  $18.07  $ 3.69  drawdown_afternoon      $ +89.80
+  2026-07-17   18.3     7473  20     7435  $  1.88  $ 2.58  $ 0.42  drawdown_afternoon      $-145.20
+  2026-07-20   18.2     7484  40     7550  $  3.55  $ 4.12  $ 1.46  drawdown_morning        $-208.20
+  2026-07-21   17.8     7480  30     7535  $  2.81  $11.48  $ 4.20  cash_settled            $+139.40
+  2026-07-22   16.9     7512  20     7475  $  1.80  $ 3.68  $ 1.44  drawdown_morning        $ -35.20
+  2026-07-23   19.1     7430  40     7350  $  3.90  $11.78  $ 2.54  drawdown_afternoon      $-135.20
+  2026-07-24   19.0     7398  40     7330  $  3.71  $ 3.71  $ 0.00  cash_settled            $-370.60
+  2026-07-27   18.7     7440  40     7510  $  3.51  $ 3.82  $ 1.38  drawdown_morning        $-212.20
+  2026-07-28   19.3     7388  30     7330  $  2.75  $ 2.98  $ 0.97  drawdown_morning        $-177.20
+  2026-07-29   19.3     7399  20     7365  $  1.83  $ 2.90  $ 0.64  drawdown_afternoon      $-118.20
+  2026-07-30   18.3     7408  40     7480  $  3.97  $ 4.82  $ 1.44  drawdown_morning        $-252.20
+  2026-07-31   17.8     7446  40     7525  $  3.26  $26.52  $ 4.72  cash_settled            $+146.40
+  2026-08-03   16.1     7559  20     7595  $  1.78  $14.50  $14.50  cash_settled            $+1272.40
+  2026-08-04   16.0     7658  25     7705  $  1.99  $ 9.53  $ 2.32  drawdown_afternoon      $ +33.80
+  2026-08-05   17.1     7787  40     7860  $  3.68  $ 3.92  $ 1.52  drawdown_morning        $-215.20
+  2026-08-06   15.7     7733  30     7680  $  2.67  $ 8.47  $ 2.01  drawdown_afternoon      $ -65.20
+  2026-08-07   15.0     7733  30     7795  $  2.80  $ 6.78  $ 0.52  drawdown_late_morning   $-227.20
+  2026-08-10   15.2     7759  25     7715  $  2.17  $ 4.26  $ 0.96  drawdown_afternoon      $-120.20
+  2026-08-11   15.5     7758  30     7805  $  2.86  $ 3.72  $ 1.42  drawdown_morning        $-143.20
+  2026-08-12   14.8     7747  30     7800  $  3.00  $ 3.87  $ 1.44  drawdown_morning        $-155.20
+  2026-08-13   14.6     7798  30     7845  $  2.90  $ 7.31  $ 2.44  drawdown_morning        $ -45.20
+  2026-08-14   14.5     7805  30     7850  $  2.91  $ 3.72  $ 1.42  drawdown_morning        $-148.20
+  2026-08-17   15.0     7775  20     7810  $  1.63  $ 1.92  $ 0.71  drawdown_morning        $ -91.20
+  2026-08-18   15.8     7703  30     7655  $  2.85  $ 3.69  $ 0.82  drawdown_afternoon      $-202.20
+  2026-08-19   15.3     7721  30     7775  $  2.65  $ 7.07  $ 2.61  drawdown_morning        $  -3.20
+  2026-08-20   15.8     7686  25     7640  $  2.33  $ 3.38  $ 1.06  drawdown_morning        $-126.20
+  2026-08-21   15.5     7666  30     7715  $  2.80  $ 4.07  $ 1.52  drawdown_morning        $-127.20
+  2026-08-24   15.9     7652  25     7610  $  2.19  $ 3.12  $ 0.27  drawdown_late_morning   $-191.20
+  2026-08-26   15.4     7686  25     7645  $  2.32  $ 5.73  $ 2.24  drawdown_morning        $  -7.20
+  2026-08-27   14.9     7702  25     7755  $  2.15  $10.78  $ 2.37  drawdown_afternoon      $ +22.80
+  2026-08-28   14.4     7747  30     7810  $  2.45  $ 4.77  $ 0.42  drawdown_late_morning   $-202.20
+  2026-08-31   15.3     7679  25     7635  $  2.19  $ 4.07  $ 0.97  drawdown_afternoon      $-121.20
+  2026-09-01   15.8     7635  30     7590  $  3.00  $ 8.54  $ 1.83  drawdown_afternoon      $-116.20
+  2026-09-02   15.8     7647  25     7690  $  2.20  $10.97  $ 2.24  drawdown_afternoon      $  +4.80
+  2026-09-09   16.1     7656  25     7610  $  2.07  $ 6.92  $ 1.57  drawdown_afternoon      $ -49.20
+  2026-09-10   18.0     7580  40     7520  $  3.81  $ 4.02  $ 1.54  drawdown_morning        $-226.20
+  2026-09-11   15.9     7673  30     7725  $  2.68  $ 2.68  $ 0.00  cash_settled            $-267.60
+  2026-09-14   17.4     7615  20     7580  $  1.84  $ 4.93  $ 0.36  drawdown_late_morning   $-147.20
+  2026-09-15   17.0     7606  25     7560  $  2.07  $ 7.18  $ 0.96  drawdown_afternoon      $-110.20
+  2026-09-16   16.7     7614  30     7685  $  2.97  $ 4.18  $ 0.94  drawdown_afternoon      $-202.20
+  2026-09-17   15.8     7619  30     7670  $  2.80  $ 5.37  $ 1.21  drawdown_afternoon      $-158.20
+  2026-09-18   15.4     7628  25     7675  $  1.95  $ 2.13  $ 0.17  drawdown_late_morning   $-177.20
+
+==========================================================================================
+  SUMMARY  (118 days loaded, 118 traded)
+==========================================================================================
+  Win rate    : 23/118  (19%)
+  Total PnL   : $+21952.20 / contract
+  Avg PnL     : $+186.04 / contract
+  Avg winner  : $+1664.55
+  Avg loser   : $-171.92
+  Median PnL  : $-134.20 / contract
+  Best day    : $+4278.40 / contract
+  Worst day   : $-391.20 / contract
+  Sharpe      : 3.146
+  Profit factor: 2.344
+  Max drawdown : $3789.80
+  MFE capture  : 54.1%
+  Exposure    : 42.9% of available session time
+  Cost drag   : $553.80 commissions + $0.00 slippage stress
+  Top-3 win share: 29.2%
+  Exit reasons: cash_settled=23  drawdown_afternoon=33  drawdown_late_morning=15  drawdown_morning=47
+  Held-to-close contribution: 23 trades, $+36005.20
+==========================================================================================
+
+===========================================================================================================================================
+  FROZEN-DECISION EXECUTION ACCOUNTING COMPARISON
+===========================================================================================================================================
+  Model                    Trades      Net P&L     Expect      PF    Win%     Median     Max DD  MFE cap    Top-3
+  -----------------------------------------------------------------------------------------------------------------------------------------
+  corrected_midpoint          118 $  +21952.20 $  +186.04   2.344   19.5% $  -134.20 $  3789.80    54.1%    29.2%
+  marketable                  118 $  +18468.20 $  +156.51   1.952   16.1% $  -167.70 $  5048.80    56.8%    29.4%
+  stressed_marketable         118 $  +14208.20 $  +120.41   1.611   15.3% $  -207.70 $  7108.00    59.4%    29.5%
+
+  Coverage and deterministic exclusions:
+  marketable: eligible=118 priced=118 missing_entry=0 crossed_entry=0 missing_exit=0 crossed_exit=0 path=22165/22182 usable (missing=17, crossed=0)
+  stressed_marketable: eligible=118 priced=118 missing_entry=0 crossed_entry=0 missing_exit=0 crossed_exit=0 path=22165/22182 usable (missing=17, crossed=0)
+===========================================================================================================================================
+
+  TRADE DISTRIBUTION  (▒▒▒▒ = loss  ████ = win  ╳╳╳╳ = fitted density,  each row = 1 trade)
+
+  95 │ ▒▒▒▒                                                       
+  94 │ ▒▒▒▒                                                       
+  93 │ ▒▒▒▒                                                       
+  92 │ ▒▒▒▒                                                       
+  91 │ ▒▒▒▒                                                       
+  90 │ ▒▒▒▒                                                       
+  89 │ ▒▒▒▒                                                       
+  88 │ ▒▒▒▒                                                       
+  87 │ ▒▒▒▒                                                       
+  86 │ ▒▒▒▒                                                       
+  85 │ ▒▒▒▒                                                       
+  84 │ ▒▒▒▒                                                       
+  83 │ ▒▒▒▒                                                       
+  82 │ ▒▒▒▒                                                       
+  81 │ ▒▒▒▒                                                       
+  80 │ ▒▒▒▒                                                       
+  79 │ ▒▒▒▒                                                       
+  78 │ ▒▒▒▒                                                       
+  77 │ ▒▒▒▒                                                       
+  76 │ ▒▒▒▒                                                       
+  75 │ ▒▒▒▒                                                       
+  74 │ ▒▒▒▒                                                       
+  73 │ ▒▒▒▒                                                       
+  72 │ ▒▒▒▒                                                       
+  71 │ ▒▒▒▒                                                       
+  70 │ ▒▒▒▒                                                       
+  69 │ ▒▒▒▒                                                       
+  68 │ ▒▒▒▒                                                       
+  67 │ ▒▒▒▒                                                       
+  66 │ ▒▒▒▒                                                       
+  65 │ ▒▒▒▒                                                       
+  64 │ ▒▒▒▒                                                       
+  63 │ ▒▒▒▒                                                       
+  62 │ ▒▒▒▒                                                       
+  61 │ ▒▒▒▒                                                       
+  60 │ ▒▒▒▒                                                       
+  59 │ ▒▒▒▒                                                       
+  58 │ ▒▒▒▒                                                       
+  57 │ ▒▒▒▒                                                       
+  56 │ ▒▒▒▒                                                       
+  55 │ ▒▒▒▒                                                       
+  54 │ ▒▒▒▒                                                       
+  53 │ ▒▒▒▒                                                       
+  52 │ ▒▒▒▒                                                       
+  51 │ ▒▒▒▒                                                       
+  50 │ ╳╳╳╳                                                       
+  49 │ ▒▒▒▒                                                       
+  48 │ ▒▒▒▒                                                       
+  47 │ ▒▒▒▒                                                       
+  46 │ ▒▒▒▒                                                       
+  45 │ ▒▒▒▒                                                       
+  44 │ ▒▒▒▒                                                       
+  43 │ ▒▒▒▒                                                       
+  42 │ ▒▒▒▒                                                       
+  41 │ ▒▒▒▒                                                       
+  40 │ ▒▒▒▒                                                       
+  39 │ ▒▒▒▒                                                       
+  38 │ ▒▒▒▒                                                       
+  37 │ ▒▒▒▒                                                       
+  36 │ ▒▒▒▒                                                       
+  35 │ ▒▒▒▒                                                       
+  34 │ ▒▒▒▒                                                       
+  33 │ ▒▒▒▒                                                       
+  32 │ ▒▒▒▒                                                       
+  31 │ ▒▒▒▒  ╳╳╳╳                                                 
+  30 │ ▒▒▒▒                                                       
+  29 │ ▒▒▒▒                                                       
+  28 │ ▒▒▒▒                                                       
+  27 │ ▒▒▒▒                                                       
+  26 │ ▒▒▒▒                                                       
+  25 │ ▒▒▒▒                                                       
+  24 │ ▒▒▒▒                                                       
+  23 │ ▒▒▒▒                                                       
+  22 │ ▒▒▒▒                                                       
+  21 │ ▒▒▒▒                                                       
+  20 │ ▒▒▒▒                                                       
+  19 │ ▒▒▒▒                                                       
+  18 │ ▒▒▒▒                                                       
+  17 │ ▒▒▒▒                                                       
+  16 │ ▒▒▒▒                                                       
+  15 │ ▒▒▒▒                                                       
+  14 │ ▒▒▒▒                                                       
+  13 │ ▒▒▒▒                                                       
+  12 │ ▒▒▒▒                                                       
+  11 │ ▒▒▒▒                                                       
+  10 │ ▒▒▒▒                                                       
+   9 │ ▒▒▒▒                                                       
+   8 │ ▒▒▒▒  ████                                                 
+   7 │ ▒▒▒▒  ████                                                 
+   6 │ ▒▒▒▒  ████                    ████                         
+   5 │ ▒▒▒▒  ████                    ████                         
+   4 │ ▒▒▒▒  ████  ╳╳╳╳              ╳╳╳╳                         
+   3 │ ▒▒▒▒  ████              ╳╳╳╳  ████  ╳╳╳╳                   
+   2 │ ▒▒▒▒  ████              ████  ████  ████  ╳╳╳╳             
+   1 │ ▒▒▒▒  ████        ╳╳╳╳  ████  ████  ████  ████  ╳╳╳╳  ╳╳╳╳ 
+     └────────────────────────────────────────────────────────────
+      $-500   $0   $500 $1000 $1500 $2000 $2500 $3000 $3500 $4000 

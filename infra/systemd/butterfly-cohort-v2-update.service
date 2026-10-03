@@ -1,0 +1,14 @@
+[Unit]
+Description=Append completed sessions to the frozen SPX v2 prospective cohort
+Requires=butterfly-tunnel.service
+After=butterfly-tunnel.service
+
+[Service]
+Type=oneshot
+Environment=SSH_AUTH_SOCK=/run/user/1000/gnupg/S.gpg-agent.ssh
+Environment="GIT_SSH_COMMAND=ssh -F /dev/null"
+Environment=UV_CACHE_DIR=/tmp/butterfly-uv-cache
+Environment=UV_PYTHON_INSTALL_DIR=/tmp/butterfly-uv-python
+WorkingDirectory=/mnt/Repos/Trading/Butterflyguy/.worktrees/spx-prospective-v2
+ExecStart=/mnt/Repos/Trading/Butterflyguy/.worktrees/spx-prospective-v2/tools/cohort_daily_update.sh
+TimeoutStartSec=2400

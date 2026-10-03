@@ -1,0 +1,11 @@
+[Unit]
+Description=Record the SPX v2 prospective cohort after settlement data lands
+
+[Timer]
+OnCalendar=Mon-Fri 18:30
+Persistent=true
+RandomizedDelaySec=300
+Unit=butterfly-cohort-v2-update.service
+
+[Install]
+WantedBy=timers.target
