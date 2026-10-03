@@ -1875,3 +1875,272 @@ Scratch simulation, H-TS1 alone, k = 1, calibrated gate 1, 358 sessions. Two can
   else run on 2024-07-01 → 2025-12-09 is post hoc.
 - **Artifacts.** `reports/research/spx_0dte_thetadata/holdout/ce91c4a08efd/`: `results.json`
   `4a5078a0…`, `trades.jsonl` `048feb2b…`.
+
+
+<!-- The following entries are the preserved 2026-10-01 Ernie branch record.
+Current status, dataset distinctions, and limitations: ernie-comparison-2026-10-01/RECONCILIATION.md. -->
+
+## 2026-10-01 — trail start and breakeven floor (Ernie @0DTE comparison; development data only)
+
+Exploratory research on already-seen history. No live config, service or cohort source was
+changed; the open cohort `spx-prospective-2026-09-22` is untouched. Branch
+`research/ernie-comparison` (worktree `../Butterflyguy-ernie`), base commit
+`bb0408f`. Context: Butterflyguy's VIX zones and 10% debit rule come from Coach Ernie
+(YouTube @0DTE). His exit, as he describes it: do nothing until unrealized gain reaches about
+75% of the debit, then trail by giving back about 75% / 45% / 20% of peak *profit* through
+the day. Ours arms at any profit and trails 60% / 90% / 75% of peak *value*. The comparison
+plan is `docs/research/ernie-comparison-2026-10-01/PLAN.md`.
+
+### Data and harness
+
+Fresh read-only after-hours Helios export with the 2026-09-25 commands (`option_chain_snapshots`
+8,390,620 rows, 137 sessions; `spot_prices`; `daily_bars` through 2026-09-30). Range
+2026-03-13 → 2026-09-18, ending before the cohort window. `baseline.py` reproduces the frozen
+replay exactly: 118 trades (22 settled, 96 trailed), midpoint $17,634.60, stressed
+$9,830.60. `trail_compare.py` reuses the same 118 entries and the 09-25 accounting and changes
+only the exit. Halves split at 2026-06-19.
+
+### Pre-declared variants (written before running)
+
+| Rule | Stressed net | H1 | H2 | Midpoint net | Settled |
+|---|---:|---:|---:|---:|---:|
+| B baseline (value trail, any profit) | +9,831 | +17,031 | −7,201 | +17,635 | 22 |
+| T1 start at +75%, our drawdowns | +10,678 | +16,593 | −5,915 | +17,405 | 59 |
+| T2 Ernie giveback (75/45/20% of peak profit; 11:30, 14:00 edges), any profit | −8,240 | −4,126 | −4,114 | +224 | 7 |
+| T3 Ernie full (+75% start and giveback) | −3,909 | −1,065 | −2,845 | +3,631 | 42 |
+
+Baseline in this harness: 96 trailed exits net −$20,809 stressed and 22 settled trades net
++$30,640. Ernie's profit-basis giveback sells flies before they land in the tent. T3's
+trailed exits turn positive (+$10,475), but its settled trades lose (−$14,384), and the top-3
+share falls from 33% to 19%. T3's 61% midpoint win rate resembles Ernie's reported record
+(52.6% wins, 1.62 average win/loss), not a 1:10 lottery profile. A post-hoc sweep of the
+start level (1.0–3.0×, our drawdowns) moved stressed net between $8.4k and $10.7k with no
+consistent pattern; T1's gain is noise-sized.
+
+### Post-hoc middle ground (defined after the table above)
+
+Breakeven floor: once the peak mark has reached 1.75 × entry, also exit when the mark falls
+to the entry price. Otherwise our drawdown schedule applies.
+
+| Rule | Stressed net | H1 | H2 | Midpoint net | Max DD | Settled | Floor exits |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| B baseline | +9,831 | +17,031 | −7,201 | +17,635 | −7,661 | 22 | – |
+| T5 start at +75% + breakeven floor | **+15,980** | **+19,533** | **−3,552** | **+22,981** | **−3,970** | 58 | 53 |
+| T6 any-profit start + breakeven floor after +75% | +14,758 | +19,971 | −5,213 | +22,835 | −5,559 | 21 | 44 |
+
+T5 against baseline: +$6,150 stressed; 48 trades better (+$9,789), 38 worse (−$3,639),
+32 unchanged.
+
+- **Where it gains.** Floor exits average −$101 stressed; the same trades lost about $400
+  under baseline. Two sessions supply +$3,397, where baseline trailed out early at a loss and
+  the fly later ran to 7–10×: 2026-08-20 (−$195 → +$2,111) and 2026-03-20 (−$245 → +$844).
+  Without the top three, the gain is +$2,413.
+- **Where it loses.** Flies that peak at 1.3–1.6× now ride to zero instead of exiting at a
+  partial loss: about −$150 to −$220 each.
+- **Mechanism.** Our 90% late-morning threshold sells below entry on any trade that peaked
+  under 10× its debit (75% afternoon: under 4×). The floor removes that "winner turns into
+  loser" path while keeping the tent landings that a tight profit-based giveback cuts.
+
+T5 beats baseline in both halves, but it was designed after seeing these 118 trades, so this
+is not the registered both-halves test. It is not validated and must not be applied to the
+open cohort or the live config.
+
+### Hypothesis for a future test (not applied)
+
+H-TR1: with every other frozen rule unchanged, arming the peak-value trailer at 1.75 × entry
+and adding a breakeven exit (mark ≤ entry once the peak has reached 1.75 × entry) improves
+stressed-marketable expectancy relative to the frozen baseline on unseen sessions. Candidate
+data: ThetaData SPXW 2022-05 → 2024-06 development window, or a forward cohort started after
+`spx-prospective-2026-09-22` ends. Live-code note: the `profitprotector` strategy already has
+a breakeven floor (`breakeven_floor_profit`), but its activation is an absolute profit, not a
+peak ratio.
+
+### Reproduction
+
+```bash
+cd docs/research/spx-idea-sweep-2026-09-25   # data/ re-exported per README.md
+../../../.venv/bin/python prep.py
+../../../.venv/bin/python baseline.py 2026-03-13 2026-09-18      # parity
+../../../.venv/bin/python trail_compare.py 2026-03-13 2026-09-18 # B, T1-T3 + per-trade CSV
+```
+
+T5/T6 and the start-level sweep call `exit_variant(..., floor_at=1.75)` from
+`trail_compare.py`; those driver snippets were not committed.
+
+## 2026-10-01 — strike placement: VIX-sigma anchor vs Ernie's price rule (development data only)
+
+Same data, range and 118 baseline entries as the trail entry above. `placement_compare.py`
+keeps each session's entry snapshot, direction and width, changes only the center strike,
+and runs each placement under the baseline exit (B) and the post-hoc T5 exit. Picks use
+marks. Distance is measured in VIX-implied daily σ (spot × VIX / √252), not the
+chain-implied remaining-session σ used on 09-25.
+
+| Placement | Exit | Trades | Stressed net | H1 | H2 | Max DD | Avg distance (σ) | Avg cost % width |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| P0 ours (VIX-sigma anchor) | B | 118 | +9,831 | +17,031 | −7,201 | −7,661 | 0.71 | 9.0% |
+| P1 closest OTM strike ≤ 10% of width | B | 118 | +10,081 | +17,316 | −7,236 | −7,696 | 0.71 | 9.0% |
+| P2 closest OTM strike ≤ 7.5% of width | B | 114 | +6,552 | +12,322 | −5,770 | −6,998 | 0.79 | 6.6% |
+| P3 convexity step from P1 (largest relative drop, cost ≥ 5%) | B | 118 | +7,829 | +13,009 | −5,180 | −5,471 | 0.81 | 6.3% |
+| P0 ours | T5 | 118 | +15,980 | +19,533 | −3,552 | −3,970 | 0.71 | 9.0% |
+| P1 ≤ 10% | T5 | 118 | +15,998 | +19,485 | −3,487 | −3,905 | 0.71 | 9.0% |
+| P2 ≤ 7.5% | T5 | 114 | +4,156 | +7,215 | −3,059 | −5,839 | 0.79 | 6.6% |
+| P3 convexity | T5 | 118 | +3,661 | +7,982 | −4,321 | −4,941 | 0.81 | 6.3% |
+
+- In practice our placement is Ernie's 10% debit rule. P0 and P1 land at the same average
+  distance and cost, and their P&L differs by noise ($250 under B, $18 under T5).
+- Pushing further out and cheaper, as with his 5–7.5% target and the convexity step, made
+  less money under both exits and at midpoint, so the difference isn't only costs. P3 has a
+  smaller H2 loss and a smaller drawdown under B but loses about $4k of H1. It doesn't beat
+  baseline in both halves.
+- The T5 exit was fitted to P0's trades, so its interaction with cheaper flies is unreliable.
+  P2 and P3 under B are the fairer comparison.
+- Caveat: P3 measures "convexity" on marks. A sharp drop in mid between adjacent strikes
+  can be a stale or wide quote rather than a real discount.
+
+Conclusion: strike placement is not where Butterflyguy and Ernie's classic OTM fly differ. No
+change proposed.
+
+## 2026-10-01 — direction: gap rule vs Ernie's trend indicators (development data only)
+
+Same data and entry machinery as above (`direction_compare.py`); only CALL/PUT changes. The
+rules were written before running. Daily closes come from FRED SP500 (public; fills the
+2025-12 → 2026-03 gap that neither the owner CSV nor the Helios daily bars covers). Hourly
+closes are 9:30-aligned RTH bars built from Helios `spot_prices`, which start on
+2026-03-13. To avoid lookahead, daily rules use closes through the prior day, and hourly
+rules use completed bars before 10:00. Every rule is scored on the same 118 sessions
+(2026-03-27 → 2026-09-18), where all indicators had warmed up.
+
+| Rule | Exit | Trades | Stressed net | H1 | H2 | Max DD | Calls/Puts | Same side as gap |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| D0 gap (ours) | B | 111 | +7,306 | +14,506 | −7,201 | −7,661 | 68/43 | — |
+| D1 price vs 1h EMA50 (his 2023 rule) | B | 112 | +2,194 | +11,107 | −8,913 | −13,385 | 71/41 | 59% |
+| D2 1h Hull55 rising | B | 111 | −3,392 | +2,532 | −5,924 | −12,787 | 58/53 | 46% |
+| D3 prior close vs daily EMA50 | B | 111 | +7,648 | +15,418 | −7,770 | −9,539 | 97/14 | 53% |
+| D4 daily Hull55 rising | B | 112 | +3,256 | +11,352 | −8,096 | −11,105 | 69/43 | 51% |
+| D0 gap (ours) | T5 | 111 | +12,793 | +16,345 | −3,552 | −3,970 | 68/43 | — |
+| D1 1h EMA50 | T5 | 112 | +6,162 | +13,762 | −7,600 | −10,592 | 71/41 | 59% |
+| D2 1h Hull55 | T5 | 111 | −736 | +4,280 | −5,016 | −10,308 | 58/53 | 46% |
+| D3 daily EMA50 | T5 | 111 | +8,808 | +17,481 | −8,672 | −9,513 | 97/14 | 53% |
+| D4 daily Hull55 | T5 | 112 | +4,192 | +13,692 | −9,500 | −11,476 | 69/43 | 51% |
+
+- No trend rule beats the gap rule in both halves. D3 edges it by +$342 under B, but it is
+  97% calls ("always call" in this up-trending sample). It loses more in H2, has a deeper
+  drawdown, and trails the gap rule by about $4k under T5.
+- The hourly rules are clearly worse. The Hull rule disagrees with the gap rule on 54% of
+  sessions and roughly breaks even or loses, with about 1.7× the drawdown.
+- This agrees with the 2026-09-25 daily-SMA result. Ernie says the tool doesn't matter as
+  long as it's used consistently; on this sample it does matter, and the gap rule is the
+  better tool.
+- Not tested: his sine-weighted MA (no length or timeframe given) and Hull on other
+  timeframes. Hull length 55 is the TradingView Hull Suite default, assumed rather than
+  stated. His direction is also paired with a structural-level pullback entry, which these
+  rules don't model.
+
+Conclusion: keep the gap rule. No change proposed.
+
+## 2026-10-01 — entry trigger: GEX-wall bounce vs our 10:00 entry (development data only)
+
+Same data and selector as above (`gex_compare.py`). Added input: per-strike SPXW open
+interest per session (`data/oi.csv`, read-only Helios export). Gamma is computed with
+Black-Scholes from the chain's IV, because Schwab's stored 0DTE gamma is zero on about 80%
+of rows. The rules below were written before running:
+
+- **Levels:** at 09:45, the 3 strikes with the largest |net GEX| within ±2σ.
+  Net GEX = gamma × OI × 100 × S² × 1%, calls positive, puts negative.
+- **Placebo:** 25-point round numbers within ±2σ.
+- **Trigger:** 09:45–12:30, with gap-rule direction. Spot comes within 3 pts of a level, then
+  moves 5 pts off it in the trade direction within 15 min. Fly chosen by the baseline
+  selector within 5 min of the trigger. No trigger means no trade.
+
+| Entry | Exit | Trades | Stressed net | Per trade | H1 | H2 | Midpoint net | Max DD |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Ours 10:00, all days | B | 118 | +9,831 | +83 | +17,031 | −7,201 | +17,635 | −7,661 |
+| GEX trigger | B | 86 | −5,244 | −61 | −943 | −4,301 | +192 | −7,075 |
+| Ours 10:00, same 85 days | B | 85 | +9,235 | +109 | +13,314 | −4,079 | +14,898 | −4,562 |
+| Round-number trigger | B | 119 | +4,010 | +34 | +8,510 | −4,500 | +12,018 | −6,795 |
+| Ours 10:00, same 116 days | B | 116 | +10,426 | +90 | +17,627 | −7,201 | +18,102 | −7,661 |
+| Ours 10:00, all days | T5 | 118 | +15,980 | +135 | +19,533 | −3,552 | +22,981 | −3,970 |
+| GEX trigger | T5 | 86 | +190 | +2 | +3,617 | −3,426 | +4,598 | −5,572 |
+| Ours 10:00, same 85 days | T5 | 85 | +15,663 | +184 | +15,630 | +33 | +20,802 | −2,094 |
+| Round-number trigger | T5 | 119 | +5,353 | +45 | +8,558 | −3,205 | +12,200 | −6,756 |
+
+- The GEX trigger fired on 86 of 128 sessions, mostly early: 27 before 10:00, 42 in the
+  10:00 hour, 14 in the 11:00 hour and 3 after 12:00. Trade count is not the issue.
+- On the same days, our plain 10:00 entry beat the GEX trigger by about $14.5k (B) and
+  $15.5k (T5), and also beat it at midpoint ($14.9k vs $0.2k), so costs don't explain the gap.
+- The GEX levels did worse than the round-number placebo, so they added no information
+  here. Both "bounce" triggers underperformed simply entering at 10:00.
+- Limits: 0DTE-only GEX (real GEX includes other expiries), prior-day OI, and computed
+  gamma. Ernie's primary levels are ES volume-profile nodes, with GEX as confirmation, and
+  his entry is discretionary. The 3/5-pt and 15-min parameters were chosen a priori, not
+  tuned. A mechanical bounce-off-a-level entry has no edge on this sample. That says
+  nothing about his discretionary version.
+
+Conclusion: keep the 10:00–10:45 entry. No change proposed.
+
+## 2026-10-01 — H-TR1 registered test: FAIL
+
+The registered one-shot test (`docs/research/ernie-comparison-2026-10-01/H-TR1-registration.md`,
+commit `b0b7215`) failed all four criteria on ThetaData SPXW 2022-05-02 → 2024-06-28
+(334 traded sessions). T5 − B stressed was −$1,208 over the full window and negative in both
+halves. It was −$6,030 without the top 3 sessions, and the drawdown was $2,827 deeper. The
++$6.1k gain on the 2026 Schwab sessions, where the rule was found, did not carry over.
+Results are in the registration file.
+
+Two observations outside the test (not gating, not to be acted on without their own test):
+
+- The frozen baseline itself is negative after costs on this window: −$9,541 stressed against
+  +$19,622 at midpoint, with a −$20.8k drawdown. 2023, a mostly low-VIX year, accounts for
+  −$15.9k. This is consistent with the 09-25 low-VIX diagnosis: costs of roughly $66 per fly
+  outweigh a small midpoint edge.
+- Only 334 of 537 sessions produced a qualifying fly (48 in 2022). The selector's RR ≥ 8 and
+  cost caps on ThetaData quotes reject many sessions. This was not investigated.
+- T6 (any-profit start plus a breakeven floor after +75%) was +$2,186 better than B, but was
+  reported only and is post-hoc.
+
+## 2026-10-01 — why the frozen baseline loses after costs on 2022–24 (diagnostic)
+
+`cost_breakdown.py` splits each baseline trade (baseline exit B) into midpoint P&L
+(commissions included), the entry spread (fly ask − mid), the exit spread (mid − bid,
+trailed exits only) and the stress add-on ($0.05 per contract per executed side). It was run
+on ThetaData 2022-05-02 → 2024-06-28, where the H-TR1 test is already spent, and on the
+Schwab 2026-03-13 → 2026-09-18 sessions. This is diagnostic and nothing is applied.
+
+| Data | Trades | Midpoint | Entry spread | Exit spread | Stress | Stressed | Midpoint/trade | Cost/trade |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ThetaData 2022–24 | 334 | +19,622 | −9,920 | −7,383 | −11,860 | −9,541 | +59 | 87 |
+| Schwab 2026 | 118 | +17,635 | −2,071 | −1,453 | −4,280 | +9,831 | +149 | 66 |
+
+Three causes, in order of size:
+
+1. **Zombieland (VIX < 17) has no edge even at midpoint.** It made +$11 per trade on 2022–24
+   (230 trades) and +$10 per trade in 2026 (51 trades); the two sources agree. About $67 per
+   trade of cost makes it −$12,838 stressed on 2022–24, more than the whole −$9,541 loss.
+   Goldilocks 1 made +$152 midpoint per trade (2022–24) and +$204 (2026). This supports the
+   2026-09-25 low-VIX diagnosis and H-LV1, and suggests a broader form: skip all VIX < 17
+   entries, not only calls.
+2. **Trailed exits carry the costs and lose before them.** 259 of 334 trades (78%) were
+   trailed out, at −$140 midpoint per trade, and they pay costs twice (about $101 per trade
+   against $42 for settled trades). The 75 settled trades made +$52.8k stressed and the
+   trailed trades −$62.3k. 2026 has the same shape (−$144 midpoint per trailed trade). This
+   is the strategy's tail-bet structure: most trades are small trailed losers, and costs
+   land on them.
+3. **The selector is attracted to badly quoted flies.** Selection ranks on marks. One wing
+   with a wide quote (for example 13.40 / 23.20) can make a fly's mid look cheap enough to
+   pass the 10% cost cap when its ask is several times higher. 13 of 334 entries (4%) had
+   an entry spread above 25% of the mid debit; the median is 5–6%. Those 13 lost $5,788
+   stressed and $5,308 marketable. Without them, 2022–24 is −$3,752 stressed and +$7,628
+   marketable. The 2026 Schwab sample had none. The live `quote_quality` settings only gate
+   exits, so nothing checks the spread at entry.
+
+Also: the stress add-on is the largest single cost line on both sources ($36 per trade on
+2022–24). Marketable accounting, which crosses the quoted spread with no add-on, gives
++$2,319 on 2022–24. Whether real fills land nearer the mid is what the open execution
+cohort measures.
+
+Candidate hypotheses for future registered tests (not applied, cohort untouched):
+- **H-LV2:** skip all entries with VIX < 17.
+- **H-SP1:** at entry, reject flies whose (ask − mid) exceeds 25% of the mid debit and take
+  the next candidate.
+
+Not investigated: why only 334 of 537 2022–24 sessions produced a qualifying fly.

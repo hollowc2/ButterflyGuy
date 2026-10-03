@@ -2,3 +2,6 @@ data/
 __pycache__/
 e0_trades*.csv
 sessions.csv
+
+# Historical Ernie adapter outputs contain vendor data.
+data_theta/
