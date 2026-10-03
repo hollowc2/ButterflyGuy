@@ -98,7 +98,8 @@ ButterflyGuy is a Python 0-DTE butterfly trading and research system using Schwa
 - `AGENTS.md`
 - `README.md`
 - `CLAUDE.md`
-- `todo.md`
+- `docs/README.md`
+- `docs/reviews/2026-09-25-code-review.md`
 - `pyproject.toml`
 - `configs/config.yaml`
 - `infra/docker-compose.yml`
@@ -135,4 +136,4 @@ Complete: code remediations, critical-alert delivery, exact-SHA rollback, synthe
 
 ## Next Session Launch Prompt
 
-Read `todo.md` and `docs/live-runbook.md`. Treat SPX, NDX, and XSP as paper-only unless the owner explicitly authorizes a supervised live canary. Before any deployment or broker-write drill, require zero open DB trades, zero nonterminal intents, no working/unknown Schwab orders, and exact broker-position/DB reconciliation.
+Read `AGENTS.md`, `docs/README.md`, and `docs/live-runbook.md`. Treat SPX, NDX, and XSP as paper-only unless the owner explicitly authorizes a supervised live canary. Before any deployment or broker-write drill, require zero open DB trades, zero nonterminal intents, no working/unknown Schwab orders, and exact broker-position/DB reconciliation.
