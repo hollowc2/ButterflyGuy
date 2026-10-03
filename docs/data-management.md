@@ -86,14 +86,16 @@ that path, so nothing was moved. Set
 - `spx_0dte_local_durable_development_20261001`: 585 accepted SPXW 0-DTE
   sessions, requested range 2022-01-03 through 2024-06-28. Existing quality
   assessment `25d9a7474ab2` passes Q1–Q6.
-- `spx_0dte_local_durable_spent_holdout_20261003`: 358 accepted sessions,
+- `spx_0dte_local_durable_spent_holdout_20261003`: 357 accepted sessions,
   requested range 2024-07-01 through 2026-03-12, the spent H-TS1 holdout
-  (`holdout_sessions: 358`; post hoc only). Built 2026-10-03 from commit `b7c249d`
-  with the development dataset's inputs, hash `f7077252…`. 68 sessions were skipped
-  for missing index data, 63 of them after the minute files end on 2025-12-09.
-  Assessment `6de96a50ba75` passes Q2–Q6. Q1 fails on one session, 2025-11-28
-  (98.15%): near-the-money quotes are missing 09:31–09:54 on the post-Thanksgiving
-  half-day. Artifacts are under `reports/data_management/2026-10-03/`.
+  (`holdout_sessions: 357`; post hoc only). Built 2026-10-03 from commit `b7c249d`
+  with the development dataset's inputs. 68 sessions were skipped for missing
+  index data, 63 of them after the minute files end on 2025-12-09. The first
+  assessment, `6de96a50ba75`, failed Q1 on 2025-11-28 only (98.15%: near-the-money
+  quotes missing 09:31–09:54 on the post-Thanksgiving half-day). The owner excluded
+  that session (`exclude-sessions`; hash `f7077252…` → `8dabf04a…`). Assessment
+  `4fef1dbe585d` then passes Q1–Q6. Artifacts are under
+  `reports/data_management/2026-10-03/`.
 - `spx_0dte_local_durable_validation_20261001`: 128 accepted sessions,
   requested range 2026-03-13 through 2026-09-25. Existing assessment
   `b3c6482ea210` passes Q1–Q4 and Q6; Q5 is not evaluable on the irregular
