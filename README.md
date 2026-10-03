@@ -218,16 +218,17 @@ uv run python src/butterfly_guy/scripts/generate_live_performance.py
 | `src/butterfly_guy/gateway_client/` | Default-off shadow comparison against SchwabGateway |
 | `configs/` | Per-asset configuration |
 | `infra/` | Docker Compose and observability |
-| `docs/` | Architecture notes, runbooks, research |
+| [`docs/`](docs/README.md) | Current guidance, architecture, runbooks, research, and historical evidence |
 | `tests/` | Tests |
 
 New to the code? Read these in order:
 
-1. `configs/config.yaml`
-2. `src/butterfly_guy/scripts/run_live.py`
-3. `src/butterfly_guy/strategy/`
-4. `src/butterfly_guy/execution/`
-5. `src/butterfly_guy/position/`
+1. [`docs/README.md`](docs/README.md)
+2. `configs/config.yaml`
+3. `src/butterfly_guy/scripts/run_live.py`
+4. `src/butterfly_guy/strategy/`
+5. `src/butterfly_guy/execution/`
+6. `src/butterfly_guy/position/`
 
 ## Contributing
 

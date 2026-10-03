@@ -1,0 +1,6 @@
+# SPX realized-vs-implied weekly post — Monday 15:30 UTC (11:30 ET EDT / 10:30 ET EST).
+# Must run after Monday's open: Friday's official close reaches daily_bars only then.
+# Vixie cron ignores CRON_TZ in user crontabs; use UTC slot.
+# Install:
+#   crontab -l 2>/dev/null | grep -v send_realized_vs_implied | cat - infra/cron/realized_vs_implied.cron | crontab -
+30 15 * * 1 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_realized_vs_implied.py >> /opt/butterflyguy/realized_vs_implied.log 2>&1

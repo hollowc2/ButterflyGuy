@@ -4,11 +4,13 @@ Read-only: queries option_chain_snapshots, spot_prices and daily_bars; never tou
 strategy, orders or the prospective cohort.
 
 Official closes reach daily_bars only when the collector runs at the next session's open,
-so the post waits for Monday 10:00 ET to include Friday. After a Monday holiday, Friday
-shows as pending and is counted in the rolling windows the following week.
+so the post waits until after Monday's open to include Friday. After a Monday holiday,
+Friday shows as pending and is counted in the rolling windows the following week.
 
-Cron (CRON_TZ=America/Los_Angeles): Monday 7:00 AM PT
-  0 7 * * 1 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_realized_vs_implied.py >> /opt/butterflyguy/realized_vs_implied.log 2>&1
+Cron: Monday 15:30 UTC (11:30 ET in EDT, 10:30 ET in EST; after the open either way).
+Vixie cron ignores CRON_TZ in user crontabs, so the slot must be UTC; see
+infra/cron/realized_vs_implied.cron.
+  30 15 * * 1 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_realized_vs_implied.py >> /opt/butterflyguy/realized_vs_implied.log 2>&1
 """
 
 from __future__ import annotations
