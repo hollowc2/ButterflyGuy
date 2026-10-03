@@ -1,0 +1,5 @@
+# SPX realized-vs-implied weekly post — Monday 15:30 UTC (11:30 ET EDT / 10:30 ET EST).
+# Friday's official close reaches daily_bars when the next session's collector runs.
+# Template assumes the cron daemon schedules in UTC. Verify its timezone first.
+# Install through the host's normal reviewed crontab workflow; retain unrelated jobs.
+30 15 * * 1 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_realized_vs_implied.py >> /opt/butterflyguy/realized_vs_implied.log 2>&1

@@ -96,7 +96,7 @@
     <button data-page="research">Research & ops</button>
     <button data-page="deploy">Deployment</button>
     <button data-page="handoff">Agent handoff</button>
-    <a class="json-link" href="application-architecture.json">Open JSON ↗</a>
+    <a class="json-link" href="application-architecture-2026-07-22.json">Open archived JSON ↗</a>
   </nav>
 
   <section id="overview" class="page active">
@@ -218,7 +218,7 @@
 
   <section id="handoff" class="page">
     <h2>Next-agent operating map</h2>
-    <div class="notice"><strong>Read first:</strong> <code>AGENTS.md</code> → <code>README.md</code> → <code>graphify-out/GRAPH_REPORT.md</code> → <code>application-architecture.json</code> → only the relevant implementation and tests.</div>
+    <div class="notice"><strong>Historical snapshot:</strong> generated 2026-07-22. Use <code>docs/README.md</code> and the current <code>graphify-out/GRAPH_REPORT.md</code> for present-day navigation.</div>
     <div class="grid">
       <article class="card wide"><h3>Graph bridge nodes</h3><p>The current graph’s highest-impact application bridges are <code>StrategySettings</code>, <code>run_live.main</code>, <code>SchwabClientWrapper</code>, <code>TradeService</code>, <code>PositionService</code>, <code>_assert_broker_state_matches_db</code>, and <code>SimulationParams</code>. Factory helpers in tests are also highly connected.</p></article>
       <article class="card wide"><h3>Verification contract</h3><p>Run the narrow relevant <code>uv run pytest … -v</code> target for Python behavior, full pytest for broad shared changes, <code>uv run ruff check .</code> for imports/formatting, and <code>graphify update .</code> after code changes.</p></article>
@@ -232,7 +232,7 @@
     </div>
   </section>
 
-  <footer>This HTML is a human-oriented snapshot. <a href="application-architecture.json">application-architecture.json</a> is the structured next-agent handoff. Source of truth remains the repository code, tests, configuration, migrations, and current graphify output.</footer>
+  <footer>This HTML is a historical human-oriented snapshot. Its <a href="application-architecture-2026-07-22.json">dated JSON companion</a> is retained for evidence. Source of truth remains the repository code, tests, configuration, migrations, and current graphify output.</footer>
 </main>
 <script>
   const buttons = [...document.querySelectorAll('[data-page]')];
