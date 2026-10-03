@@ -7,11 +7,11 @@
 # frozen commit, so research work on main can never make the sources drift.
 set -uo pipefail
 
-REPO=${BUTTERFLY_REPO:-/mnt/Repos/Trading/Butterflyguy-cohort}
-COHORT=${BUTTERFLY_COHORT:-reports/prospective_execution/spx-prospective-2026-09-22}
-COHORT_BRANCH=${BUTTERFLY_COHORT_BRANCH:-cohort/spx-prospective-2026-09-22}
+REPO=${BUTTERFLY_REPO:-/mnt/Repos/Trading/Butterflyguy/.worktrees/spx-prospective-v2}
+COHORT=${BUTTERFLY_COHORT:-reports/prospective_execution/spx-prospective-v2-2026-10-02}
+COHORT_BRANCH=${BUTTERFLY_COHORT_BRANCH:-cohort/spx-prospective-v2-2026-10-02}
 UV=${UV_BIN:-/home/corey/.local/bin/uv}
-STATE=${XDG_STATE_HOME:-$HOME/.local/state}/butterfly-cohort
+STATE=${XDG_STATE_HOME:-$HOME/.local/state}/butterfly-cohort-v2
 LOG=$STATE/update.log
 
 mkdir -p "$STATE"
@@ -30,14 +30,14 @@ if [ "$BRANCH" != "$COHORT_BRANCH" ]; then
     exit 0
 fi
 
-if ! timeout 1800 "$UV" run python src/butterfly_guy/scripts/run_prospective_execution.py \
+if ! timeout 1800 "$UV" run --locked python src/butterfly_guy/scripts/run_prospective_execution.py \
         update --cohort "$COHORT" >>"$LOG" 2>&1; then
     echo "$(date -Is) FAILED: update returned non-zero" >>"$LOG"
     exit 1
 fi
 
 # Verify before trusting what we are about to commit.
-if ! timeout 300 "$UV" run python src/butterfly_guy/scripts/run_prospective_execution.py \
+if ! timeout 300 "$UV" run --locked python src/butterfly_guy/scripts/run_prospective_execution.py \
         verify --cohort "$COHORT" >>"$LOG" 2>&1; then
     echo "$(date -Is) FAILED: ledger integrity check" >>"$LOG"
     exit 1
