@@ -18,6 +18,7 @@
   validate-vendor    fidelity validation of a vendor dataset against the Helios export
   coverage           per-session quote, spot, VIX and official-bar coverage of a dataset
   mechanism          DESCRIPTIVE H-TS1 mechanism check on Cboe daily closes (development window)
+  schwab-fidelity    report-only agreement of recorded Helios chains with ThetaData
 """
 
 from __future__ import annotations
@@ -868,6 +869,28 @@ def cmd_vendor_quality(args: argparse.Namespace) -> int:
     return 0 if results["pass"] else 1
 
 
+def cmd_schwab_fidelity(args: argparse.Namespace) -> int:
+    from butterfly_guy.research import fidelity
+
+    _quiet_logs()
+    cache = Path(args.cache) if args.cache else None
+    helios = Dataset.open(args.reference, cache)
+    vendor = Dataset.open(args.vendor_dataset, cache)
+    end = args.end or args.start
+    summary, rows = fidelity.run(helios, vendor, args.start, end, load_spx_config())
+    if not rows:
+        print("no session in both datasets for the range", file=sys.stderr)
+        return 2
+    inputs = {"helios": summary["meta"]["helios"], "vendor": summary["meta"]["vendor"],
+              "range": summary["range"], "config_sha256": sha256_file(SPX_CONFIG)}
+    folder = fidelity.publish(Path(args.out), summary, rows, inputs,
+                              args.run_date or dt.datetime.now(dt.UTC).date())
+    print((folder / "report.md").read_text())
+    print(fidelity.one_line(summary))
+    print(f"artifacts: {folder}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python -m butterfly_guy.research", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1034,6 +1057,18 @@ def build_parser() -> argparse.ArgumentParser:
     vv.add_argument("--end", type=_date, default=dt.date(2026, 9, 25))
     vv.add_argument("--out", default=str(REPORTS))
     vv.set_defaults(func=cmd_validate_vendor)
+
+    sf = sub.add_parser("schwab-fidelity",
+                        help="report-only agreement of recorded Helios chains with ThetaData")
+    sf.add_argument("--vendor-dataset", required=True)
+    sf.add_argument("--reference", default=DEFAULT_DATASET, help="recorded Helios dataset")
+    sf.add_argument("--start", type=_date, required=True)
+    sf.add_argument("--end", type=_date, default=None, help="default: --start")
+    sf.add_argument("--out", default=str(REPO_ROOT / "reports" / "data_management"
+                                         / "schwab_fidelity"))
+    sf.add_argument("--run-date", type=_date, default=None,
+                    help="artifact folder date (default: today, UTC)")
+    sf.set_defaults(func=cmd_schwab_fidelity)
 
     cv = sub.add_parser("coverage", help="per-session coverage of a dataset")
     cv.add_argument("--start", type=_date, default=None)
