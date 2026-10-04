@@ -18,6 +18,17 @@ chain_snapshot_duration = Histogram(
     "butterfly_chain_snapshot_duration_seconds", "Time to collect a chain snapshot",
     ["underlying"],
 )
+collector_tick_lateness = Histogram(
+    "butterfly_collector_tick_lateness_seconds",
+    "Aligned collector: pass start minus its scheduled grid tick",
+    ["underlying"],
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0),
+)
+collector_missed_ticks = Counter(
+    "butterfly_collector_missed_ticks_total",
+    "Aligned collector: grid ticks skipped because a pass overran its slot",
+    ["underlying"],
+)
 chain_snapshot_rows = Gauge(
     "butterfly_chain_snapshot_rows", "Number of rows in last chain snapshot",
     ["underlying"],

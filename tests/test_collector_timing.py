@@ -157,3 +157,23 @@ def test_only_the_spx_config_records_timing() -> None:
     flags = {name: CollectorSettings(**yaml.safe_load(open(f"configs/{name}"))["collector"])
              .record_timing for name in ("config.yaml", "config_ndx.yaml", "config_xsp.yaml")}
     assert flags == {"config.yaml": True, "config_ndx.yaml": False, "config_xsp.yaml": False}
+
+
+@pytest.mark.asyncio
+async def test_aligned_pass_fetches_the_chain_first_and_records_the_tick() -> None:
+    provider = _provider()
+    order: list[str] = []
+    provider.get_option_chain_observed.side_effect = (
+        lambda *_: order.append("chain") or (CHAIN, OBSERVED))
+    spot = provider.get_spot_observed.side_effect
+    provider.get_spot_observed.side_effect = lambda symbol: order.append(symbol) or spot(symbol)
+    collector, chain_q, _ = _collector(provider)
+    tick = dt.datetime(2026, 10, 5, 14, 1, tzinfo=dt.UTC)
+
+    assert await collector._collect_timed_snapshot(tick, chain_first=True) == 3
+
+    assert order == ["chain", "$SPX", "$VIX"]
+    meta = chain_q.insert_snapshot_meta.await_args.args[0]
+    assert meta["scheduled_at"] == tick
+    assert meta["chain_fetch_completed_at"] <= meta["spot_fetch_started_at"]
+    assert meta["snapshot_time"] == STAMP

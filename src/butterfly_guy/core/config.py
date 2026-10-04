@@ -165,6 +165,10 @@ class CollectorSettings(ConfigModel):
     snapshot_interval_seconds: int = 60
     # Record quote event times, fetch timings and omitted contracts (migration 011).
     record_timing: bool = False
+    # Collect on a fixed wall-clock grid (HH:MM:00 + offset ET) instead of sleeping
+    # snapshot_interval_seconds after each pass; overrun ticks are skipped, not caught up.
+    align_to_minute: bool = False
+    align_offset_seconds: float = 0.0
 
 
 class DatabaseSettings(ConfigModel):

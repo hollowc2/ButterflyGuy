@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import time
 from typing import Any
 
 from butterfly_guy.backtest.chain_cache import save_snapshot
@@ -13,6 +14,8 @@ from butterfly_guy.core.metrics import (
     chain_snapshot_duration,
     chain_snapshot_rows,
     chain_snapshots_total,
+    collector_missed_ticks,
+    collector_tick_lateness,
 )
 from butterfly_guy.core.time_utils import (
     get_0dte_expiration,
@@ -33,8 +36,19 @@ log = get_logger(__name__)
 UNOBSERVED_SOURCE = "unobserved"  # a provider without timing metadata (shadow reads)
 
 
+TICK = dt.timedelta(minutes=1)
+MISSED_TICK_ALERT = 3  # consecutive skipped grid ticks before alerting
+
+
 def _wall_clock() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
+
+
+def next_tick(now: dt.datetime, offset_seconds: float) -> dt.datetime:
+    """The first grid tick (HH:MM:00 + offset) at or after `now`."""
+    offset = dt.timedelta(seconds=offset_seconds)
+    tick = (now - offset).replace(second=0, microsecond=0) + offset
+    return tick if tick >= now else tick + TICK
 
 
 class OptionChainCollector:
@@ -55,6 +69,10 @@ class OptionChainCollector:
         self.daily_bar_queries = daily_bar_queries
         self._daily_bars_date: dt.date | None = None
         self._meta_alert_sent = False
+        # Clocks of the aligned loop (replaced by a fake clock in tests).
+        self._now = _wall_clock
+        self._monotonic = time.monotonic
+        self._sleep = asyncio.sleep
 
     def _parse_chain_response(
         self,
@@ -229,7 +247,9 @@ class OptionChainCollector:
         log.warning("snapshot_empty", expiration=str(expiration))
         return 0
 
-    async def _collect_timed_snapshot(self, scheduled_at: dt.datetime | None = None) -> int:
+    async def _collect_timed_snapshot(
+        self, scheduled_at: dt.datetime | None = None, *, chain_first: bool = False
+    ) -> int:
         """`collect_snapshot` that also records when each quote was made.
 
         `snapshot_time` keeps its meaning (the stamp at the start of the pass). Quote event
@@ -246,7 +266,22 @@ class OptionChainCollector:
         meta: dict[str, Any] = {"snapshot_time": snapshot_time, "underlying": underlying,
                                 "expiration": expiration, "scheduled_at": scheduled_at}
 
+        async def fetch_chain() -> tuple[dict[str, Any], ChainObservation]:
+            observed = getattr(self.schwab, "get_option_chain_observed", None)
+            started = _wall_clock()
+            if observed is not None:
+                data, chain = await observed(chain_symbol, expiration)
+            else:
+                data = await self.schwab.get_option_chain(chain_symbol, expiration)
+                chain = ChainObservation(source=UNOBSERVED_SOURCE)
+            meta.update(chain_fetch_started_at=started, chain_fetch_completed_at=_wall_clock())
+            return data, chain
+
         with chain_snapshot_duration.labels(underlying=underlying).time():
+            if chain_first:
+                # The chain's quotes land closest to the minute mark ThetaData's row
+                # represents; spot and VIX follow, and their fetch times are recorded.
+                chain_data, chain = await fetch_chain()
             spot, started, done = await self._spot(spot_symbol)
             spot_price = spot.price
             meta.update(spot_fetch_started_at=started, spot_fetch_completed_at=done,
@@ -267,14 +302,8 @@ class OptionChainCollector:
                 except Exception as e:
                     log.warning("vix_fetch_failed", error=str(e))
 
-            observed = getattr(self.schwab, "get_option_chain_observed", None)
-            started = _wall_clock()
-            if observed is not None:
-                chain_data, chain = await observed(chain_symbol, expiration)
-            else:
-                chain_data = await self.schwab.get_option_chain(chain_symbol, expiration)
-                chain = ChainObservation(source=UNOBSERVED_SOURCE)
-            meta.update(chain_fetch_started_at=started, chain_fetch_completed_at=_wall_clock())
+            if not chain_first:
+                chain_data, chain = await fetch_chain()
             rows = self._parse_chain_response(chain_data, snapshot_time, expiration, spot_price)
             for row in rows:
                 timing = chain.contracts.get(row.get("symbol") or "")
@@ -317,8 +346,90 @@ class OptionChainCollector:
             self._meta_alert_sent = False
             await notify(f"✅ {underlying} snapshot timing metadata writes recovered.")
 
+    async def _sleep_until(self, deadline: dt.datetime) -> None:
+        """Sleep to an absolute wall-clock deadline, measured on the monotonic clock."""
+        target = self._monotonic() + (deadline - self._now()).total_seconds()
+        while (remaining := target - self._monotonic()) > 0:
+            await self._sleep(remaining)
+
+    async def run_aligned_loop(self) -> None:
+        """Collect on the fixed grid HH:MM:00 + `align_offset_seconds` while the market is
+        open. Each sleep runs to an absolute deadline; a pass that overruns its slot makes
+        the loop skip the missed ticks (no catch-up burst), count them and record them.
+        """
+        collector = self.config.collector
+        offset = collector.align_offset_seconds
+        underlying = self.config.strategy.underlying
+        log.info("collector_starting", aligned=True, offset_seconds=offset)
+        deadline: dt.datetime | None = None
+        consecutive_failures = 0
+        alert_sent = False
+        missed_streak = 0
+        missed_alert_sent = False
+
+        closed_logged = False
+        while True:
+            now = self._now()
+            if deadline is None:
+                deadline = next_tick(now, offset)
+            elif now > deadline:
+                upcoming = next_tick(now, offset)
+                skipped = round((upcoming - deadline) / TICK)
+                if is_market_open(deadline):
+                    collector_missed_ticks.labels(underlying=underlying).inc(skipped)
+                    missed_streak += skipped
+                    log.warning("collector_ticks_missed", scheduled_at=deadline.isoformat(),
+                                skipped=skipped, streak=missed_streak)
+                    if missed_streak >= MISSED_TICK_ALERT and not missed_alert_sent:
+                        await notify(f"⚠️ {underlying} collector missed {missed_streak} "
+                                     "minute ticks in a row (passes overrunning their slot).")
+                        missed_alert_sent = True
+                deadline = upcoming
+            await self._sleep_until(deadline)
+            if not is_market_open(deadline):
+                # Step through the grid while closed, so the first tick after the open
+                # (09:30:00 + offset) is not missed.
+                if not closed_logged:
+                    log.info("market_closed_waiting")
+                    closed_logged = True
+                deadline += TICK
+                continue
+            closed_logged = False
+
+            collector_tick_lateness.labels(underlying=underlying).observe(
+                max(0.0, (self._now() - deadline).total_seconds()))
+            try:
+                if collector.record_timing:
+                    await self._collect_timed_snapshot(deadline, chain_first=True)
+                else:
+                    await self.collect_snapshot()
+                # After the minute's snapshot, so a once-a-day refresh never delays it.
+                await self.collect_daily_bars()
+                if alert_sent:
+                    await notify(f"✅ {underlying} data collection recovered.")
+                    alert_sent = False
+                consecutive_failures = 0
+            except Exception as e:
+                log.error("snapshot_failed", error=str(e))
+                consecutive_failures += 1
+                if consecutive_failures >= 3 and not alert_sent:
+                    await notify(
+                        f"⚠️ {underlying} data collection has failed "
+                        f"{consecutive_failures} times in a row. Last error: {e}"
+                    )
+                    alert_sent = True
+            deadline += TICK
+            if self._now() <= deadline:
+                missed_streak = 0
+                if missed_alert_sent:
+                    await notify(f"✅ {underlying} collector is back on its minute grid.")
+                    missed_alert_sent = False
+
     async def run_loop(self) -> None:
         """Main collector loop — runs while market is open."""
+        if self.config.collector.align_to_minute:
+            await self.run_aligned_loop()
+            return
         interval = self.config.collector.snapshot_interval_seconds
         underlying = self.config.strategy.underlying
         log.info("collector_starting", interval=interval)

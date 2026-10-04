@@ -84,6 +84,8 @@ risk:
 collector:
   snapshot_interval_seconds: 60
   record_timing: true  # quote event times and chain_snapshot_meta (SPX only)
+  align_to_minute: true  # fixed HH:MM:00 + offset grid, chain fetched first (SPX only)
+  align_offset_seconds: 0.0
 monitoring:
   metrics_port: 8000
   log_level: "INFO"
