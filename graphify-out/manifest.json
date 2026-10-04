@@ -120,9 +120,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/config.py": {
-    "mtime": 1791147674.492751,
-    "seen": 1791147837.935988,
-    "ast_hash": "f84cfd30ad29c096317e77fa6cc02883",
+    "mtime": 1791148071.8995395,
+    "seen": 1791148310.0620258,
+    "ast_hash": "ee2942ae3486dc909000054ed7676a34",
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/logging.py": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/metrics.py": {
-    "mtime": 1786326053.1578424,
-    "seen": 1791136932.658798,
-    "ast_hash": "dd8d8400bd2a89de6cb8261757b1c0b6",
+    "mtime": 1791148071.9435387,
+    "seen": 1791148310.0622487,
+    "ast_hash": "3e1075567d3803fdc505805cf311182a",
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/time_utils.py": {
@@ -156,9 +156,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/collector.py": {
-    "mtime": 1791147674.54875,
-    "seen": 1791147837.9366498,
-    "ast_hash": "bda91e59cfa1712fcdc495fa1a41a746",
+    "mtime": 1791148095.0051203,
+    "seen": 1791148310.0625925,
+    "ast_hash": "29932b2022b83841f967bcad8070d3d1",
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/db_chain_quotes.py": {
@@ -260,8 +260,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/db/queries.py": {
-    "mtime": 1791147674.6387482,
-    "seen": 1791147837.9375622,
+    "mtime": 1791148009.5116713,
+    "seen": 1791148310.063504,
     "ast_hash": "9abbbf8019789c877c7bfd8ad1e1d0f3",
     "semantic_hash": ""
   },
@@ -638,8 +638,8 @@
     "semantic_hash": ""
   },
   "tests/integration/test_database_smoke.py": {
-    "mtime": 1791147674.7717457,
-    "seen": 1791147837.9491248,
+    "mtime": 1791148009.6666687,
+    "seen": 1791148310.0750525,
     "ast_hash": "0c3b80f5753feb609fa86d8158129088",
     "semantic_hash": ""
   },
@@ -1004,9 +1004,9 @@
     "semantic_hash": ""
   },
   "configs/config.yaml": {
-    "mtime": 1791147674.4467516,
-    "seen": 1791147837.959614,
-    "ast_hash": "6ed0528d237b553de5bd4317d401d3d4",
+    "mtime": 1791148071.924539,
+    "seen": 1791148310.0857406,
+    "ast_hash": "884ee570c6dcca06dfe9583f83f3fb5f",
     "semantic_hash": ""
   },
   "configs/config_ndx.yaml": {
@@ -1112,8 +1112,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/providers.py": {
-    "mtime": 1791147674.594749,
-    "seen": 1791147837.93687,
+    "mtime": 1791148009.4346728,
+    "seen": 1791148310.0628133,
     "ast_hash": "12495e1c314722edae33a8d4f18351d0",
     "semantic_hash": ""
   },
@@ -1136,8 +1136,8 @@
     "semantic_hash": ""
   },
   "tests/test_market_data_providers.py": {
-    "mtime": 1791147674.818745,
-    "seen": 1791147837.9525394,
+    "mtime": 1791148009.747667,
+    "seen": 1791148310.0785162,
     "ast_hash": "29ed4cee5c1a64c5583741697454a608",
     "semantic_hash": ""
   },
@@ -1922,8 +1922,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/research/export.py": {
-    "mtime": 1791147674.6837473,
-    "seen": 1791147837.941316,
+    "mtime": 1791148009.5566707,
+    "seen": 1791148310.0673099,
     "ast_hash": "2d074a98e900a58645c57074d5ed3a99",
     "semantic_hash": ""
   },
@@ -2144,8 +2144,8 @@
     "semantic_hash": ""
   },
   "tests/test_research_export.py": {
-    "mtime": 1791147674.8617442,
-    "seen": 1791147837.9542174,
+    "mtime": 1791148009.7906663,
+    "seen": 1791148310.0801895,
     "ast_hash": "a2e3aeebff91cc5eaf9408f9f9359f1a",
     "semantic_hash": ""
   },
@@ -2672,8 +2672,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/research/fidelity.py": {
-    "mtime": 1791147674.7297466,
-    "seen": 1791147837.9414291,
+    "mtime": 1791148009.6246693,
+    "seen": 1791148310.06742,
     "ast_hash": "e694c97bfd58f268bdbdd87086c1edf5",
     "semantic_hash": ""
   },
@@ -2732,9 +2732,15 @@
     "semantic_hash": ""
   },
   "tests/test_collector_timing.py": {
-    "mtime": 1791147690.9354525,
-    "seen": 1791147837.950509,
-    "ast_hash": "b3f95fd0932cb2ff0c7bac7ab6cc7bf9",
+    "mtime": 1791148148.642147,
+    "seen": 1791148310.0764604,
+    "ast_hash": "68d0e8173d295cc285549793e12c6309",
+    "semantic_hash": ""
+  },
+  "tests/test_collector_cadence.py": {
+    "mtime": 1791148231.2876477,
+    "seen": 1791148310.0763712,
+    "ast_hash": "051b06343244e3046e719048ab3fcc9d",
     "semantic_hash": ""
   }
 }
