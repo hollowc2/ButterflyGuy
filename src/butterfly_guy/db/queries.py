@@ -27,6 +27,8 @@ class ChainQueries:
             "bid_size", "ask_size", "rho", "intrinsic_value", "time_value",
             "in_the_money", "days_to_expiration", "multiplier", "theoretical_value",
         ]
+        if any("quote_event_ts" in row for row in rows):
+            columns += ["quote_event_ts", "quote_age_s"]
 
         records = [
             tuple(row.get(col) for col in columns) for row in rows
@@ -39,6 +41,20 @@ class ChainQueries:
                 columns=columns,
             )
         return len(records)
+
+    async def insert_snapshot_meta(self, meta: dict[str, Any]) -> None:
+        """Write one chain_snapshot_meta row (timing metadata of a collected snapshot)."""
+        meta = {**meta, "omitted": json.dumps(meta.get("omitted") or [])}
+        columns = list(meta)
+        placeholders = ", ".join(
+            f"${i}::jsonb" if c == "omitted" else f"${i}"
+            for i, c in enumerate(columns, 1)
+        )
+        await self.db.pool.execute(
+            f"INSERT INTO chain_snapshot_meta ({', '.join(columns)}) VALUES ({placeholders}) "
+            "ON CONFLICT (snapshot_time, underlying, expiration) DO NOTHING",
+            *meta.values(),
+        )
 
     async def get_latest_chain(
         self, underlying: str, expiration: dt.date
@@ -211,11 +227,26 @@ class SpotQueries:
     def __init__(self, db: DatabasePool) -> None:
         self.db = db
 
-    async def insert(self, underlying: str, price: float, ts: dt.datetime | None = None) -> None:
+    async def insert(
+        self,
+        underlying: str,
+        price: float,
+        ts: dt.datetime | None = None,
+        *,
+        event_ts: dt.datetime | None = None,
+        age_s: float | None = None,
+    ) -> None:
         ts = ts or dt.datetime.now(dt.timezone.utc)
+        if event_ts is None and age_s is None:
+            await self.db.pool.execute(
+                "INSERT INTO spot_prices (ts, underlying, price) VALUES ($1, $2, $3)",
+                ts, underlying, price,
+            )
+            return
         await self.db.pool.execute(
-            "INSERT INTO spot_prices (ts, underlying, price) VALUES ($1, $2, $3)",
-            ts, underlying, price,
+            "INSERT INTO spot_prices (ts, underlying, price, event_ts, age_s) "
+            "VALUES ($1, $2, $3, $4, $5)",
+            ts, underlying, price, event_ts, age_s,
         )
 
     async def get_latest(self, underlying: str) -> float | None:

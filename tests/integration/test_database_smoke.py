@@ -22,6 +22,15 @@ async def test_migrations_and_weekly_pnl_query():
         await run_migrations(db)
         applied = await db.pool.fetchval("SELECT count(*) FROM schema_migrations")
         assert applied == len(list(MIGRATIONS_DIR.glob("*.sql")))
+        # 011 is idempotent: re-applying it is a no-op.
+        await db.pool.execute((MIGRATIONS_DIR / "011_snapshot_timing.sql").read_text())
+        timing_columns = await db.pool.fetchval(
+            "SELECT count(*) FROM information_schema.columns WHERE "
+            "(table_name, column_name) IN (('option_chain_snapshots', 'quote_event_ts'), "
+            "('option_chain_snapshots', 'quote_age_s'), ('spot_prices', 'event_ts'), "
+            "('spot_prices', 'age_s'), ('chain_snapshot_meta', 'scheduled_at'))"
+        )
+        assert timing_columns == 5
 
         await db.pool.execute(
             """

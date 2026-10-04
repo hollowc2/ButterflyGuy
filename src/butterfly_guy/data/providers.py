@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import math
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
@@ -30,6 +31,58 @@ TRANSIENT_GATEWAY_ERRORS = (
     GatewayTimeoutError,
     GatewayUnavailableError,
 )
+
+
+DIRECT_SOURCE = "schwab_direct"
+
+
+@dataclass(frozen=True)
+class ContractTiming:
+    """When a kept contract's quote was made, as the gateway reported it."""
+
+    event_timestamp: dt.datetime | None
+    age_seconds: float | None
+
+
+@dataclass(frozen=True)
+class OmittedContract:
+    """A delivered contract left out of the strategy chain (stale or untimed)."""
+
+    symbol: str
+    option_type: str
+    strike: float
+    stale: bool
+    age_seconds: float | None
+    flags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ChainObservation:
+    """Timing metadata of one option-chain read; empty for the direct client."""
+
+    source: str
+    event_timestamp: dt.datetime | None = None
+    gateway_received_at: dt.datetime | None = None
+    age_seconds: float | None = None
+    stale: bool | None = None
+    data_quality_flags: tuple[str, ...] = ()
+    contracts: Mapping[str, ContractTiming] = field(default_factory=dict)
+    contracts_delivered: int | None = None
+    contracts_kept: int | None = None
+    omitted: tuple[OmittedContract, ...] = ()
+
+
+@dataclass(frozen=True)
+class SpotObservation:
+    """A spot price with its timing metadata; empty for the direct client."""
+
+    price: float
+    source: str
+    event_timestamp: dt.datetime | None = None
+    gateway_received_at: dt.datetime | None = None
+    age_seconds: float | None = None
+    stale: bool | None = None
+    data_quality_flags: tuple[str, ...] = ()
 
 
 def _now_eastern() -> dt.datetime:
@@ -263,9 +316,13 @@ class GatewayAuthoritativeMarketDataProvider:
         return result
 
     async def get_spot_price(self, symbol: str = "$SPX") -> float:
-        return await self._required_read("spot", lambda: self._get_spot_price(symbol))
+        return (await self.get_spot_observed(symbol)).price
 
-    async def _get_spot_price(self, symbol: str) -> float:
+    async def get_spot_observed(self, symbol: str = "$SPX") -> SpotObservation:
+        """Collector-only: the spot price with the gateway's timing metadata."""
+        return await self._required_read("spot", lambda: self._get_spot_observed(symbol))
+
+    async def _get_spot_observed(self, symbol: str) -> SpotObservation:
         response = await self._client.get_spot(symbol)
         spot = response.spot
         _require_usable_observation(
@@ -275,19 +332,33 @@ class GatewayAuthoritativeMarketDataProvider:
         )
         if not _same_symbol(spot.symbol, symbol):
             raise GatewayMarketDataError("gateway spot symbol does not match request")
-        return _finite_number(spot.price, positive=True)
+        return SpotObservation(
+            price=_finite_number(spot.price, positive=True),
+            source=getattr(spot, "source", None) or "gateway",
+            event_timestamp=getattr(spot, "event_timestamp", None),
+            gateway_received_at=getattr(spot, "gateway_received_at", None),
+            age_seconds=spot.age_seconds,
+            stale=spot.stale,
+            data_quality_flags=tuple(spot.data_quality_flags),
+        )
 
     async def get_option_chain(
         self, symbol: str, expiration: dt.date
     ) -> dict[str, Any]:
+        return (await self.get_option_chain_observed(symbol, expiration))[0]
+
+    async def get_option_chain_observed(
+        self, symbol: str, expiration: dt.date
+    ) -> tuple[dict[str, Any], ChainObservation]:
+        """Collector-only: the strategy chain plus the read's timing metadata."""
         return await self._required_read(
             "option_chain",
-            lambda: self._get_option_chain(symbol, expiration),
+            lambda: self._get_option_chain_observed(symbol, expiration),
         )
 
-    async def _get_option_chain(
+    async def _get_option_chain_observed(
         self, symbol: str, expiration: dt.date
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], ChainObservation]:
         request_symbol = canonicalize_schwab_chain_symbol(symbol)
         response = await self._client.get_option_chain(request_symbol, expiration)
         chain = response.option_chain
@@ -317,6 +388,8 @@ class GatewayAuthoritativeMarketDataProvider:
         }
         expiration_key = f"{expiration.isoformat()}:0"
         seen_symbols: set[str] = set()
+        timings: dict[str, ContractTiming] = {}
+        omitted: list[OmittedContract] = []
         contract_counts = {"CALL": 0, "PUT": 0}
         strikes: set[float] = set()
         for contract in chain.contracts:
@@ -448,7 +521,19 @@ class GatewayAuthoritativeMarketDataProvider:
                 ),
             }
             if not usable_contract:
+                omitted.append(OmittedContract(
+                    symbol=contract_symbol,
+                    option_type=option_type,
+                    strike=strike,
+                    stale=bool(contract.stale),
+                    age_seconds=contract.age_seconds,
+                    flags=tuple(sorted(contract_flags)),
+                ))
                 continue
+            timings[contract_symbol] = ContractTiming(
+                event_timestamp=getattr(contract, "event_timestamp", None),
+                age_seconds=contract.age_seconds,
+            )
             map_key = "callExpDateMap" if option_type == "CALL" else "putExpDateMap"
             strike_key = str(int(strike)) if strike.is_integer() else str(strike)
             strike_map = maps[map_key].setdefault(expiration_key, {})
@@ -476,11 +561,23 @@ class GatewayAuthoritativeMarketDataProvider:
             raise GatewayMarketDataError(
                 "gateway option-chain counts do not match delivered contracts"
             )
+        observation = ChainObservation(
+            source=getattr(chain, "source", None) or "gateway",
+            event_timestamp=getattr(chain, "event_timestamp", None),
+            gateway_received_at=getattr(chain, "gateway_received_at", None),
+            age_seconds=chain.age_seconds,
+            stale=chain.stale,
+            data_quality_flags=tuple(chain.data_quality_flags),
+            contracts=timings,
+            contracts_delivered=len(seen_symbols),
+            contracts_kept=len(timings),
+            omitted=tuple(omitted),
+        )
         return {
             "symbol": chain.symbol,
             "underlyingPrice": underlying_price,
             **maps,
-        }
+        }, observation
 
     async def get_intraday_bars(
         self, symbol: str = "$SPX", days_back: int = 1
@@ -709,10 +806,21 @@ class DirectSchwabMarketDataProvider:
     async def get_spot_price(self, symbol: str = "$SPX") -> float:
         return await self._client.get_spot_price(symbol)
 
+    async def get_spot_observed(self, symbol: str = "$SPX") -> SpotObservation:
+        """The direct client has no timing metadata."""
+        return SpotObservation(price=await self.get_spot_price(symbol), source=DIRECT_SOURCE)
+
     async def get_option_chain(
         self, symbol: str, expiration: dt.date
     ) -> dict[str, Any]:
         return await self._client.get_option_chain(symbol, expiration)
+
+    async def get_option_chain_observed(
+        self, symbol: str, expiration: dt.date
+    ) -> tuple[dict[str, Any], ChainObservation]:
+        """The direct client has no timing metadata."""
+        chain = await self.get_option_chain(symbol, expiration)
+        return chain, ChainObservation(source=DIRECT_SOURCE)
 
     async def get_intraday_bars(
         self, symbol: str = "$SPX", days_back: int = 1

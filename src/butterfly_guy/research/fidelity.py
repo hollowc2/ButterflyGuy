@@ -10,7 +10,9 @@ ThetaData import (`research import-local`). Rules fixed here:
 - **Matching.** Each Helios snapshot is paired with the vendor row of the minute that
   contains its quote time: the recorded quote event time (`quote_event_us` in the
   session's `clock.parquet`, written by exports of sessions recorded with timing metadata)
-  when present, else `snapshot_time`. The basis is reported as `timing_basis`. With
+  when present, else `snapshot_time`. The basis is reported as `timing_basis`. The export
+  sets a snapshot's event time to its latest contract quote event, the moment the recorded
+  state was current as of. With
   `snapshot_time` the pairing is approximate: the stamp is taken before spot, VIX and the
   chain are fetched, and a snapshot `x` seconds past the minute is compared with the
   vendor's state at the minute mark, `x` seconds earlier. Lateness is that `x`.
@@ -188,7 +190,8 @@ def _bucket(x: np.ndarray, edges) -> np.ndarray:
 
 
 def quote_times(ds: Dataset, d: dt.date, ts: np.ndarray) -> tuple[np.ndarray, str]:
-    """Each snapshot's quote time and the timing basis."""
+    """Each snapshot's quote time and the timing basis (`quote_event_ts`, `snapshot_time`,
+    or `mixed` when only some snapshots carry an event time)."""
     table = pq.read_table(ds._path(f"{session_dir(d)}/clock.parquet"))
     if EVENT_COLUMN in table.column_names:
         clock_ts = table.column("ts_us").to_numpy()
@@ -196,8 +199,11 @@ def quote_times(ds: Dataset, d: dt.date, ts: np.ndarray) -> tuple[np.ndarray, st
         i = np.searchsorted(clock_ts, ts)
         ok = (i < len(clock_ts)) & (clock_ts[np.minimum(i, len(clock_ts) - 1)] == ts)
         got = np.where(ok, event[np.minimum(i, len(clock_ts) - 1)], np.nan)
-        if np.isfinite(got).all():
-            return got.astype(np.int64), "quote_event_ts"
+        have = np.isfinite(got)
+        if have.any():
+            # A session partly recorded with timing falls back per snapshot.
+            out = np.where(have, got, ts).astype(np.int64)
+            return out, "quote_event_ts" if have.all() else "mixed"
     return ts, "snapshot_time"
 
 
