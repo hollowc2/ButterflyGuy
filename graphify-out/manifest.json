@@ -120,9 +120,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/config.py": {
-    "mtime": 1790998589.7784266,
-    "seen": 1791136932.6587944,
-    "ast_hash": "f929b0d07d7a82a646e56946e8cbf6ce",
+    "mtime": 1791147674.492751,
+    "seen": 1791147837.935988,
+    "ast_hash": "f84cfd30ad29c096317e77fa6cc02883",
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/logging.py": {
@@ -156,9 +156,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/collector.py": {
-    "mtime": 1790453905.205275,
-    "seen": 1791136932.6588023,
-    "ast_hash": "5721b85bcf0c985e4681241dcc55d4a9",
+    "mtime": 1791147674.54875,
+    "seen": 1791147837.9366498,
+    "ast_hash": "bda91e59cfa1712fcdc495fa1a41a746",
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/db_chain_quotes.py": {
@@ -260,9 +260,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/db/queries.py": {
-    "mtime": 1790453905.4102712,
-    "seen": 1791136932.6588137,
-    "ast_hash": "3a731aeb86ab8d7ddce525f380f08194",
+    "mtime": 1791147674.6387482,
+    "seen": 1791147837.9375622,
+    "ast_hash": "9abbbf8019789c877c7bfd8ad1e1d0f3",
     "semantic_hash": ""
   },
   "src/butterfly_guy/execution/__init__.py": {
@@ -638,9 +638,9 @@
     "semantic_hash": ""
   },
   "tests/integration/test_database_smoke.py": {
-    "mtime": 1784824040.9030426,
-    "seen": 1791136932.658935,
-    "ast_hash": "f99a3b4a8633f5dcd72fe4dfc3105d14",
+    "mtime": 1791147674.7717457,
+    "seen": 1791147837.9491248,
+    "ast_hash": "0c3b80f5753feb609fa86d8158129088",
     "semantic_hash": ""
   },
   "tests/integration/test_order_preview.py": {
@@ -1004,9 +1004,9 @@
     "semantic_hash": ""
   },
   "configs/config.yaml": {
-    "mtime": 1786326052.485855,
-    "seen": 1791136932.6590748,
-    "ast_hash": "81c0c22eb230adc03bb13b02879c2961",
+    "mtime": 1791147674.4467516,
+    "seen": 1791147837.959614,
+    "ast_hash": "6ed0528d237b553de5bd4317d401d3d4",
     "semantic_hash": ""
   },
   "configs/config_ndx.yaml": {
@@ -1112,9 +1112,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/providers.py": {
-    "mtime": 1789146204.2839417,
-    "seen": 1791136932.6588051,
-    "ast_hash": "47bda757931b93a1f298f4c04485bf64",
+    "mtime": 1791147674.594749,
+    "seen": 1791147837.93687,
+    "ast_hash": "12495e1c314722edae33a8d4f18351d0",
     "semantic_hash": ""
   },
   "src/butterfly_guy/gateway_client/__init__.py": {
@@ -1136,9 +1136,9 @@
     "semantic_hash": ""
   },
   "tests/test_market_data_providers.py": {
-    "mtime": 1788902888.7430215,
-    "seen": 1791136932.6589806,
-    "ast_hash": "90c14e953be0e745d2e6e3257d4bdfd8",
+    "mtime": 1791147674.818745,
+    "seen": 1791147837.9525394,
+    "ast_hash": "29ed4cee5c1a64c5583741697454a608",
     "semantic_hash": ""
   },
   "docs/architecture/schwab-capability-matrix.md": {
@@ -1880,8 +1880,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/research/cli.py": {
-    "mtime": 1791136070.2327492,
-    "seen": 1791136932.6588466,
+    "mtime": 1791147135.4505427,
+    "seen": 1791147837.9406514,
     "ast_hash": "38e4017776d168b29d805baf5bcac70c",
     "semantic_hash": ""
   },
@@ -1922,9 +1922,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/research/export.py": {
-    "mtime": 1790998590.642413,
-    "seen": 1791136932.6588542,
-    "ast_hash": "ecc28c401e8b4e894476d69cdc9a074c",
+    "mtime": 1791147674.6837473,
+    "seen": 1791147837.941316,
+    "ast_hash": "2d074a98e900a58645c57074d5ed3a99",
     "semantic_hash": ""
   },
   "src/butterfly_guy/research/features.py": {
@@ -2144,9 +2144,9 @@
     "semantic_hash": ""
   },
   "tests/test_research_export.py": {
-    "mtime": 1790998594.395353,
-    "seen": 1791136932.659004,
-    "ast_hash": "2d93525fc273d65ef1f9f70769b8307f",
+    "mtime": 1791147674.8617442,
+    "seen": 1791147837.9542174,
+    "ast_hash": "a2e3aeebff91cc5eaf9408f9f9359f1a",
     "semantic_hash": ""
   },
   "tests/test_research_features.py": {
@@ -2672,32 +2672,32 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/research/fidelity.py": {
-    "mtime": 1791135802.9306958,
-    "seen": 1791136932.6588564,
-    "ast_hash": "a1fb14aa8bbbdb3e5f8b94e1993ce152",
+    "mtime": 1791147674.7297466,
+    "seen": 1791147837.9414291,
+    "ast_hash": "e694c97bfd58f268bdbdd87086c1edf5",
     "semantic_hash": ""
   },
   "tests/test_research_fidelity.py": {
-    "mtime": 1791136147.6653228,
-    "seen": 1791136932.6590059,
+    "mtime": 1791147135.546541,
+    "seen": 1791147837.9543183,
     "ast_hash": "3466b5357ae14b4bc238b21711c7c4d7",
     "semantic_hash": ""
   },
   "tools/run_schwab_fidelity_daily.sh": {
-    "mtime": 1791136439.070972,
-    "seen": 1791136932.6590617,
+    "mtime": 1791147135.5805404,
+    "seen": 1791147837.9586759,
     "ast_hash": "e3e84780e31002e31fe4b88811cbd382",
     "semantic_hash": ""
   },
   "docs/research/schwab-fidelity-baseline-2026-10-04.md": {
-    "mtime": 1791136574.8484855,
-    "seen": 1791136932.6591384,
+    "mtime": 1791147134.064568,
+    "seen": 1791147837.9658058,
     "ast_hash": "cf8ad26ace72e16f84b3d2b23b6612cd",
     "semantic_hash": ""
   },
   "docs/research/schwab-recording-fidelity-implementation-prompt.md": {
-    "mtime": 1791135042.9951808,
-    "seen": 1791136932.6591396,
+    "mtime": 1791147134.110567,
+    "seen": 1791147837.9658093,
     "ast_hash": "a66a9160cd806fdd0c2f89cc33b0f562",
     "semantic_hash": ""
   },
@@ -2729,6 +2729,12 @@
     "mtime": 1784824038.763083,
     "seen": 1791136932.6591964,
     "ast_hash": "37648d0bbde577ca1ee9f34960277173",
+    "semantic_hash": ""
+  },
+  "tests/test_collector_timing.py": {
+    "mtime": 1791147690.9354525,
+    "seen": 1791147837.950509,
+    "ast_hash": "b3f95fd0932cb2ff0c7bac7ab6cc7bf9",
     "semantic_hash": ""
   }
 }

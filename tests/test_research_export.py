@@ -5,6 +5,8 @@ from __future__ import annotations
 import datetime as dt
 import io
 
+import numpy as np
+
 from butterfly_guy.research.dataset import Dataset
 from butterfly_guy.research.export import ExportPlan, run_export
 
@@ -15,7 +17,9 @@ TIMES = [f"2026-06-10 14:{m:02d}:00+00" for m in range(0, 60, 5)]
 class FakeSource:
     """Answers the export's bounded queries for one session."""
 
-    def __init__(self) -> None:
+    def __init__(self, timing: str | None = None) -> None:
+        # timing: None (no migration-011 columns), "null" (columns, no values), "values"
+        self.timing = timing
         self.bars = [("2026-06-09", "SPX", 5990.0, 6010.0, 5980.0, 6000.0),
                      ("2026-06-09", "$VIX", 18.0, 19.0, 17.0, 18.5),
                      ("2026-06-10", "$VIX", 18.5, 19.0, 17.5, 18.0)]
@@ -30,17 +34,25 @@ class FakeSource:
     def copy_csv(self, sql: str) -> bytes:
         self.sql.append(sql)
         out = io.StringIO()
-        if "count(distinct snapshot_time)" in sql:
+        if "information_schema.columns" in sql:
+            out.write(f"n\n{0 if self.timing is None else 1}\n")
+        elif "count(distinct snapshot_time)" in sql:
             out.write("n\n60\n")
+        elif "max(quote_event_ts)" in sql:
+            out.write("snapshot_time,quote_event_ts\n")
+            for t in TIMES:
+                out.write(f"{t},{t[:-6]}:02.5+00\n")
         elif "distinct on (snapshot_time)" in sql:
             out.write("snapshot_time,spot,spot_min,spot_max\n")
             for t in TIMES:
                 out.write(f"{t},6005.0,6005.0,6005.0\n")
         elif "from option_chain_snapshots" in sql:
-            out.write("snapshot_time,strike,t,bid,ask,mark,iv,delta,spot\n")
+            age = "quote_age_s," if "quote_age_s" in sql else ""
+            out.write(f"snapshot_time,strike,t,bid,ask,mark,iv,delta,{age}spot\n")
+            value = {"values": "1.5,", "null": ","}.get(self.timing, "") if age else ""
             for t in TIMES:
                 for k in (6000, 6010, 6020):
-                    out.write(f"{t},{k},C,1.0,1.1,1.05,0.2,0.5,6005.0\n")
+                    out.write(f"{t},{k},C,1.0,1.1,1.05,0.2,0.5,{value}6005.0\n")
         elif "from daily_bars" in sql:
             out.write("date,underlying,open,high,low,close\n")
             for row in self.bars:
@@ -75,3 +87,24 @@ def test_bars_only_refresh_records_the_landed_settlement(tmp_path):
     assert ds.verify() == [] and ds.manifest.history == second.history
     bars = ds.daily_bars()
     assert float(bars[(bars.underlying == "SPX") & (bars.date == DAY)]["close"].iloc[0]) == 6012.5
+
+
+def test_sessions_without_quote_ages_export_exactly_as_before(tmp_path):
+    before = run_export(FakeSource(), ExportPlan(DAY, DAY, log=io.StringIO()),
+                        tmp_path / "a")
+    after = run_export(FakeSource("null"), ExportPlan(DAY, DAY, log=io.StringIO()),
+                       tmp_path / "b")
+    assert after.files == before.files
+
+
+def test_recorded_quote_ages_and_event_times_are_exported(tmp_path):
+    from butterfly_guy.research.fidelity import quote_times
+
+    run_export(FakeSource("values"), ExportPlan(DAY, DAY, log=io.StringIO()), tmp_path)
+    ds = Dataset(tmp_path / "spx_0dte")
+    chain = ds.chain(DAY)
+    assert float(chain.fields["C_quote_age_s"][0, 0]) == 1.5
+    assert np.isnan(chain.fields["P_quote_age_s"]).all()
+    ts, basis = quote_times(ds, DAY, chain.ts)
+    assert basis == "quote_event_ts"
+    assert ((ts - chain.ts) == 2_500_000).all()

@@ -24,7 +24,9 @@ import pandas as pd
 import pyarrow as pa
 
 from butterfly_guy.research.dataset import (
+    AGE_FIELD,
     DEFAULT_DATASET,
+    OPTION_TYPES,
     Manifest,
     SessionChain,
     chain_to_table,
@@ -183,14 +185,35 @@ def clock_sql(underlying: str, date: dt.date) -> str:
     )
 
 
-def chain_sql(underlying: str, date: dt.date, strike_lo: float, strike_hi: float) -> str:
+TIMING_COLUMNS_SQL = (
+    "select count(*) as n from information_schema.columns "
+    "where table_name = 'option_chain_snapshots' and column_name = 'quote_age_s'"
+)
+
+
+def chain_sql(underlying: str, date: dt.date, strike_lo: float, strike_hi: float,
+              timing: bool = False) -> str:
+    """Chain rows; with `timing` (migration 011 columns exist) also `quote_age_s`."""
     lo, hi = _utc_day(date)
     return (
         "select snapshot_time, strike, left(option_type, 1) as t, bid, ask, mark, iv, delta, "
-        "spot_price as spot from option_chain_snapshots "
+        + ("quote_age_s, " if timing else "")
+        + "spot_price as spot from option_chain_snapshots "
         f"where underlying = '{_underlying(underlying)}' and expiration = '{date}' "
         f"and snapshot_time >= '{lo}' and snapshot_time < '{hi}' "
         f"and strike >= {strike_lo:.2f} and strike <= {strike_hi:.2f}"
+    )
+
+
+def quote_event_sql(underlying: str, date: dt.date) -> str:
+    """Per snapshot, the latest quote event among its contracts: the moment the recorded
+    chain state was current as of (a quiet contract's event time is its last change)."""
+    lo, hi = _utc_day(date)
+    return (
+        "select snapshot_time, max(quote_event_ts) as quote_event_ts "
+        f"from option_chain_snapshots where underlying = '{_underlying(underlying)}' "
+        f"and expiration = '{date}' and snapshot_time >= '{lo}' and snapshot_time < '{hi}' "
+        "group by snapshot_time"
     )
 
 
@@ -251,9 +274,17 @@ def _git_sha() -> str:
         return ""
 
 
+def has_timing_columns(source: DataSource) -> bool:
+    return int(_read_csv(source.copy_csv(TIMING_COLUMNS_SQL))["n"][0]) > 0
+
+
 def export_session(
-    source: DataSource, underlying: str, date: dt.date, strike_margin: float
+    source: DataSource, underlying: str, date: dt.date, strike_margin: float,
+    timing: bool = False,
 ) -> tuple[SessionChain, pd.DataFrame] | None:
+    """One session. With `timing`, a session recorded with quote ages also gets
+    `{C,P}_quote_age_s` in its chain and `quote_event_us` in its clock; a session without
+    any (recorded before migration 011) exports exactly as before."""
     clock = _read_csv(source.copy_csv(clock_sql(underlying, date)))
     if clock.empty:
         return None
@@ -265,21 +296,38 @@ def export_session(
     })
     k_lo = float(np.floor(clock_df["spot_min"].min() - strike_margin))
     k_hi = float(np.ceil(clock_df["spot_max"].max() + strike_margin))
-    rows = _read_csv(source.copy_csv(chain_sql(underlying, date, k_lo, k_hi)))
-    if rows.empty:
+    raw = _read_csv(source.copy_csv(chain_sql(underlying, date, k_lo, k_hi, timing)))
+    if raw.empty:
         return None
     rows = pd.DataFrame({
-        "ts_us": _ts_us(rows["snapshot_time"]),
-        "strike": rows["strike"].astype("float64"),
-        "t": rows["t"].astype(str),
-        "bid": pd.to_numeric(rows["bid"], errors="coerce").astype("float64"),
-        "ask": pd.to_numeric(rows["ask"], errors="coerce").astype("float64"),
-        "mark": pd.to_numeric(rows["mark"], errors="coerce").astype("float64"),
-        "iv": pd.to_numeric(rows["iv"], errors="coerce").astype("float32"),
-        "delta": pd.to_numeric(rows["delta"], errors="coerce").astype("float32"),
-        "spot": pd.to_numeric(rows["spot"], errors="coerce").astype("float64"),
+        "ts_us": _ts_us(raw["snapshot_time"]),
+        "strike": raw["strike"].astype("float64"),
+        "t": raw["t"].astype(str),
+        "bid": pd.to_numeric(raw["bid"], errors="coerce").astype("float64"),
+        "ask": pd.to_numeric(raw["ask"], errors="coerce").astype("float64"),
+        "mark": pd.to_numeric(raw["mark"], errors="coerce").astype("float64"),
+        "iv": pd.to_numeric(raw["iv"], errors="coerce").astype("float32"),
+        "delta": pd.to_numeric(raw["delta"], errors="coerce").astype("float32"),
+        "spot": pd.to_numeric(raw["spot"], errors="coerce").astype("float64"),
     })
-    return dense_chain_from_rows(rows, date), clock_df
+    chain = dense_chain_from_rows(rows, date)
+    age = (pd.to_numeric(raw["quote_age_s"], errors="coerce").to_numpy(dtype=np.float32)
+           if "quote_age_s" in raw else None)
+    if age is not None and np.isfinite(age).any():
+        ti = np.searchsorted(chain.ts, rows["ts_us"].to_numpy())
+        ki = np.searchsorted(chain.strikes, rows["strike"].to_numpy())
+        for t in OPTION_TYPES:
+            m = (rows["t"] == t).to_numpy()
+            a = np.full((len(chain.ts), len(chain.strikes)), np.nan, dtype=np.float32)
+            a[ti[m], ki[m]] = age[m]
+            chain.fields[f"{t}_{AGE_FIELD}"] = a
+        events = _read_csv(source.copy_csv(quote_event_sql(underlying, date)))
+        events = events[events["quote_event_ts"].notna()]
+        by_ts = dict(zip(_ts_us(events["snapshot_time"]).tolist(),
+                         _ts_us(events["quote_event_ts"]).tolist(), strict=True))
+        clock_df["quote_event_us"] = pd.array(
+            [by_ts.get(int(x)) for x in clock_df["ts_us"]], dtype="Int64")
+    return chain, clock_df
 
 
 def _weekdays(start: dt.date, end: dt.date) -> list[dt.date]:
@@ -396,6 +444,7 @@ def run_export(source: DataSource, plan: ExportPlan, cache_root: Path | None = N
             columns=["date", "snapshots", "chain_snapshots", "strikes", "strike_lo",
                      "strike_hi", "clock_spot_disagreements"]
         )
+    timing = not plan.bars_only and has_timing_columns(source)
     existing = set(sessions["date"])
     known = existing if not plan.refresh else set()
     added: list[dt.date] = []
@@ -408,7 +457,7 @@ def run_export(source: DataSource, plan: ExportPlan, cache_root: Path | None = N
         if n < MIN_SESSION_SNAPSHOTS:
             print(f"  {date}: {n} snapshots, skipped", file=log)
             continue
-        result = export_session(source, plan.underlying, date, plan.strike_margin)
+        result = export_session(source, plan.underlying, date, plan.strike_margin, timing)
         if result is None:
             print(f"  {date}: no rows, skipped", file=log)
             continue

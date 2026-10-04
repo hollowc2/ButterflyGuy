@@ -163,6 +163,8 @@ class RiskSettings(ConfigModel):
 
 class CollectorSettings(ConfigModel):
     snapshot_interval_seconds: int = 60
+    # Record quote event times, fetch timings and omitted contracts (migration 011).
+    record_timing: bool = False
 
 
 class DatabaseSettings(ConfigModel):

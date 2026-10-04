@@ -776,3 +776,85 @@ async def test_same_day_stale_empty_extended_session_is_allowed_only_for_extende
         GatewayMarketDataError, match="data is stale"
     ):
         await provider.get_intraday_bars_for_day("SPX", day)
+
+
+@pytest.mark.asyncio
+async def test_observed_chain_returns_timing_and_leaves_the_strategy_chain_unchanged() -> None:
+    expiration = dt.date(2026, 8, 24)
+    event = dt.datetime(2026, 8, 24, 14, 0, 1, tzinfo=dt.UTC)
+    received = dt.datetime(2026, 8, 24, 14, 0, 3, tzinfo=dt.UTC)
+    stale_call = _contract("CALL", "XSP STALE CALL", 632.0)
+    stale_call.stale = True
+    stale_call.data_quality_flags = ("stale",)
+    stale_call.age_seconds = 60.0
+    fresh_call = _contract("CALL", "XSP FRESH CALL", 633.0)
+    fresh_call.event_timestamp = event
+    put = _contract("PUT", "XSP PUT 633", 633.0)
+    gateway = AsyncMock()
+    gateway.get_option_chain.return_value = SimpleNamespace(
+        option_chain=_observation(
+            symbol="XSP",
+            expiration=expiration,
+            underlying_price=632.5,
+            call_contract_count=2,
+            put_contract_count=1,
+            strike_count=2,
+            contracts=(stale_call, fresh_call, put),
+            data_quality_flags=("stale_contracts_present",),
+            event_timestamp=event,
+            gateway_received_at=received,
+            source="schwab_rest",
+        )
+    )
+    provider = GatewayAuthoritativeMarketDataProvider(gateway)
+
+    plain = await provider.get_option_chain("XSP", expiration)
+    chain, observed = await provider.get_option_chain_observed("XSP", expiration)
+
+    assert chain == plain
+    calls = chain["callExpDateMap"]["2026-08-24:0"]
+    assert [o["symbol"] for options in calls.values() for o in options] == ["XSP FRESH CALL"]
+    assert observed.source == "schwab_rest"
+    assert (observed.event_timestamp, observed.gateway_received_at) == (event, received)
+    assert observed.age_seconds == 0.2 and observed.stale is False
+    assert observed.data_quality_flags == ("stale_contracts_present",)
+    assert (observed.contracts_delivered, observed.contracts_kept) == (3, 2)
+    assert observed.contracts["XSP FRESH CALL"].event_timestamp == event
+    assert observed.contracts["XSP PUT 633"].age_seconds == 0.2
+    assert "XSP STALE CALL" not in observed.contracts
+    (omitted,) = observed.omitted
+    assert (omitted.symbol, omitted.stale, omitted.age_seconds, omitted.flags) == (
+        "XSP STALE CALL", True, 60.0, ("stale",))
+
+
+@pytest.mark.asyncio
+async def test_observed_spot_returns_timing_and_price_is_unchanged() -> None:
+    event = dt.datetime(2026, 8, 24, 14, 0, 1, tzinfo=dt.UTC)
+    gateway = AsyncMock()
+    gateway.get_spot.return_value = SimpleNamespace(
+        spot=_observation(symbol="$SPX", price=6400.25, event_timestamp=event,
+                          source="schwab_stream")
+    )
+    provider = GatewayAuthoritativeMarketDataProvider(gateway)
+
+    observed = await provider.get_spot_observed("$SPX")
+
+    assert await provider.get_spot_price("$SPX") == observed.price == 6400.25
+    assert (observed.event_timestamp, observed.age_seconds, observed.source) == (
+        event, 0.2, "schwab_stream")
+
+
+@pytest.mark.asyncio
+async def test_direct_provider_observations_are_empty() -> None:
+    client = AsyncMock()
+    client.get_spot_price.return_value = 6400.0
+    client.get_option_chain.return_value = {"symbol": "$SPX"}
+    provider = DirectSchwabMarketDataProvider(client)
+
+    spot = await provider.get_spot_observed("$SPX")
+    chain, observed = await provider.get_option_chain_observed("$SPX", dt.date(2026, 8, 24))
+
+    assert (spot.price, spot.source, spot.event_timestamp) == (6400.0, "schwab_direct", None)
+    assert chain == {"symbol": "$SPX"}
+    assert observed.source == "schwab_direct" and observed.contracts == {}
+    assert observed.contracts_delivered is None and observed.omitted == ()
