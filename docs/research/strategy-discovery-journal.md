@@ -2144,3 +2144,72 @@ Candidate hypotheses for future registered tests (not applied, cohort untouched)
   the next candidate.
 
 Not investigated: why only 334 of 537 2022–24 sessions produced a qualifying fly.
+
+## 2026-10-02 — edge search: hold to settlement with a VIX floor (development + validation; nothing registered)
+
+Written up 2026-10-03 from the session notes, the
+[F2 draft registration](f2-shadow-registration-2026-10-02.md) and the
+[F2 scorer review](f2-shadow-review-2026-10-03.md). The search harness lived in session
+scratch and was not committed. It drove `run_variants` from the pinned
+`.worktrees/thetadata-readiness-2026-10-01` engine without writing to the registry, so
+**the variant tables below cannot be regenerated from the repository**. Treat them as a
+record of what was looked at, not as evidence.
+
+### Discipline
+
+Search on ThetaData development 2022-01-03 → 2024-06-28; confirm finalists once on
+2026-03 → 09 validation. The holdout was already spent (H-TS1) and was not used.
+
+- Stage 1: VIX floor × exit style, 80 variants.
+- Stage 2: direction, entry time, stops and gap, 36 variants.
+
+That is 116 variants in all, so the best one is subject to selection bias.
+
+### Findings
+
+- **Holding to settlement beat the live trailer at every VIX floor** on the development
+  window. Trailed exits pay the spread and fees; settlement is free (see the 2026-10-01
+  cost diagnostic above).
+- The gap direction rule and the 10:00 ET entry beat every alternative tried.
+
+Stressed, one lot:
+
+| Variant | Development 2022-01 → 2024-06 | Validation 2026-03 → 09 |
+|---|---:|---:|
+| E0 (live) | −$13,323 | +$6,084 |
+| F1: hold, no filter | +$8.7k | +$10.5k |
+| R1A175 | +$8.1k | +$12.6k |
+| **F2: VIX ≥ 16, hold** | **+$18,645** | **+$11,668** |
+
+F2 on development: H1 +$8.3k, H2 +$10.3k, PF 1.41, max drawdown $6.2k, bootstrap
+P(>0) 0.96, Δ vs E0 90% CI +$14.6k / +$50.5k. Validation bootstrap P(>0) 0.92.
+
+### Caveats
+
+- About +$8.9k of the development hold P&L comes from 18 trades at VIX 17–18 in 2023.
+  The second half of both windows is weak.
+- **Cross-source check (Schwab DB quotes, `run_backtest_db`, 2026-03-13 → 09-28):**
+  holding is *worse* than the trailer. Stressed P&L is +$10.9k vs +$14.5k. On the VIX ≥ 16
+  subset, midpoint P&L is +$18.3k vs +$25.0k. In 2026 the hold-vs-trailer sign flips with
+  the quote source.
+- Why: in both sources the trailer salvages about $120–140 on most exits. Holding wins
+  only on rare late reversals to the center. 2022–24 had 31 of 283 exits like that, only 3
+  of them knife-edge drawdown arms. 2026 had 5–7, and ThetaData's 2026 edge came mostly
+  from knife-edge days (3/31, 4/9; see the 2026-10-01 Schwab-vs-ThetaData backtest). The
+  case for holding depends on how often reversals happen, which varies by regime.
+- F2 was not evaluated on the spent 2024-07 → 2026-03 holdout years. Note that the related
+  R1 (skip VIX < 17, trailer kept) was still −$20.3k stressed (PF 0.54) on those years.
+
+### What followed
+
+- 2026-10-02: an F2 prospective shadow was drafted
+  (`f2-shadow-registration-2026-10-02.md`). It scores the frozen v2 cohort's entries with
+  VIX ≥ 16 held to settlement. Endpoint: 60 trades with ≥ 8 stressed winners. Early stop:
+  stressed drawdown above $8,000. Five gates.
+- 2026-10-03: review (PR #47) found six scorer defects and could not establish that the
+  draft was frozen before it saw data. F2 output is therefore **exploratory shadow**, not
+  a registered test. On 2026-10-03, `butterfly-f2-shadow.service` was repointed from the
+  uncommitted draft checkout to the reviewed scorer, pinned at `d14b4b9`
+  (`.worktrees/f2-shadow-reviewed`) and writing to `reports/f2_shadow_reviewed/`. No F2
+  trade had been recorded at the time, so nothing was lost by switching.
+- No runtime configuration changed.
