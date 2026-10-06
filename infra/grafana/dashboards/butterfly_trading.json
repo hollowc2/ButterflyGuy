@@ -24,7 +24,7 @@
   ],
   "schemaVersion": 38,
   "version": 10,
-  "refresh": "10s",
+  "refresh": "30s",
   "templating": {
     "list": [
       {
@@ -172,7 +172,7 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE((SELECT (q.fly_mark * 100 * t.quantity)::float FROM butterfly_trades t JOIN monitoring_leg_quotes q ON q.trade_id = t.id AND q.underlying = t.underlying WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status = 'OPEN' ORDER BY q.ts DESC LIMIT 1), 0)::float AS \"Current Value\"",
+          "rawSql": "SELECT NOW() AS time, COALESCE((SELECT (q.fly_mark * 100 * t.quantity)::float FROM butterfly_trades t CROSS JOIN LATERAL (SELECT ts, fly_mark FROM monitoring_leg_quotes WHERE trade_id = t.id AND underlying = t.underlying ORDER BY ts DESC LIMIT 1) q WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status = 'OPEN' ORDER BY q.ts DESC LIMIT 1), 0)::float AS \"Current Value\"",
           "format": "time_series",
           "refId": "A"
         }
@@ -1212,7 +1212,7 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT t.entry_time AS time, COALESCE(sp.price, NULLIF(t.metadata->>'entry_spot', '')::numeric, q.spot_price)::float AS \"Entry\" FROM butterfly_trades t LEFT JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp ON TRUE LEFT JOIN LATERAL (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = t.id AND spot_price IS NOT NULL ORDER BY ts LIMIT 1) q ON TRUE WHERE t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.entry_time >= $__timeFrom() AND t.entry_time <= $__timeTo() ORDER BY t.entry_time LIMIT 1",
+          "rawSql": "SELECT t.entry_time AS time, COALESCE((SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1), NULLIF(t.metadata->>'entry_spot', '')::numeric, (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = t.id AND spot_price IS NOT NULL ORDER BY ts LIMIT 1))::float AS \"Entry\" FROM butterfly_trades t WHERE t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.entry_time >= $__timeFrom() AND t.entry_time <= $__timeTo() ORDER BY t.entry_time LIMIT 1",
           "format": "time_series"
         },
         {
@@ -1221,7 +1221,7 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT t.exit_time AS time, COALESCE(sp.price, q.spot_price)::float AS \"Exit\" FROM butterfly_trades t LEFT JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1) sp ON TRUE LEFT JOIN LATERAL (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = t.id AND spot_price IS NOT NULL AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1) q ON TRUE WHERE t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL AND t.entry_time >= $__timeFrom() AND t.entry_time <= $__timeTo() ORDER BY t.entry_time LIMIT 1",
+          "rawSql": "SELECT t.exit_time AS time, COALESCE((SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1), (SELECT spot_price FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND trade_id = t.id AND spot_price IS NOT NULL AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1))::float AS \"Exit\" FROM butterfly_trades t WHERE t.underlying = '$underlying' AND t.status != 'CANCELLED' AND t.exit_time IS NOT NULL AND t.entry_time >= $__timeFrom() AND t.entry_time <= $__timeTo() ORDER BY t.entry_time LIMIT 1",
           "format": "time_series"
         },
         {

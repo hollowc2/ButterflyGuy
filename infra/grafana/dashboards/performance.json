@@ -24,7 +24,7 @@
   ],
   "schemaVersion": 38,
   "version": 4,
-  "refresh": "30s",
+  "refresh": "60s",
   "time": {
     "from": "now-90d",
     "to": "now"
