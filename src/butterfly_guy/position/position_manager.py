@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 from dataclasses import dataclass
 
@@ -177,11 +178,19 @@ class PositionManager:
         self,
         candidate: ButterflyCandidate,
         current_quotes: dict[float, OptionQuote],
+        *,
+        at: dt.datetime | None = None,
+        include_tent_boundaries: bool = True,
     ) -> PositionState:
         """
         Calculate current butterfly value from latest chain quotes.
         Value = lower_mark - 2 * center_mark + upper_mark
+
+        Offline monitor replay supplies an observation time and can omit tent
+        geometry when the recording has no leg IV. Live defaults are unchanged.
         """
+        if at is not None and (at.tzinfo is None or at.utcoffset() is None):
+            raise ValueError("position observation time must be timezone-aware")
         lower_q = current_quotes.get(candidate.lower_strike)
         center_q = current_quotes.get(candidate.center_strike)
         upper_q = current_quotes.get(candidate.upper_strike)
@@ -247,14 +256,14 @@ class PositionManager:
         self._last_mark_value = current_value
 
         # Determine time regime
-        mins_open = minutes_since_open()
+        mins_open = minutes_since_open(at) if at is not None else minutes_since_open()
         regime = get_time_regime(mins_open, self._profit_settings.regimes)
-        mins_left = minutes_to_close()
+        mins_left = minutes_to_close(at) if at is not None else minutes_to_close()
 
         # Compute dynamic tent boundaries (BS-derived; converge to at-expiry BE as T→0)
         lower_tent: float | None = None
         upper_tent: float | None = None
-        if mins_left > 0:
+        if mins_left > 0 and include_tent_boundaries:
             t_years = mins_left / (365 * 24 * 60)
             lower_tent, upper_tent = compute_tent_boundaries(
                 candidate, lower_q, center_q, upper_q, t_years

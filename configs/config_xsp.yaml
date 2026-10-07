@@ -86,7 +86,7 @@ profit_management:
     max_jump_ratio: 0.50
     max_jump_abs: 0.10
 risk:
-  max_daily_loss: 50.0        # 1/10th of SPX; raw credit units (not dollar-multiplied)
+  max_daily_loss: 50.0        # Dollars; closed-trade P&L includes multiplier and quantity.
   max_trades_per_day: 1
   max_position_size: 1
   max_weekly_loss: null       # Weekly PnL is monitored but does not block XSP entries.

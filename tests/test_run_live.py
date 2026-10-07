@@ -1090,6 +1090,33 @@ async def test_restart_with_open_trade_does_not_double_count_entry_cost():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("trade_date", "entry_price"),
+    [(dt.date(2026, 9, 1), 0.33), (dt.date(2026, 9, 24), 0.39)],
+)
+async def test_xsp_restart_then_worthless_settlement_books_one_loss(
+    trade_date, entry_price
+):
+    queries = _StatefulRiskQueries()
+    engine = RiskEngine(RiskSettings(max_daily_loss=50.0), queries, underlying="XSP")
+    trade = TradeRecord(
+        trade_id=1, trade_date=trade_date, entry_price=entry_price, quantity=1
+    )
+
+    # The old startup path reserved the debit in realized_pnl, then added it
+    # again when a worthless fly settled, falsely breaching the $50 limit.
+    await _sync_startup_risk_pnl(engine, 0.0, trade, trade_date)
+    assert queries.state["realized_pnl"] == 0.0
+    assert engine._committed_exposure[trade_date] == pytest.approx(entry_price * 100)
+
+    await engine.record_pnl(-entry_price * 100, trade_date)
+
+    assert queries.state["realized_pnl"] == pytest.approx(-entry_price * 100)
+    assert not queries.state["halted"]
+    assert trade_date not in engine._committed_exposure
+
+
+@pytest.mark.asyncio
 async def test_restart_open_trade_exposure_blocks_entry_until_closed(monkeypatch):
     today = dt.date(2026, 6, 25)
     queries = _StatefulRiskQueries()

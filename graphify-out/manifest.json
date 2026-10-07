@@ -290,9 +290,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/position/position_manager.py": {
-    "mtime": 1790453905.5642684,
-    "seen": 1791136932.6588235,
-    "ast_hash": "ffccdafdc38287a92b8552801c87f5f1",
+    "mtime": 1791338465.6030476,
+    "seen": 1791338721.999553,
+    "ast_hash": "a9bc24a6964fb1c0b844b6717eb2fa01",
     "semantic_hash": ""
   },
   "src/butterfly_guy/position/profit_policy.py": {
@@ -854,9 +854,9 @@
     "semantic_hash": ""
   },
   "tests/test_run_live.py": {
-    "mtime": 1790998595.1133416,
-    "seen": 1791136932.659027,
-    "ast_hash": "8689d8fbd2ff90d047edcee38e65ff8a",
+    "mtime": 1791338363.9488122,
+    "seen": 1791338722.0071054,
+    "ast_hash": "b60bce17d6c2b6a9b93a4524ac6c05bd",
     "semantic_hash": ""
   },
   "tests/test_run_migrations.py": {
@@ -1016,9 +1016,9 @@
     "semantic_hash": ""
   },
   "configs/config_xsp.yaml": {
-    "mtime": 1786326052.5758533,
-    "seen": 1791136932.659077,
-    "ast_hash": "d659b71e8b9c7708fe981a7ca224e11a",
+    "mtime": 1791338364.0838099,
+    "seen": 1791338722.0086951,
+    "ast_hash": "b0b8f1861f78f1f11c8576e03ac41ad3",
     "semantic_hash": ""
   },
   "configs/daily_report_card.yaml": {
@@ -2741,6 +2741,36 @@
     "mtime": 1791148504.6706882,
     "seen": 1791308663.7353237,
     "ast_hash": "051b06343244e3046e719048ab3fcc9d",
+    "semantic_hash": ""
+  },
+  "src/butterfly_guy/scripts/replay_xsp_exits.py": {
+    "mtime": 1791338703.9768908,
+    "seen": 1791338722.0023272,
+    "ast_hash": "8f609e926fd975c4c8f21f78cfd2be55",
+    "semantic_hash": ""
+  },
+  "tests/test_xsp_monitor_replay.py": {
+    "mtime": 1791338704.1658874,
+    "seen": 1791338722.0075583,
+    "ast_hash": "deaf49a3e5fa8120d3f31abd5974366e",
+    "semantic_hash": ""
+  },
+  "docs/operations/grafana-sql-cpu-2026-10-06.md": {
+    "mtime": 1791310550.266739,
+    "seen": 1791338722.010587,
+    "ast_hash": "2800cc0661a3bae00f9fda315b35f497",
+    "semantic_hash": ""
+  },
+  "docs/research/xsp-improvements-2026-10-06.md": {
+    "mtime": 1791338842.0994735,
+    "seen": 1791338869.8493536,
+    "ast_hash": "d36128af0793c90e1d080935bcdfdcc9",
+    "semantic_hash": ""
+  },
+  "docs/reviews/xsp-strategy-review-2026-10-06.md": {
+    "mtime": 1791338842.2754703,
+    "seen": 1791338869.8495176,
+    "ast_hash": "f9a1a7fd007f77f3f53cf80dd595c8fc",
     "semantic_hash": ""
   }
 }
