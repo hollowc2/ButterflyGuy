@@ -362,7 +362,7 @@ class GatewayAuthoritativeMarketDataProvider:
         )
 
     async def get_held_quotes_observed(self, symbols: tuple[str, ...]) -> PartialQuoteResponseV1:
-        """One shadow read, with missing symbols named; no retries or readiness changes."""
+        """One partial-capable read; no retries or readiness changes."""
         response = await self._client.get_available_quotes(symbols)
         returned = {quote.symbol for quote in response.quotes}
         missing = set(response.missing_symbols)

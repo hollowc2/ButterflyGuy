@@ -1,0 +1,11 @@
+# Explicit XSP paper-candidate activation. Use after the gateway-paper overlay;
+# require the live-runbook flatness gate before recreating app_xsp.
+# Base strategy configs remain the baseline for research and rollback.
+services:
+  app_xsp:
+    # YAML initialization overrides nested environment values in load_config;
+    # select the staged config through the existing runtime mount instead.
+    volumes: !override
+      - "${SCHWAB_GATEWAY_TOKEN_DIR:?set token directory}:${SCHWAB_GATEWAY_TOKEN_DIR:?set token directory}"
+      - "${XSP_PROTECTION_CONFIG_PATH:?set staged XSP config path}:/app/configs/config_xsp.yaml"
+      - /opt/butterflyguy/data/chains:/app/data/chains

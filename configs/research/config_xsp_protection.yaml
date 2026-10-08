@@ -1,0 +1,113 @@
+# Research candidate; not mounted by Compose. Existing protector thresholds unchanged.
+schwab:
+  max_token_age: 518400
+strategy:
+  underlying: XSP
+  wing_widths:
+  - 3
+  - 4
+  - 5
+  vix_width_buckets:
+  - vix_max: 17.0
+    widths:
+    - 3
+    - 4
+  - vix_max: 24.5
+    widths:
+    - 3
+    - 4
+    - 5
+  - vix_max: 32.0
+    widths:
+    - 4
+    - 5
+  - vix_max: 9999.0
+    widths:
+    - 4
+    - 5
+  spot_range: 10
+  min_debit: 0.25
+  rr_min: 8.0
+  max_cost_per_width:
+    3: 0.3
+    4: 0.4
+    5: 0.5
+entry:
+  start_time: 07:00
+  end_time: 07:45
+  timezone: America/Los_Angeles
+  strike_selection_method: VIX
+  center_tolerance: 1.5
+execution:
+  price_ladder_step: 0.01
+  price_ladder_steps: 4
+  retry_interval_seconds: 20
+  order_timeout_seconds: 300
+  paper_trading: true
+  allow_live_trading: false
+  paper_fill_buffer: 0.0
+  paper_slippage_per_spread: 0.005
+profit_management:
+  strategy: profitprotector
+  profitprotector:
+    breakeven_activation_profit: 1.0
+    breakeven_floor_profit: 0.0
+    profit_lock_activation_profit: 2.0
+    profit_lock_floor_profit: 0.75
+    large_peak_profit_ratio: 2.0
+    large_peak_drawdown_threshold: 0.5
+  regimes:
+    morning:
+      start_minutes_after_open: 0
+      end_minutes_after_open: 120
+      drawdown_threshold: 0.8
+      confirmation_polls: 3
+      min_peak_profit_ratio: 1.25
+      min_hold_minutes: 30
+    late_morning:
+      start_minutes_after_open: 120
+      end_minutes_after_open: 240
+      drawdown_threshold: 0.9
+      confirmation_polls: 3
+      min_peak_profit_ratio: 1.25
+      min_hold_minutes: 45
+    afternoon:
+      start_minutes_after_open: 240
+      end_minutes_after_open: 390
+      drawdown_threshold: 0.85
+      confirmation_polls: 3
+      min_peak_profit_ratio: 1.25
+      min_hold_minutes: 45
+  exit_before_close_minutes: 0
+  max_loss_from_cost: 0.5
+  use_absolute_loss_stop: false
+  quote_quality:
+    enabled: true
+    min_bid_to_mark_ratio: 0.75
+    max_spread_width_ratio: 0.5
+    min_mark_value: 0.25
+    max_leg_spread_to_mark_ratio: 1.0
+    max_leg_spread_abs: 0.2
+  peak_tracking:
+    confirmation_polls: 3
+    confirmation_tolerance_ratio: 0.1
+    require_quote_quality: true
+    max_jump_ratio: 0.5
+    max_jump_abs: 0.1
+risk:
+  max_daily_loss: 50.0
+  max_trades_per_day: 1
+  max_position_size: 1
+  max_weekly_loss: null
+  max_consecutive_losses: 10
+  min_buying_power: 200.0
+  fail_safe_on_balance_error: true
+collector:
+  snapshot_interval_seconds: 60
+  record_timing: true
+position_data:
+  shadow_held_quotes: true
+  recover_held_quotes: true
+monitoring:
+  metrics_port: 8000
+  log_level: INFO

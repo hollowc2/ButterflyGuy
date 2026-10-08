@@ -120,9 +120,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/config.py": {
-    "mtime": 1791417409.5325797,
-    "seen": 1791417647.0794535,
-    "ast_hash": "81c016af7a7c1ac9b367a98a9d4f9f66",
+    "mtime": 1791485082.1867847,
+    "seen": 1791485112.4942265,
+    "ast_hash": "40c12819ebb543d592604d5466efb628",
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/logging.py": {
@@ -518,9 +518,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/position_service.py": {
-    "mtime": 1791417409.715577,
-    "seen": 1791417647.0842767,
-    "ast_hash": "484514b9fe4f2a7fb11b8708027469b9",
+    "mtime": 1791484923.388835,
+    "seen": 1791484969.0343657,
+    "ast_hash": "9625682c7f792127eb8f06997c9b3c73",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/trade_chart.py": {
@@ -1112,9 +1112,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/providers.py": {
-    "mtime": 1791417409.6015787,
-    "seen": 1791417647.0799348,
-    "ast_hash": "57f78aa00863be93697ab4d763f6e422",
+    "mtime": 1791485082.2967827,
+    "seen": 1791485112.4946468,
+    "ast_hash": "2d17a7b8ed63d006746a397fc363dc2d",
     "semantic_hash": ""
   },
   "src/butterfly_guy/gateway_client/__init__.py": {
@@ -2744,15 +2744,15 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/replay_xsp_exits.py": {
-    "mtime": 1791338703.9768908,
-    "seen": 1791338722.0023272,
-    "ast_hash": "8f609e926fd975c4c8f21f78cfd2be55",
+    "mtime": 1791484942.83049,
+    "seen": 1791484969.0333886,
+    "ast_hash": "b1c2b45960e0f576286857e44db22382",
     "semantic_hash": ""
   },
   "tests/test_xsp_monitor_replay.py": {
-    "mtime": 1791338704.1658874,
-    "seen": 1791338722.0075583,
-    "ast_hash": "deaf49a3e5fa8120d3f31abd5974366e",
+    "mtime": 1791484879.2066188,
+    "seen": 1791484969.0389645,
+    "ast_hash": "2d649ca891ba86b7285a712534160754",
     "semantic_hash": ""
   },
   "docs/operations/grafana-sql-cpu-2026-10-06.md": {
@@ -2789,6 +2789,30 @@
     "mtime": 1791417409.4645808,
     "seen": 1791417647.093158,
     "ast_hash": "c610577bf9d0a1006c02a94d56fd8876",
+    "semantic_hash": ""
+  },
+  "src/butterfly_guy/services/position_quote_recovery.py": {
+    "mtime": 1791484682.0421154,
+    "seen": 1791484969.0343637,
+    "ast_hash": "0f81ae83564786c3ea9a44d5601e0f3b",
+    "semantic_hash": ""
+  },
+  "tests/test_position_quote_recovery.py": {
+    "mtime": 1791485082.4387798,
+    "seen": 1791485112.502082,
+    "ast_hash": "34d7e948d75f1a0b77f287af102de04e",
+    "semantic_hash": ""
+  },
+  "configs/research/config_xsp_protection.yaml": {
+    "mtime": 1791484769.3805668,
+    "seen": 1791484969.0423353,
+    "ast_hash": "45478882d38ff9f19a53ca58b36961e6",
+    "semantic_hash": ""
+  },
+  "docs/research/xsp-fix-candidate-2026-10-08.md": {
+    "mtime": 1791485109.238259,
+    "seen": 1791485112.5095165,
+    "ast_hash": "2bfe1b88b7dd89744631b34b2fdc29aa",
     "semantic_hash": ""
   }
 }

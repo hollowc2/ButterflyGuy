@@ -130,7 +130,11 @@ def replay_trade(
     terminal_coverage = not is_market_open(end + dt.timedelta(seconds=10))
     marketable_entry = float(trade["entry_diagnostics"]["marketable_entry_estimate"])
     quantity = int(trade["quantity"])
-    settlement_pnl = (float(trade["exit_price"]) - marketable_entry) * 100 * quantity
+    settlement_pnl = (
+        (float(trade["exit_price"]) - marketable_entry) * 100 * quantity
+        if trade.get("exit_reason") == "cash_settled" and trade.get("exit_price") is not None
+        else None
+    )
     hypothetical_pnl = settlement_pnl
     if first_exit:
         hypothetical_pnl = (first_exit["estimated_exit_price"] - marketable_entry) * 100 * quantity
@@ -144,9 +148,9 @@ def replay_trade(
         "peak_mismatch_polls": mismatches,
         "max_peak_difference": round(max_difference, 6),
         "first_exit": first_exit,
-        "settlement_pnl_dollars": round(settlement_pnl, 2),
-        "policy_pnl_dollars": round(hypothetical_pnl, 2),
-        "settlement_source": trade["settlement_source"],
+        "settlement_pnl_dollars": round(settlement_pnl, 2) if settlement_pnl is not None else None,
+        "policy_pnl_dollars": round(hypothetical_pnl, 2) if hypothetical_pnl is not None else None,
+        "settlement_source": trade.get("settlement_source"),
     }
 
 
@@ -155,10 +159,17 @@ def main() -> None:
     parser.add_argument("--trades", type=Path, required=True)
     parser.add_argument("--quotes", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--earlier-trailer", action="store_true")
+    candidates = parser.add_mutually_exclusive_group()
+    candidates.add_argument("--earlier-trailer", action="store_true")
+    candidates.add_argument("--candidate-config", type=Path)
+    parser.add_argument("--include-open", action="store_true",
+                        help="Allow partial-session OPEN trades; never invent settlement")
     args = parser.parse_args()
     setup_logging(log_level="ERROR", json_output=False)
     config = load_config(config_path="configs/config_xsp.yaml")
+    candidate_config = (
+        load_config(config_path=args.candidate_config) if args.candidate_config else None
+    )
     sections = [json.loads(line) for line in args.trades.read_text().splitlines()]
     trades = {int(t["id"]): t for s in sections if s["section"] == "trades" for t in s["rows"]}
     results = []
@@ -169,7 +180,10 @@ def main() -> None:
                 list(batch) for _, batch in itertools.groupby(rows, key=lambda r: r["ts"])
             ]
             trade = trades[trade_id]
-            if trade["fill_model"] != "mark_v1" or trade["exit_reason"] != "cash_settled":
+            open_trade = args.include_open and trade.get("status") == "OPEN"
+            if trade["fill_model"] != "mark_v1" or (
+                trade["exit_reason"] != "cash_settled" and not open_trade
+            ):
                 raise ValueError("replay cohort requires mark_v1 cash-settled trades")
             try:
                 baseline = replay_trade(trade, observations, config)
@@ -186,20 +200,27 @@ def main() -> None:
             baseline["baseline_parity"] = (
                 baseline["peak_mismatch_polls"] == 0
                 and baseline["first_exit"] is None
-                and baseline["terminal_coverage"]
+                and (baseline["terminal_coverage"] or open_trade)
             )
             if args.earlier_trailer and baseline["baseline_parity"]:
                 baseline["earlier_trailer"] = replay_trade(
                     trade, observations, config, earlier_trailer=True
                 )
+            if candidate_config is not None and baseline["baseline_parity"]:
+                baseline["candidate_policy"] = replay_trade(trade, observations, candidate_config)
             results.append(baseline)
     report = {
         "scope": "XSP fixed observed entries; monitor policy replay, not entry selection",
-        "candidate": (
+        "candidate": str(args.candidate_config) if args.candidate_config else (
             "50% trailing drawdown in all regimes; "
             "all other quality/hold/confirmation rules unchanged"
         ),
         "earlier_trailer_requested": args.earlier_trailer,
+        "include_open": args.include_open,
+        "candidate_policy_settings": (
+            candidate_config.profit_management.model_dump(mode="json")
+            if candidate_config is not None else None
+        ),
         "policy_settings": config.profit_management.model_dump(mode="json"),
         "source_hashes": {
             str(p): hashlib.sha256(p.read_bytes()).hexdigest()
@@ -207,11 +228,13 @@ def main() -> None:
                 Path(__file__),
                 Path("src/butterfly_guy/position/position_manager.py"),
                 Path("src/butterfly_guy/position/state_machine.py"),
+                Path("src/butterfly_guy/position/profit_policy.py"),
             )
         },
         "input_hashes": {
             str(p): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in (args.trades, args.quotes, Path("configs/config_xsp.yaml"))
+            for p in (args.trades, args.quotes, Path("configs/config_xsp.yaml"),
+                      *([args.candidate_config] if args.candidate_config else []))
         },
         "trades": results,
         "limitations": [
@@ -222,6 +245,8 @@ def main() -> None:
             "Missing telemetry is not interpolated",
             "Candidate evaluated only on exact baseline peak/exit parity",
             "Component-bid exits are hypothetical, not fills",
+            "OPEN trades have partial coverage and no settlement P&L",
+            "Held-quote recovery is not simulated by the monitor policy replay",
         ],
     }
     with args.output.open("x") as handle:

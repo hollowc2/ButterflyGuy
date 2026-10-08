@@ -68,6 +68,7 @@ from butterfly_guy.services.position_data_diagnostics import (
     PositionQuoteShadow,
     held_leg_evidence,
 )
+from butterfly_guy.services.position_quote_recovery import HeldQuoteRecovery
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, summarize_exit_chart
 from butterfly_guy.strategy.exit_mark_parity import (
     DB_EXIT_PARITY_MAX_LAG_SECONDS,
@@ -312,12 +313,20 @@ class PositionService:
                 trade_id=trade.trade_id, underlying=self.config.strategy.underlying,
             )
         self._held_quote_shadow = shadow
+        self._held_quote_recovery = (
+            HeldQuoteRecovery(provider)
+            if isinstance(provider, GatewayAuthoritativeMarketDataProvider)
+            and settings is not None and settings.recover_held_quotes is True
+            and self.config.strategy.underlying == "XSP"
+            and self.config.execution.paper_trading is True else None
+        )
         try:
             await self._monitor_loop(trade, candidate, recovered_peak)
         finally:
             if shadow is not None:
                 await shadow.close()
             self._held_quote_shadow = None
+            self._held_quote_recovery = None
 
     async def _monitor_loop(
         self,
@@ -358,6 +367,7 @@ class PositionService:
                 expiration = get_0dte_expiration()
                 observation = None
                 quotes: dict[float, OptionQuote] = {}
+                recovery_evidence: dict = {}
                 try:
                     chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(
                         self.config.strategy.underlying, self.config.strategy.underlying,
@@ -373,12 +383,25 @@ class PositionService:
                         self._held_quote_shadow.submit(
                             held_leg_evidence(trade, candidate, quotes, observation), observation,
                         )
+                    if self._held_quote_recovery is not None and any(
+                        strike not in quotes for strike in (
+                            candidate.lower_strike, candidate.center_strike, candidate.upper_strike,
+                        )
+                    ):
+                        recovered, recovery_evidence = await self._held_quote_recovery.recover(
+                            trade, candidate,
+                        )
+                        if recovery_evidence:
+                            log.info("position_held_quote_recovery", **recovery_evidence)
+                        if recovered is not None:
+                            quotes = recovered
                     # Recovery is only proven after all held legs can be valued;
                     # a syntactically valid chain missing one leg remains unsafe.
                     pos_state = self.position_manager.update_position_value(
                         candidate, quotes
                     )
                 except Exception as market_data_error:
+                    await self._record_held_quote_recovery(recovery_evidence)
                     market_data_failures += 1
                     if market_data_failure_started_at is None:
                         market_data_failure_started_at = asyncio.get_running_loop().time()
@@ -691,6 +714,7 @@ class PositionService:
                             reason=signal.reason,
                         )
 
+                await self._record_held_quote_recovery(recovery_evidence)
                 if self.monitoring_leg_queries is not None:
                     await self._record_monitoring_leg_quotes(
                         trade=trade,
@@ -1112,6 +1136,19 @@ class PositionService:
             exit_reason=row.get("exit_reason"),
         )
         return summarize_exit_chart(spec, candles, full_session=full_session)
+
+    async def _record_held_quote_recovery(self, evidence: dict) -> None:
+        """Bounded diagnostics, after the exit action or when no valuation is possible."""
+        if evidence:
+            await self._best_effort(
+                "held_quote_recovery_event",
+                asyncio.wait_for(
+                    self.decision_queries.log_event(
+                        "position_held_quote_recovery", evidence,
+                        underlying=self.config.strategy.underlying,
+                    ), timeout=3.0,
+                ),
+            )
 
     async def _best_effort(self, name: str, operation: Awaitable[Any]) -> tuple[bool, Any]:
         """Await non-critical DB telemetry; log and count failures, never raise.
