@@ -89,7 +89,7 @@ All three assets are paper-only unless the owner explicitly authorizes a supervi
 
 ## Schwab gateway
 
-Market data comes through the standalone, read-only [SchwabGateway](https://github.com/hollowc2/SchwabGateway) service. Butterfly Guy pins `schwab-gateway-sdk` 0.5.0 and `schwab-token-store` v0.1.0 in `pyproject.toml` and `uv.lock`.
+Market data comes through the standalone, read-only [SchwabGateway](https://github.com/hollowc2/SchwabGateway) service. Butterfly Guy pins `schwab-gateway-sdk` 0.8.0 and `schwab-token-store` v0.1.0 in `pyproject.toml` and `uv.lock`.
 
 | Path | Market data | Accounts, orders, tokens |
 |---|---|---|

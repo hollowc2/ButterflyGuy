@@ -191,6 +191,13 @@ class MonitoringSettings(ConfigModel):
     log_level: str = "INFO"
 
 
+class PositionDataSettings(ConfigModel):
+    # Read-only evidence collection; targeted quotes never feed position valuation.
+    shadow_held_quotes: bool = False
+    shadow_interval_seconds: float = Field(default=60.0, ge=30.0, le=3600.0)
+    shadow_timeout_seconds: float = Field(default=3.0, gt=0, le=10.0)
+
+
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="",
@@ -209,6 +216,7 @@ class AppConfig(BaseSettings):
     collector: CollectorSettings = Field(default_factory=CollectorSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    position_data: PositionDataSettings = Field(default_factory=PositionDataSettings)
 
     @model_validator(mode="after")
     def validate_trading_safety(self) -> AppConfig:

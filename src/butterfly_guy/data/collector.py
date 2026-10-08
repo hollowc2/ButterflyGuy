@@ -321,7 +321,11 @@ class OptionChainCollector:
                 contracts_omitted=len(chain.omitted),
                 omitted=[{"symbol": o.symbol, "option_type": o.option_type,
                           "strike": o.strike, "stale": o.stale, "age_s": o.age_seconds,
-                          "flags": list(o.flags)} for o in chain.omitted],
+                          "flags": list(o.flags),
+                          "event_timestamp": (
+                              o.event_timestamp.isoformat() if o.event_timestamp else None
+                          ), "bid": o.bid, "ask": o.ask, "mark": o.mark}
+                         for o in chain.omitted],
                 strikes_within_spot_range=len({r["strike"] for r in rows
                                                if abs(r["strike"] - spot_price) <= spot_range}),
             )

@@ -30,7 +30,10 @@ from butterfly_guy.core.time_utils import (
     session_date,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
-from butterfly_guy.data.providers import CollectorMarketDataProvider
+from butterfly_guy.data.providers import (
+    CollectorMarketDataProvider,
+    GatewayAuthoritativeMarketDataProvider,
+)
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import (
     SCHWAB_CHAIN_SYMBOLS,
@@ -61,6 +64,10 @@ from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
+from butterfly_guy.services.position_data_diagnostics import (
+    PositionQuoteShadow,
+    held_leg_evidence,
+)
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, summarize_exit_chart
 from butterfly_guy.strategy.exit_mark_parity import (
     DB_EXIT_PARITY_MAX_LAG_SECONDS,
@@ -293,6 +300,31 @@ class PositionService:
         candidate: ButterflyCandidate,
         recovered_peak: float | None = None,
     ) -> None:
+        """Keep diagnostic tasks scoped to this position, including cancellation."""
+        provider = getattr(self, "market_data", None)
+        settings = getattr(self.config, "position_data", None)
+        shadow = None
+        if isinstance(provider, GatewayAuthoritativeMarketDataProvider) and (
+            settings is not None and settings.shadow_held_quotes is True
+        ):
+            shadow = PositionQuoteShadow(
+                provider, self.decision_queries, settings,
+                trade_id=trade.trade_id, underlying=self.config.strategy.underlying,
+            )
+        self._held_quote_shadow = shadow
+        try:
+            await self._monitor_loop(trade, candidate, recovered_peak)
+        finally:
+            if shadow is not None:
+                await shadow.close()
+            self._held_quote_shadow = None
+
+    async def _monitor_loop(
+        self,
+        trade: TradeRecord,
+        candidate: ButterflyCandidate,
+        recovered_peak: float | None = None,
+    ) -> None:
         """Monitor position every 2s, evaluate state machine, trigger exit if needed."""
         self.position_manager.reset(trade.entry_price, peak_value=recovered_peak)
         self._last_persisted_peak = (
@@ -316,6 +348,7 @@ class PositionService:
         exited = False
         market_data_failures = 0
         market_data_alerted = False
+        market_data_failure_started_at: float | None = None
         market_data = getattr(self, "market_data", None) or getattr(
             self, "schwab", None
         )
@@ -323,15 +356,23 @@ class PositionService:
             try:
                 # Fetch latest chain for position valuation
                 expiration = get_0dte_expiration()
+                observation = None
+                quotes: dict[float, OptionQuote] = {}
                 try:
-                    chain_data = await market_data.get_option_chain(
-                        SCHWAB_CHAIN_SYMBOLS.get(
-                            self.config.strategy.underlying,
-                            self.config.strategy.underlying,
-                        ),
-                        expiration,
+                    chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(
+                        self.config.strategy.underlying, self.config.strategy.underlying,
                     )
+                    if isinstance(market_data, GatewayAuthoritativeMarketDataProvider):
+                        chain_data, observation = await market_data.get_option_chain_observed(
+                            chain_symbol, expiration,
+                        )
+                    else:
+                        chain_data = await market_data.get_option_chain(chain_symbol, expiration)
                     quotes = self._extract_quotes(chain_data, expiration, candidate)
+                    if self._held_quote_shadow is not None:
+                        self._held_quote_shadow.submit(
+                            held_leg_evidence(trade, candidate, quotes, observation), observation,
+                        )
                     # Recovery is only proven after all held legs can be valued;
                     # a syntactically valid chain missing one leg remains unsafe.
                     pos_state = self.position_manager.update_position_value(
@@ -339,10 +380,30 @@ class PositionService:
                     )
                 except Exception as market_data_error:
                     market_data_failures += 1
+                    if market_data_failure_started_at is None:
+                        market_data_failure_started_at = asyncio.get_running_loop().time()
+                    held_legs = held_leg_evidence(
+                        trade, candidate, quotes, observation,
+                        chain_failed=not isinstance(
+                            market_data_error, PositionQuotesUnavailableError,
+                        ),
+                    )
+                    if self._held_quote_shadow is not None:
+                        self._held_quote_shadow.submit(held_legs, observation)
                     failure_details: dict[str, object] = {
                         "trade_id": trade.trade_id,
                         "consecutive_failures": market_data_failures,
                         "error": str(market_data_error),
+                        "held_legs": held_legs,
+                        "outage_seconds": round(
+                            asyncio.get_running_loop().time() - market_data_failure_started_at, 1,
+                        ),
+                        "chain_gateway_received_at": (
+                            observation.gateway_received_at.isoformat()
+                            if observation and observation.gateway_received_at else None
+                        ),
+                        "chain_age_seconds": observation.age_seconds if observation else None,
+                        "chain_source": observation.source if observation else None,
                     }
                     if isinstance(market_data_error, PositionQuotesUnavailableError):
                         failure_details.update(
@@ -370,8 +431,15 @@ class PositionService:
                                 ),
                             )
                             alert_text = (
-                                "WARNING: position market data is unavailable "
-                                f"for trade {trade.trade_id}; position remains OPEN."
+                                f"WARNING: {self.config.strategy.underlying} position market data "
+                                f"is unavailable for trade {trade.trade_id}; "
+                                "valuation-dependent exits suspended; position remains OPEN. "
+                                + "; ".join(
+                                    f"{leg['strike']:g} {candidate.direction}: {leg['reason']}"
+                                    + (f" (quote age {leg['age_seconds']:.0f}s)"
+                                       if leg['age_seconds'] is not None else "")
+                                    for leg in held_legs if leg["reason"] != "usable"
+                                )
                             )
                             if self.notifier:
                                 try:
@@ -395,6 +463,10 @@ class PositionService:
                             {
                                 "trade_id": trade.trade_id,
                                 "consecutive_failures": market_data_failures,
+                                "outage_seconds": round(
+                                    asyncio.get_running_loop().time()
+                                    - market_data_failure_started_at, 1,
+                                ) if market_data_failure_started_at is not None else None,
                             },
                             underlying=self.config.strategy.underlying,
                         ),
@@ -410,6 +482,7 @@ class PositionService:
                         )
                     market_data_failures = 0
                     market_data_alerted = False
+                    market_data_failure_started_at = None
                 chain_fetched_at = now_eastern()
 
                 if trade.entry_time is not None:

@@ -95,6 +95,9 @@ risk:
   fail_safe_on_balance_error: true  # block trading if Schwab balance API is unavailable
 collector:
   snapshot_interval_seconds: 60
+  record_timing: true
+position_data:
+  shadow_held_quotes: true
 monitoring:
   metrics_port: 8000
   log_level: "INFO"

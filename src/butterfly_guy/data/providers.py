@@ -16,6 +16,7 @@ from schwab_gateway_sdk.client import (
     GatewayTimeoutError,
     GatewayUnavailableError,
 )
+from schwab_gateway_sdk.models import PartialQuoteResponseV1
 
 from butterfly_guy.core.metrics import clear_readiness, set_readiness
 from butterfly_guy.core.time_utils import MARKET_OPEN, market_close_time
@@ -54,6 +55,10 @@ class OmittedContract:
     stale: bool
     age_seconds: float | None
     flags: tuple[str, ...]
+    event_timestamp: dt.datetime | None = None
+    bid: float | None = None
+    ask: float | None = None
+    mark: float | None = None
 
 
 @dataclass(frozen=True)
@@ -356,6 +361,15 @@ class GatewayAuthoritativeMarketDataProvider:
             lambda: self._get_option_chain_observed(symbol, expiration),
         )
 
+    async def get_held_quotes_observed(self, symbols: tuple[str, ...]) -> PartialQuoteResponseV1:
+        """One shadow read, with missing symbols named; no retries or readiness changes."""
+        response = await self._client.get_available_quotes(symbols)
+        returned = {quote.symbol for quote in response.quotes}
+        missing = set(response.missing_symbols)
+        if returned | missing != set(symbols):
+            raise GatewayMarketDataError("gateway held quotes do not match requested symbols")
+        return response
+
     async def _get_option_chain_observed(
         self, symbol: str, expiration: dt.date
     ) -> tuple[dict[str, Any], ChainObservation]:
@@ -528,6 +542,8 @@ class GatewayAuthoritativeMarketDataProvider:
                     stale=bool(contract.stale),
                     age_seconds=contract.age_seconds,
                     flags=tuple(sorted(contract_flags)),
+                    event_timestamp=getattr(contract, "event_timestamp", None),
+                    bid=bid, ask=ask, mark=mark,
                 ))
                 continue
             timings[contract_symbol] = ContractTiming(
