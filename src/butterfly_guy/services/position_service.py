@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 from collections.abc import Awaitable
+from time import monotonic
 from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import AppConfig
@@ -358,6 +359,8 @@ class PositionService:
         market_data_failures = 0
         market_data_alerted = False
         market_data_failure_started_at: float | None = None
+        next_outage_alert_seconds = 60.0
+        last_recovery_status = "not_attempted"
         market_data = getattr(self, "market_data", None) or getattr(
             self, "schwab", None
         )
@@ -392,6 +395,7 @@ class PositionService:
                             trade, candidate,
                         )
                         if recovery_evidence:
+                            last_recovery_status = recovery_evidence["status"]
                             log.info("position_held_quote_recovery", **recovery_evidence)
                         if recovered is not None:
                             quotes = recovered
@@ -404,7 +408,7 @@ class PositionService:
                     await self._record_held_quote_recovery(recovery_evidence)
                     market_data_failures += 1
                     if market_data_failure_started_at is None:
-                        market_data_failure_started_at = asyncio.get_running_loop().time()
+                        market_data_failure_started_at = monotonic()
                     held_legs = held_leg_evidence(
                         trade, candidate, quotes, observation,
                         chain_failed=not isinstance(
@@ -419,7 +423,7 @@ class PositionService:
                         "error": str(market_data_error),
                         "held_legs": held_legs,
                         "outage_seconds": round(
-                            asyncio.get_running_loop().time() - market_data_failure_started_at, 1,
+                            monotonic() - market_data_failure_started_at, 1,
                         ),
                         "chain_gateway_received_at": (
                             observation.gateway_received_at.isoformat()
@@ -474,10 +478,60 @@ class PositionService:
                                     )
                             if not await notify_telegram(alert_text):
                                 log.warning("position_market_data_telegram_alert_failed")
+                    if (market_data_alerted
+                            and failure_details["outage_seconds"] >= next_outage_alert_seconds):
+                        # One reminder per poll; skip missed intervals rather than burst.
+                        outage_seconds = failure_details["outage_seconds"]
+                        next_outage_alert_seconds = (outage_seconds // 300 + 1) * 300
+                        recovery_status = (
+                            last_recovery_status if self._held_quote_recovery is not None
+                            else "disabled"
+                        )
+                        escalation = {
+                            **failure_details, "targeted_recovery_status": recovery_status,
+                        }
+                        log.error("position_market_data_outage_prolonged", **escalation)
+                        alert_text = (
+                            f"WARNING: {self.config.strategy.underlying} trade {trade.trade_id}: "
+                            f"valuation-dependent exits suspended for {outage_seconds:.0f}s; "
+                            "position remains OPEN. "
+                            + "; ".join(
+                                f"{leg['strike']:g} {candidate.direction}: {leg['reason']}"
+                                + (f" (quote age {leg['age_seconds']:.0f}s)"
+                                   if leg["age_seconds"] is not None else "")
+                                for leg in held_legs if leg["reason"] != "usable"
+                            )
+                            + f". Latest targeted recovery result: {recovery_status}."
+                        )
+                        await self._best_effort(
+                            "position_market_data_outage_prolonged_event",
+                            asyncio.wait_for(self.decision_queries.log_event(
+                                "position_market_data_outage_prolonged", escalation,
+                                underlying=self.config.strategy.underlying,
+                            ), timeout=3.0),
+                        )
+                        if self.notifier:
+                            try:
+                                await asyncio.wait_for(
+                                    self.notifier.notify_text(alert_text), timeout=3.0,
+                                )
+                            except Exception as notify_error:
+                                log.warning(
+                                    "position_market_data_alert_failed", error=str(notify_error),
+                                )
+                        try:
+                            if not await asyncio.wait_for(notify_telegram(alert_text), timeout=3.0):
+                                log.warning("position_market_data_telegram_alert_failed")
+                        except Exception as notify_error:
+                            log.warning(
+                                "position_market_data_telegram_alert_failed",
+                                error=str(notify_error),
+                            )
                     await asyncio.sleep(poll_interval)
                     continue
 
                 if market_data_failures:
+                    outage_seconds = round(monotonic() - market_data_failure_started_at, 1)
                     clear_readiness("market_data_unavailable")
                     await self._best_effort(
                         "position_market_data_recovered_event",
@@ -486,10 +540,7 @@ class PositionService:
                             {
                                 "trade_id": trade.trade_id,
                                 "consecutive_failures": market_data_failures,
-                                "outage_seconds": round(
-                                    asyncio.get_running_loop().time()
-                                    - market_data_failure_started_at, 1,
-                                ) if market_data_failure_started_at is not None else None,
+                                "outage_seconds": outage_seconds,
                             },
                             underlying=self.config.strategy.underlying,
                         ),
@@ -498,14 +549,18 @@ class PositionService:
                         "position_market_data_recovered",
                         trade_id=trade.trade_id,
                         consecutive_failures=market_data_failures,
+                        outage_seconds=outage_seconds,
                     )
                     if market_data_alerted:
                         await notify_telegram(
-                            f"OK: position market data recovered for trade {trade.trade_id}."
+                            f"OK: position market data recovered for trade {trade.trade_id} "
+                            f"after {outage_seconds:.0f}s; valuation-dependent exits resumed."
                         )
                     market_data_failures = 0
                     market_data_alerted = False
                     market_data_failure_started_at = None
+                    next_outage_alert_seconds = 60.0
+                    last_recovery_status = "not_attempted"
                 chain_fetched_at = now_eastern()
 
                 if trade.entry_time is not None:

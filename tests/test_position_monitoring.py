@@ -215,6 +215,7 @@ async def test_intermittent_missing_held_leg_degrades_then_recovers_without_brok
 ) -> None:
     """Replay valid -> incomplete threshold -> valid for every held leg."""
     set_readiness(None)
+
     complete = _quotes()
     incomplete = {strike: quote for strike, quote in complete.items() if strike != missing_strike}
     next_strike = HELD_STRIKES[(HELD_STRIKES.index(missing_strike) + 1) % len(HELD_STRIKES)]
@@ -267,3 +268,74 @@ async def test_intermittent_missing_held_leg_degrades_then_recovers_without_brok
     assert monitor_log.warning.call_count == 1
     assert monitor_log.error.call_count == 1
     set_readiness(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "fallback,notification_fails", [(False, False), (True, False), (True, True)],
+)
+async def test_prolonged_outage_reminders_are_rate_limited_and_reset_on_recovery(
+    fallback: bool, notification_fails: bool,
+) -> None:
+    set_readiness(None)
+    complete = _quotes()
+    incomplete = {k: v for k, v in complete.items() if k != HELD_STRIKES[-1]}
+    service = _service([incomplete] * 10 + [complete] + [incomplete] * 3 + [complete])
+    service.state_machine.evaluate.side_effect = None
+    service.state_machine.evaluate.return_value = None
+    service.notifier = MagicMock(notify_text=AsyncMock())
+    times = iter([0, 2, 4, 59, 60, 61, 299, 300, 301, 600, 601, 700, 702, 760, 761])
+    clock = [0.0]
+    helper = SimpleNamespace(recover=AsyncMock(return_value=(None, {})))
+    calls = 0
+
+    async def get_chain(*_args):
+        nonlocal calls
+        calls += 1
+        try:
+            clock[0] = next(times)
+        except StopIteration:
+            raise asyncio.CancelledError from None
+        if fallback:
+            service._held_quote_recovery = helper
+            helper.recover.return_value = (
+                None, {"status": "unusable_quotes"} if calls in {1, 12} else {},
+            )
+        return {"underlyingPrice": 756.0}
+
+    service.market_data.get_option_chain.side_effect = get_chain
+    telegram = AsyncMock(return_value=True)
+    if notification_fails:
+        # Initial alert succeeds; prolonged alerts must not stop monitoring.
+        service.notifier.notify_text.side_effect = [None] + [TimeoutError()] * 3 + [None, None]
+        telegram.side_effect = [True] + [TimeoutError()] * 3 + [True, True, True, True]
+    with (
+        patch("butterfly_guy.services.position_service.is_market_open", return_value=True),
+        patch("butterfly_guy.services.position_service.session_date", return_value=EXPIRATION),
+        patch("butterfly_guy.services.position_service.get_0dte_expiration",
+              return_value=EXPIRATION),
+        patch("butterfly_guy.services.position_service.monotonic", side_effect=lambda: clock[0]),
+        patch("butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()),
+        patch("butterfly_guy.services.position_service.notify_telegram", new=telegram),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await service.monitor_loop(
+            TradeRecord(trade_id=17, trade_date=EXPIRATION, entry_price=0.50), _candidate(),
+        )
+    events = service.decision_queries.log_event.await_args_list
+    prolonged = [c.args[1] for c in events
+                 if c.args[0] == "position_market_data_outage_prolonged"]
+    assert [e["outage_seconds"] for e in prolonged] == [60, 300, 600, 60]
+    assert {e["targeted_recovery_status"] for e in prolonged} == {
+        "unusable_quotes" if fallback else "disabled",
+    }
+    assert all(e["held_legs"][-1]["strike"] == HELD_STRIKES[-1] for e in prolonged)
+    messages = [c.args[0] for c in telegram.await_args_list]
+    assert len(messages) == 8  # Two initial alerts, four reminders, two recoveries.
+    assert "suspended for 60s" in messages[1]
+    assert "after 601s; valuation-dependent exits resumed" in messages[4]
+    assert "after 61s; valuation-dependent exits resumed" in messages[-1]
+    assert service.state_machine.evaluate.call_count == 2
+    service.order_manager.execute_exit.assert_not_awaited()
+    assert service.schwab.mock_calls == []
+    assert readiness_snapshot() == (True, None)

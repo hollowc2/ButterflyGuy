@@ -13,8 +13,14 @@ valuation or exit policy.
   each held leg's symbol, strike, rejection reason, bid/ask/mark, quote timestamp,
   age and quality flags, plus the chain's gateway receipt time.
 - The alert identifies the underlying and affected strikes and states that
-  valuation-dependent exits are suspended. Recovery means usable chain quotes
-  returned; it does not mean the position closed.
+  valuation-dependent exits are suspended. Prolonged outages generate a reminder
+  after 60 seconds, at 300 seconds, and every 300 seconds thereafter. Reminders
+  report the total valuation outage duration, current blocking legs and latest
+  targeted recovery result (or that recovery is disabled). Missed reminder
+  intervals do not generate a burst of alerts. Reminder DB writes and each
+  notification have a three-second timeout; failures do not stop monitoring.
+  Recovery reports the outage duration and resets the reminder schedule.
+  Recovery means usable valuation returned; it does not mean the position closed.
 - XSP/NDX enable `collector.record_timing`, using the existing migration 011
   columns and `chain_snapshot_meta`. Rejected-contract metadata also retains
   prices and the event timestamp. Raw historical snapshots are unchanged.
@@ -57,7 +63,8 @@ FROM decision_log
 WHERE ts >= CURRENT_DATE
   AND event_type IN ('position_held_quote_shadow',
                      'position_market_data_unavailable',
-                     'position_market_data_recovered')
+                     'position_market_data_recovered',
+                     'position_market_data_outage_prolonged')
 ORDER BY ts;
 ```
 
@@ -71,3 +78,28 @@ coverage. Activating them for valuation, defining prolonged-outage escalation,
 and separating time-based exit intent from price-dependent decisions are later
 behavioral changes that need dedicated tests and review. This stage does not
 relax freshness, fabricate missing-leg values, or alter the cash-settlement path.
+
+## October 9 coverage investigation
+
+Trade 341 held the XSP 780/784/788 call butterfly. Its three valuation outages
+lasted 304.2, 88.5 and 157.9 seconds. During each, both chain and targeted quote
+responses retained the same old 788 quote timestamp, with bid 0 and ask 0.01;
+the other held legs continued updating. All 18 targeted recovery attempts were
+rejected as unusable. The trade subsequently closed at 17:19:08 UTC through the
+existing drawdown exit. This evidence does not establish the upstream reason
+for the unchanged timestamps or prove an exit was missed.
+
+The current gateway/consumer implementation has no level-one option streaming
+path. Schwab-py's [streaming documentation](https://schwab-py.readthedocs.io/en/latest/streaming.html)
+supports `level_one_option_subs`, option bid/ask fields and `QUOTE_TIME_MILLIS`.
+This makes streaming a candidate for a shadow coverage comparison, not a proven
+solution: another response carrying the same old quote time remains stale.
+
+A gateway-owned shadow capture should subscribe to the three exact held symbols
+and compare timestamp age, complete usable bid/ask coverage and outage duration
+against both existing REST paths. Preserve per-symbol timestamps across partial
+stream updates and reconnects; receipt time or another contract's update must
+never renew a leg's quote time. First check the gateway's existing stream-session
+ownership to avoid disrupting its active equity/order-book subscriptions. No
+new stream connection, production subscription or valuation source is activated
+by this consumer alert change.

@@ -518,9 +518,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/position_service.py": {
-    "mtime": 1791484923.388835,
-    "seen": 1791484969.0343657,
-    "ast_hash": "9625682c7f792127eb8f06997c9b3c73",
+    "mtime": 1791589278.831093,
+    "seen": 1791589308.702744,
+    "ast_hash": "99e738a5a1c9da6841cd7a5fbeccf89a",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/trade_chart.py": {
@@ -1244,9 +1244,9 @@
     "semantic_hash": ""
   },
   "tests/test_position_monitoring.py": {
-    "mtime": 1790453906.9392433,
-    "seen": 1791136932.6589916,
-    "ast_hash": "ae9b3916a2e2e82929423ff014d5b958",
+    "mtime": 1791589240.1787877,
+    "seen": 1791589262.1181731,
+    "ast_hash": "1468680e07a0bf2fbf800324d5a7fc4f",
     "semantic_hash": ""
   },
   "tools/archive/schwab-gateway/launch_schwab_gateway_readiness_soak_20260909.sh": {
@@ -2786,9 +2786,9 @@
     "semantic_hash": ""
   },
   "docs/position-market-data-diagnostics.md": {
-    "mtime": 1791417409.4645808,
-    "seen": 1791417647.093158,
-    "ast_hash": "c610577bf9d0a1006c02a94d56fd8876",
+    "mtime": 1791589227.9020083,
+    "seen": 1791589262.1229599,
+    "ast_hash": "2b25941550713633c1004abb0970556b",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/position_quote_recovery.py": {
@@ -2810,9 +2810,15 @@
     "semantic_hash": ""
   },
   "docs/research/xsp-fix-candidate-2026-10-08.md": {
-    "mtime": 1791485109.238259,
-    "seen": 1791485112.5095165,
-    "ast_hash": "2bfe1b88b7dd89744631b34b2fdc29aa",
+    "mtime": 1791485287.9868283,
+    "seen": 1791589262.125221,
+    "ast_hash": "6ca98b8bb418f59c4403df17baceb363",
+    "semantic_hash": ""
+  },
+  "infra/docker-compose.xsp-protection.yml": {
+    "mtime": 1791485287.89383,
+    "seen": 1791589262.12544,
+    "ast_hash": "f0d488c2261d442d71eaa944c1317b56",
     "semantic_hash": ""
   }
 }
