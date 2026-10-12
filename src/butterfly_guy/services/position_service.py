@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 from collections.abc import Awaitable
+from time import monotonic
 from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import AppConfig
@@ -30,7 +31,10 @@ from butterfly_guy.core.time_utils import (
     session_date,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
-from butterfly_guy.data.providers import CollectorMarketDataProvider
+from butterfly_guy.data.providers import (
+    CollectorMarketDataProvider,
+    GatewayAuthoritativeMarketDataProvider,
+)
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
 from butterfly_guy.data.schwab_client import (
     SCHWAB_CHAIN_SYMBOLS,
@@ -61,6 +65,11 @@ from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
+from butterfly_guy.services.position_data_diagnostics import (
+    PositionQuoteShadow,
+    held_leg_evidence,
+)
+from butterfly_guy.services.position_quote_recovery import HeldQuoteRecovery
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, summarize_exit_chart
 from butterfly_guy.strategy.exit_mark_parity import (
     DB_EXIT_PARITY_MAX_LAG_SECONDS,
@@ -69,6 +78,7 @@ from butterfly_guy.strategy.exit_mark_parity import (
 
 log = get_logger(__name__)
 MARKET_DATA_FAILURE_THRESHOLD = 3
+MARKET_DATA_RECOVERY_HOLD_SECONDS = 120.0
 # Consecutive failures of one best-effort DB telemetry write before alerting.
 TELEMETRY_FAILURE_THRESHOLD = 5
 
@@ -293,6 +303,48 @@ class PositionService:
         candidate: ButterflyCandidate,
         recovered_peak: float | None = None,
     ) -> None:
+        """Keep diagnostic tasks scoped to this position, including cancellation."""
+        provider = getattr(self, "market_data", None)
+        settings = getattr(self.config, "position_data", None)
+        shadow = None
+        if isinstance(provider, GatewayAuthoritativeMarketDataProvider) and (
+            settings is not None and settings.shadow_held_quotes is True
+        ):
+            shadow = PositionQuoteShadow(
+                provider, self.decision_queries, settings,
+                trade_id=trade.trade_id, underlying=self.config.strategy.underlying,
+            )
+        self._held_quote_shadow = shadow
+        self._held_quote_recovery = (
+            HeldQuoteRecovery(provider)
+            if isinstance(provider, GatewayAuthoritativeMarketDataProvider)
+            and settings is not None and settings.recover_held_quotes is True
+            and self.config.strategy.underlying == "XSP"
+            and self.config.execution.paper_trading is True else None
+        )
+        try:
+            await self._monitor_loop(trade, candidate, recovered_peak)
+        finally:
+            if shadow is not None:
+                await shadow.close()
+            self._held_quote_shadow = None
+            self._held_quote_recovery = None
+
+    async def _send_recovery_ok(self, trade_id: int) -> None:
+        try:
+            await asyncio.wait_for(notify_telegram(
+                f"OK: position market data recovered for trade {trade_id}; "
+                "valuation-dependent exits resumed."
+            ), timeout=3.0)
+        except Exception as notify_error:
+            log.warning("position_market_data_telegram_alert_failed", error=str(notify_error))
+
+    async def _monitor_loop(
+        self,
+        trade: TradeRecord,
+        candidate: ButterflyCandidate,
+        recovered_peak: float | None = None,
+    ) -> None:
         """Monitor position every 2s, evaluate state machine, trigger exit if needed."""
         self.position_manager.reset(trade.entry_price, peak_value=recovered_peak)
         self._last_persisted_peak = (
@@ -316,6 +368,14 @@ class PositionService:
         exited = False
         market_data_failures = 0
         market_data_alerted = False
+        # A flapping quote must read as one incident: the "unavailable" alert is
+        # sent once, and "recovered" only after health has held for a while.
+        incident_alerted = False
+        recovery_ok_pending: float | None = None
+        incident: tuple[float, float] | None = None
+        market_data_failure_started_at: float | None = None
+        next_outage_alert_seconds = 60.0
+        last_recovery_status = "not_attempted"
         market_data = getattr(self, "market_data", None) or getattr(
             self, "schwab", None
         )
@@ -323,26 +383,80 @@ class PositionService:
             try:
                 # Fetch latest chain for position valuation
                 expiration = get_0dte_expiration()
+                observation = None
+                quotes: dict[float, OptionQuote] = {}
+                recovery_evidence: dict = {}
                 try:
-                    chain_data = await market_data.get_option_chain(
-                        SCHWAB_CHAIN_SYMBOLS.get(
-                            self.config.strategy.underlying,
-                            self.config.strategy.underlying,
-                        ),
-                        expiration,
+                    chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(
+                        self.config.strategy.underlying, self.config.strategy.underlying,
                     )
+                    if isinstance(market_data, GatewayAuthoritativeMarketDataProvider):
+                        chain_data, observation = await market_data.get_option_chain_observed(
+                            chain_symbol, expiration,
+                        )
+                    else:
+                        chain_data = await market_data.get_option_chain(chain_symbol, expiration)
                     quotes = self._extract_quotes(chain_data, expiration, candidate)
+                    if self._held_quote_shadow is not None:
+                        self._held_quote_shadow.submit(
+                            held_leg_evidence(trade, candidate, quotes, observation), observation,
+                        )
+                    held_strikes = (
+                        candidate.lower_strike, candidate.center_strike, candidate.upper_strike,
+                    )
+                    if self._held_quote_recovery is not None:
+                        quotes.update(self._held_quote_recovery.floor_fill(
+                            strike for strike in held_strikes if strike not in quotes
+                        ))
+                    if self._held_quote_recovery is not None and any(
+                        strike not in quotes for strike in held_strikes
+                    ):
+                        recovered, recovery_evidence = await self._held_quote_recovery.recover(
+                            trade, candidate,
+                        )
+                        if recovery_evidence:
+                            last_recovery_status = recovery_evidence["status"]
+                            log.info("position_held_quote_recovery", **recovery_evidence)
+                        if recovered is not None:
+                            quotes = recovered
                     # Recovery is only proven after all held legs can be valued;
                     # a syntactically valid chain missing one leg remains unsafe.
                     pos_state = self.position_manager.update_position_value(
                         candidate, quotes
                     )
                 except Exception as market_data_error:
+                    await self._record_held_quote_recovery(recovery_evidence)
                     market_data_failures += 1
+                    if recovery_ok_pending is not None and incident is not None:
+                        # Failed again before the recovery held: same incident.
+                        market_data_failure_started_at, next_outage_alert_seconds = incident
+                        market_data_alerted = True
+                    recovery_ok_pending = None
+                    incident = None
+                    if market_data_failure_started_at is None:
+                        market_data_failure_started_at = monotonic()
+                    held_legs = held_leg_evidence(
+                        trade, candidate, quotes, observation,
+                        chain_failed=not isinstance(
+                            market_data_error, PositionQuotesUnavailableError,
+                        ),
+                    )
+                    if self._held_quote_shadow is not None:
+                        self._held_quote_shadow.submit(held_legs, observation)
                     failure_details: dict[str, object] = {
                         "trade_id": trade.trade_id,
                         "consecutive_failures": market_data_failures,
                         "error": str(market_data_error),
+                        "held_legs": held_legs,
+                        "outage_seconds": round(
+                            monotonic() - market_data_failure_started_at, 1,
+                        ),
+                        "chain_gateway_received_at": (
+                            observation.gateway_received_at.isoformat()
+                            if observation and observation.gateway_received_at else None
+                        ),
+                        "chain_age_seconds": observation.age_seconds if observation else None,
+                        "chain_source": observation.source if observation else None,
                     }
                     if isinstance(market_data_error, PositionQuotesUnavailableError):
                         failure_details.update(
@@ -370,23 +484,82 @@ class PositionService:
                                 ),
                             )
                             alert_text = (
-                                "WARNING: position market data is unavailable "
-                                f"for trade {trade.trade_id}; position remains OPEN."
+                                f"WARNING: {self.config.strategy.underlying} position market data "
+                                f"is unavailable for trade {trade.trade_id}; "
+                                "valuation-dependent exits suspended; position remains OPEN. "
+                                + "; ".join(
+                                    f"{leg['strike']:g} {candidate.direction}: {leg['reason']}"
+                                    + (f" (quote age {leg['age_seconds']:.0f}s)"
+                                       if leg['age_seconds'] is not None else "")
+                                    for leg in held_legs if leg["reason"] != "usable"
+                                )
                             )
-                            if self.notifier:
-                                try:
-                                    await self.notifier.notify_text(alert_text)
-                                except Exception as notify_error:
-                                    log.warning(
-                                        "position_market_data_alert_failed",
-                                        error=str(notify_error),
-                                    )
-                            if not await notify_telegram(alert_text):
+                            if not incident_alerted:
+                                incident_alerted = True
+                                if self.notifier:
+                                    try:
+                                        await self.notifier.notify_text(alert_text)
+                                    except Exception as notify_error:
+                                        log.warning(
+                                            "position_market_data_alert_failed",
+                                            error=str(notify_error),
+                                        )
+                                if not await notify_telegram(alert_text):
+                                    log.warning("position_market_data_telegram_alert_failed")
+                    if (market_data_alerted
+                            and failure_details["outage_seconds"] >= next_outage_alert_seconds):
+                        # One reminder per poll; skip missed intervals rather than burst.
+                        outage_seconds = failure_details["outage_seconds"]
+                        next_outage_alert_seconds = (outage_seconds // 300 + 1) * 300
+                        recovery_status = (
+                            last_recovery_status if self._held_quote_recovery is not None
+                            else "disabled"
+                        )
+                        escalation = {
+                            **failure_details, "targeted_recovery_status": recovery_status,
+                        }
+                        log.error("position_market_data_outage_prolonged", **escalation)
+                        alert_text = (
+                            f"WARNING: {self.config.strategy.underlying} trade {trade.trade_id}: "
+                            f"valuation-dependent exits suspended for {outage_seconds:.0f}s; "
+                            "position remains OPEN. "
+                            + "; ".join(
+                                f"{leg['strike']:g} {candidate.direction}: {leg['reason']}"
+                                + (f" (quote age {leg['age_seconds']:.0f}s)"
+                                   if leg["age_seconds"] is not None else "")
+                                for leg in held_legs if leg["reason"] != "usable"
+                            )
+                            + f". Latest targeted recovery result: {recovery_status}."
+                        )
+                        await self._best_effort(
+                            "position_market_data_outage_prolonged_event",
+                            asyncio.wait_for(self.decision_queries.log_event(
+                                "position_market_data_outage_prolonged", escalation,
+                                underlying=self.config.strategy.underlying,
+                            ), timeout=3.0),
+                        )
+                        if self.notifier:
+                            try:
+                                await asyncio.wait_for(
+                                    self.notifier.notify_text(alert_text), timeout=3.0,
+                                )
+                            except Exception as notify_error:
+                                log.warning(
+                                    "position_market_data_alert_failed", error=str(notify_error),
+                                )
+                        try:
+                            if not await asyncio.wait_for(notify_telegram(alert_text), timeout=3.0):
                                 log.warning("position_market_data_telegram_alert_failed")
+                        except Exception as notify_error:
+                            log.warning(
+                                "position_market_data_telegram_alert_failed",
+                                error=str(notify_error),
+                            )
                     await asyncio.sleep(poll_interval)
                     continue
 
                 if market_data_failures:
+                    outage_seconds = round(monotonic() - market_data_failure_started_at, 1)
                     clear_readiness("market_data_unavailable")
                     await self._best_effort(
                         "position_market_data_recovered_event",
@@ -395,6 +568,7 @@ class PositionService:
                             {
                                 "trade_id": trade.trade_id,
                                 "consecutive_failures": market_data_failures,
+                                "outage_seconds": outage_seconds,
                             },
                             underlying=self.config.strategy.underlying,
                         ),
@@ -403,13 +577,23 @@ class PositionService:
                         "position_market_data_recovered",
                         trade_id=trade.trade_id,
                         consecutive_failures=market_data_failures,
+                        outage_seconds=outage_seconds,
                     )
                     if market_data_alerted:
-                        await notify_telegram(
-                            f"OK: position market data recovered for trade {trade.trade_id}."
-                        )
+                        recovery_ok_pending = monotonic()
+                        incident = (market_data_failure_started_at, next_outage_alert_seconds)
                     market_data_failures = 0
                     market_data_alerted = False
+                    market_data_failure_started_at = None
+                    next_outage_alert_seconds = 60.0
+                    last_recovery_status = "not_attempted"
+                if recovery_ok_pending is not None and (
+                    monotonic() - recovery_ok_pending >= MARKET_DATA_RECOVERY_HOLD_SECONDS
+                ):
+                    await self._send_recovery_ok(trade.trade_id)
+                    recovery_ok_pending = None
+                    incident = None
+                    incident_alerted = False
                 chain_fetched_at = now_eastern()
 
                 if trade.entry_time is not None:
@@ -618,6 +802,7 @@ class PositionService:
                             reason=signal.reason,
                         )
 
+                await self._record_held_quote_recovery(recovery_evidence)
                 if self.monitoring_leg_queries is not None:
                     await self._record_monitoring_leg_quotes(
                         trade=trade,
@@ -725,6 +910,8 @@ class PositionService:
             if not exited:
                 await asyncio.sleep(poll_interval)
 
+        if recovery_ok_pending is not None:
+            await self._send_recovery_ok(trade.trade_id)
         if exited:
             return
 
@@ -1039,6 +1226,19 @@ class PositionService:
             exit_reason=row.get("exit_reason"),
         )
         return summarize_exit_chart(spec, candles, full_session=full_session)
+
+    async def _record_held_quote_recovery(self, evidence: dict) -> None:
+        """Bounded diagnostics, after the exit action or when no valuation is possible."""
+        if evidence:
+            await self._best_effort(
+                "held_quote_recovery_event",
+                asyncio.wait_for(
+                    self.decision_queries.log_event(
+                        "position_held_quote_recovery", evidence,
+                        underlying=self.config.strategy.underlying,
+                    ), timeout=3.0,
+                ),
+            )
 
     async def _best_effort(self, name: str, operation: Awaitable[Any]) -> tuple[bool, Any]:
         """Await non-critical DB telemetry; log and count failures, never raise.

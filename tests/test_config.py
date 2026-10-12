@@ -4,7 +4,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from butterfly_guy.core.config import AppConfig, load_config
+from butterfly_guy.core.config import AppConfig, PositionDataSettings, load_config
 
 
 def test_load_config_defaults():
@@ -14,6 +14,16 @@ def test_load_config_defaults():
     assert config.risk.max_daily_loss == 500.0
     assert config.risk.max_trades_per_day == 1
     assert 10 in config.strategy.wing_widths
+    assert config.position_data.shadow_held_quotes is False
+
+
+@pytest.mark.parametrize("settings", [
+    {"shadow_interval_seconds": 0}, {"shadow_interval_seconds": 2},
+    {"shadow_timeout_seconds": 0}, {"shadow_timeout_seconds": 11},
+])
+def test_position_shadow_settings_bound_request_rate_and_timeout(settings):
+    with pytest.raises(ValidationError):
+        PositionDataSettings(**settings)
 
 
 def test_load_config_from_yaml(tmp_path):

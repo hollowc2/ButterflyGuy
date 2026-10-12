@@ -191,6 +191,15 @@ class MonitoringSettings(ConfigModel):
     log_level: str = "INFO"
 
 
+class PositionDataSettings(ConfigModel):
+    # Shadow requests collect evidence only; they never feed position valuation.
+    shadow_held_quotes: bool = False
+    shadow_interval_seconds: float = Field(default=60.0, ge=30.0, le=3600.0)
+    shadow_timeout_seconds: float = Field(default=3.0, gt=0, le=10.0)
+    # Candidate only: recover missing chain legs from a complete fresh quote response.
+    recover_held_quotes: bool = False
+
+
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="",
@@ -209,9 +218,14 @@ class AppConfig(BaseSettings):
     collector: CollectorSettings = Field(default_factory=CollectorSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    position_data: PositionDataSettings = Field(default_factory=PositionDataSettings)
 
     @model_validator(mode="after")
     def validate_trading_safety(self) -> AppConfig:
+        if self.position_data.recover_held_quotes and (
+            self.strategy.underlying != "XSP" or not self.execution.paper_trading
+        ):
+            raise ValueError("held quote recovery is restricted to XSP paper trading")
         widths = self.strategy.wing_widths
         if not widths or any(width <= 0 for width in widths) or len(widths) != len(set(widths)):
             raise ValueError("strategy.wing_widths must be unique positive values")

@@ -80,6 +80,27 @@ def test_xsp_replay_respects_early_close():
     assert state.minutes_to_close == 15
 
 
+def test_open_monitor_replay_does_not_invent_settlement():
+    at = dt.datetime(2026, 9, 25, 10, 5, tzinfo=EASTERN)
+    trade = {
+        "id": 1, "trade_date": "2026-09-25", "direction": "PUT",
+        "wing_width": 3, "center_strike": 740, "entry_price": 0.30,
+        "entry_time": at.isoformat(), "entry_spot": 743, "quantity": 1,
+        "exit_price": None, "exit_reason": None,
+        "entry_diagnostics": {"marketable_entry_estimate": 0.35},
+    }
+    batch = [
+        {"trade_id": "1", "ts": at.isoformat(), "expiration": "2026-09-25",
+         "strike": str(q.strike), "option_type": "PUT", "symbol": q.symbol,
+         "bid": str(q.bid), "ask": str(q.ask), "mark": str(q.mark), "peak_value": "0.30"}
+        for q in quote_map(0.4).values()
+    ]
+    result = replay_trade(trade, [batch], load_config(config_path="configs/config_xsp.yaml"))
+    assert not result["terminal_coverage"]
+    assert result["settlement_pnl_dollars"] is None
+    assert result["policy_pnl_dollars"] is None
+
+
 @pytest.mark.parametrize("bad_field", ["missing_leg", "direction", "expiration", "market"])
 def test_monitor_replay_refuses_unusable_held_leg_evidence(bad_field):
     at = dt.datetime(2026, 9, 25, 10, 5, tzinfo=EASTERN)

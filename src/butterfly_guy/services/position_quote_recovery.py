@@ -1,0 +1,102 @@
+"""Opt-in XSP paper recovery from fresh targeted quotes, never stale estimates."""
+
+from __future__ import annotations
+
+import asyncio
+import math
+
+from butterfly_guy.core.time_utils import now_eastern
+from butterfly_guy.data.providers import GatewayAuthoritativeMarketDataProvider
+from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
+
+FLOOR_ASK = 0.01
+FLOOR_WING_MAX_EVENT_AGE = 3600.0
+FLOOR_WING_HOLD_SECONDS = 120.0
+
+
+class HeldQuoteRecovery:
+    """One bounded read per 30 seconds; require all held legs from the same response."""
+
+    def __init__(self, provider: GatewayAuthoritativeMarketDataProvider) -> None:
+        self.provider = provider
+        self.next_attempt_at = 0.0
+        self.floor_wings: dict[float, tuple[OptionQuote, float]] = {}
+
+    async def recover(
+        self, trade: TradeRecord, candidate: ButterflyCandidate,
+    ) -> tuple[dict[float, OptionQuote] | None, dict]:
+        loop = asyncio.get_running_loop()
+        if loop.time() < self.next_attempt_at:
+            return None, {}
+        self.next_attempt_at = loop.time() + 30.0
+        symbols = tuple(
+            getattr(trade, f"{name}_symbol") or getattr(candidate, f"{name}_symbol")
+            for name in ("lower", "center", "upper")
+        )
+        evidence = {"trade_id": trade.trade_id, "mode": "fresh_targeted_recovery"}
+        if not all(symbols) or len(set(symbols)) != 3:
+            return None, {**evidence, "status": "held_symbols_unavailable"}
+        try:
+            response = await asyncio.wait_for(
+                self.provider.get_held_quotes_observed(symbols), timeout=3.0,
+            )
+        except Exception as error:
+            return None, {**evidence, "status": "request_failed",
+                          "error_type": type(error).__name__}
+        by_symbol = {q.symbol: q for q in response.quotes}
+        if (response.missing_symbols or len(response.quotes) != 3
+                or set(by_symbol) != set(symbols)):
+            return None, {**evidence, "status": "incomplete_response"}
+        at = now_eastern()
+        quotes = {}
+        legs = []
+        for name, symbol in zip(("lower", "center", "upper"), symbols, strict=True):
+            q = by_symbol[symbol]
+            event_age = (at - q.event_timestamp).total_seconds() if q.event_timestamp else None
+            received_age = (at - q.gateway_received_at).total_seconds()
+            finite = all(math.isfinite(v) and v >= 0 for v in (q.bid, q.ask, q.mark))
+            # A 0 x 0.01 wing has no quote updates to wait for, so the gateway ages
+            # it to "stale" while its value stays pinned to the floor. Accept it
+            # only when that is the sole defect and the response itself is fresh.
+            floor_wing = (
+                finite and q.bid == 0 and q.ask == FLOOR_ASK
+                and set(q.data_quality_flags) <= {"stale"}
+                and event_age is not None and 0 <= event_age <= FLOOR_WING_MAX_EVENT_AGE
+                and 0 <= received_age <= 30
+            )
+            # A fresh HTTP response alone does not refresh an old exchange event.
+            usable = floor_wing or (
+                not q.stale and not q.data_quality_flags
+                and q.age_seconds is not None and 0 <= q.age_seconds <= 30
+                and event_age is not None and 0 <= event_age <= 30
+                and 0 <= received_age <= 30
+                and finite
+                and q.bid <= q.mark <= q.ask
+            )
+            legs.append({"symbol": symbol, "usable": usable, "bid": q.bid,
+                         "ask": q.ask, "mark": q.mark, "source": q.source,
+                         "event_timestamp": q.event_timestamp.isoformat()
+                         if q.event_timestamp else None,
+                         "age_seconds": q.age_seconds,
+                         "gateway_received_at": q.gateway_received_at.isoformat(),
+                         "flags": list(q.data_quality_flags)})
+            if usable:
+                strike = getattr(candidate, f"{name}_strike")
+                quotes[strike] = OptionQuote(
+                    symbol=symbol, underlying="XSP", expiration=trade.trade_date,
+                    strike=strike, option_type=candidate.direction,
+                    bid=q.bid, ask=q.ask, mark=(q.bid + q.ask) / 2,
+                )
+                if floor_wing:
+                    self.floor_wings[strike] = (quotes[strike], loop.time())
+        evidence.update(legs=legs, status="recovered" if len(quotes) == 3 else "unusable_quotes")
+        return (quotes if len(quotes) == 3 else None), evidence
+
+    def floor_fill(self, strikes) -> dict[float, OptionQuote]:
+        """Recently verified floor wings, so the 30s rate limit cannot re-open the gap."""
+        now = asyncio.get_running_loop().time()
+        return {
+            strike: quote for strike in strikes
+            if (held := self.floor_wings.get(strike)) is not None
+            for quote, at in (held,) if now - at <= FLOOR_WING_HOLD_SECONDS
+        }

@@ -101,7 +101,9 @@ async def test_timed_snapshot_records_quote_times_and_meta() -> None:
     assert (meta["contracts_delivered"], meta["contracts_stored"],
             meta["contracts_omitted"]) == (4, 3, 1)
     assert meta["omitted"] == [{"symbol": "C6005", "option_type": "CALL", "strike": 6005.0,
-                                "stale": True, "age_s": 75.0, "flags": ["stale"]}]
+                                "stale": True, "age_s": 75.0, "flags": ["stale"],
+                                "event_timestamp": None, "bid": None,
+                                "ask": None, "mark": None}]
     assert meta["strikes_within_spot_range"] == 1  # 6000 within 100 of 6010; 6300 is not
 
 
@@ -149,14 +151,14 @@ async def test_provider_without_observations_records_unobserved_meta() -> None:
     assert all(r["quote_event_ts"] is None for r in rows)
 
 
-def test_only_the_spx_config_records_timing() -> None:
+def test_all_paper_strategy_configs_record_timing() -> None:
     import yaml
 
     from butterfly_guy.core.config import CollectorSettings
 
     flags = {name: CollectorSettings(**yaml.safe_load(open(f"configs/{name}"))["collector"])
              .record_timing for name in ("config.yaml", "config_ndx.yaml", "config_xsp.yaml")}
-    assert flags == {"config.yaml": True, "config_ndx.yaml": False, "config_xsp.yaml": False}
+    assert flags == {"config.yaml": True, "config_ndx.yaml": True, "config_xsp.yaml": True}
 
 
 @pytest.mark.asyncio

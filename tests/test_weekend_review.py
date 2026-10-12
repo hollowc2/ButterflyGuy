@@ -11,6 +11,7 @@ from butterfly_guy.reports.live_performance import TradePoint, trade_point_from_
 from butterfly_guy.services.weekend_review import (
     ReviewWindows,
     calendar_month_to_date,
+    format_combined_performance_caption,
     format_executable_pnl,
     format_performance_caption,
     format_review_header,
@@ -302,3 +303,43 @@ async def test_summary_only_review_skips_trade_recaps(tmp_path) -> None:
     assert result.weekly_trade_count == 2
     assert result.messages_sent == 2
     chart.assert_not_awaited()
+
+
+def test_combined_caption_labels_periods_and_accounting() -> None:
+    day = dt.date(2026, 10, 9)
+    trade = _trade_point(day, pnl=319, executable=301)
+    caption = format_combined_performance_caption([trade], [trade], [trade])
+    for label in ("Weekly", "Monthly", "All-Time"):
+        assert f"> **{label}** · Trades: 1" in caption
+    assert "Executable P&L is an estimate" in caption
+    assert "fill model only" in caption
+
+
+@pytest.mark.asyncio
+async def test_historical_review_excludes_later_trades_and_fill_models(tmp_path, capsys) -> None:
+    reviewed = _row(underlying="XSP", trade_date=dt.date(2026, 10, 2))
+    future = _row(
+        id=8, underlying="XSP", trade_date=dt.date(2026, 10, 5),
+        metadata={"paper_fill_model": "future_model"},
+    )
+    with (
+        patch(
+            "butterfly_guy.services.weekend_review.fetch_closed_trades",
+            new=AsyncMock(return_value=[reviewed, future]),
+        ),
+        patch(
+            "butterfly_guy.services.weekend_review.build_combined_performance_chart_png",
+            return_value=b"png",
+        ) as chart,
+    ):
+        await send_weekend_review(
+            AsyncMock(), underlying="XSP", reference=dt.date(2026, 10, 3),
+            notifier=None, dry_run=True, dry_run_dir=tmp_path, include_trade_recaps=False,
+        )
+    periods = chart.call_args.args[0]
+    assert all(len(trades) == 1 for _, trades in periods)
+    assert all(trades[0].paper_fill_model == "mark_v1" for _, trades in periods)
+    assert chart.call_args.kwargs["title"] == "XSP Paper Performance Summary"
+    output = capsys.readouterr().out
+    assert "future_model" not in output
+    assert "> **All-Time** · Trades: 1" in output
