@@ -3,8 +3,8 @@
 Posts one review per asset with paper and executable P&L side by side. SPX also
 gets per-trade recaps with charts; NDX and XSP post their summary only.
 
-Cron: Saturday 9:00 AM PT
-  0 16 * * 6 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/send_weekend_review.py >> /opt/butterflyguy/weekend_review.log 2>&1
+Cron: Saturday 16:00 UTC; see infra/cron/weekend_review.cron for the isolated
+reporting release used on Helios (SPX only).
 """
 
 from __future__ import annotations
@@ -16,13 +16,17 @@ import os
 import sys
 from pathlib import Path
 
-from dotenv import dotenv_values
+import yaml
+from dotenv import dotenv_values, load_dotenv
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "src"))
 
-from butterfly_guy.core.config import load_config
+from butterfly_guy.core.config import DatabaseSettings
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.core.time_utils import now_pacific
 from butterfly_guy.db.connection import DatabasePool
@@ -30,6 +34,22 @@ from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.weekend_review import send_weekend_review
 
 log = get_logger(__name__)
+
+
+class ReviewSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_nested_delimiter="__", extra="ignore")
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+
+
+def load_review_database(config_path: str | Path, env_file: str | Path) -> DatabaseSettings:
+    """Read only the reporting dependency; trading config may use a newer schema."""
+    with Path(config_path).open() as config_file:
+        config = yaml.safe_load(config_file) or {}
+    load_dotenv(env_file)
+    database = dict(config.get("database") or {})
+    if os.getenv("DATABASE_PASSWORD") and not os.getenv("DATABASE__PASSWORD"):
+        database.setdefault("password", os.environ["DATABASE_PASSWORD"])
+    return ReviewSettings(database=database).database
 
 
 def parse_reference_date(week_ending: str | None) -> dt.date:
@@ -41,6 +61,7 @@ def parse_reference_date(week_ending: str | None) -> dt.date:
 async def main() -> int:
     parser = argparse.ArgumentParser(description="Send the weekend review to Discord")
     parser.add_argument("--config", default="configs/config.yaml")
+    parser.add_argument("--env-file", type=Path, default=Path(".env"))
     parser.add_argument(
         "--week-ending",
         default=None,
@@ -72,10 +93,10 @@ async def main() -> int:
     recap_assets = {a.strip().upper() for a in args.recap_assets.split(",") if a.strip()}
 
     setup_logging()
-    config = load_config(args.config)
+    database = load_review_database(args.config, args.env_file)
     reference = parse_reference_date(args.week_ending)
 
-    webhook = os.environ.get("DISCORD_WEEKEND_REVIEW_WEBHOOK") or dotenv_values(ROOT / ".env").get(
+    webhook = os.environ.get("DISCORD_WEEKEND_REVIEW_WEBHOOK") or dotenv_values(args.env_file).get(
         "DISCORD_WEEKEND_REVIEW_WEBHOOK",
         "",
     )
@@ -84,7 +105,7 @@ async def main() -> int:
         return 1
 
     notifier = DiscordNotifier(webhook) if webhook and not args.dry_run else None
-    db = DatabasePool(config.database.dsn)
+    db = DatabasePool(database.dsn)
     await db.initialize()
     try:
         for asset in assets:

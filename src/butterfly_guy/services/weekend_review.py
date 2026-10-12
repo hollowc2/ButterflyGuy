@@ -169,7 +169,13 @@ def format_combined_performance_caption(
         ("Monthly", monthly),
         ("All-Time", all_time),
     ):
-        lines.append(format_performance_caption(label, trades).split("\n", 1)[1])
+        stats_line = format_performance_caption(label, trades).split("\n", 1)[1]
+        lines.append(f"> **{label}** · {stats_line.removeprefix('> ')}")
+    lines.append(
+        "> _Win rate, PF, drawdown and chart curves use paper P&L. "
+        "Executable P&L is an estimate from recorded marketable prices. "
+        "All-Time covers the displayed fill model only._"
+    )
     return "\n".join(lines)
 
 
@@ -282,7 +288,10 @@ async def send_weekend_review(
 ) -> ReviewResult:
     """Post one asset's review: header, optional per-trade recaps, performance summary."""
     windows = review_windows(reference)
-    all_rows = await fetch_closed_trades(db, underlying)
+    all_rows = [
+        row for row in await fetch_closed_trades(db, underlying)
+        if _trade_date(row) <= windows.week_end
+    ]
     all_points = closed_trades_to_points(all_rows)
 
     weekly_rows = trades_in_range_rows(all_rows, windows.week_start, windows.week_end)
@@ -348,7 +357,9 @@ async def send_weekend_review(
         monthly_points,
         cohort_points,
     )
-    combined_png = build_combined_performance_chart_png(performance_periods)
+    combined_png = build_combined_performance_chart_png(
+        performance_periods, title=f"{underlying} Paper Performance Summary"
+    )
     await _post_with_delay(
         notifier,
         content=combined_caption,
