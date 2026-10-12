@@ -163,3 +163,51 @@ def test_xsp_candidate_protects_october_8_giveback_after_confirmation():
     assert candidate_machine.evaluate(pos).reason == "profitprotector_breakeven_floor"
     pos.position_age_minutes = 10
     assert candidate_machine.evaluate(pos) is None
+
+
+def _with_wing(result, **updates):
+    wing = result.quotes[-1].model_copy(update=updates)
+    return result.model_copy(update={"quotes": (*result.quotes[:-1], wing)})
+
+
+STALE_FLOOR = {
+    "bid": 0.0, "ask": 0.01, "mark": 0.005, "stale": True, "age_seconds": 301,
+    "event_timestamp": NOW - dt.timedelta(seconds=301), "data_quality_flags": ("stale",),
+}
+
+
+@pytest.mark.asyncio
+async def test_stale_floor_wing_is_valued_when_response_is_fresh():
+    """Trade 344: a 0 x 0.01 wing ages to stale without moving; it must not mask the fly."""
+    helper, _ = recovery(_with_wing(response(), **STALE_FLOOR))
+    with patch("butterfly_guy.services.position_quote_recovery.now_eastern", return_value=NOW):
+        quotes, evidence = await helper.recover(trade(), candidate())
+    assert evidence["status"] == "recovered"
+    assert quotes[775].bid == 0.0 and quotes[775].ask == 0.01
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("updates", [
+    {"ask": 0.0, "mark": 0.0},
+    {"ask": 0.02, "mark": 0.01},
+    {"event_timestamp": None},
+    {"event_timestamp": NOW - dt.timedelta(hours=2), "age_seconds": 7200},
+    {"bid": 0.01, "ask": 0.02, "mark": 0.015},
+    {"data_quality_flags": ("stale", "crossed")},
+    {"gateway_received_at": NOW - dt.timedelta(seconds=60)},
+])
+async def test_stale_wing_exemption_is_limited_to_the_floor_quote(updates):
+    helper, _ = recovery(_with_wing(response(), **{**STALE_FLOOR, **updates}))
+    with patch("butterfly_guy.services.position_quote_recovery.now_eastern", return_value=NOW):
+        quotes, evidence = await helper.recover(trade(), candidate())
+    assert quotes is None and evidence["status"] == "unusable_quotes"
+
+
+@pytest.mark.asyncio
+async def test_verified_floor_wing_fills_between_rate_limited_recoveries():
+    helper, _ = recovery(_with_wing(response(), **STALE_FLOOR))
+    with patch("butterfly_guy.services.position_quote_recovery.now_eastern", return_value=NOW):
+        await helper.recover(trade(), candidate())
+    assert set(helper.floor_fill([775, 771])) == {775}
+    helper.floor_wings[775] = (helper.floor_wings[775][0], helper.floor_wings[775][1] - 121)
+    assert helper.floor_fill([775]) == {}

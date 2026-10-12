@@ -264,7 +264,8 @@ async def test_intermittent_missing_held_leg_degrades_then_recovers_without_brok
     assert service.state_machine.evaluate.call_count == 2
     service.order_manager.execute_exit.assert_not_awaited()
     assert service.schwab.mock_calls == []
-    assert telegram_notify.call_count == 2
+    # Recovery is only announced once it has held; the loop ends before that.
+    assert telegram_notify.call_count == 1
     assert monitor_log.warning.call_count == 1
     assert monitor_log.error.call_count == 1
     set_readiness(None)
@@ -286,7 +287,9 @@ async def test_prolonged_outage_reminders_are_rate_limited_and_reset_on_recovery
     service.notifier = MagicMock(notify_text=AsyncMock())
     times = iter([0, 2, 4, 59, 60, 61, 299, 300, 301, 600, 601, 700, 702, 760, 761])
     clock = [0.0]
-    helper = SimpleNamespace(recover=AsyncMock(return_value=(None, {})))
+    helper = SimpleNamespace(
+        recover=AsyncMock(return_value=(None, {})), floor_fill=lambda strikes: {},
+    )
     calls = 0
 
     async def get_chain(*_args):
@@ -325,16 +328,18 @@ async def test_prolonged_outage_reminders_are_rate_limited_and_reset_on_recovery
     events = service.decision_queries.log_event.await_args_list
     prolonged = [c.args[1] for c in events
                  if c.args[0] == "position_market_data_outage_prolonged"]
-    assert [e["outage_seconds"] for e in prolonged] == [60, 300, 600, 60]
+    # The flap at t=700 continues the incident, so no fresh 60s reminder.
+    assert [e["outage_seconds"] for e in prolonged] == [60, 300, 600]
     assert {e["targeted_recovery_status"] for e in prolonged} == {
         "unusable_quotes" if fallback else "disabled",
     }
     assert all(e["held_legs"][-1]["strike"] == HELD_STRIKES[-1] for e in prolonged)
     messages = [c.args[0] for c in telegram.await_args_list]
-    assert len(messages) == 8  # Two initial alerts, four reminders, two recoveries.
+    # The flap at t=700 follows a recovery at t=601 that had not held for 120s, so it is
+    # one incident: a single initial alert, three reminders, and no premature "OK".
+    assert len(messages) == 4
     assert "suspended for 60s" in messages[1]
-    assert "after 601s; valuation-dependent exits resumed" in messages[4]
-    assert "after 61s; valuation-dependent exits resumed" in messages[-1]
+    assert not any(m.startswith("OK:") for m in messages)
     assert service.state_machine.evaluate.call_count == 2
     service.order_manager.execute_exit.assert_not_awaited()
     assert service.schwab.mock_calls == []
