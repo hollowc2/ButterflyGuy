@@ -4,16 +4,16 @@
     "corrected_midpoint": {
       "direction": {
         "CALL": {
-          "average_mfe": 929.15,
-          "expectancy": 443.85,
-          "max_drawdown": 110.2,
-          "median_trade": 133.1,
-          "mfe_capture": 0.5338,
-          "net_pnl": 1775.4,
-          "profit_factor": 9.519,
+          "average_mfe": 745.6,
+          "expectancy": 326.04,
+          "max_drawdown": 145.2,
+          "median_trade": -98.2,
+          "mfe_capture": 0.5321,
+          "net_pnl": 1630.2,
+          "profit_factor": 5.61,
           "top3_concentration": 1.0,
-          "trade_count": 4,
-          "win_rate": 0.5
+          "trade_count": 5,
+          "win_rate": 0.4
         },
         "PUT": {
           "average_mfe": 67.4,
@@ -54,39 +54,39 @@
           "win_rate": 0.0
         },
         "drawdown_morning": {
-          "average_mfe": 130.4,
-          "expectancy": -116.8667,
-          "max_drawdown": 350.6,
-          "median_trade": -110.2,
+          "average_mfe": 100.65,
+          "expectancy": -123.95,
+          "max_drawdown": 495.8,
+          "median_trade": -126.2,
           "mfe_capture": 0.0,
-          "net_pnl": -350.6,
+          "net_pnl": -495.8,
           "profit_factor": 0.0,
           "top3_concentration": 0.0,
-          "trade_count": 3,
+          "trade_count": 4,
           "win_rate": 0.0
         }
       },
       "half": {
         "first_half": {
-          "average_mfe": 843.0667,
-          "expectancy": 470.3333,
-          "max_drawdown": 110.2,
-          "median_trade": -98.2,
-          "mfe_capture": 0.6403,
-          "net_pnl": 1411.0,
-          "profit_factor": 7.771,
+          "average_mfe": 664.9,
+          "expectancy": 299.2,
+          "max_drawdown": 312.4,
+          "median_trade": -104.2,
+          "mfe_capture": 0.6089,
+          "net_pnl": 1196.8,
+          "profit_factor": 3.832,
           "top3_concentration": 1.0,
-          "trade_count": 3,
-          "win_rate": 0.3333
+          "trade_count": 4,
+          "win_rate": 0.25
         },
         "second_half": {
-          "average_mfe": 440.7333,
-          "expectancy": 2.6667,
-          "max_drawdown": 356.4,
+          "average_mfe": 401.0667,
+          "expectancy": 25.6667,
+          "max_drawdown": 145.2,
           "median_trade": -142.2,
-          "mfe_capture": 0.2756,
-          "net_pnl": 8.0,
-          "profit_factor": 1.022,
+          "mfe_capture": 0.3029,
+          "net_pnl": 77.0,
+          "profit_factor": 1.268,
           "top3_concentration": 1.0,
           "trade_count": 3,
           "win_rate": 0.3333
@@ -94,16 +94,16 @@
       },
       "month": {
         "2026-10": {
-          "average_mfe": 641.9,
-          "expectancy": 236.5,
+          "average_mfe": 551.8286,
+          "expectancy": 181.9714,
           "max_drawdown": 454.6,
-          "median_trade": -104.2,
-          "mfe_capture": 0.5151,
-          "net_pnl": 1419.0,
-          "profit_factor": 3.512,
+          "median_trade": -110.2,
+          "mfe_capture": 0.5136,
+          "net_pnl": 1273.8,
+          "profit_factor": 2.794,
           "top3_concentration": 1.0,
-          "trade_count": 6,
-          "win_rate": 0.3333
+          "trade_count": 7,
+          "win_rate": 0.2857
         }
       },
       "settlement": {
@@ -120,15 +120,15 @@
           "win_rate": 1.0
         },
         "intraday_exit": {
-          "average_mfe": 130.4,
-          "expectancy": -141.2,
-          "max_drawdown": 564.8,
-          "median_trade": -126.2,
+          "average_mfe": 106.6,
+          "expectancy": -142.0,
+          "max_drawdown": 710.0,
+          "median_trade": -142.2,
           "mfe_capture": 0.0,
-          "net_pnl": -564.8,
+          "net_pnl": -710.0,
           "profit_factor": 0.0,
           "top3_concentration": 0.0,
-          "trade_count": 4,
+          "trade_count": 5,
           "win_rate": 0.0
         }
       }
@@ -136,16 +136,16 @@
     "marketable": {
       "direction": {
         "CALL": {
-          "average_mfe": 889.8,
-          "expectancy": 420.85,
-          "max_drawdown": 145.2,
-          "median_trade": 115.6,
+          "average_mfe": 711.84,
+          "expectancy": 301.64,
+          "max_drawdown": 175.2,
+          "median_trade": -120.2,
           "mfe_capture": 0.5475,
-          "net_pnl": 1683.4,
-          "profit_factor": 7.343,
+          "net_pnl": 1508.2,
+          "profit_factor": 4.423,
           "top3_concentration": 1.0,
-          "trade_count": 4,
-          "win_rate": 0.5
+          "trade_count": 5,
+          "win_rate": 0.4
         },
         "PUT": {
           "average_mfe": 49.9,
@@ -186,39 +186,39 @@
           "win_rate": 0.0
         },
         "drawdown_morning": {
-          "average_mfe": 106.5333,
-          "expectancy": -143.5333,
-          "max_drawdown": 430.6,
-          "median_trade": -145.2,
+          "average_mfe": 79.9,
+          "expectancy": -151.45,
+          "max_drawdown": 605.8,
+          "median_trade": -155.2,
           "mfe_capture": 0.0,
-          "net_pnl": -430.6,
+          "net_pnl": -605.8,
           "profit_factor": 0.0,
           "top3_concentration": 0.0,
-          "trade_count": 3,
+          "trade_count": 4,
           "win_rate": 0.0
         }
       },
       "half": {
         "first_half": {
-          "average_mfe": 803.1333,
-          "expectancy": 444.0,
-          "max_drawdown": 145.2,
-          "median_trade": -120.2,
-          "mfe_capture": 0.663,
-          "net_pnl": 1332.0,
-          "profit_factor": 6.019,
+          "average_mfe": 627.3,
+          "expectancy": 272.95,
+          "max_drawdown": 360.4,
+          "median_trade": -132.7,
+          "mfe_capture": 0.6366,
+          "net_pnl": 1091.8,
+          "profit_factor": 3.159,
           "top3_concentration": 1.0,
-          "trade_count": 3,
-          "win_rate": 0.3333
+          "trade_count": 4,
+          "win_rate": 0.25
         },
         "second_half": {
-          "average_mfe": 416.5333,
-          "expectancy": -18.0,
-          "max_drawdown": 405.4,
+          "average_mfe": 383.2667,
+          "expectancy": 3.6667,
+          "max_drawdown": 175.2,
           "median_trade": -165.2,
-          "mfe_capture": 0.2812,
-          "net_pnl": -54.0,
-          "profit_factor": 0.867,
+          "mfe_capture": 0.3056,
+          "net_pnl": 11.0,
+          "profit_factor": 1.032,
           "top3_concentration": 1.0,
           "trade_count": 3,
           "win_rate": 0.3333
@@ -226,16 +226,16 @@
       },
       "month": {
         "2026-10": {
-          "average_mfe": 609.8333,
-          "expectancy": 213.0,
+          "average_mfe": 522.7143,
+          "expectancy": 157.5429,
           "max_drawdown": 525.6,
-          "median_trade": -132.7,
+          "median_trade": -145.2,
           "mfe_capture": 0.5326,
-          "net_pnl": 1278.0,
-          "profit_factor": 2.905,
+          "net_pnl": 1102.8,
+          "profit_factor": 2.304,
           "top3_concentration": 1.0,
-          "trade_count": 6,
-          "win_rate": 0.3333
+          "trade_count": 7,
+          "win_rate": 0.2857
         }
       },
       "settlement": {
@@ -252,15 +252,15 @@
           "win_rate": 1.0
         },
         "intraday_exit": {
-          "average_mfe": 104.85,
-          "expectancy": -167.7,
-          "max_drawdown": 670.8,
-          "median_trade": -155.2,
+          "average_mfe": 83.88,
+          "expectancy": -169.2,
+          "max_drawdown": 846.0,
+          "median_trade": -165.2,
           "mfe_capture": 0.0,
-          "net_pnl": -670.8,
+          "net_pnl": -846.0,
           "profit_factor": 0.0,
           "top3_concentration": 0.0,
-          "trade_count": 4,
+          "trade_count": 5,
           "win_rate": 0.0
         }
       }
@@ -268,16 +268,16 @@
     "stressed_marketable": {
       "direction": {
         "CALL": {
-          "average_mfe": 849.8,
-          "expectancy": 390.85,
-          "max_drawdown": 185.2,
-          "median_trade": 85.6,
+          "average_mfe": 679.84,
+          "expectancy": 269.64,
+          "max_drawdown": 215.2,
+          "median_trade": -160.2,
           "mfe_capture": 0.5615,
-          "net_pnl": 1563.4,
-          "profit_factor": 5.526,
+          "net_pnl": 1348.2,
+          "profit_factor": 3.405,
           "top3_concentration": 1.0,
-          "trade_count": 4,
-          "win_rate": 0.5
+          "trade_count": 5,
+          "win_rate": 0.4
         },
         "PUT": {
           "average_mfe": 29.9,
@@ -318,39 +318,39 @@
           "win_rate": 0.0
         },
         "drawdown_morning": {
-          "average_mfe": 79.8667,
-          "expectancy": -183.5333,
-          "max_drawdown": 550.6,
-          "median_trade": -185.2,
+          "average_mfe": 59.9,
+          "expectancy": -191.45,
+          "max_drawdown": 765.8,
+          "median_trade": -195.2,
           "mfe_capture": 0.0,
-          "net_pnl": -550.6,
+          "net_pnl": -765.8,
           "profit_factor": 0.0,
           "top3_concentration": 0.0,
-          "trade_count": 3,
+          "trade_count": 4,
           "win_rate": 0.0
         }
       },
       "half": {
         "first_half": {
-          "average_mfe": 763.1333,
-          "expectancy": 410.6667,
-          "max_drawdown": 185.2,
-          "median_trade": -160.2,
-          "mfe_capture": 0.689,
-          "net_pnl": 1232.0,
-          "profit_factor": 4.567,
+          "average_mfe": 587.3,
+          "expectancy": 237.95,
+          "max_drawdown": 440.4,
+          "median_trade": -172.7,
+          "mfe_capture": 0.6715,
+          "net_pnl": 951.8,
+          "profit_factor": 2.521,
           "top3_concentration": 1.0,
-          "trade_count": 3,
-          "win_rate": 0.3333
+          "trade_count": 4,
+          "win_rate": 0.25
         },
         "second_half": {
-          "average_mfe": 389.8667,
-          "expectancy": -51.3333,
-          "max_drawdown": 485.4,
+          "average_mfe": 369.9333,
+          "expectancy": -29.6667,
+          "max_drawdown": 215.2,
           "median_trade": -205.2,
-          "mfe_capture": 0.2833,
-          "net_pnl": -154.0,
-          "profit_factor": 0.683,
+          "mfe_capture": 0.2986,
+          "net_pnl": -89.0,
+          "profit_factor": 0.788,
           "top3_concentration": 1.0,
           "trade_count": 3,
           "win_rate": 0.3333
@@ -358,16 +358,16 @@
       },
       "month": {
         "2026-10": {
-          "average_mfe": 576.5,
-          "expectancy": 179.6667,
+          "average_mfe": 494.1429,
+          "expectancy": 123.2571,
           "max_drawdown": 645.6,
-          "median_trade": -172.7,
+          "median_trade": -185.2,
           "mfe_capture": 0.5518,
-          "net_pnl": 1078.0,
-          "profit_factor": 2.298,
+          "net_pnl": 862.8,
+          "profit_factor": 1.825,
           "top3_concentration": 1.0,
-          "trade_count": 6,
-          "win_rate": 0.3333
+          "trade_count": 7,
+          "win_rate": 0.2857
         }
       },
       "settlement": {
@@ -384,15 +384,15 @@
           "win_rate": 1.0
         },
         "intraday_exit": {
-          "average_mfe": 74.85,
-          "expectancy": -207.7,
-          "max_drawdown": 830.8,
-          "median_trade": -195.2,
+          "average_mfe": 59.88,
+          "expectancy": -209.2,
+          "max_drawdown": 1046.0,
+          "median_trade": -205.2,
           "mfe_capture": 0.0,
-          "net_pnl": -830.8,
+          "net_pnl": -1046.0,
           "profit_factor": 0.0,
           "top3_concentration": 0.0,
-          "trade_count": 4,
+          "trade_count": 5,
           "win_rate": 0.0
         }
       }
@@ -401,9 +401,9 @@
   "cash_settled_trades": 2,
   "cohort_id": "spx-prospective-v2-2026-10-02",
   "deferred_session_dates": [
-    "2026-10-12"
+    "2026-10-13"
   ],
-  "eligible_trades": 6,
+  "eligible_trades": 7,
   "endpoint": {
     "blocked_by_incomplete_sessions": true,
     "conditions": {
@@ -414,7 +414,7 @@
       },
       "eligible_trades": {
         "met": false,
-        "observed": 6,
+        "observed": 7,
         "required": 120
       },
       "stressed_winners": {
@@ -429,7 +429,7 @@
     "checks": {
       "drawdown_within_limit": true,
       "executable_entry_coverage": true,
-      "marketable_positive_in_both_halves": false,
+      "marketable_positive_in_both_halves": true,
       "session_data_complete": false,
       "stressed_expectancy_positive": true,
       "stressed_net_pnl_positive": true,
@@ -442,94 +442,94 @@
     "integrity_checkpoint_due": false,
     "passed": false
   },
-  "generated_at": "2026-10-13T01:35:19.830548+00:00",
+  "generated_at": "2026-10-14T01:37:13.305530+00:00",
   "label": "prospective",
   "models": {
     "corrected_midpoint": {
-      "average_mfe": 641.9,
+      "average_mfe": 551.8286,
       "complete_fill_coverage": 1.0,
       "crossed_entry_markets": 0,
       "crossed_exit_markets": 0,
       "crossed_exit_observations": 0,
-      "eligible_signals": 6,
-      "expectancy": 236.5,
-      "gross_pnl": 1445.0,
+      "eligible_signals": 7,
+      "expectancy": 181.9714,
+      "gross_pnl": 1305.0,
       "max_drawdown": 454.6,
-      "median_trade": -104.2,
-      "mfe_capture": 0.5151,
+      "median_trade": -110.2,
+      "mfe_capture": 0.5136,
       "missing_entry_markets": 0,
       "missing_exit_markets": 0,
       "missing_exit_observations": 0,
       "model": "corrected_midpoint",
-      "net_pnl": 1419.0,
-      "priced_trades": 6,
-      "profit_factor": 3.512,
+      "net_pnl": 1273.8,
+      "priced_trades": 7,
+      "profit_factor": 2.794,
       "settlement_fallbacks": 0,
       "skipped_exit_observations": 0,
       "top3_concentration": 1.0,
-      "trade_count": 6,
+      "trade_count": 7,
       "unpriced_trades": 0,
-      "win_rate": 0.3333
+      "win_rate": 0.2857
     },
     "marketable": {
-      "average_mfe": 609.8333,
+      "average_mfe": 522.7143,
       "complete_fill_coverage": 1.0,
       "crossed_entry_markets": 0,
       "crossed_exit_markets": 0,
       "crossed_exit_observations": 0,
-      "eligible_signals": 6,
-      "expectancy": 213.0,
-      "gross_pnl": 1304.0,
+      "eligible_signals": 7,
+      "expectancy": 157.5429,
+      "gross_pnl": 1134.0,
       "max_drawdown": 525.6,
-      "median_trade": -132.7,
+      "median_trade": -145.2,
       "mfe_capture": 0.5326,
       "missing_entry_markets": 0,
       "missing_exit_markets": 0,
       "missing_exit_observations": 0,
       "model": "marketable",
-      "net_pnl": 1278.0,
-      "priced_trades": 6,
-      "profit_factor": 2.905,
+      "net_pnl": 1102.8,
+      "priced_trades": 7,
+      "profit_factor": 2.304,
       "settlement_fallbacks": 0,
       "skipped_exit_observations": 0,
       "top3_concentration": 1.0,
-      "trade_count": 6,
+      "trade_count": 7,
       "unpriced_trades": 0,
-      "win_rate": 0.3333
+      "win_rate": 0.2857
     },
     "stressed_marketable": {
-      "average_mfe": 576.5,
+      "average_mfe": 494.1429,
       "complete_fill_coverage": 1.0,
       "crossed_entry_markets": 0,
       "crossed_exit_markets": 0,
       "crossed_exit_observations": 0,
-      "eligible_signals": 6,
-      "expectancy": 179.6667,
-      "gross_pnl": 1304.0,
+      "eligible_signals": 7,
+      "expectancy": 123.2571,
+      "gross_pnl": 1134.0,
       "max_drawdown": 645.6,
-      "median_trade": -172.7,
+      "median_trade": -185.2,
       "mfe_capture": 0.5518,
       "missing_entry_markets": 0,
       "missing_exit_markets": 0,
       "missing_exit_observations": 0,
       "model": "stressed_marketable",
-      "net_pnl": 1078.0,
-      "priced_trades": 6,
-      "profit_factor": 2.298,
+      "net_pnl": 862.8,
+      "priced_trades": 7,
+      "profit_factor": 1.825,
       "settlement_fallbacks": 0,
       "skipped_exit_observations": 0,
       "top3_concentration": 1.0,
-      "trade_count": 6,
+      "trade_count": 7,
       "unpriced_trades": 0,
-      "win_rate": 0.3333
+      "win_rate": 0.2857
     }
   },
   "primary_model": "stressed_marketable",
   "prospective_start_date": "2026-10-02",
   "schema_version": 2,
-  "session_completion_coverage": 0.8571,
-  "sessions_observed": 7,
-  "sessions_recorded": 6,
+  "session_completion_coverage": 0.875,
+  "sessions_observed": 8,
+  "sessions_recorded": 7,
   "sessions_with_incomplete_data": 1,
   "sessions_without_signal": 0
 }
