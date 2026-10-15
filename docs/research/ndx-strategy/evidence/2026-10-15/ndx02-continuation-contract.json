@@ -1,0 +1,39 @@
+{
+  "model": "NDX-02-minute-continuation-import-v1",
+  "parent": "NDX-02/run-02 and NDX-01/run-03; no baseline substitution",
+  "cohort_sha256": "4064b835c8e55f5396f628ee07eacd438f298e02216a030113a7e8772aca15bc",
+  "execution_ledger_sha256": "5c54ff129abd40b8bd00dc6d55d4e8b6a123301621b99a5968d2b0edb3f5add4",
+  "inventory_manifest_sha256": "44c1e57bb71abf348d60ef31dc63f6b7431bae5be534720a3686d5bd787cde07",
+  "execution_parent_run_sha256": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261",
+  "baseline_parent_run_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee",
+  "query_sha256": "4dddd2eff87c3e65f36ae705ba95cda6d278ae2693245b1049b635d98e97e906",
+  "schema_manifest_sha256": "a9007cea6f1bf8f4d71a5fc2c7fcdd9656ed410d79906d134471b97209fc57fd",
+  "nominal_cadence_seconds": 60,
+  "gap_diagnostics_seconds": [
+    30,
+    60,
+    90,
+    120
+  ],
+  "timestamp_equality_tolerance_seconds": 1e-06,
+  "price_precision_points": 0.0001,
+  "negative_composite_tolerance_points": 0.00011,
+  "mark_midpoint_difference_reporting_tolerance_points": 0.00011,
+  "root": "NDXP",
+  "time_range": "Per-trade snapshot_time in (recorded exit, exchange regular close], all times timezone aware. snapshot_time collector start-of-pass, not event or availability time. Exact-symbol three-leg source rows; no price-quality filter during extraction.",
+  "normalization": "Group by trade ID and snapshot_time, exactly one of each verified symbol, correct strike/root/expiration/direction/underlying, finite nonnegative leg bid/ask/mark and ask>=bid. Reject/report duplicate keys and incomplete/invalid groups; preserve raw rows. Do not clip negative composite prices or replace provider marks with midpoint.",
+  "inventory_reconciliation": "Recompute historical inventory predicate separately: exactly three rows, distinct strikes=3, expiration/type match, bid>=0, ask>=bid, mark IS NOT NULL. Compare count/first/last at microsecond precision; differences remain discrepancies.",
+  "minute_buckets": "UTC floor-to-minute (equivalent to ET grid for these sessions). Full expected buckets start at ceil(exit) and end strictly before close; partial exit minute and exact-close boundary are separate. Never impute missing buckets. p95 uses nearest rank.",
+  "eligibility": {
+    "import_eligible": "Any available raw rows retained; per-group normalization eligibility recorded. No strategy eligibility inferred.",
+    "R0_30_second_continuation_eligible": false,
+    "minute_replay_eligible": false,
+    "reason": "Minute sampling has different semantics; no causal minute signal/fill/gap/freshness policy registered. Missing event/availability evidence not inferred."
+  },
+  "scope_exclusions": [
+    "No P&L, signals, hold-after-exit rules, parameter search or liquidity threshold selection",
+    "No runtime/credential/service/order changes",
+    "No official settlement claim"
+  ],
+  "retention": "Accepted Eros; independent backup not established"
+}

@@ -1,0 +1,8 @@
+{
+  "config_sha256": "d9f9082e0fa2ae474fbe5557fa000e77ad8b923a3e5bbb1e799532a2bffb013e",
+  "source_sha256": {
+    "src/butterfly_guy/research/ndx_execution_audit.py": "6f07369160970d84c8443fb69b5de1501d0d380794abef9bed7f51a2266d9574",
+    "src/butterfly_guy/research/ndx_evidence.py": "895482fd84752e1779ff7ed8442b805e7c638ff4bd9df2bad8ede439263c7908",
+    "tests/test_ndx_execution_audit.py": "9bd99e09a2d9984cbb443e465e35044b6f34e5b137da5398c0e042e7966015be"
+  }
+}

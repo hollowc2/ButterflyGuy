@@ -1,0 +1,85 @@
+{
+  "observed": "2026-10-15 container vs repository; not a historical full-runtime attestation",
+  "files": [
+    {
+      "file": "src/butterfly_guy/position/state_machine.py",
+      "container_sha256": "ae80343fb0fcbb60fd0102c02e29ae3ba82df8f9e7a50d1d41576bf592f95521",
+      "repository_sha256": "0f15b285dc5eeccb564dfb1c67e0c7cad6b63504d3325148f88bdbb98070fd91",
+      "container_matches_repository": false,
+      "local_sha256": "ae80343fb0fcbb60fd0102c02e29ae3ba82df8f9e7a50d1d41576bf592f95521",
+      "container_matches_local": true
+    },
+    {
+      "file": "src/butterfly_guy/position/position_manager.py",
+      "container_sha256": "91252c2b7f26eabf080c9deb0f3e22dda1f20e96030779ebab8764a12ff3870e",
+      "repository_sha256": "5f1e7eeeeb1e696e2d428e15d8c0520bafb9aaabf3af4634efe9708475a40c65",
+      "container_matches_repository": false,
+      "local_sha256": "91252c2b7f26eabf080c9deb0f3e22dda1f20e96030779ebab8764a12ff3870e",
+      "container_matches_local": true
+    },
+    {
+      "file": "src/butterfly_guy/core/config.py",
+      "container_sha256": "ecada2dd5c23eb894975de2f4cca44ccda881d8315e451994639169332e53ff3",
+      "repository_sha256": "f45d2c697681fdba7c7f89b215e6a7cda5cbbe37678ac2aba7c04c0cab914757",
+      "container_matches_repository": false,
+      "local_sha256": "d218bec6eddddcd43bc8edbf4ecac9adf30bdfd4004c0feac28ec2e69b1d620a",
+      "container_matches_local": false
+    },
+    {
+      "file": "src/butterfly_guy/services/position_service.py",
+      "container_sha256": "bbfec4687f56c2a57275ab1646a5b67dc6eae590b12ec3cdab8dbb2faffb1614",
+      "repository_sha256": "fcde54f99b8fe929193a5989fe3960b70a6bd4d8ff8bdbf2159e01fc71cf4b1b",
+      "container_matches_repository": false,
+      "local_sha256": "f425832f3174c98ed9bac9d33a36f6f0e5ae81f56e0fca5b749bb772b6b31407",
+      "container_matches_local": false
+    },
+    {
+      "file": "src/butterfly_guy/execution/order_manager.py",
+      "container_sha256": "e9f43882ffce84aeb1b0761062278d2cc5a53777cb75912feaa0a28ba08dd6d1",
+      "repository_sha256": "ab10b158930e40c6f7f2f4b6f57c7b206fd3539e6ea5b5dfdf3b2e48e8c1cf1d",
+      "container_matches_repository": false,
+      "local_sha256": "e9f43882ffce84aeb1b0761062278d2cc5a53777cb75912feaa0a28ba08dd6d1",
+      "container_matches_local": true
+    },
+    {
+      "file": "src/butterfly_guy/core/time_utils.py",
+      "container_sha256": "5df59b6eba559d85c0f7fcf09e255075ad8431232d12f331a212666e2855f94d",
+      "repository_sha256": "da51271a0cbf7445a60c2ac5dda987e87798289feb1741b3375ff2bd43f8983e",
+      "container_matches_repository": false,
+      "local_sha256": "5df59b6eba559d85c0f7fcf09e255075ad8431232d12f331a212666e2855f94d",
+      "container_matches_local": true
+    },
+    {
+      "file": "src/butterfly_guy/position/profit_policy.py",
+      "container_sha256": "908fbd4df219fa612c953c0bbc7ecfb33a9139a58d94d5a316a3328393994289",
+      "repository_sha256": "908fbd4df219fa612c953c0bbc7ecfb33a9139a58d94d5a316a3328393994289",
+      "container_matches_repository": true,
+      "local_sha256": "908fbd4df219fa612c953c0bbc7ecfb33a9139a58d94d5a316a3328393994289",
+      "container_matches_local": true
+    },
+    {
+      "file": "configs/config_ndx.yaml",
+      "container_sha256": "4438f5c00d260822eb7814e591aaeef30cfb1ced1bc70cd566970e1508ae73c6",
+      "repository_sha256": "4438f5c00d260822eb7814e591aaeef30cfb1ced1bc70cd566970e1508ae73c6",
+      "container_matches_repository": true,
+      "local_sha256": "85aebe52a041db609e6c6b9c5bd8ad4e23b61b665753333387de6f1c16c68224",
+      "container_matches_local": false
+    },
+    {
+      "file": "pyproject.toml",
+      "container_sha256": "014dfde9a59d7f6a37777982aea8460628a363e680eaf64b14e2b7cb0d36d425",
+      "repository_sha256": "8cd9966e5f3ead4ea775d4e66221fc71370f16162d4f1ce39e562749e2235f93",
+      "container_matches_repository": false,
+      "local_sha256": "014dfde9a59d7f6a37777982aea8460628a363e680eaf64b14e2b7cb0d36d425",
+      "container_matches_local": true
+    },
+    {
+      "file": "uv.lock",
+      "container_sha256": "4c22a869845d8ea612a17560557fa25a67e0f35e7d436f26b08171d1ee421725",
+      "repository_sha256": "d7d95ccf6347636bb3766d59516cb70def4c0d8767f8219cbcadeacbd5793935",
+      "container_matches_repository": false,
+      "local_sha256": "4c22a869845d8ea612a17560557fa25a67e0f35e7d436f26b08171d1ee421725",
+      "container_matches_local": true
+    }
+  ]
+}

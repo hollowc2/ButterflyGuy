@@ -1,0 +1,31 @@
+{
+  "trades": 17,
+  "raw_leg_rows": 3364,
+  "valid_groups": 1114,
+  "rejected_groups": 11,
+  "inventory_mismatch_ids": [],
+  "price_flags": {
+    "negative_composite_bid": 635,
+    "negative_composite_mark": 157,
+    "mark_above_width": 0,
+    "crossed_composite": 0,
+    "provider_mark_outside_composite_market": 0
+  },
+  "interval_seconds": {
+    "n": 1097,
+    "min": 61.131032,
+    "median": 63.101178,
+    "p95_nearest_rank": 64.264143,
+    "max": 264.102769
+  },
+  "gaps_above_seconds": {
+    "30": 1097,
+    "60": 1097,
+    "90": 4,
+    "120": 4
+  },
+  "missing_full_minute_buckets": 67,
+  "multiply_occupied_buckets": 0,
+  "R0_eligible_trades": 0,
+  "minute_replay_eligible_trades": 0
+}

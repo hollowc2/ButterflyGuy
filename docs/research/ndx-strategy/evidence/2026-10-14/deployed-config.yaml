@@ -1,0 +1,75 @@
+schwab:
+  # token_path is deliberately unset: see configs/config.yaml.
+  max_token_age: 518400  # 6 days in seconds
+
+strategy:
+  underlying: "NDX"
+  wing_widths: [80, 100, 150]  # must be multiples of 10 (NDX strike increment)
+  spot_range: 250              # NDX trades ~20000, wider scan range
+  rr_min: 8.0
+  max_cost_per_width:
+    80: 6.00
+    100: 8.00
+    150: 12.00
+entry:
+  start_time: "07:00"  # PST
+  end_time: "07:45"    # PST
+  timezone: "America/Los_Angeles"
+  strike_selection_method: "VIX"
+  center_tolerance: 100.0  # NDX moves in larger point increments
+execution:
+  price_ladder_step: 0.10
+  price_ladder_steps: 4
+  retry_interval_seconds: 20
+  order_timeout_seconds: 300
+  paper_trading: true
+  paper_fill_buffer: 0.00
+profit_management:
+  strategy: "peakvaluetrailer"
+  profitprotector:
+    breakeven_activation_profit: 1.00
+    breakeven_floor_profit: 0.00
+    profit_lock_activation_profit: 2.00
+    profit_lock_floor_profit: 0.75
+    large_peak_profit_ratio: 2.00
+    large_peak_drawdown_threshold: 0.50
+  regimes:
+    morning:
+      start_minutes_after_open: 0
+      end_minutes_after_open: 120
+      drawdown_threshold: 1.00
+      confirmation_polls: 3
+      min_peak_profit_ratio: 1.5
+    late_morning:
+      start_minutes_after_open: 120
+      end_minutes_after_open: 240
+      drawdown_threshold: 0.95
+      confirmation_polls: 2
+      min_peak_profit_ratio: 1.5
+    afternoon:
+      start_minutes_after_open: 240
+      end_minutes_after_open: 390
+      drawdown_threshold: 0.90
+      confirmation_polls: 2
+      min_peak_profit_ratio: 1.5
+  exit_before_close_minutes: 0
+  max_loss_from_cost: 0.50
+  use_absolute_loss_stop: false
+  quote_quality:
+    enabled: true
+    min_bid_to_mark_ratio: 0.35
+    max_spread_width_ratio: 1.5
+risk:
+  max_daily_loss: 500.0
+  max_trades_per_day: 1
+  max_position_size: 1
+  max_weekly_loss: 5000.0  # Wider NDX flies need more weekly room
+collector:
+  snapshot_interval_seconds: 60
+  record_timing: true
+monitoring:
+  metrics_port: 8000           # each container gets its own port 8000 internally
+  log_level: "INFO"
+
+position_data:
+  shadow_held_quotes: true

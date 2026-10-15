@@ -1,0 +1,12 @@
+{
+  "comparison": "Oct 15 captured container vs local config class AST (no environment values inspected)",
+  "classes_equal": {
+    "ProfitManagementSettings": true,
+    "TimeRegime": true,
+    "QuoteQualitySettings": true,
+    "PeakTrackingSettings": true,
+    "ProfitProtectorSettings": true,
+    "ExecutionSettings": true
+  },
+  "qualification": "Not per-trade effective settings or full runtime parity"
+}

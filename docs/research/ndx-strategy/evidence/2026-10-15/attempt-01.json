@@ -1,0 +1,11 @@
+{
+  "parent": "NDX-R0",
+  "attempt": "run-01",
+  "status": "failed historical reproduction",
+  "cause": "Port incorrectly required final observation to precede the close; R0 admits a last tick after close but before recorded settlement. 12 paths differed, including 9 mark_v1. Numerical/timing tolerances unchanged.",
+  "files": {
+    "ndx_baseline.py": "fc4add862b514ec4eee381e415371b5e792736e7058d7fd4655c23a3732a69bb",
+    "contract.json": "9568d3bd92716813f7e2c96899111784b28d2932f9cca91cc819cf479f235502",
+    "ndx_evidence.py": "895482fd84752e1779ff7ed8442b805e7c638ff4bd9df2bad8ede439263c7908"
+  }
+}

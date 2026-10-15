@@ -1,0 +1,36 @@
+{
+  "snapshot_id": "ndx-minute-continuation-20261015-v2",
+  "provider": "Helios TimescaleDB original ButterflyGuy Schwab chain snapshots; source labels preserved per metadata row",
+  "acquisition": {
+    "started_utc": "2026-10-15T20:19:52.965265+00:00",
+    "completed_utc": "2026-10-15T20:20:00.296467+00:00",
+    "raw_preserved": true
+  },
+  "original_tables": [
+    "option_chain_snapshots",
+    "chain_snapshot_meta"
+  ],
+  "interval": "independent nominal minute snapshots; cadence to be audited",
+  "timezone": "all database timestamps timezone aware; display/session America/New_York; UTC normal form",
+  "raw_rows": 3364,
+  "first_snapshot_time": "2026-07-23T19:59:52.562862+00:00",
+  "last_snapshot_time": "2026-10-13T19:59:39.83143+00:00",
+  "parent_inventory_manifest_sha256": "44c1e57bb71abf348d60ef31dc63f6b7431bae5be534720a3686d5bd787cde07",
+  "parent_execution_run_sha256": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261",
+  "contract_sha256": "70af72b2bbdb23ecd7cf01b37e6ecc881eea76c6fb1623675e2f7039532a5e5e",
+  "failed_attempt_manifest_sha256": "265d271efdcdc6145d6008c4c67271e3a4fd5d9115bf7acc6324ab524a53780d",
+  "retention": "Eros NFS accepted; no independent backup established",
+  "files": {
+    "acquisition-complete.json": "f40d405f51842335caacd6e44b800f737e791ce7c0be2fdfa9d5d119eaeb2978",
+    "preflight.json": "106d66ece912f3c5797c807e6e28b1567acef4d7c7324651719a3f96731745bf",
+    "cohort.json": "4064b835c8e55f5396f628ee07eacd438f298e02216a030113a7e8772aca15bc",
+    "acquisition-start.json": "a0cad2947bc5e6ee73861c363728468f6962a914dcd3cb74b1621a0a05fca223",
+    "contract.json": "70af72b2bbdb23ecd7cf01b37e6ecc881eea76c6fb1623675e2f7039532a5e5e",
+    "prices/extract.csv": "6600e6525963d562c932158748d05d406675bf508f95e85915443e9c0497d17d",
+    "prices/manifest.json": "95966acf1d2246840d157e16e2890907f7f1717e00c0da0671dcb281a25809d1",
+    "prices/continuation-prices-v2.sql": "20deedc173aaa521deec24d0a1aaf699f96ffc5223ee26b0db86979023075d0e",
+    "schema/extract.csv": "6b7bb34d10e1eddc8a9fc4decd29d7636d73adf46dd6c32223a61585258d0599",
+    "schema/continuation-schema.sql": "4865b02870158c994ccda2365fa58654a6834c55e2f356db2014ce8b5d314880",
+    "schema/manifest.json": "a9007cea6f1bf8f4d71a5fc2c7fcdd9656ed410d79906d134471b97209fc57fd"
+  }
+}

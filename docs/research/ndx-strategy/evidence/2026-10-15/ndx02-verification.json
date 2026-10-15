@@ -1,0 +1,98 @@
+{
+  "created_utc": "2026-10-15T19:54:21.885591+00:00",
+  "task": "NDX-02 bounded execution/accounting attribution",
+  "status": "complete for this portion; liquidity calibration and continuation eligibility incomplete",
+  "final_run": "reports/research/ndx-02-20261015/run-02",
+  "verified_inputs": {
+    "ndx-r0-20261014": {
+      "files": 347,
+      "manifest_sha256": "0599bbd58ea30246c3329113b12b00ca7ac36a0f4944ef7dd8ab785aac114967"
+    },
+    "ndx-01-supplement-20261015": {
+      "files": 4,
+      "manifest_sha256": "da4d8beb577b506ab91c5989d76aedad395676f9dcb8c5ec3ca35bcabfdd7122"
+    },
+    "ndx-continuation-inventory-20261015": {
+      "files": 2,
+      "manifest_sha256": "44c1e57bb71abf348d60ef31dc63f6b7431bae5be534720a3686d5bd787cde07"
+    },
+    "helios-ndx-source-20261015": {
+      "files": 2,
+      "manifest_sha256": "2862993bc456d9405910e3f5a88e785584d0f9740408223cfbd3df7fdf3f5c77"
+    },
+    "parent_NDX01_run03": {
+      "outputs": 12,
+      "run_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee"
+    }
+  },
+  "current_source_pins_verified": 140,
+  "unchanged_correction_outputs": {
+    "execution-ledger.jsonl": true,
+    "modern-context.jsonl": true,
+    "summary.json": true
+  },
+  "tests": {
+    "command": "NDX_EXECUTION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-r0-20261014 NDX_SUPPLEMENT=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-01-supplement-20261015 uv run --offline --frozen pytest tests/test_ndx_execution_audit.py tests/test_ndx_baseline.py tests/test_state_machine.py tests/test_position_manager.py -q",
+    "result": "57 passed in 19.03s",
+    "audit_tests": 13,
+    "existing_tests": 44,
+    "offline_policy": "socket.socket blocked; subprocess.run restricted to git rev-parse HEAD and git status --short"
+  },
+  "lint": {
+    "command": "uv run --offline --frozen ruff check .",
+    "result": "All checks passed!"
+  },
+  "diff_check": {
+    "command": "git diff --check",
+    "result": "passed"
+  },
+  "graphify": {
+    "command": "/home/corey/.cache/uv/archive-v0/Yo1tT0lFfjWucooJ/bin/graphify update .",
+    "result": "completed AST-only; 7375 nodes, 19245 edges, 332 communities",
+    "warnings": [
+      "Optional tree_sitter_sql missing; 18 SQL files contributed no symbols",
+      "Three files yielded no symbols",
+      "Community labels stale; no LLM labeling performed"
+    ],
+    "log_sha256": "9304e6fb9225120de2c89d75c36b10a452dcf0dd9abdd5ded616547793621448"
+  },
+  "preserved_attempts": [
+    {
+      "run": "run-01",
+      "run_sha256": "73a7a5faeda79bee92b638be01a51195f40dee2422304c51e1befbe42ffa3756",
+      "issue": "First full offline test: 1 failed, 56 passed; platform.platform() launched uname -p, rejected by subprocess restriction. Accounting unchanged. Temporary failed test directory /tmp/pytest-of-corey/pytest-2/test_full_offline_audit0/ retained; source/contract durably preserved in run-01."
+    },
+    {
+      "issue": "Initial fixtures: 1 failed, 11 passed, 1 skipped; exact binary float fee assertion changed to pytest.approx. No production tolerance changed."
+    }
+  ],
+  "not_performed": [
+    "Strategy experiments/variant replay",
+    "Remote/broker/database/credential access",
+    "Runtime changes/orders/deployment",
+    "Continuation price import or hold-after-exit evaluation",
+    "New dependency installation"
+  ],
+  "retention": "Accepted Eros filesystem; no independent backup established",
+  "file_sha256": {
+    "src/butterfly_guy/research/ndx_execution_audit.py": "c3bb06c6b2cda21fa5fe52c6e2740ff5626c91c6499bb2188d99ecb925db11fa",
+    "tests/test_ndx_execution_audit.py": "2a35a383d6c6dd505842d5346444e8382c72d2d1abb5606977f13629e41877b8",
+    "docs/research/ndx-strategy/NDX-02-execution-accounting.md": "fb9c6280b9af400637303d0eceb94bd6ca29dcbba661de05dc739290d7f6faf8",
+    "docs/research/ndx-strategy/NDX-02-reproduction.md": "10e8c75c71bd76a85d22b8bbebe68b51ba03bf412bd39e5bde93dc518695efc0",
+    "docs/research/ndx-strategy/README.md": "426a23ebe8ce09aaddd770d57f6fbf0ff67eb718bde23fe1a767121ecd90bbf6",
+    "docs/research/ndx-strategy-development.md": "9f5fcb3ca8f10bad67a683d8eeaeee185d4785dc884743fbffdfc43f1b82279e",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-execution-source-lock.json": "1da615afb4e380b1d4814792f4402d1654dab87552ed0219912aa92c009db190",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-execution-source-lock-final.json": "d2b9df47d97d744180f850c4b31f11653fa9af1069e88acdf08bbd6a103e070a",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-execution-contract.json": "d9f9082e0fa2ae474fbe5557fa000e77ad8b923a3e5bbb1e799532a2bffb013e",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-execution-ledger.jsonl": "5c54ff129abd40b8bd00dc6d55d4e8b6a123301621b99a5968d2b0edb3f5add4",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-run-02.json": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-execution-final.json": "ac2c302a6d9241d39cae42a033784cdd8a837e4c5633cf996d215f1ff34096a2",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-summary.json": "277dfb22e405c414764a285c8ddf0bff308522991847cc52042e542de76d380d"
+  },
+  "graph_sha256": {
+    "graphify-out/GRAPH_REPORT.md": "2f4ddaadcbe9bdaf5127b589b0a32955c72182b17cf6a58ef22b66faf49c4166",
+    "graphify-out/graph.html": "a0d45de7c13150a55a6b0b965a568d7d7d45339fd2318d18300e4ad0cfec0158",
+    "graphify-out/graph.json": "6517907595dd615752d9e4cdabe14bcf92184a434ad12c9c9f4e6124ffa17c4a",
+    "graphify-out/manifest.json": "658d10d2676c378db1963397e5d548118c45d195d42f6665fdc754dc494fae42"
+  }
+}

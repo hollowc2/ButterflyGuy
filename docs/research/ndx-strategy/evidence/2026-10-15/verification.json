@@ -1,0 +1,66 @@
+{
+  "verified_utc": "2026-10-15T17:42:33.690911+00:00",
+  "status": "passed for qualified offline reference baseline; full runtime parity not established",
+  "source_head": "6a33d170c09f7ff68d7edb733b74c087b27c0227",
+  "run_id": "run-03",
+  "run_location": "/mnt/Repos/Trading/Butterflyguy/reports/research/ndx-01-20261015/run-03",
+  "run_receipt_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee",
+  "final_contract_sha256": "d55b293953cdcdb376fb8e1d9efba6723ca76a67ac87f8b4ee356fd13cb119a2",
+  "snapshot_manifest_sha256": "0599bbd58ea30246c3329113b12b00ca7ac36a0f4944ef7dd8ab785aac114967",
+  "original_inputs_verified_before_and_after": 15,
+  "original_final_files_verified_before_and_after": 29,
+  "new_snapshot_verified_files": 347,
+  "pinned_source_dependency_test_files": 138,
+  "archived_baseline_row_differences": 0,
+  "tests": {
+    "command": "NDX_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-r0-20261014 NDX_SUPPLEMENT=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-01-supplement-20261015 UV_CACHE_DIR=/tmp/ndx-uv-cache uv run --offline pytest tests/test_ndx_baseline.py tests/test_state_machine.py tests/test_position_manager.py -q",
+    "passed": 44,
+    "new_focused_tests": 16,
+    "existing_tests": 28,
+    "network_proof": "Full named snapshot replay with socket.socket blocked and subprocess commands restricted to local git; private fixture and independent small fixtures passed."
+  },
+  "lint": {
+    "command": "UV_CACHE_DIR=/tmp/ndx-uv-cache uv run --offline --frozen ruff check .",
+    "status": "passed"
+  },
+  "diff_check": "git diff --check passed",
+  "isolated_checkout": {
+    "location": "/tmp/ndx01-clean-checkout-20261015",
+    "method": "Local clone of starting HEAD with proposed new source/test/docs overlaid, shared existing locked Python interpreter, explicit private snapshot paths. No temporary script dependency. Source pins verified in isolated tree.",
+    "command_prefix": "PYTHONPATH=src /mnt/Repos/Trading/Butterflyguy/.venv/bin/python -m butterfly_guy.research.ndx_baseline",
+    "full_arguments": "See run-03.json command; PYTHONPATH=src supplied from isolated clone root. All evidence/config/output arguments absolute in the receipt.",
+    "status": "passed; archived baseline exact within declared tolerances"
+  },
+  "graphify": {
+    "command": "/tmp/butterfly-graphify-uv-cache/archive-v0/b7f2gNYIFAJlsn5o/bin/graphify update .",
+    "status": "completed AST-only, no LLM/API",
+    "before_nodes": 6897,
+    "after_nodes": 6997,
+    "before_edges": 19200,
+    "after_edges": 19459,
+    "limitations": "18 SQL files skipped because tree_sitter_sql is not installed; no semantic document extraction or LLM relabeling requested. Initial generated graph bytes preserved in named snapshot."
+  },
+  "skipped": {
+    "empty_cache_dependency_install": "Existing uv.lock environment available; no fresh download/reinstall needed. Fresh checkout instructions use uv sync --frozen.",
+    "broker_tests": "Offline research; no credentials required or read.",
+    "service_restart_or_deployment": "Not authorized or necessary.",
+    "official_XQC_verification": "No attributed official settlement dataset available in named evidence.",
+    "full_historical_runtime_parity": "Per-trade effective settings/full historical deployments and original quote event/availability timestamps not recorded."
+  },
+  "retention": "Owner accepted Eros-backed NFS. Same-filesystem verified copy, not an independent backup.",
+  "attempts": [
+    {
+      "run": "run-01",
+      "status": "failed; additional post-close bound changed 12 paths; failed source/contract/output retained; no tolerance widened"
+    },
+    {
+      "run": "run-02",
+      "status": "baseline reproduced; library logging leak caught by combined tests, fixed in final source; retained"
+    },
+    {
+      "run": "run-03",
+      "status": "final qualified reproduction and stricter coverage audit"
+    }
+  ],
+  "final_handoff_location": "/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx01-final-handoff-20261015"
+}

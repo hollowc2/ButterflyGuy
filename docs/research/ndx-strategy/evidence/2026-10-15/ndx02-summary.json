@@ -1,0 +1,367 @@
+{
+  "model": "NDX-02-execution-accounting-v1",
+  "parent": "NDX-01/run-03",
+  "discretionary": {
+    "n": 17,
+    "ids": [
+      194,
+      226,
+      233,
+      236,
+      245,
+      248,
+      249,
+      254,
+      258,
+      267,
+      294,
+      306,
+      316,
+      317,
+      339,
+      343,
+      346
+    ],
+    "recorded_paper_pnl_dollars": -9316.0,
+    "historical_stored_stress_pnl_dollars": -20060.0,
+    "stress_pnl_coverage": 17,
+    "paper_pnl_failures": [],
+    "sides": {
+      "entry": {
+        "fill_checks": 17,
+        "fill_failures": [],
+        "estimate_checks": 17,
+        "estimate_failures": [],
+        "event_fill_price_failures": [],
+        "signal_mark_event_failures": [],
+        "stored_drag_failures": [],
+        "mark_fallback_ids": [],
+        "negative_bid_ids": [
+          194,
+          317
+        ],
+        "proceeds_floor_ids": [],
+        "floor_benefit_dollars": 0,
+        "drag_dollars": {
+          "n": 17,
+          "sum": 9017.0,
+          "median": 405.00000000000006,
+          "min": 300.0,
+          "max": 1287.0
+        },
+        "spread_points": {
+          "n": 17,
+          "sum": 178.64999999999998,
+          "median": 8.0,
+          "min": 5.9,
+          "max": 25.650000000000006
+        },
+        "spread_to_mark": {
+          "n": 17,
+          "sum": 23.80766618310262,
+          "median": 1.1688311688311683,
+          "min": 0.7712418300653595,
+          "max": 3.296915167095116
+        },
+        "diagnostic_minus_signal_points": {
+          "n": 0
+        },
+        "diagnostic_price_change_ids": [],
+        "signal_observation_timestamp_coverage": 0,
+        "diagnostic_collection_timestamp_coverage": 0,
+        "quote_event_timestamp_coverage": 0,
+        "availability_timestamp_coverage": 0,
+        "recorded_fill_timestamp_coverage": 17,
+        "event_fill_time_failures": [],
+        "telemetry_offsets_seconds": {
+          "trade_entered": {
+            "n": 7,
+            "sum": 0.280186,
+            "median": 0.030772,
+            "min": 0.015168,
+            "max": 0.0935
+          }
+        },
+        "signal_mark_coverage": 0,
+        "selection_collection_time_trade_coverage": 7
+      },
+      "exit": {
+        "fill_checks": 7,
+        "fill_failures": [],
+        "estimate_checks": 17,
+        "estimate_failures": [],
+        "event_fill_price_failures": [],
+        "signal_mark_event_failures": [],
+        "stored_drag_failures": [],
+        "mark_fallback_ids": [
+          194
+        ],
+        "negative_bid_ids": [],
+        "proceeds_floor_ids": [],
+        "floor_benefit_dollars": 0,
+        "drag_dollars": {
+          "n": 17,
+          "sum": 1727.0,
+          "median": 96.0,
+          "min": 5.000000000000027,
+          "max": 197.00000000000003
+        },
+        "spread_points": {
+          "n": 16,
+          "sum": 32.1,
+          "median": 1.85,
+          "min": 0.8999999999999998,
+          "max": 3.4499999999999993
+        },
+        "spread_to_mark": {
+          "n": 16,
+          "sum": 17.381279725858647,
+          "median": 1.2031693472090823,
+          "min": 0.29498525073746323,
+          "max": 1.3167938931297707
+        },
+        "diagnostic_minus_signal_points": {
+          "n": 7,
+          "sum": -0.38999999999999935,
+          "median": 0.0,
+          "min": -0.3500000000000001,
+          "max": 0.15999999999999992
+        },
+        "diagnostic_price_change_ids": [
+          294,
+          306,
+          316
+        ],
+        "signal_observation_timestamp_coverage": 0,
+        "diagnostic_collection_timestamp_coverage": 0,
+        "quote_event_timestamp_coverage": 0,
+        "availability_timestamp_coverage": 0,
+        "recorded_fill_timestamp_coverage": 17,
+        "event_fill_time_failures": [],
+        "telemetry_offsets_seconds": {
+          "trade_exited": {
+            "n": 7,
+            "sum": 0.323512,
+            "median": 0.02574,
+            "min": 0.011814,
+            "max": 0.093679
+          },
+          "exit_signal_fired": {
+            "n": 7,
+            "sum": -2.989295,
+            "median": -0.637133,
+            "min": -0.9578,
+            "max": 0.060588
+          }
+        },
+        "signal_mark_coverage": 7,
+        "selection_collection_time_trade_coverage": 0
+      }
+    }
+  },
+  "all_modern_context": {
+    "n": 53,
+    "ids": [
+      191,
+      194,
+      198,
+      201,
+      202,
+      206,
+      211,
+      214,
+      217,
+      222,
+      226,
+      229,
+      233,
+      236,
+      238,
+      240,
+      245,
+      248,
+      249,
+      254,
+      257,
+      258,
+      263,
+      265,
+      267,
+      271,
+      275,
+      278,
+      280,
+      284,
+      287,
+      288,
+      292,
+      294,
+      297,
+      299,
+      302,
+      306,
+      309,
+      313,
+      316,
+      317,
+      322,
+      323,
+      326,
+      328,
+      332,
+      333,
+      336,
+      339,
+      343,
+      346,
+      349
+    ],
+    "recorded_paper_pnl_dollars": 9254.839999999998,
+    "historical_stored_stress_pnl_dollars": -30978.16,
+    "stress_pnl_coverage": 53,
+    "paper_pnl_failures": [],
+    "sides": {
+      "entry": {
+        "fill_checks": 53,
+        "fill_failures": [],
+        "estimate_checks": 53,
+        "estimate_failures": [],
+        "event_fill_price_failures": [],
+        "signal_mark_event_failures": [],
+        "stored_drag_failures": [],
+        "mark_fallback_ids": [],
+        "negative_bid_ids": [
+          194,
+          198,
+          201,
+          202,
+          206,
+          211,
+          214,
+          217,
+          238,
+          265,
+          271,
+          292,
+          317
+        ],
+        "proceeds_floor_ids": [],
+        "floor_benefit_dollars": 0,
+        "drag_dollars": {
+          "n": 53,
+          "sum": 38506.0,
+          "median": 454.9999999999999,
+          "min": 229.99999999999997,
+          "max": 3090.0
+        },
+        "spread_points": {
+          "n": 53,
+          "sum": 764.85,
+          "median": 9.0,
+          "min": 4.5000000000000036,
+          "max": 61.7
+        },
+        "spread_to_mark": {
+          "n": 53,
+          "sum": 105.79904775096698,
+          "median": 1.215189873417722,
+          "min": 0.6206896551724141,
+          "max": 10.972972972972956
+        },
+        "diagnostic_minus_signal_points": {
+          "n": 0
+        },
+        "diagnostic_price_change_ids": [],
+        "signal_observation_timestamp_coverage": 0,
+        "diagnostic_collection_timestamp_coverage": 0,
+        "quote_event_timestamp_coverage": 0,
+        "availability_timestamp_coverage": 0,
+        "recorded_fill_timestamp_coverage": 53,
+        "event_fill_time_failures": [],
+        "telemetry_offsets_seconds": {
+          "trade_entered": {
+            "n": 28,
+            "sum": 1.610944,
+            "median": 0.030822500000000003,
+            "min": 0.008884,
+            "max": 0.404143
+          }
+        },
+        "signal_mark_coverage": 0,
+        "selection_collection_time_trade_coverage": 28
+      },
+      "exit": {
+        "fill_checks": 7,
+        "fill_failures": [],
+        "estimate_checks": 17,
+        "estimate_failures": [],
+        "event_fill_price_failures": [],
+        "signal_mark_event_failures": [],
+        "stored_drag_failures": [],
+        "mark_fallback_ids": [
+          194
+        ],
+        "negative_bid_ids": [],
+        "proceeds_floor_ids": [],
+        "floor_benefit_dollars": 0,
+        "drag_dollars": {
+          "n": 53,
+          "sum": 1727.0,
+          "median": -0.0,
+          "min": -0.0,
+          "max": 197.00000000000003
+        },
+        "spread_points": {
+          "n": 16,
+          "sum": 32.1,
+          "median": 1.85,
+          "min": 0.8999999999999998,
+          "max": 3.4499999999999993
+        },
+        "spread_to_mark": {
+          "n": 16,
+          "sum": 17.381279725858647,
+          "median": 1.2031693472090823,
+          "min": 0.29498525073746323,
+          "max": 1.3167938931297707
+        },
+        "diagnostic_minus_signal_points": {
+          "n": 7,
+          "sum": -0.38999999999999935,
+          "median": 0.0,
+          "min": -0.3500000000000001,
+          "max": 0.15999999999999992
+        },
+        "diagnostic_price_change_ids": [
+          294,
+          306,
+          316
+        ],
+        "signal_observation_timestamp_coverage": 0,
+        "diagnostic_collection_timestamp_coverage": 0,
+        "quote_event_timestamp_coverage": 0,
+        "availability_timestamp_coverage": 0,
+        "recorded_fill_timestamp_coverage": 53,
+        "event_fill_time_failures": [],
+        "telemetry_offsets_seconds": {
+          "trade_exited": {
+            "n": 7,
+            "sum": 0.323512,
+            "median": 0.02574,
+            "min": 0.011814,
+            "max": 0.093679
+          },
+          "exit_signal_fired": {
+            "n": 7,
+            "sum": -2.989295,
+            "median": -0.637133,
+            "min": -0.9578,
+            "max": 0.060588
+          }
+        },
+        "signal_mark_coverage": 7,
+        "selection_collection_time_trade_coverage": 0
+      }
+    }
+  }
+}
