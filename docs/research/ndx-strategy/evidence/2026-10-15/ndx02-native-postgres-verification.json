@@ -1,0 +1,159 @@
+{
+  "created_utc": "2026-10-16T02:29:56.093325+00:00",
+  "status": "native gateway preservation and asyncpg research integration implemented; capture disabled and full NDX-02 incomplete",
+  "starting_git_sha": "49da0284d24814ed2bc0838bbd543444b48019b9",
+  "initial_dirty": "All prior NDX fidelity/provenance/recording source/tests/docs/evidence and graph work preserved",
+  "checks": [
+    {
+      "command": "NDX_POSTGRES_BIN=/home/corey/.cache/uv/archive-v0/ZWZ0Mqbj4Iv7hOst/pgserver/pginstall/bin NDX_FIDELITY_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_CONTINUATION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-minute-continuation-20261015-v2 NDX_EXECUTION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-r0-20261014 NDX_SUPPLEMENT=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-01-supplement-20261015 uv run --offline --frozen pytest tests/test_ndx_native_response.py tests/test_ndx_postgres_recording.py tests/test_ndx_recording.py tests/test_ndx_provenance.py tests/test_ndx_quote_fidelity.py tests/test_ndx_quote_fidelity_raw.py tests/test_ndx_continuation.py tests/test_ndx_execution_audit.py tests/test_ndx_baseline.py tests/test_state_machine.py tests/test_position_manager.py -q",
+      "result": "164 passed, 0 skipped in 26.69 seconds (28 new native/actual-PG checks plus prior 136)"
+    },
+    {
+      "command": "uv run --offline --frozen ruff check .",
+      "result": "All checks passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "/home/corey/.cache/uv/archive-v0/Yo1tT0lFfjWucooJ/bin/graphify update .",
+      "result": "AST-only completed: 10351 nodes, 22818 edges, 360 communities",
+      "limitations": [
+        "Optional tree_sitter_sql absent: 23 SQL files contributed nothing",
+        "3 files yielded no symbols and 58 unclassified files skipped",
+        "Saved community labels stale; no semantic/API refresh or unrelated SQL-parser install"
+      ]
+    },
+    {
+      "command": "Local comparison of installed SDK model_json_schema against frozen gateway-body.schema.json, source/config locks and all archived run output hashes",
+      "result": "all matched"
+    }
+  ],
+  "run_command": "/mnt/Repos/Trading/Butterflyguy/.venv/bin/python3 /mnt/Repos/Trading/Butterflyguy/tools/check_ndx_postgres_recording.py --input /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/postgres-v1/native-synthetic.json --universe /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/postgres-v1/universe.json --postgres-bin /home/corey/.cache/uv/archive-v0/ZWZ0Mqbj4Iv7hOst/pgserver/pginstall/bin --config /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/postgres-v1/contract.json --source-lock /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/postgres-v1/source-lock.json --output /tmp/ndx-native-postgres-20261015/run-01",
+  "summary": {
+    "model": "NDX-native-postgres-check-v1",
+    "cases": [
+      {
+        "case": "native-small",
+        "contracts_per_body": 4,
+        "body_bytes": 2042,
+        "samples": 5,
+        "request_count": 5,
+        "wall_seconds_max": 0.01125884499924723,
+        "wall_seconds_p95_nearest_rank": 0.01125884499924723,
+        "cpu_seconds_total": 0.025686357999999965
+      },
+      {
+        "case": "sdk-contract-limit",
+        "contracts_per_body": 5000,
+        "body_bytes": 1295450,
+        "samples": 3,
+        "request_count": 3,
+        "wall_seconds_max": 0.3177010599993082,
+        "wall_seconds_p95_nearest_rank": 0.3177010599993082,
+        "cpu_seconds_total": 0.8002384470000001
+      }
+    ],
+    "table_rows": {
+      "quotes": 8,
+      "provenance": 8,
+      "publications": 8,
+      "journal": 24
+    },
+    "new_historical_coverage": 0,
+    "evidence_kind": "synthetic",
+    "database_size_growth_bytes": 352256,
+    "server_version": "PostgreSQL 16.2 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 10.2.1 20210130 (Red Hat 10.2.1-11), 64-bit",
+    "timescaledb_extension_available": false,
+    "process_peak_rss_kib_linux": 77392,
+    "resource_scope": "Native synthetic SDK parsing, actual PostgreSQL publish/read; excludes exports",
+    "production_budget_validated": false,
+    "replay_eligible": false
+  },
+  "runtime_acquisition": {
+    "package": "pgserver==0.1.4",
+    "separate_environment": "Python 3.12; project Python 3.13 unchanged",
+    "source": "Temporary uv --no-project --python 3.12 --with pgserver environment; binary hashes recorded in run",
+    "prior_attempts": [
+      "Offline cache unavailable",
+      "Python 3.13 wheel resolution unsupported"
+    ],
+    "project_dependency_files_changed": false
+  },
+  "server_scope": "New private local /tmp Unix-socket-only PostgreSQL clusters, TCP disabled; stopped after tests/run; no Docker or system daemon started",
+  "test_mechanics": [
+    "Real metadata rollback and deferred server COMMIT failure",
+    "Real backend termination before commit and cross-connection uncommitted invisibility",
+    "Injected COMMIT-reply loss after a real server commit; unknown outcome until inventory",
+    "Actual append-only UPDATE/DELETE/TRUNCATE guards, correction parents, schema identity checks",
+    "Missing post-COMMIT acknowledgement and failed receipt journaling remain separate",
+    "Native SDK client= injection preserves exact buffered body with one request and no active bot wiring"
+  ],
+  "target_observation": {
+    "observed_utc": "2026-10-16T02:29:01.689137+00:00",
+    "scope": "Post-registration read-only target identity supplement; not an operational activation preflight or deployed-engine validation",
+    "host": "billy@helios",
+    "observed_hostname": "helios",
+    "repository_exists": "/opt/butterflyguy",
+    "container": "butterfly_timescaledb",
+    "image_tag": "timescale/timescaledb:latest-pg16",
+    "observed_status": "Up 9 days (healthy)",
+    "container_image_id": "sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+    "observed_repository_digest": "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+    "postgres_server_version": "16.11",
+    "timescaledb_extension_version": "2.25.2",
+    "read_only_sql": "BEGIN READ ONLY; SET LOCAL statement_timeout = '5s'; SELECT current_setting('server_version') AS postgres, (SELECT extversion FROM pg_extension WHERE extname='timescaledb') AS timescaledb; COMMIT;",
+    "observed_sql_output": [
+      "BEGIN",
+      "SET",
+      "16.11|2.25.2",
+      "COMMIT"
+    ],
+    "other_reads": [
+      "hostname",
+      "test -d /opt/butterflyguy",
+      "docker ps filtered to butterfly_timescaledb",
+      "docker inspect image ID only",
+      "docker image inspect ID/RepoDigests only"
+    ],
+    "not_inspected": [
+      "credentials/environment values",
+      "market data or positions/orders",
+      "application release/source or migration state",
+      "live recording permissions or load"
+    ],
+    "no_live_ddl_dml_restart_or_activation": true,
+    "comparison": "Local adapter tests: PostgreSQL 16.2, no TimescaleDB extension. Live metadata: PostgreSQL 16.11 with TimescaleDB 2.25.2. Both core major 16; exact target patch/extension/image compatibility remains unvalidated.",
+    "next_validation": "Run the additive schema/roles/adapter in a new isolated instance of the observed image digest, never by mutating the live container. No current local Docker daemon was started for this task."
+  },
+  "not_validated": [
+    "Isolated deployed TimescaleDB 2.25.2/PostgreSQL 16.11 image, permissions, pool and load; local engine was PostgreSQL 16.2 without extension",
+    "Original provider body, gateway actual age-reference instant, gateway build identity and clock synchronization",
+    "Production budgets, actual capture retention/drop behavior, operational activation or strategy economics"
+  ],
+  "scope_boundaries": [
+    "Gateway-normalized HTTP-decoded body scope; not original provider bytes",
+    "Synthetic 4/5000-contract resource bodies add zero historical coverage",
+    "All 17 historical continuation paths retain ineligibility",
+    "No existing collector/provider/trading tables/configuration/limits/credentials/account guards/order routing changed",
+    "No other repository modified; no broker/order call, live DDL/DML, capture activation, service restart or deployment",
+    "Remote target metadata was read only after registration; not a full operational preflight or deployed-engine test",
+    "Closed artifacts archived on Eros NFS; independent backup unestablished"
+  ],
+  "artifacts_sha256": {
+    "docs/research/ndx-strategy/postgres-v1/contract.json": "44a8dc338b6f42d1d0fa67dc1fc12b724d76ece76c7ff7e4fab2e189b900fc45",
+    "docs/research/ndx-strategy/postgres-v1/source-lock.json": "14de3a0bed62cc53c72217e217b48bc924fab900405389120028bb25fc20bd82",
+    "reports/research/ndx-02-native-postgres-20261015/run-01/run.json": "53a6973c8baec839b68d8f683363cafa431df30a070e2055e991f4fb7bd9b2fe",
+    "reports/research/ndx-02-native-postgres-20261015/run-01/summary.json": "8927717328b009b272ffb2535c38ed2ca81e86dbd25d470880dc04e526d78c8d",
+    "docs/research/ndx-strategy/NDX-02-native-postgres-integration.md": "9b74b7d57dea12cd1630123ab18cddd896be5a3be4e835c31f19d9a315d7ab9b",
+    "docs/research/ndx-strategy-development.md": "3f678b5ffe5504b41a0d35cf6a8ca8a2e65766ecfd6db396413765f46dfa28f0",
+    "docs/research/ndx-strategy/README.md": "2a90a22af98ad316a930e527691f6ea103dd69064b70a815e304689ae70ae7d8",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-native-postgres-target-readonly.json": "44ab86dcd3b824c88a5f79d66f4028c4ff0f0bf15a51738dc3f5b067b7296eb6"
+  },
+  "frozen_failed_runs": [],
+  "pre_registration_corrections": [
+    "Preparatory import/line-wrap lint fixes and internal metadata/commit semantics checks completed before source lock; no frozen native/PG contract/output overwritten"
+  ],
+  "next_action": "Validate the additive schema/role/pool adapter in an isolated instance of observed TimescaleDB 2.25.2/PostgreSQL 16.11 image digest; prepare a default-off bounded research observer with retention/drop/resource and named-target release/rollback plan. Preserve upstream unknowns; activation remains separately authorized."
+}

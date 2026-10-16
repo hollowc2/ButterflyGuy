@@ -1,0 +1,133 @@
+{
+  "checkout_sha": "49da0284d24814ed2bc0838bbd543444b48019b9",
+  "initial_dirty": false,
+  "local_source": {
+    "src/butterfly_guy/data/collector.py": {
+      "lines": [
+        78,
+        134,
+        224,
+        349,
+        433,
+        468
+      ],
+      "observation": "Supplied marks forwarded; pass/fetch/contract clocks distinct; quote insert and metadata separate; work then sleep in unaligned loop.",
+      "sha256": "9b66338db2b94357d180bf53e97520e2f3412ef80c27bf604dfa0dbb4ec2a81e"
+    },
+    "src/butterfly_guy/data/providers.py": {
+      "lines": [
+        374,
+        591,
+        816,
+        843
+      ],
+      "observation": "Gateway copies validated supplied mark and contract timing; direct observed adapter has no contract clocks. Source label is not deployment attestation.",
+      "sha256": "365a0c4a6ce81fc558f273770f24c477412a1ade90dc125eb47861574aabb3c9"
+    },
+    "src/butterfly_guy/data/schwab_client.py": {
+      "lines": [
+        270,
+        282
+      ],
+      "observation": "Direct option chain wrapper returns response JSON; no collector runtime history attested.",
+      "sha256": "900b61f111302b1d9a23f1550e7ac899dc42cd15af27ae95554a72bdfff15cc8"
+    },
+    "src/butterfly_guy/db/queries.py": {
+      "lines": [
+        18,
+        58
+      ],
+      "observation": "COPY of supplied rows; separately inserted metadata, conflicts ignored. No consumer or commit timestamps.",
+      "sha256": "d2b873e4abd90a18c5a1b5507cbb45a65d80275971f9548f085e10f9608182ab"
+    },
+    "src/butterfly_guy/db/migrations/001_initial.sql": {
+      "lines": [
+        5,
+        28
+      ],
+      "observation": "Checked-in numeric(10,4) quote prices.",
+      "sha256": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699"
+    },
+    "src/butterfly_guy/db/migrations/004_add_chain_fields.sql": {
+      "lines": [
+        1,
+        15
+      ],
+      "observation": "Provider-labelled nullable auxiliary columns, not reconstructed financial values.",
+      "sha256": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af"
+    },
+    "src/butterfly_guy/db/migrations/011_snapshot_timing.sql": {
+      "lines": [
+        1,
+        40
+      ],
+      "observation": "Nullable quote clocks and chain metadata; no commit/publication/consumer time.",
+      "sha256": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44"
+    }
+  },
+  "saved_runtime_files": [
+    {
+      "path": "src/butterfly_guy/position/state_machine.py",
+      "sha256": "ae80343fb0fcbb60fd0102c02e29ae3ba82df8f9e7a50d1d41576bf592f95521",
+      "matches_current_local": true
+    },
+    {
+      "path": "src/butterfly_guy/position/position_manager.py",
+      "sha256": "91252c2b7f26eabf080c9deb0f3e22dda1f20e96030779ebab8764a12ff3870e",
+      "matches_current_local": true
+    },
+    {
+      "path": "src/butterfly_guy/core/config.py",
+      "sha256": "ecada2dd5c23eb894975de2f4cca44ccda881d8315e451994639169332e53ff3",
+      "matches_current_local": false
+    },
+    {
+      "path": "src/butterfly_guy/services/position_service.py",
+      "sha256": "bbfec4687f56c2a57275ab1646a5b67dc6eae590b12ec3cdab8dbb2faffb1614",
+      "matches_current_local": false
+    },
+    {
+      "path": "src/butterfly_guy/execution/order_manager.py",
+      "sha256": "e9f43882ffce84aeb1b0761062278d2cc5a53777cb75912feaa0a28ba08dd6d1",
+      "matches_current_local": true
+    },
+    {
+      "path": "src/butterfly_guy/core/time_utils.py",
+      "sha256": "5df59b6eba559d85c0f7fcf09e255075ad8431232d12f331a212666e2855f94d",
+      "matches_current_local": true
+    },
+    {
+      "path": "src/butterfly_guy/position/profit_policy.py",
+      "sha256": "908fbd4df219fa612c953c0bbc7ecfb33a9139a58d94d5a316a3328393994289",
+      "matches_current_local": true
+    },
+    {
+      "path": "configs/config_ndx.yaml",
+      "sha256": "4438f5c00d260822eb7814e591aaeef30cfb1ced1bc70cd566970e1508ae73c6",
+      "matches_current_local": false
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "014dfde9a59d7f6a37777982aea8460628a363e680eaf64b14e2b7cb0d36d425",
+      "matches_current_local": true
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "4c22a869845d8ea612a17560557fa25a67e0f35e7d436f26b08171d1ee421725",
+      "matches_current_local": true
+    }
+  ],
+  "saved_runtime_manifest_sha256": "2862993bc456d9405910e3f5a88e785584d0f9740408223cfbd3df7fdf3f5c77",
+  "saved_runtime_scope": "Selected October 15 execution/position/config files and dependencies; no collector/provider/db insert source; no full historical deployment attestation.",
+  "raw_scope": "Exact-symbol/session quote DB rows and snapshot metadata, not original provider payloads. Unrelated omitted-contract payloads excluded.",
+  "age_reference": "Historical age-reference clock semantics and synchronization unattested; age/completion residual is descriptive, not a reconstructed timestamp.",
+  "unresolved_causes": [
+    "provider rounding implementation/tie breaking",
+    "original provider values and upstream normalization",
+    "which adapters/builds generated each row",
+    "causal contribution of old or asynchronous legs",
+    "clock synchronization/skew",
+    "consumer availability"
+  ],
+  "no_remote_acquisition": "Local evidence suffices to bound absent payload/deployment/availability evidence; no DB query would recover an uncaptured response."
+}

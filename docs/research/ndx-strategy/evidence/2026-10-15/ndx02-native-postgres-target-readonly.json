@@ -1,0 +1,37 @@
+{
+  "observed_utc": "2026-10-16T02:29:01.689137+00:00",
+  "scope": "Post-registration read-only target identity supplement; not an operational activation preflight or deployed-engine validation",
+  "host": "billy@helios",
+  "observed_hostname": "helios",
+  "repository_exists": "/opt/butterflyguy",
+  "container": "butterfly_timescaledb",
+  "image_tag": "timescale/timescaledb:latest-pg16",
+  "observed_status": "Up 9 days (healthy)",
+  "container_image_id": "sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+  "observed_repository_digest": "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+  "postgres_server_version": "16.11",
+  "timescaledb_extension_version": "2.25.2",
+  "read_only_sql": "BEGIN READ ONLY; SET LOCAL statement_timeout = '5s'; SELECT current_setting('server_version') AS postgres, (SELECT extversion FROM pg_extension WHERE extname='timescaledb') AS timescaledb; COMMIT;",
+  "observed_sql_output": [
+    "BEGIN",
+    "SET",
+    "16.11|2.25.2",
+    "COMMIT"
+  ],
+  "other_reads": [
+    "hostname",
+    "test -d /opt/butterflyguy",
+    "docker ps filtered to butterfly_timescaledb",
+    "docker inspect image ID only",
+    "docker image inspect ID/RepoDigests only"
+  ],
+  "not_inspected": [
+    "credentials/environment values",
+    "market data or positions/orders",
+    "application release/source or migration state",
+    "live recording permissions or load"
+  ],
+  "no_live_ddl_dml_restart_or_activation": true,
+  "comparison": "Local adapter tests: PostgreSQL 16.2, no TimescaleDB extension. Live metadata: PostgreSQL 16.11 with TimescaleDB 2.25.2. Both core major 16; exact target patch/extension/image compatibility remains unvalidated.",
+  "next_validation": "Run the additive schema/roles/adapter in a new isolated instance of the observed image digest, never by mutating the live container. No current local Docker daemon was started for this task."
+}

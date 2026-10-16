@@ -1,0 +1,90 @@
+{
+  "synthetic": true,
+  "response_id": "08d-out-of-order",
+  "legs": [
+    {
+      "symbol": "NDXP  300102P30000000",
+      "root": "NDXP",
+      "expiry": "2030-01-02",
+      "option_type": "PUT",
+      "strike": "30000",
+      "multiplier": "100",
+      "bid": "10.00",
+      "ask": "10.20",
+      "provider_mark": "10.10",
+      "bid_size": 5,
+      "ask_size": 6,
+      "event": {
+        "wall_utc": "2030-01-02T19:59:01+00:00",
+        "monotonic_ns": 1001000000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_seconds": "2.0",
+      "age_reference": {
+        "wall_utc": "2030-01-02T19:59:03+00:00",
+        "monotonic_ns": 1003000000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_semantics": "synthetic reference.wall minus event.wall; exact decimal seconds; no defaults",
+      "source": "synthetic-provider",
+      "flags": [],
+      "normalization": "synthetic verbatim decimal strings; no defaults"
+    },
+    {
+      "symbol": "NDXP  300102P30100000",
+      "root": "NDXP",
+      "expiry": "2030-01-02",
+      "option_type": "PUT",
+      "strike": "30100",
+      "multiplier": "100",
+      "bid": "12.00",
+      "ask": "12.20",
+      "provider_mark": "12.11",
+      "bid_size": 5,
+      "ask_size": 6,
+      "event": {
+        "wall_utc": "2030-01-02T19:59:01.100000+00:00",
+        "monotonic_ns": 1001100000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_seconds": "1.9",
+      "age_reference": {
+        "wall_utc": "2030-01-02T19:59:03+00:00",
+        "monotonic_ns": 1003000000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_semantics": "synthetic reference.wall minus event.wall; exact decimal seconds; no defaults",
+      "source": "synthetic-provider",
+      "flags": [],
+      "normalization": "synthetic verbatim decimal strings; no defaults"
+    },
+    {
+      "symbol": "NDXP  300102P30200000",
+      "root": "NDXP",
+      "expiry": "2030-01-02",
+      "option_type": "PUT",
+      "strike": "30200",
+      "multiplier": "100",
+      "bid": "10.00",
+      "ask": "10.20",
+      "provider_mark": "10.10",
+      "bid_size": 5,
+      "ask_size": 6,
+      "event": {
+        "wall_utc": "2030-01-02T19:59:01.200000+00:00",
+        "monotonic_ns": 1001200000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_seconds": "1.8",
+      "age_reference": {
+        "wall_utc": "2030-01-02T19:59:03+00:00",
+        "monotonic_ns": 1003000000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_semantics": "synthetic reference.wall minus event.wall; exact decimal seconds; no defaults",
+      "source": "synthetic-provider",
+      "flags": [],
+      "normalization": "synthetic verbatim decimal strings; no defaults"
+    }
+  ]
+}

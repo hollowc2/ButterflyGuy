@@ -1,0 +1,101 @@
+{
+  "observations": 1114,
+  "legs": 3342,
+  "flags": {
+    "negative_mark": 157,
+    "negative_bid": 635,
+    "midpoint_difference": 816,
+    "any_leg_outside_market": 0,
+    "any_leg_midpoint_difference": 923
+  },
+  "negative_mark_and_midpoint_difference": 103,
+  "overlap_masks": {
+    "negative_mark|negative_bid|midpoint_difference|any_leg_midpoint_difference": 103,
+    "midpoint_difference|any_leg_midpoint_difference": 355,
+    "none": 91,
+    "negative_bid|midpoint_difference|any_leg_midpoint_difference": 358,
+    "negative_bid": 70,
+    "negative_bid|any_leg_midpoint_difference": 50,
+    "negative_mark|negative_bid": 30,
+    "negative_mark|negative_bid|any_leg_midpoint_difference": 24,
+    "any_leg_midpoint_difference": 33
+  },
+  "timing_coverage": {
+    "unknown": 966,
+    "all": 148
+  },
+  "trades": 17,
+  "raw_leg_rows": 3364,
+  "excluded_groups": 11,
+  "excluded_by_trade": {
+    "317": 5,
+    "346": 6
+  },
+  "leg_market_outside_count_complete": 0,
+  "complete_leg_residuals": {
+    "n": 3342,
+    "min": -0.005,
+    "median": 0.0,
+    "p95_nearest_rank": 0.005,
+    "max": 0.005
+  },
+  "complete_leg_residuals_exceed_half_cent": 0,
+  "timing": {
+    "event_time_dispersion_seconds": {
+      "n": 148,
+      "min": 0.001,
+      "median": 9.378,
+      "p95_nearest_rank": 138.629,
+      "max": 268.471
+    },
+    "youngest_reported_age_seconds": {
+      "n": 148,
+      "min": 0.504256,
+      "median": 0.9642265,
+      "p95_nearest_rank": 6.476732,
+      "max": 17.15339
+    },
+    "oldest_reported_age_seconds": {
+      "n": 148,
+      "min": 0.578442,
+      "median": 10.825448999999999,
+      "p95_nearest_rank": 139.32593,
+      "max": 269.15707
+    }
+  },
+  "leg_timing": {
+    "event_to_local_fetch_completion_seconds": {
+      "n": 444,
+      "min": 0.563559,
+      "median": 2.6143275,
+      "p95_nearest_rank": 65.098389,
+      "max": 269.238356
+    },
+    "reported_age_minus_completion_event_delta_seconds": {
+      "n": 444,
+      "min": -0.24372000000000016,
+      "median": -0.07186850000000022,
+      "p95_nearest_rank": -0.05649000000000015,
+      "max": -0.04901299999999953
+    }
+  },
+  "leg_counts_complete": {
+    "mark_outside_own_market": 0,
+    "midpoint_difference_reportable": 1537
+  },
+  "metadata_field_coverage": {
+    "chain_source": 148,
+    "chain_flags": 148,
+    "scheduled_at": 0,
+    "chain_fetch_started_at": 148,
+    "chain_fetch_completed_at": 148,
+    "chain_gateway_received_at": 148,
+    "chain_event_ts": 148,
+    "chain_age_s": 148
+  },
+  "event_after_pass_start_count": 145,
+  "event_after_local_completion_count": 0,
+  "consumer_availability_known": 0,
+  "R0_eligible_trades": 0,
+  "minute_replay_eligible_trades": 0
+}

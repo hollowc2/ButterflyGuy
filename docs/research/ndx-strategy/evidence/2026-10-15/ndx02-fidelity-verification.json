@@ -1,0 +1,101 @@
+{
+  "created_utc": "2026-10-15T20:44:23.078757+00:00",
+  "decision": "Bounded fidelity attribution/specification complete; insufficient evidence for causal minute replay. Full liquidity calibration and promotion incomplete.",
+  "git_sha": "49da0284d24814ed2bc0838bbd543444b48019b9",
+  "initial_git_status": "clean",
+  "final_git_status": " M docs/research/ndx-strategy-development.md\n M docs/research/ndx-strategy/README.md\n M graphify-out/GRAPH_REPORT.md\n M graphify-out/graph.html\n M graphify-out/graph.json\n M graphify-out/manifest.json\n?? docs/research/ndx-strategy/NDX-02-causal-minute-specification.md\n?? docs/research/ndx-strategy/NDX-02-quote-fidelity-reproduction.md\n?? docs/research/ndx-strategy/NDX-02-quote-fidelity.md\n?? docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-breakdown.jsonl\n?? docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-contract.json\n?? docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-examples.jsonl\n?? docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-run.json\n?? docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-source-lock.json\n?? docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-source-trace.json\n?? docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-summary.json\n?? src/butterfly_guy/research/ndx_quote_fidelity.py\n?? tests/test_ndx_quote_fidelity.py\n?? tests/test_ndx_quote_fidelity_raw.py\n",
+  "run_path": "reports/research/ndx-02-fidelity-20261015/run-01",
+  "run_sha256": "b2a17d7b15e589c94fc9b9a568efd26802e9e3e048638d352cec0631bea08f66",
+  "snapshot_file_counts_verified": {
+    "r0": 347,
+    "supplement": 4,
+    "inventory": 2,
+    "runtime": 2,
+    "continuation": 11
+  },
+  "parent_outputs_verified": {
+    "continuation": "5ff727a579cc1af46fdd41d888502a78d638a4bd9f5ec2e45a4e08051c9aae92",
+    "execution": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261",
+    "baseline": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee"
+  },
+  "source_pins_verified": 147,
+  "artifact_sha256": {
+    "src/butterfly_guy/research/ndx_quote_fidelity.py": "a5278cb7b80c386846c4626c7d5b7edee92bd95d5518daf4a6fb557238b4494c",
+    "tests/test_ndx_quote_fidelity.py": "af8ce9c69d92444c6bb623eb371e0b624623f84875b8fbfe4af51c1a0b6fc8eb",
+    "tests/test_ndx_quote_fidelity_raw.py": "cb509d3ed6a9f48af8382916c8a2ee8ea11787834fa7d878fb8011c88166ee80",
+    "docs/research/ndx-strategy-development.md": "fd2405105142091a1ffd6724d734999e178ecabfdfc698d0e3d4a4f48b3f7e9e",
+    "docs/research/ndx-strategy/README.md": "694da776168cc9f5649fb68418b6ecd8bdf437b511fbf3109f7c4615650f0e86",
+    "docs/research/ndx-strategy/NDX-02-quote-fidelity.md": "8913fca9ebd01c54c719585d6064c183bb1f0ccca30d34433bb25f3e93ec787c",
+    "docs/research/ndx-strategy/NDX-02-quote-fidelity-reproduction.md": "31ec124b212c57ed1067d069d5d2be1d682e14697ebbb7995dc51112976a2dcd",
+    "docs/research/ndx-strategy/NDX-02-causal-minute-specification.md": "0b7859b2d4b2e15f33987eea866e6c89f38a50cd22f3b7aafb8867e7b424c2a1",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-source-lock.json": "920104996107dd903728fee3b86fd65ad32395564b8c86b0ed53441c9b958ab5",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-breakdown.jsonl": "c43be84d7e2ea5319e598ab2d21d6e5f2fed257d68483c636c3cc5a2890b493b",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-source-trace.json": "654cfcb939a9bf9d45f0cfee4f3f45802fc6114e5c1c0a01ec4a925943ecb727",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-summary.json": "124ac748f2e1723f738ee8eb5effc40bc143dcf42d522be987760063e7df83a3",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-examples.jsonl": "0786bd20d680e517627f589b0722eb2b0f537f38731bf2afb379c4cf68150fad",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-run.json": "b2a17d7b15e589c94fc9b9a568efd26802e9e3e048638d352cec0631bea08f66",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-contract.json": "c995bdcbae0ee806f138e4dbcd51b50d1aab52371d5234c7186bece0d0746322"
+  },
+  "checks": [
+    {
+      "command": "NDX_FIDELITY_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_CONTINUATION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-minute-continuation-20261015-v2 NDX_EXECUTION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-r0-20261014 NDX_SUPPLEMENT=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-01-supplement-20261015 uv run --offline --frozen pytest tests/test_ndx_quote_fidelity.py tests/test_ndx_quote_fidelity_raw.py tests/test_ndx_continuation.py tests/test_ndx_execution_audit.py tests/test_ndx_baseline.py tests/test_state_machine.py tests/test_position_manager.py -q",
+      "result": "82 passed, zero skipped in 21.15 seconds",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run --offline --frozen ruff check .",
+      "result": "All checks passed",
+      "exit_code": 0
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "exit_code": 0
+    },
+    {
+      "command": "/home/corey/.cache/uv/archive-v0/Yo1tT0lFfjWucooJ/bin/graphify update .",
+      "exit_code": 0,
+      "result": "AST graph updated: 8322 nodes, 20382 edges, 342 communities. Optional tree_sitter_sql absent; labels stale; no API/semantic refresh performed."
+    },
+    {
+      "command": "/mnt/Repos/Trading/Butterflyguy/.venv/bin/python3 -m butterfly_guy.research.ndx_quote_fidelity --evidence-root /mnt/Repos/Trading/Butterflyguy/evidence/ndx --manifest /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-snapshot.json --continuation-parent /mnt/Repos/Trading/Butterflyguy/reports/research/ndx-02-continuation-20261015/run-01 --execution-parent /mnt/Repos/Trading/Butterflyguy/reports/research/ndx-02-20261015/run-02 --baseline-parent /mnt/Repos/Trading/Butterflyguy/reports/research/ndx-01-20261015/run-03 --config /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-contract.json --source-lock /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-source-lock.json --output /mnt/Repos/Trading/Butterflyguy/reports/research/ndx-02-fidelity-20261015/run-01",
+      "result": "Frozen run-01 completed; all artifacts hashed",
+      "exit_code": 0
+    }
+  ],
+  "offline_enforcement": "Primary private integration tests block sockets and restrict subprocesses to local Git. Second raw-JSON test uses only local CSV/JSON and independent Decimal arithmetic.",
+  "independent_raw_test_source_sha256": "cb509d3ed6a9f48af8382916c8a2ee8ea11787834fa7d878fb8011c88166ee80",
+  "independent_raw_findings": {
+    "negative_mark_equals_negative_midpoint_membership": true,
+    "negative_mark_count": 157,
+    "negative_mark_and_difference_overlap": 103,
+    "max_absolute_leg_residual_points": "0.005",
+    "all_raw_rows_preserved_once": 3364
+  },
+  "development_attempts": [
+    {
+      "stage": "pre-source-lock fixtures",
+      "result": "4 failed, 4 passed, 1 private check skipped",
+      "failed_test": "test_unknown_zero_invalid_and_market (all four parameterizations)",
+      "exception": "IndexError: list index out of range",
+      "expression": "quote.get(\"symbol\", \"\").split()[0]",
+      "correction": "Missing symbol now produces null root; no quote, timestamp or reporting tolerance changed."
+    },
+    {
+      "stage": "corrected pre-lock fixtures",
+      "result": "8 passed, 1 private check skipped explicitly; then full private check enabled and passed"
+    },
+    {
+      "stage": "frozen run-01",
+      "result": "First frozen fidelity run succeeded; no failed frozen run, overwritten contract/source lock or correction run."
+    }
+  ],
+  "skipped_scope": [
+    "No broker-connected tests",
+    "No fresh dependency installation",
+    "No remote access or acquisition",
+    "No semantic graph refresh or optional SQL parser installation"
+  ],
+  "retention": "Private ignored evidence retained on Eros; independent backup not established.",
+  "next_action": "Write a separately reviewable prospective provenance specification with response/build/clock/publication/consumer receipt semantics and fixtures. No activation, replay or economic evaluation."
+}

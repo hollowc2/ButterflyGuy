@@ -1,0 +1,80 @@
+{
+  "model": "NDX-provenance-v1",
+  "registered_utc": "2026-10-15T21:01:53.455178+00:00",
+  "purpose": "offline provenance sufficiency only; synthetic fixtures; no runtime policy or replay",
+  "schema": "docs/research/ndx-strategy/provenance-v1/record.schema.json",
+  "schema_sha256": "df7d8235387218a98b115bbaf3d05aff51fc68be9c020df6754e25d57a30f8c7",
+  "fixture_manifest": "docs/research/ndx-strategy/provenance-v1/manifest.json",
+  "fixture_manifest_sha256": "982630409b7ca68e022d7725ef8a1aff04c7e7740111860ccd816817e1a2ef16",
+  "input_sha256": "15778ac04a471b45828f4e9307e6621c56897f49c6b920717ac6832e49bf85d9",
+  "parents": {
+    "fidelity": {
+      "path": "reports/research/ndx-02-fidelity-20261015/run-01",
+      "run_sha256": "b2a17d7b15e589c94fc9b9a568efd26802e9e3e048638d352cec0631bea08f66"
+    },
+    "accounting": {
+      "path": "reports/research/ndx-02-20261015/run-02",
+      "run_sha256": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261"
+    },
+    "continuation": {
+      "path": "reports/research/ndx-02-continuation-20261015/run-01",
+      "run_sha256": "5ff727a579cc1af46fdd41d888502a78d638a4bd9f5ec2e45a4e08051c9aae92"
+    },
+    "baseline": {
+      "path": "reports/research/ndx-01-20261015/run-03",
+      "run_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee"
+    }
+  },
+  "snapshots": {
+    "r0": {
+      "root": "evidence/ndx/ndx-r0-20261014",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/snapshot.json",
+      "manifest_sha256": "0599bbd58ea30246c3329113b12b00ca7ac36a0f4944ef7dd8ab785aac114967",
+      "required": [
+        "raw/trades.csv",
+        "raw/events.csv",
+        "raw/paths.csv"
+      ]
+    },
+    "supplement": {
+      "root": "evidence/ndx/ndx-01-supplement-20261015",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/supplement-manifest.json",
+      "manifest_sha256": "da4d8beb577b506ab91c5989d76aedad395676f9dcb8c5ec3ca35bcabfdd7122",
+      "required": [
+        "supplement.csv"
+      ]
+    },
+    "inventory": {
+      "root": "evidence/ndx/ndx-continuation-inventory-20261015",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/continuation-inventory-manifest.json",
+      "manifest_sha256": "44c1e57bb71abf348d60ef31dc63f6b7431bae5be534720a3686d5bd787cde07",
+      "required": [
+        "extract.csv"
+      ]
+    },
+    "runtime": {
+      "root": "evidence/ndx/helios-ndx-source-20261015",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/runtime-source-manifest.json",
+      "manifest_sha256": "2862993bc456d9405910e3f5a88e785584d0f9740408223cfbd3df7fdf3f5c77",
+      "required": [
+        "container-source.tar.gz"
+      ]
+    },
+    "continuation": {
+      "root": "evidence/ndx/ndx-minute-continuation-20261015-v2",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-snapshot.json",
+      "manifest_sha256": "2332897f0d59377b9acf83f87eaadd7229048224b812db4c719ba4999f7b55e1",
+      "required": [
+        "prices/extract.csv",
+        "schema/extract.csv",
+        "cohort.json",
+        "contract.json"
+      ]
+    }
+  },
+  "freshness_bound": null,
+  "dispersion_bound": null,
+  "gap_bound": null,
+  "corrections": [],
+  "historical_eligibility": "unchanged; all 17 remain ineligible"
+}

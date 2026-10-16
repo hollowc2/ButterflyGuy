@@ -15,6 +15,31 @@ preserves the independent minute observations in a separate snapshot. Both R0
 and minute-replay eligibility remain false; see its
 [offline command](NDX-02-continuation-reproduction.md).
 
+The bounded [constituent fidelity audit](NDX-02-quote-fidelity.md) attributes
+signed composite anomalies to raw legs and recorded clocks. Its
+[causal minute specification](NDX-02-causal-minute-specification.md) retains
+insufficient evidence and zero replay eligibility; see the
+[offline command](NDX-02-quote-fidelity-reproduction.md).
+
+The [prospective provenance contract](NDX-02-prospective-provenance.md) now has a
+[strict schema and synthetic fixtures](provenance-v1/record.schema.json), an offline
+checker and [reproduction guide](NDX-02-provenance-reproduction.md). This completes
+the bounded specification only; no capture or replay is activated. The
+[remaining implementation gates](NDX-remaining-roadmap.md) define Stage B through
+NDX-06 and the next separately scoped action.
+
+The [Stage B recording preparation](NDX-02-recording-implementation.md) adds a
+standalone local SQLite recorder and real transaction/restart/failure tests.
+It has no active bot integration. The [upstream source supplement](NDX-02-recording-upstream-review.md)
+narrows prospective age/cache requirements without establishing historical identity.
+TimescaleDB/upstream integration and capture activation remain pending.
+
+The [native gateway/PostgreSQL integration](NDX-02-native-postgres-integration.md)
+now provides opt-in SDK client injection, exact buffered gateway-body preservation,
+asyncpg publication/receipt tables and real PostgreSQL tests. It supersedes the
+SQLite-only integration limitation without activating capture. Deployed TimescaleDB
+validation and upstream provider/reference/build/clock gaps remain open.
+
 [Reconciliation and evidence audit](NDX-01-reconciliation.md) explains the source
 identities, trade 222, accounting, coverage and remaining limitations. The
 [final contract](evidence/2026-10-15/r0-reproduction-final.json) defines eligibility

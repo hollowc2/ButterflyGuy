@@ -1,0 +1,418 @@
+{
+  "$defs": {
+    "OptionChainV1": {
+      "additionalProperties": false,
+      "description": "A complete normalized chain for one symbol and one expiration.\n\nThe response is hard-bounded at ``MAX_OPTION_CHAIN_CONTRACTS_V1``. The gateway\nrefuses an oversized upstream payload instead of silently truncating contracts,\nbecause a partial strike set is unsafe for strategy selection and position marks.",
+      "properties": {
+        "symbol": {
+          "title": "Symbol",
+          "type": "string"
+        },
+        "expiration": {
+          "format": "date",
+          "title": "Expiration",
+          "type": "string"
+        },
+        "underlying_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Underlying Price"
+        },
+        "call_contract_count": {
+          "title": "Call Contract Count",
+          "type": "integer"
+        },
+        "put_contract_count": {
+          "title": "Put Contract Count",
+          "type": "integer"
+        },
+        "strike_count": {
+          "title": "Strike Count",
+          "type": "integer"
+        },
+        "contracts": {
+          "items": {
+            "$ref": "#/$defs/OptionContractV1"
+          },
+          "title": "Contracts",
+          "type": "array"
+        },
+        "event_timestamp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Event Timestamp"
+        },
+        "gateway_received_at": {
+          "format": "date-time",
+          "title": "Gateway Received At",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "stale": {
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "age_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Age Seconds"
+        },
+        "data_quality_flags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Data Quality Flags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "symbol",
+        "expiration",
+        "call_contract_count",
+        "put_contract_count",
+        "strike_count",
+        "contracts",
+        "gateway_received_at",
+        "source",
+        "stale"
+      ],
+      "title": "OptionChainV1",
+      "type": "object"
+    },
+    "OptionContractV1": {
+      "additionalProperties": false,
+      "description": "One normalized Schwab option contract for strategy and valuation consumers.",
+      "properties": {
+        "symbol": {
+          "title": "Symbol",
+          "type": "string"
+        },
+        "option_type": {
+          "enum": [
+            "CALL",
+            "PUT"
+          ],
+          "title": "Option Type",
+          "type": "string"
+        },
+        "expiration": {
+          "format": "date",
+          "title": "Expiration",
+          "type": "string"
+        },
+        "strike": {
+          "title": "Strike",
+          "type": "number"
+        },
+        "bid": {
+          "title": "Bid",
+          "type": "number"
+        },
+        "ask": {
+          "title": "Ask",
+          "type": "number"
+        },
+        "mark": {
+          "title": "Mark",
+          "type": "number"
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last"
+        },
+        "total_volume": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Volume"
+        },
+        "open_interest": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Open Interest"
+        },
+        "volatility": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volatility"
+        },
+        "delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delta"
+        },
+        "gamma": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gamma"
+        },
+        "theta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Theta"
+        },
+        "vega": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vega"
+        },
+        "bid_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bid Size"
+        },
+        "ask_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ask Size"
+        },
+        "rho": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rho"
+        },
+        "intrinsic_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intrinsic Value"
+        },
+        "time_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time Value"
+        },
+        "in_the_money": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In The Money"
+        },
+        "days_to_expiration": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Days To Expiration"
+        },
+        "multiplier": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Multiplier"
+        },
+        "theoretical_option_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Theoretical Option Value"
+        },
+        "event_timestamp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Event Timestamp"
+        },
+        "stale": {
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "age_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Age Seconds"
+        },
+        "data_quality_flags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Data Quality Flags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "symbol",
+        "option_type",
+        "expiration",
+        "strike",
+        "bid",
+        "ask",
+        "mark",
+        "stale"
+      ],
+      "title": "OptionContractV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "option_chain": {
+      "$ref": "#/$defs/OptionChainV1"
+    }
+  },
+  "required": [
+    "option_chain"
+  ],
+  "title": "OptionChainResponseV1",
+  "type": "object"
+}

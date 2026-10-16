@@ -1,0 +1,19 @@
+{
+  "config_sha256": "44a8dc338b6f42d1d0fa67dc1fc12b724d76ece76c7ff7e4fab2e189b900fc45",
+  "source_sha256": {
+    "src/butterfly_guy/research/ndx_native_response.py": "cb69001062b5c61819d9227e6578967c09a0a30ee93f61fca5edd00d87e74ea8",
+    "src/butterfly_guy/research/ndx_postgres_recording.py": "f36485193b3f420f4913fdf860b5365b69869033f5d168aa9ccb84dbc3bb04bd",
+    "src/butterfly_guy/research/ndx_recording.py": "db4986bf6dc22b1cd2c684151ac4f3f7a104fbba972c5481d657d189e997ef5f",
+    "src/butterfly_guy/research/ndx_provenance.py": "3641d808e7ea4adc459de3aeea3e84607b5db2cd2b24d429a1da55798a53bc92",
+    "src/butterfly_guy/research/ndx_evidence.py": "895482fd84752e1779ff7ed8442b805e7c638ff4bd9df2bad8ede439263c7908",
+    "src/butterfly_guy/research/ndx_continuation.py": "91eb792441d6a6b52602b6d2a3245cdb27f91bf3120f6fb22473d5569dc8e548",
+    "tests/test_ndx_native_response.py": "3d9c6a70d10b4a29440d03057a7d3c3abc1e2bd3cf0f8a4d9b2873a15ca4e55f",
+    "tests/test_ndx_postgres_recording.py": "1af942a1055b55e9f68cc83196289ab8cf6f6609b59753037aecf86f2d93d034",
+    "tools/check_ndx_postgres_recording.py": "2f31b6d4e30a850b66ebf76701d274c863f0b5b10efcbeae2a278e58f76e5482",
+    "docs/research/ndx-strategy/postgres-v1/schema.sql": "cd99bb8c27aedef901cbb9567cb09d3bd53e5fb22e7a9ba2e039176993bceb59",
+    "docs/research/ndx-strategy/postgres-v1/gateway-body.schema.json": "2193acb896842a210bfaa1415fa1da47d11629e8fd83559de8cf0daaefa247fc",
+    "docs/research/ndx-strategy/NDX-02-native-postgres-integration.md": "9b74b7d57dea12cd1630123ab18cddd896be5a3be4e835c31f19d9a315d7ab9b",
+    "pyproject.toml": "014dfde9a59d7f6a37777982aea8460628a363e680eaf64b14e2b7cb0d36d425",
+    "uv.lock": "4c22a869845d8ea612a17560557fa25a67e0f35e7d436f26b08171d1ee421725"
+  }
+}

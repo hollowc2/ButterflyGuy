@@ -1,0 +1,28 @@
+{
+  "kind": "synthetic fixtures only; historical-shaped case is invented, not coverage",
+  "files": {
+    "08c-wrong-identity-response.json": "43f9e709a0843363df6c45918f8bf3c4668ee27fd4e9b8da946fedadc6ff5127",
+    "03-events-during-pass-response.json": "556e2867ea748b3433123055a15067e6f666461d153195a181f487ba01678a54",
+    "publication.json": "cca708bcdfdee7820b1167bb69b5b4555f27c89320072111aad731ac2d149f26",
+    "02-db-complete-publication.json": "e02b3dcbaa91cd53262aea0111cdd3ae157ec7283ee9f6b90677d99c26398e43",
+    "record.schema.json": "df7d8235387218a98b115bbaf3d05aff51fc68be9c020df6754e25d57a30f8c7",
+    "05-partial-null-and-zero-response.json": "6108c6582193c9d161f0e2ff5f7db291b1f6680c5f851a00810fd0a013a6c378",
+    "12-after-close-gap-no-later-response.json": "fae9877a2bc02e8817a7548d1a94853ab92c6c65ffec1bff38a1e838a8b7c966",
+    "07-signed-marks-response.json": "f29cd729c50e6ebe5a3cc151ce020bcc8e344b788653117c705d81805e6f57bb",
+    "11b-incompatible-domains-response.json": "a272ef0cdf349924219029cd00702aaa368224914d022219eab82e49405367b3",
+    "10-transaction-start-only-response.json": "f7eafeeedb31562ff228076800279af0c9166caadb7bbd4b64391679a3361481",
+    "08b-duplicate-leg-response.json": "6e68d526cb772af6956e727c6f558934f472ecd91f2e52ffa14852e5645754a5",
+    "fixtures.jsonl": "15778ac04a471b45828f4e9307e6621c56897f49c6b920717ac6832e49bf85d9",
+    "06-old-zero-size-response.json": "1a4ac97e8a8c37c224feba10214c537acf901241cc40cdb116c4dd2a778c6a38",
+    "08d-out-of-order-response.json": "57d6c0c9be65c82b313e8e2919e0946b0e71b8028f188d278f180791e5053dfc",
+    "09-quote-success-meta-failure-response.json": "7927701cce502b268c544937de09efb55fdea0b25ee5605356d482b5da728bf1",
+    "13-read-failure-response.json": "4ff2a654312a5e013922e1cc80b9e4feaeb2a6e6fd03f15032e4900ed5244c38",
+    "08a-incomplete-response.json": "41701844a869a4ebff75e4061eb5823c3e600b2542687782fca49a3dd1547022",
+    "11a-clock-discontinuity-response.json": "6fc9a0eb8fd5710f821c2456edca8a8b81c981c6a4337909243bf01aebe3bbef",
+    "01-direct-complete-response.json": "2732d60af34fed13dbb0637043524bf672efa148f84ccb09dca52142951c7b6e",
+    "expectations.json": "b9de0c468bc16771afc72ca8524eb0c30e46b7e4f4c15d3367d86c2cfd80a4a0",
+    "02-db-complete-response.json": "677d6fce71a55cdc1c8237bd70426d5a0b2cf74d214fc8884ef8560e382a54e1",
+    "response.json": "d5103327af892d6831340c94ebfe915c43308b6aeb0ee8eb6b7837b280db0d12",
+    "04-fetch-without-receipt-response.json": "ce5cc9250e1f88e9b0779d6c8763c122c708fd0f18d29f462e2dd8bdcaf8cafd"
+  }
+}

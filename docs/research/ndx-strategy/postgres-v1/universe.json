@@ -1,0 +1,10 @@
+{
+  "session": "2030-01-02",
+  "symbols": [
+    "NDXP  300102P30000000",
+    "NDXP  300102P30100000",
+    "NDXP  300102P30200000"
+  ],
+  "evidence_kind": "synthetic",
+  "purpose": "Native-schema fixture, not provider evidence or new historical coverage"
+}

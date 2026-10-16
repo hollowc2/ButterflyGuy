@@ -38,17 +38,38 @@ reconciles all 17 inventory records but exposes cadence gaps, incomplete leg
 groups, negative provider composites and limited constituent timing evidence.
 It does not extend R0 or establish a causal quote path.
 
-**Next action: bounded constituent quote-quality attribution and causal minute
-evidence specification.** Attribute the 157 negative composite marks and
-provider-mark/midpoint differences, beginning with the timed subset 339/343/346;
-state what remains unknowable for the 14 untimed trades. Specify evidence-based
-availability, cadence and gap/quality treatment before any economic evaluation.
-Do not test hold-after-exit rules, optimize parameters, rerun rejected settings,
-select thresholds from P&L or deploy. Full NDX-02 liquidity calibration remains open.
+**Constituent quote-quality attribution and causal minute specification complete;
+causal minute replay remains unsupported.** The
+[fidelity report](ndx-strategy/NDX-02-quote-fidelity.md) explains exact leg arithmetic,
+rounding-compatible differences and recorded event dispersion, with historical
+root causes explicitly unresolved. The
+[causal-use specification](ndx-strategy/NDX-02-causal-minute-specification.md)
+requires consumer availability and attested timing semantics that are missing.
+All 17 trades remain ineligible for R0 continuation and minute replay.
 
-Use the [detailed next-session prompt](ndx-strategy/NEXT-STEP-PROMPT.md) to carry
-out that bounded task; it is an instruction, not a completed audit or permission
-to begin economic replay.
+**Prospective provenance specification and offline fixtures complete.**
+[NDX-provenance-v1](ndx-strategy/NDX-02-prospective-provenance.md) specifies separate
+DB and collector-local receipt channels, strict schema, append-only publication,
+clock/age semantics and failure evidence. Its checker validates provenance only;
+18 synthetic records add zero historical coverage. Full NDX-02 remains open.
+
+**Native gateway-body preservation and PostgreSQL research integration implemented;
+activation remains disabled.** The [new integration](ndx-strategy/NDX-02-native-postgres-integration.md)
+uses the pinned SDK's client= injection, exact buffered native gateway bytes,
+separate asyncpg research tables and actual PostgreSQL transaction/receipt checks.
+The earlier SQLite package remains preserved. All 164 private/real-engine checks
+pass. Gateway-normalized bytes do not establish original provider data or missing
+upstream age-reference/build/clock evidence.
+
+**Next action: validate against the deployed TimescaleDB version and prepare a
+reviewed, default-off observer integration** with explicit scope, role/pool/drop
+budgets, retention and rollback. The adapter was tested on PostgreSQL 16.2 without
+the extension; read-only Helios metadata now identifies PostgreSQL 16.11 with
+TimescaleDB 2.25.2 as the isolated validation target. Upstream freshness-reference/build
+and provider-body gaps remain separate. The
+[remaining-stage gates](ndx-strategy/NDX-remaining-roadmap.md) still apply. No capture,
+replay, threshold selection, promotion or deployment is activated. Both saved
+next-session prompts remain preserved as historical instructions.
 
 ## Intended finished system
 
@@ -739,3 +760,309 @@ negative-mark treatment with independent fixtures before any economic evaluation
 or retain insufficient evidence. No hold-after-exit replay, parameter optimization,
 P&L-selected thresholds, new capture-service activation or deployment in that task.
 Full NDX-02 liquidity calibration remains incomplete.
+
+### 2026-10-15 — NDX-02 constituent fidelity and causal-use specification
+
+**Status: bounded attribution/specification complete; insufficient evidence for
+causal replay; full liquidity calibration and strategy promotion incomplete.**
+Added `butterfly_guy.research.ndx_quote_fidelity`, focused independent fixtures,
+a second direct raw-JSON verification, machine-readable complete/leg/exclusion/
+overlap/example ledgers, the [fidelity report](ndx-strategy/NDX-02-quote-fidelity.md),
+[causal specification](ndx-strategy/NDX-02-causal-minute-specification.md) and
+[reproduction guide](ndx-strategy/NDX-02-quote-fidelity-reproduction.md).
+
+Starting HEAD `49da0284d24814ed2bc0838bbd543444b48019b9`, initially clean. Verified
+all five local snapshot manifests, required inputs, all three frozen parents'
+outputs and existing source pins before attribution; unchanged file hashes remain
+valid across the newer checkout. Saved October 15 runtime source is an observation
+of selected execution/position modules, not historical collector/gateway identity.
+No original provider responses or complete per-session deployment history exist
+in the inspected bundle. No additional acquisition or remote access was needed.
+
+Immutable contract/source lock and frozen run:
+`reports/research/ndx-02-fidelity-20261015/run-01/`. This adds no P&L or strategy
+trial. It derives the 17-trade cohort from closed non-settled `mark_v1` records,
+rebuilds 1,114 complete groups and eleven excluded groups (22 retained legs),
+reconciles the inventory/parent records, and independently computes decimal
+constituent/composite prices without clipping or replacement. Reporting tolerances
+remain 0.00011 points and one microsecond. A predeclared 0.005-point individual
+rounding-compatibility bound is a precision diagnostic, not a trading filter.
+
+Findings: 157 negative marks, 635 negative bids, 816 reportable midpoint
+differences; **103** observations overlap the negative-mark/difference sets.
+None of 3,342 complete-group leg marks is outside its recorded market. All leg
+mark/midpoint residuals are within ±0.005 points; weighted residuals exactly
+explain composite discrepancies of −0.015 to +0.020 points. This is consistent
+with cent rounding but does not prove the provider's implementation. The same
+157 groups have negative midpoints independently of rounding. Negative composites
+are attributable to recorded cross-strike prices, not to negative individual
+marks; signed cost-to-close diagnostics remain signed.
+
+Timed subset: 148 groups / 444 legs on 339/343/346, 12 negative marks, 105
+midpoint differences, eight overlapping mark anomalies. Untimed subset: 966
+groups / 2,898 legs on 14 trades, 145 negatives, 711 differences, 95 overlapping.
+Event dispersion 0.001–268.471 seconds, median 9.378, p95 138.629; oldest reported
+leg age maximum 269.157070 seconds. 145 events follow pass start, zero follow
+local fetch completion. Age-reference semantics and clock synchronization remain
+unattested. Chain-wide stale flags cannot identify individual selected stale legs.
+No consumer availability is recorded; no age subtraction invents a timestamp.
+Existing cadence gaps, incomplete groups and all-17 ineligibility remain intact.
+
+Source trace: local collector forwards marks, gateway adapter validates/copies
+individual markets and maps clocks, database copies supplied columns, metadata
+writes are separate, and unaligned collection sleeps after work. These are
+possible mechanisms, not proof of a historical deployment. Saved container tar
+contains no collector/provider/database insertion source or gateway implementation.
+Provider fault, upstream normalization, timing causation, historical adapter and
+per-trade deployment remain unresolved. No clean/fresh assumption is assigned
+to the 14 untimed trades. Raw snapshots and all failed/superseded parents remain
+unchanged. Eros retention still has no established independent backup.
+
+Exact executed audit command (choose a new output for repetition):
+
+```bash
+uv run --offline --frozen python -m butterfly_guy.research.ndx_quote_fidelity \
+  --evidence-root evidence/ndx \
+  --manifest docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-snapshot.json \
+  --continuation-parent reports/research/ndx-02-continuation-20261015/run-01 \
+  --execution-parent reports/research/ndx-02-20261015/run-02 \
+  --baseline-parent reports/research/ndx-01-20261015/run-03 \
+  --config docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-contract.json \
+  --source-lock docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-source-lock.json \
+  --output reports/research/ndx-02-fidelity-20261015/run-01
+```
+
+Verification: **82 passed, zero skipped** with all private-snapshot environment
+variables set (ten new fidelity/raw checks plus the prior 72). Repository lint
+and `git diff --check` passed. Graphify AST update completed; optional SQL parser
+is unavailable and community labels require a separate semantic refresh. No
+broker-connected tests or fresh dependency installation were needed.
+
+Full verification command and environment paths are in the reproduction guide;
+[verification](ndx-strategy/evidence/2026-10-15/ndx02-fidelity-verification.json)
+preserves results and source/output hashes. Initial fixture development found a
+missing-symbol root-extraction `IndexError` (four failures); fixed before the
+source lock and first audit run. Eight unit fixtures then passed with the private
+check explicitly skipped; full private verification subsequently passed. No
+failed frozen fidelity run or overwritten contract/source lock was needed.
+
+**Exact next action:** specify prospective provenance fields and storage/receipt
+semantics with fixtures and explicit feasibility; do not activate acquisition.
+Current evidence fails the proposed causal availability contract for all 17
+trades. No new strategy P&L, exit replay, thresholds, orders, runtime settings,
+credentials, services or deployments were changed.
+
+
+## 2026-10-15 — Prospective provenance contract and offline checker
+
+The bounded specification portion is complete; instrumentation and full NDX-02
+remain pending. See [specification/feasibility](ndx-strategy/NDX-02-prospective-provenance.md),
+[reproduction](ndx-strategy/NDX-02-provenance-reproduction.md) and
+[Stages B–G](ndx-strategy/NDX-remaining-roadmap.md). Registered inputs are in
+`docs/research/ndx-strategy/provenance-v1/`; frozen private run is
+`reports/research/ndx-02-provenance-20261015/run-01/`. Small run, summary and
+verification copies are under `ndx-strategy/evidence/2026-10-15/ndx02-provenance-*`.
+
+Starting HEAD `49da0284d24814ed2bc0838bbd543444b48019b9`, with existing dirty
+fidelity, living-plan/index and graph work preserved. New source is
+`src/butterfly_guy/research/ndx_provenance.py`; focused checks are
+`tests/test_ndx_provenance.py`. Source/config/fixture/schema/parent hashes and
+Python/dependency/platform identities are recorded in run.json and source-lock.json.
+The command verifies all five private snapshots, required manifest membership,
+four frozen parents and source pins using existing verification functions.
+
+All twelve requested fixture scenarios are covered by 18 synthetic records:
+six sufficient asserted receipt chains, eight insufficient and four rejected.
+Sufficiency concerns the receipt record only. Every result has false freshness
+and replay eligibility, null earliest availability and no decision/fill. The
+historical-shaped fixture is explicitly synthetic. No new historical cohort,
+physical timing bound, liquidity threshold or P&L is created. Current source
+shows separate quote and metadata writes; proposed complete publication is not
+implemented in the collector or database. Cross-domain causal ordering remains
+conservatively insufficient. All 17 historical paths remain ineligible.
+
+Verification: 31 new checks and the prior 82 private-enabled checks pass; exact
+combined check, lint, diff and graph results are recorded in the new verification
+record. Original responses, historical age/clock semantics, consumer receipts,
+full producer deployments, actual complex-order evidence and official XQC remain
+missing. Eros retention is unchanged; independent backup remains unestablished.
+Preparatory Path-type/lint corrections occurred before contract registration;
+no frozen provenance run failed or was overwritten. Previous failed/superseded
+extractions and runs remain untouched.
+
+**Exact next bounded action:** review v1 meanings, DB complete-snapshot protocol,
+upstream ownership, safe response boundary and resource/retention requirements;
+then request separately scoped Stage B implementation of the smallest recording
+diff with isolated failure tests and an activation/rollback plan. This task did
+not authorize capture activation, migrations, service operations, economic
+experiments or promotion. NDX-03 requires the full opportunity/skip set and its
+own research instruction; later gates remain as documented in the roadmap.
+
+
+## 2026-10-15 — Stage B local recording implementation and source review
+
+Reviewable preparation is implemented in
+`src/butterfly_guy/research/ndx_recording.py`, `tools/check_ndx_recording.py` and
+`tests/test_ndx_recording.py`. The standalone research SQLite schema is outside
+runtime migrations. Existing collector/providers/queries and all prior source
+pins are unchanged. Read the
+[implementation/reproduction/activation checklist](ndx-strategy/NDX-02-recording-implementation.md)
+and [pinned upstream supplement](ndx-strategy/NDX-02-recording-upstream-review.md).
+Full Stage B integration/activation and full NDX-02 remain incomplete.
+
+The recorder publishes copied quote/provenance/manifest rows in one transaction,
+observes commit acknowledgement only afterward, reads one exact complete snapshot,
+then records actual consumer receipt. Missing bytes/clock evidence and lost ack
+remain unknown. Duplicate deliveries refuse overwrite; corrections require a
+previous provenance hash. Failure/drop evidence stays separate from quote presence.
+No automatic pruning or trading coupling is introduced. There is no active bot
+import, broker call, migration against live DBs, observer or deployment.
+
+The source-locked run-02 used 25 entirely synthetic observations on local tmpfs;
+all published and journaled receipt. Closed DB size was 446,464 bytes, total measured
+publish/read CPU 0.0484 s, p95 wall time 0.002153 s. These small selected-leg samples
+exclude export writes and cannot establish production budgets, native full-chain
+capacity, TimescaleDB behavior or NFS durability. The checkout is nfs4; closed
+run artifacts were copied and hash-verified under
+`reports/research/ndx-02-recording-20261015/run-02/`. Do not operate a shared
+live SQLite journal on this NFS archive. Independent backup remains unestablished.
+
+Registered config/source locks and synthetic inputs are in
+`docs/research/ndx-strategy/recording-v1/`. Run-01 and its original files remain
+unchanged; run-02 links/verifies it as a correction parent after test-only lint
+line wrapping, correction-parent verification and documentation updates. Recording
+semantics did not change. Starting HEAD remains
+`49da0284d24814ed2bc0838bbd543444b48019b9`; all earlier dirty work is preserved.
+Exact invocation and source/input/output/environment identities are in each
+run.json. Small run/summary/verification copies use `ndx02-recording-*` under
+the October 15 versioned evidence directory.
+
+Verification: **136 passed, zero skipped** with private evidence enabled (23 real
+SQLite recording checks plus the prior 113). Tests include actual metadata/commit
+failure rollback, cross-connection invisibility, append-only constraints, lost
+post-commit acknowledgement, receipt/failure-journal failure, restart, correction
+parents and an abruptly exiting child process before COMMIT. Ruff and whitespace
+checks pass; graphify AST update completed with optional SQL parser and stale-label
+limitations. PostgreSQL/TimescaleDB tests were not run: no local executables or
+running Docker daemon were available. No daemon was started or packages installed.
+
+Read-only Git inspection of SchwabGateway's ButterflyGuy-pinned revision
+`0d0125e51266740de0f43c72b540002a4dcfc25d` established a prospective code-level
+age formula and cache refresh behavior. Event selection takes the latest positive
+quote/trade epoch-millisecond field; age is max(0, reference-event). Cache hits
+recompute age at a new gateway evaluation instant while retaining the original
+gateway receipt. The exact reference must be recorded separately. This is not
+historical server/deployment or synchronization evidence and does not repair
+any of the 17 ineligible historical paths. The other repository was not modified.
+
+**Exact next bounded action:** implement/review the actual native-response boundary
+and target DB/consumer adapter with explicit reference/build/cache provenance;
+validate on isolated target storage with real-size inputs and resource/drop budgets.
+No capture activation is ready for approval yet. A named-target preflight,
+concrete release/rollback plan and separate operational authorization still precede
+activation. Economic stages and the full opportunity-set requirement remain gated.
+
+
+## 2026-10-15 — Native gateway preservation and asyncpg research integration
+
+The [native/PG implementation record](ndx-strategy/NDX-02-native-postgres-integration.md)
+owns the protocol, reproduction, target-engine limits and next gates. New files:
+`src/butterfly_guy/research/ndx_native_response.py`,
+`src/butterfly_guy/research/ndx_postgres_recording.py`,
+`tools/check_ndx_postgres_recording.py` and the two corresponding new test files.
+SQL, native synthetic fixture/universe, body schema and preregistered contract/
+source lock are under `docs/research/ndx-strategy/postgres-v1/`. No previously
+frozen source/contract/output or other-repository file was rewritten.
+
+The existing pinned SDK supports client= injection. The optional research HTTP
+client therefore preserves its normal buffered GET response before SDK parsing,
+without modifying the SDK, making another request, or changing active bot wiring.
+Only the successful native option-chain schema is accepted; unknown/sensitive
+fields, duplicate JSON keys, wrong identities and unbuffered/oversized responses
+refuse recording. Original buffered gateway body bytes, including lexical number
+precision, remain intact. This is gateway-normalized HTTP-decoded body scope,
+not original provider wire data. Missing multiplier/flags/age-reference remain
+missing; chain flags do not label selected legs. Recording failures are counted/
+journaled separately while the SDK receives its unchanged response. Cancellation
+propagates. Recording is awaited only on this explicit research path; it is not
+approved as an inline delay on the trading path.
+
+The asyncpg adapter writes selected quote copies, producer metadata/BYTEA body
+and a complete manifest in one real PostgreSQL transaction. Schema installation
+is explicit, additive and outside automatic runtime migrations. Publication binds
+installation UUID, actual transaction ID, exact snapshot/version/symbols and
+content hashes. Acknowledgement is observed only after COMMIT returns; consumer
+read/receipt and persistence are separate. One exact-key joined SQL statement
+reads the complete committed snapshot and observed acknowledgement consistently.
+A lost COMMIT reply produces unknown outcome until recovery observes publication
+presence; it does not invent a past commit acknowledgement. All results retain
+insufficient evidence, false replay eligibility and no decision/fill.
+
+Temporary test-only pgserver==0.1.4 executables supplied PostgreSQL 16.2. Python
+3.13 package resolution was unsupported, so a separate Python 3.12 uv environment
+was used; project dependency files/pins are unchanged. All test clusters were
+new private /tmp Unix-socket instances with TCP disabled and were stopped explicitly.
+No Docker/system/remote service was started or changed. Cluster/logs are retained.
+The TimescaleDB extension was not present, so deployment-version/extension/pool/
+role/load parity remains unverified. Actual source and timing evidence are not
+inferred from this test engine.
+
+Frozen synthetic resource run:
+`reports/research/ndx-02-native-postgres-20261015/run-01/`, copied byte-for-byte from
+its closed local /tmp output with all output hashes verified. Five small native
+4-contract responses and three 5,000-contract responses all completed SDK → PG
+publication → receipt, using one mock HTTP GET per sample and real local DB I/O.
+The larger bodies were 1,295,450 bytes; maximum measured complete cycle was
+0.317701 s, versus 0.011259 s for the small body. Peak Python RSS was 77,392 KiB;
+DB growth 352,256 bytes reflects compressible synthetic content and is not a real
+retention estimate. Export writes are excluded. No production latency/resource
+budget or trading-path coupling is approved by these measurements. No new market
+coverage or strategy economics are produced.
+
+Run artifacts preserve a custom-format research-schema pg_dump, exact native body
+and receipt/manifest samples, source copies, invocation, UTC/environment/dependencies,
+PostgreSQL binary hashes/version, parent/input/config/source/output hashes and
+recovery inventory. Small run/summary/verification copies use
+`ndx02-native-postgres-*` in the October 15 versioned evidence directory. Starting
+Git SHA is still `49da0284d24814ed2bc0838bbd543444b48019b9`, with earlier dirty
+work preserved. No frozen native/PG run failed or was overwritten. Preparatory
+line-wrap/import lint corrections occurred before registration.
+
+Verification: **164 passed, zero skipped** in the combined private-enabled suite
+(28 new native/real-PG checks plus the prior 136). Checks include deferred server
+COMMIT failure, actual backend termination before commit, cross-connection
+uncommitted invisibility, lost acknowledgement/receipt, append-only/TRUNCATE refusal,
+correction/schema identity, injected COMMIT-reply loss after a real commit and
+end-to-end pinned SDK/body roundtrip. Repository Ruff and whitespace checks pass;
+AST graph refresh completed with the documented optional SQL-parser/stale-label
+limitations. Frozen SDK schema, source/config and archived run outputs match hashes.
+
+**Exact next bounded action:** establish the intended deployed TimescaleDB version
+read-only and validate the additive schema/permissions/adapter on an isolated
+matching environment; prepare a default-off research observer factory with bounded
+pool/drop accounting, explicit capture universe/window, real resource/retention
+budgets and release/rollback validation. Upstream original-provider body, actual
+freshness-reference instant, gateway build and clock synchronization remain
+unattested; preserve unknowns until separately evidenced. Named-target live DDL,
+capture activation, service changes and later economic research still require
+their scoped authorization. All 17 historical continuation paths remain ineligible;
+full NDX-02 and NDX-03–06 are not complete. Eros archival retention is preserved;
+independent backup remains unestablished.
+
+
+### Post-registration target identity supplement
+
+Read-only Helios metadata subsequently confirmed hostname/repository and a healthy
+`butterfly_timescaledb` using `timescale/timescaledb:latest-pg16`. Inside an explicit
+READ ONLY transaction with a 5 s timeout, version metadata reported PostgreSQL
+**16.11** and TimescaleDB **2.25.2**. Running image ID/RepoDigest was
+`sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6`.
+The [target record](ndx-strategy/evidence/2026-10-15/ndx02-native-postgres-target-readonly.json)
+preserves exact scope/SQL and distinguishes this observation from engine testing.
+No credentials, market data, positions/orders, application release or migration
+state were inspected; this was not a full activation preflight. No DDL/DML,
+capture, service restart or deployment occurred. The remaining compatibility
+check is now specifically an **isolated instance of that observed image**,
+not a mutation of the live container. Current local tests remain PostgreSQL 16.2
+without the extension; the read-only observation does not retroactively validate
+the target image or alter any frozen run/config/source lock.

@@ -1,0 +1,751 @@
+{
+  "$defs": {
+    "Clock": {
+      "additionalProperties": false,
+      "properties": {
+        "owner": {
+          "minLength": 1,
+          "title": "Owner",
+          "type": "string"
+        },
+        "process": {
+          "minLength": 1,
+          "title": "Process",
+          "type": "string"
+        },
+        "boot": {
+          "minLength": 1,
+          "title": "Boot",
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "sync_evidence": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sync Evidence"
+        },
+        "uncertainty_seconds": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Uncertainty Seconds"
+        },
+        "discontinuity": {
+          "title": "Discontinuity",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "owner",
+        "process",
+        "boot",
+        "source",
+        "sync_evidence",
+        "uncertainty_seconds",
+        "discontinuity"
+      ],
+      "title": "Clock",
+      "type": "object"
+    },
+    "Consumer": {
+      "additionalProperties": false,
+      "properties": {
+        "identity": {
+          "minLength": 1,
+          "title": "Identity",
+          "type": "string"
+        },
+        "build_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Build Sha256"
+        },
+        "returned_snapshot_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Returned Snapshot Id"
+        },
+        "returned_symbols": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Returned Symbols",
+          "type": "array"
+        },
+        "read_status": {
+          "enum": [
+            "success",
+            "failed",
+            "unknown"
+          ],
+          "title": "Read Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "identity",
+        "build_sha256",
+        "returned_snapshot_id",
+        "returned_symbols",
+        "read_status"
+      ],
+      "title": "Consumer",
+      "type": "object"
+    },
+    "Leg": {
+      "additionalProperties": false,
+      "properties": {
+        "symbol": {
+          "minLength": 1,
+          "title": "Symbol",
+          "type": "string"
+        },
+        "root": {
+          "const": "NDXP",
+          "title": "Root",
+          "type": "string"
+        },
+        "expiry": {
+          "minLength": 1,
+          "title": "Expiry",
+          "type": "string"
+        },
+        "option_type": {
+          "enum": [
+            "CALL",
+            "PUT"
+          ],
+          "title": "Option Type",
+          "type": "string"
+        },
+        "strike": {
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$",
+          "title": "Strike",
+          "type": "string"
+        },
+        "multiplier": {
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$",
+          "title": "Multiplier",
+          "type": "string"
+        },
+        "bid": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bid"
+        },
+        "ask": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ask"
+        },
+        "provider_mark": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Provider Mark"
+        },
+        "bid_size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bid Size"
+        },
+        "ask_size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ask Size"
+        },
+        "event": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "age_seconds": {
+          "anyOf": [
+            {
+              "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Age Seconds"
+        },
+        "age_reference": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "age_semantics": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Age Semantics"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source"
+        },
+        "flags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Flags",
+          "type": "array"
+        },
+        "normalization": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Normalization"
+        }
+      },
+      "required": [
+        "symbol",
+        "root",
+        "expiry",
+        "option_type",
+        "strike",
+        "multiplier",
+        "bid",
+        "ask",
+        "provider_mark",
+        "bid_size",
+        "ask_size",
+        "event",
+        "age_seconds",
+        "age_reference",
+        "age_semantics",
+        "source",
+        "flags",
+        "normalization"
+      ],
+      "title": "Leg",
+      "type": "object"
+    },
+    "Payload": {
+      "additionalProperties": false,
+      "properties": {
+        "response_id": {
+          "minLength": 1,
+          "title": "Response Id",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Path"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sha256"
+        },
+        "scope": {
+          "const": "market-only-body-v1",
+          "title": "Scope",
+          "type": "string"
+        },
+        "redaction": {
+          "minLength": 1,
+          "title": "Redaction",
+          "type": "string"
+        }
+      },
+      "required": [
+        "response_id",
+        "path",
+        "sha256",
+        "scope",
+        "redaction"
+      ],
+      "title": "Payload",
+      "type": "object"
+    },
+    "Publication": {
+      "additionalProperties": false,
+      "properties": {
+        "publication_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Publication Id"
+        },
+        "transaction_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Transaction Id"
+        },
+        "snapshot_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Snapshot Id"
+        },
+        "quote_write": {
+          "enum": [
+            "success",
+            "failed",
+            "unknown"
+          ],
+          "title": "Quote Write",
+          "type": "string"
+        },
+        "metadata_write": {
+          "enum": [
+            "success",
+            "failed",
+            "unknown"
+          ],
+          "title": "Metadata Write",
+          "type": "string"
+        },
+        "complete_manifest_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Complete Manifest Sha256"
+        },
+        "complete_manifest_path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Complete Manifest Path"
+        },
+        "visibility_evidence": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Visibility Evidence"
+        },
+        "failure": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Failure"
+        }
+      },
+      "required": [
+        "publication_id",
+        "transaction_id",
+        "snapshot_id",
+        "quote_write",
+        "metadata_write",
+        "complete_manifest_sha256",
+        "complete_manifest_path",
+        "visibility_evidence",
+        "failure"
+      ],
+      "title": "Publication",
+      "type": "object"
+    },
+    "Stamp": {
+      "additionalProperties": false,
+      "properties": {
+        "wall_utc": {
+          "minLength": 1,
+          "title": "Wall Utc",
+          "type": "string"
+        },
+        "monotonic_ns": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Monotonic Ns"
+        },
+        "clock": {
+          "minLength": 1,
+          "title": "Clock",
+          "type": "string"
+        }
+      },
+      "required": [
+        "wall_utc",
+        "monotonic_ns",
+        "clock"
+      ],
+      "title": "Stamp",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "NDX-provenance-v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "evidence_kind": {
+      "enum": [
+        "synthetic",
+        "historical",
+        "prospective"
+      ],
+      "title": "Evidence Kind",
+      "type": "string"
+    },
+    "record_id": {
+      "minLength": 1,
+      "title": "Record Id",
+      "type": "string"
+    },
+    "snapshot_id": {
+      "minLength": 1,
+      "title": "Snapshot Id",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "acquisition_id": {
+      "minLength": 1,
+      "title": "Acquisition Id",
+      "type": "string"
+    },
+    "pass_id": {
+      "minLength": 1,
+      "title": "Pass Id",
+      "type": "string"
+    },
+    "request_id": {
+      "minLength": 1,
+      "title": "Request Id",
+      "type": "string"
+    },
+    "channel": {
+      "enum": [
+        "collector-direct",
+        "db-research"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "session": {
+      "minLength": 1,
+      "title": "Session",
+      "type": "string"
+    },
+    "close_utc": {
+      "minLength": 1,
+      "title": "Close Utc",
+      "type": "string"
+    },
+    "parent_record_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Parent Record Sha256"
+    },
+    "expected_symbols": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Expected Symbols",
+      "type": "array"
+    },
+    "payload": {
+      "$ref": "#/$defs/Payload"
+    },
+    "clocks": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Clock"
+      },
+      "title": "Clocks",
+      "type": "object"
+    },
+    "stamps": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/Stamp"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "Stamps",
+      "type": "object"
+    },
+    "legs": {
+      "items": {
+        "$ref": "#/$defs/Leg"
+      },
+      "title": "Legs",
+      "type": "array"
+    },
+    "chain_source": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Chain Source"
+    },
+    "chain_flags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Chain Flags",
+      "type": "array"
+    },
+    "builds": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "Builds",
+      "type": "object"
+    },
+    "effective_settings": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "Effective Settings",
+      "type": "object"
+    },
+    "publication": {
+      "$ref": "#/$defs/Publication"
+    },
+    "consumer": {
+      "$ref": "#/$defs/Consumer"
+    },
+    "dropped_records": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Dropped Records"
+    },
+    "gap_before_seconds": {
+      "anyOf": [
+        {
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Gap Before Seconds"
+    }
+  },
+  "required": [
+    "schema_version",
+    "evidence_kind",
+    "record_id",
+    "snapshot_id",
+    "version",
+    "acquisition_id",
+    "pass_id",
+    "request_id",
+    "channel",
+    "session",
+    "close_utc",
+    "parent_record_sha256",
+    "expected_symbols",
+    "payload",
+    "clocks",
+    "stamps",
+    "legs",
+    "chain_source",
+    "chain_flags",
+    "builds",
+    "effective_settings",
+    "publication",
+    "consumer",
+    "dropped_records",
+    "gap_before_seconds"
+  ],
+  "title": "Record",
+  "type": "object"
+}

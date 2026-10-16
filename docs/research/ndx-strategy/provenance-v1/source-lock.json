@@ -1,0 +1,19 @@
+{
+  "config_sha256": "2c3d7a46c57c48fb6085a89771cba74857a7ce6916993f9d8f6716ae0ffa143b",
+  "source_sha256": {
+    "src/butterfly_guy/research/ndx_provenance.py": "3641d808e7ea4adc459de3aeea3e84607b5db2cd2b24d429a1da55798a53bc92",
+    "src/butterfly_guy/research/ndx_evidence.py": "895482fd84752e1779ff7ed8442b805e7c638ff4bd9df2bad8ede439263c7908",
+    "src/butterfly_guy/research/ndx_continuation.py": "91eb792441d6a6b52602b6d2a3245cdb27f91bf3120f6fb22473d5569dc8e548",
+    "tests/test_ndx_provenance.py": "074b9dcd43af7a0335fe8893a360c88986a766f86ff25ce4a934e51d8153ee99",
+    "pyproject.toml": "014dfde9a59d7f6a37777982aea8460628a363e680eaf64b14e2b7cb0d36d425",
+    "uv.lock": "4c22a869845d8ea612a17560557fa25a67e0f35e7d436f26b08171d1ee421725",
+    "docs/research/ndx-strategy/NDX-02-prospective-provenance.md": "33a11008e5c4a85393431a8d76bd981de8350ef22a5871c96e432179f5ab8211",
+    "docs/research/ndx-strategy/NDX-remaining-roadmap.md": "ded7ce31b7373bb3a5a636f1d1a8aa7cb851a2df26b012743dcc7400c8cb7f62",
+    "src/butterfly_guy/data/collector.py": "9b66338db2b94357d180bf53e97520e2f3412ef80c27bf604dfa0dbb4ec2a81e",
+    "src/butterfly_guy/data/providers.py": "365a0c4a6ce81fc558f273770f24c477412a1ade90dc125eb47861574aabb3c9",
+    "src/butterfly_guy/data/schwab_client.py": "900b61f111302b1d9a23f1550e7ac899dc42cd15af27ae95554a72bdfff15cc8",
+    "src/butterfly_guy/db/queries.py": "d2b873e4abd90a18c5a1b5507cbb45a65d80275971f9548f085e10f9608182ab",
+    "src/butterfly_guy/db/migrations/001_initial.sql": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+    "src/butterfly_guy/db/migrations/011_snapshot_timing.sql": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44"
+  }
+}

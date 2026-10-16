@@ -2948,9 +2948,9 @@
     "semantic_hash": ""
   },
   "docs/research/ndx-strategy-development.md": {
-    "mtime": 1792093990.3557723,
-    "seen": 1792095764.4373906,
-    "ast_hash": "c3b99756d2483bb71f7c7c61981670c1",
+    "mtime": 1792108340.005125,
+    "seen": 1792117376.7657886,
+    "ast_hash": "3ac69a802400f580d9003be84aea6078",
     "semantic_hash": ""
   },
   "docs/research/ndx-strategy/NDX-01-reconciliation.md": {
@@ -2960,9 +2960,9 @@
     "semantic_hash": ""
   },
   "docs/research/ndx-strategy/README.md": {
-    "mtime": 1792093938.7666776,
-    "seen": 1792095764.4374418,
-    "ast_hash": "b5b0072c9cc7fc43d0770465fbdab873",
+    "mtime": 1792108340.064124,
+    "seen": 1792117376.76656,
+    "ast_hash": "9fb3c4dee08195aeb4addbfbeba7e67d",
     "semantic_hash": ""
   },
   "docs/research/ndx-strategy/evidence/2026-10-14/deployed-config.yaml": {
@@ -3101,6 +3101,480 @@
     "mtime": 1792093938.6666794,
     "seen": 1792095764.43744,
     "ast_hash": "52f849a208f198a1a076981c332e24a7",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-run-01.json": {
+    "mtime": 1792095870.826876,
+    "seen": 1792096823.6474097,
+    "ast_hash": "e0e4034dbe82f09d223e76b20c0d303c",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-summary.json": {
+    "mtime": 1792095870.6698787,
+    "seen": 1792096823.647525,
+    "ast_hash": "7e7ccd021b93cee90fc9c3d6d1654c07",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-verification.json": {
+    "mtime": 1792096018.3991954,
+    "seen": 1792096823.6475267,
+    "ast_hash": "89ff083d759f555a1ce921086b9f53ee",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-contract.json": {
+    "mtime": 1792096542.1486921,
+    "seen": 1792096823.6477532,
+    "ast_hash": "692d8decece376a8c8a909c2d17a8cbd",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-source-lock.json": {
+    "mtime": 1792096699.1928442,
+    "seen": 1792096823.647755,
+    "ast_hash": "16f689bf964948b8e540bff1435c42ee",
+    "semantic_hash": ""
+  },
+  "src/butterfly_guy/research/ndx_quote_fidelity.py": {
+    "mtime": 1792096689.8770132,
+    "seen": 1792096823.6550708,
+    "ast_hash": "0319e36aea9600d796d21818d87d2be6",
+    "semantic_hash": ""
+  },
+  "tests/test_ndx_quote_fidelity.py": {
+    "mtime": 1792096677.92323,
+    "seen": 1792096823.6596992,
+    "ast_hash": "626bbf3e04f0d5e452018d7012c8ffe0",
+    "semantic_hash": ""
+  },
+  "tests/test_ndx_quote_fidelity_raw.py": {
+    "mtime": 1792096789.2452116,
+    "seen": 1792096823.6597006,
+    "ast_hash": "24747a541602981b6dc77a6975adfae4",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-continuation-reproduction.md": {
+    "mtime": 1792095916.84104,
+    "seen": 1792096823.6652188,
+    "ast_hash": "a859e43ab4ee465e180dc45648ad8d5b",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-continuation.md": {
+    "mtime": 1792095870.9088743,
+    "seen": 1792096823.66522,
+    "ast_hash": "7700de0f59f65010724e4696b936f8af",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NEXT-STEP-PROMPT.md": {
+    "mtime": 1792096231.507327,
+    "seen": 1792096823.6653106,
+    "ast_hash": "ac049d5fde5b18adb03b1957cf03fb2c",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-run.json": {
+    "mtime": 1792097018.5650542,
+    "seen": 1792098241.2582393,
+    "ast_hash": "6474faba7cc59f45d003c37505a5415b",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-source-trace.json": {
+    "mtime": 1792097019.0430455,
+    "seen": 1792098241.2582996,
+    "ast_hash": "711e4297f6b420f9bade0cec215762a4",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-summary.json": {
+    "mtime": 1792097018.4300568,
+    "seen": 1792098241.2583015,
+    "ast_hash": "3754785f7df2acee9a0157238e8d0f06",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-fidelity-verification.json": {
+    "mtime": 1792097063.2262447,
+    "seen": 1792098241.2583027,
+    "ast_hash": "2084d1ee20192366a48f29a536c58172",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/01-direct-complete-response.json": {
+    "mtime": 1792097978.7271414,
+    "seen": 1792098241.2591321,
+    "ast_hash": "5e6a5f6978fd29f2ed9f73b574b5a0c6",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/02-db-complete-publication.json": {
+    "mtime": 1792097978.7941403,
+    "seen": 1792098241.259134,
+    "ast_hash": "4cde8b487e063665ecd4db0dfd85de65",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/02-db-complete-response.json": {
+    "mtime": 1792097978.7731407,
+    "seen": 1792098241.2591352,
+    "ast_hash": "91e247b095fd24d6c9efa1dce304344f",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/03-events-during-pass-response.json": {
+    "mtime": 1792097978.8171399,
+    "seen": 1792098241.2591362,
+    "ast_hash": "f1a38639bc8dd9522ae5b1ff2dcc2079",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/04-fetch-without-receipt-response.json": {
+    "mtime": 1792097978.8391395,
+    "seen": 1792098241.2591376,
+    "ast_hash": "24cdf05ce4c821e0c172e3f986f7ca25",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/05-partial-null-and-zero-response.json": {
+    "mtime": 1792097978.8621392,
+    "seen": 1792098241.2591386,
+    "ast_hash": "69e0b85786dd4a261e0cd8c8a6f42822",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/06-old-zero-size-response.json": {
+    "mtime": 1792097978.883139,
+    "seen": 1792098241.2591395,
+    "ast_hash": "0b9a419143ab85ce0eeb372f0998c9f1",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/07-signed-marks-response.json": {
+    "mtime": 1792097978.9061384,
+    "seen": 1792098241.259141,
+    "ast_hash": "27e4c0ec641f57c506bb3f4b2c6db8bb",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/08a-incomplete-response.json": {
+    "mtime": 1792097978.928138,
+    "seen": 1792098241.259142,
+    "ast_hash": "7a456c0ba51ff0b33deed47496a0fca9",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/08b-duplicate-leg-response.json": {
+    "mtime": 1792097978.9501376,
+    "seen": 1792098241.259143,
+    "ast_hash": "e8786e0d692b1ebe4acd68c0a573cb73",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/08c-wrong-identity-response.json": {
+    "mtime": 1792097978.9731371,
+    "seen": 1792098241.2591443,
+    "ast_hash": "9e99ff4249f1ce7167dd5f36bc180b49",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/08d-out-of-order-response.json": {
+    "mtime": 1792097978.995137,
+    "seen": 1792098241.2591453,
+    "ast_hash": "e36346b06a99a300f7a363ac6f7a51a1",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/09-quote-success-meta-failure-response.json": {
+    "mtime": 1792097979.0161364,
+    "seen": 1792098241.2591462,
+    "ast_hash": "133cbc7a08e3759b4243c6a387e682a6",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/10-transaction-start-only-response.json": {
+    "mtime": 1792097979.041136,
+    "seen": 1792098241.2591472,
+    "ast_hash": "5b7539ba939a930f8ea7845dfa62968b",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/11a-clock-discontinuity-response.json": {
+    "mtime": 1792097979.0621357,
+    "seen": 1792098241.2591484,
+    "ast_hash": "8c8742fdca3fd17828fb33f69a32079b",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/11b-incompatible-domains-response.json": {
+    "mtime": 1792097979.0831354,
+    "seen": 1792098241.2591493,
+    "ast_hash": "09b51d7925adb17368e68090bd4aac88",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/12-after-close-gap-no-later-response.json": {
+    "mtime": 1792097979.106135,
+    "seen": 1792098241.2591503,
+    "ast_hash": "1c14dbd5b0b75209359a0fff94afd1e1",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/13-read-failure-response.json": {
+    "mtime": 1792097979.1291347,
+    "seen": 1792098241.2591515,
+    "ast_hash": "54d1f52018c6c0aff606487d0df6bf36",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/contract.json": {
+    "mtime": 1792098113.4818113,
+    "seen": 1792098241.2591522,
+    "ast_hash": "e59b25945835d4eb312d2ad93f804b9f",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/expectations.json": {
+    "mtime": 1792097979.2071333,
+    "seen": 1792098241.2591534,
+    "ast_hash": "94a4c34d7d77403f057a30357aaebeb3",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/manifest.json": {
+    "mtime": 1792097979.285132,
+    "seen": 1792098241.2591543,
+    "ast_hash": "7911b9e0683caa77d2b3fd23e8ccaabc",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/publication.json": {
+    "mtime": 1792097978.749141,
+    "seen": 1792098241.2591555,
+    "ast_hash": "f9b197719183ddf221a6a62d7123aca8",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/record.schema.json": {
+    "mtime": 1792097979.2401326,
+    "seen": 1792098241.2591565,
+    "ast_hash": "05c996acd41e1c75708e90c1d200ddb4",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/response.json": {
+    "mtime": 1792097978.7041419,
+    "seen": 1792098241.2591577,
+    "ast_hash": "1950ab15587d6b8fd1fd929f0df48c40",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/provenance-v1/source-lock.json": {
+    "mtime": 1792098113.5158107,
+    "seen": 1792098241.2591588,
+    "ast_hash": "a676461b64476e43e86db31b18651585",
+    "semantic_hash": ""
+  },
+  "src/butterfly_guy/research/ndx_provenance.py": {
+    "mtime": 1792098113.3698132,
+    "seen": 1792098241.266169,
+    "ast_hash": "b473f0f713228d717032237bc32caac4",
+    "semantic_hash": ""
+  },
+  "tests/test_ndx_provenance.py": {
+    "mtime": 1792098065.0946498,
+    "seen": 1792098241.2711298,
+    "ast_hash": "f208c4faf3afaeee285dae2570ba2852",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-causal-minute-specification.md": {
+    "mtime": 1792096912.7569723,
+    "seen": 1792098241.2771916,
+    "ast_hash": "703843829270b4cb752a9dd3b05c77ae",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-prospective-provenance.md": {
+    "mtime": 1792098065.3466456,
+    "seen": 1792098241.2773392,
+    "ast_hash": "9a44973615f27551a20771cd348477e9",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-provenance-reproduction.md": {
+    "mtime": 1792098214.2270594,
+    "seen": 1792098241.277341,
+    "ast_hash": "13ab0ed13ae9c55af8aef5495ecd2550",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-quote-fidelity-reproduction.md": {
+    "mtime": 1792096976.1328235,
+    "seen": 1792098241.2773423,
+    "ast_hash": "dc9422d55eef5ab13de229380151d3fd",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-quote-fidelity.md": {
+    "mtime": 1792097062.603256,
+    "seen": 1792098241.2773438,
+    "ast_hash": "7017fbd5cea6e57139fbceecc2777ae9",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-remaining-roadmap.md": {
+    "mtime": 1792098106.0899396,
+    "seen": 1792098241.2773926,
+    "ast_hash": "aa7556bba55ef40c48d72fef6115b381",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/REMAINING-IMPLEMENTATION-PROMPT.md": {
+    "mtime": 1792097364.2174182,
+    "seen": 1792098241.2774436,
+    "ast_hash": "191cbb8108c89d335eee5aaedc7afc63",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-provenance-run.json": {
+    "mtime": 1792098143.443291,
+    "seen": 1792108223.475082,
+    "ast_hash": "b0498f4aecb8896387ee120c1d8f24f2",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-provenance-summary.json": {
+    "mtime": 1792098141.6283226,
+    "seen": 1792108223.4750865,
+    "ast_hash": "bed8b94a5349d38844252a8217ddfc66",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-provenance-verification.json": {
+    "mtime": 1792098285.193821,
+    "seen": 1792108223.475089,
+    "ast_hash": "d3276d43a7577f2536426af71e681c8b",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/recording-v1/contract-v2.json": {
+    "mtime": 1792108192.6956542,
+    "seen": 1792108223.480036,
+    "ast_hash": "62304ba2aa86338a6bb410cf6b6f7f09",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/recording-v1/contract.json": {
+    "mtime": 1792108153.609314,
+    "seen": 1792108223.4800396,
+    "ast_hash": "616e8983c23cc21e89b379f9483bbebd",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/recording-v1/producer.json": {
+    "mtime": 1792108153.5753145,
+    "seen": 1792108223.480042,
+    "ast_hash": "00cc884142ce6e5cb4e52fc3699bc277",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/recording-v1/response.json": {
+    "mtime": 1792108100.0992084,
+    "seen": 1792108223.4800448,
+    "ast_hash": "91e247b095fd24d6c9efa1dce304344f",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/recording-v1/source-lock-v2.json": {
+    "mtime": 1792108192.7296536,
+    "seen": 1792108223.4800467,
+    "ast_hash": "223c15ee4f01653afeda88e4227546da",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/recording-v1/source-lock.json": {
+    "mtime": 1792108153.6493134,
+    "seen": 1792108223.4800491,
+    "ast_hash": "f99816bb2e5c50e3d0f2a809c18ad0c4",
+    "semantic_hash": ""
+  },
+  "src/butterfly_guy/research/ndx_recording.py": {
+    "mtime": 1792108131.1846902,
+    "seen": 1792108223.4959102,
+    "ast_hash": "203cdc8a839e32f80742e1ae1f6e1f4e",
+    "semantic_hash": ""
+  },
+  "tests/test_ndx_recording.py": {
+    "mtime": 1792108190.58169,
+    "seen": 1792108223.5052533,
+    "ast_hash": "5d24a268a17df2601903a65444e1ee06",
+    "semantic_hash": ""
+  },
+  "tools/check_ndx_recording.py": {
+    "mtime": 1792108190.6146896,
+    "seen": 1792108223.5096047,
+    "ast_hash": "ccccba566e4bfc0f009c640a83e6d3f9",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-recording-implementation.md": {
+    "mtime": 1792108190.637689,
+    "seen": 1792108223.5161889,
+    "ast_hash": "555543306ab02d123bfac29102df0238",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-recording-run-01.json": {
+    "mtime": 1792108154.3679438,
+    "seen": 1792117376.7408397,
+    "ast_hash": "cd3c40accc6e592d8efc484bd4fd8b9b",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-recording-run-02.json": {
+    "mtime": 1792108193.6229072,
+    "seen": 1792117376.7408426,
+    "ast_hash": "3325443790bab7f163a3c63dc072e561",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-recording-summary.json": {
+    "mtime": 1792108193.181969,
+    "seen": 1792117376.7408442,
+    "ast_hash": "05dcdef8f028cefec1adb237d04a3c9b",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-recording-upstream-source-trace.json": {
+    "mtime": 1792108282.2371242,
+    "seen": 1792117376.7408466,
+    "ast_hash": "1b7c336baf37b3cccaced42313ce689b",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-recording-verification.json": {
+    "mtime": 1792108375.0145156,
+    "seen": 1792117376.7408483,
+    "ast_hash": "0f5b4496ce0db5b14bc6ce0897aabf3a",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/postgres-v1/contract.json": {
+    "mtime": 1792117288.6413245,
+    "seen": 1792117376.7421029,
+    "ast_hash": "bbf8aed6900b07e0a0de30c698bc32c0",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/postgres-v1/gateway-body.schema.json": {
+    "mtime": 1792117288.608325,
+    "seen": 1792117376.7421048,
+    "ast_hash": "5c8778f464c2ec143e6d9020bbef5d7e",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/postgres-v1/native-synthetic.json": {
+    "mtime": 1792116672.095463,
+    "seen": 1792117376.7421067,
+    "ast_hash": "9f3871a2737e6044a1c20f81e65745bc",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/postgres-v1/source-lock.json": {
+    "mtime": 1792117288.6773238,
+    "seen": 1792117376.7421083,
+    "ast_hash": "c71ef110c16ea93f3d0cac24551d1ce8",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/postgres-v1/universe.json": {
+    "mtime": 1792116672.1204627,
+    "seen": 1792117376.7421181,
+    "ast_hash": "cba4e249f35ccd8058a6d7eda5aa8149",
+    "semantic_hash": ""
+  },
+  "src/butterfly_guy/research/ndx_native_response.py": {
+    "mtime": 1792116858.3154428,
+    "seen": 1792117376.7531304,
+    "ast_hash": "4b5116eb4b3401382e4347e46c1a58b7",
+    "semantic_hash": ""
+  },
+  "src/butterfly_guy/research/ndx_postgres_recording.py": {
+    "mtime": 1792117107.0043466,
+    "seen": 1792117376.7531343,
+    "ast_hash": "aad7d1866d920e4e79c1bca06f32f515",
+    "semantic_hash": ""
+  },
+  "tests/test_ndx_native_response.py": {
+    "mtime": 1792116858.365442,
+    "seen": 1792117376.7588086,
+    "ast_hash": "135624ed4710924480126aa258fa82c1",
+    "semantic_hash": ""
+  },
+  "tests/test_ndx_postgres_recording.py": {
+    "mtime": 1792116922.211396,
+    "seen": 1792117376.758812,
+    "ast_hash": "a4600260d93df359b763b28b65b27606",
+    "semantic_hash": ""
+  },
+  "tools/check_ndx_postgres_recording.py": {
+    "mtime": 1792117107.036346,
+    "seen": 1792117376.76157,
+    "ast_hash": "8adecdf980f215926e3dc23966440233",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-native-postgres-integration.md": {
+    "mtime": 1792117288.1093333,
+    "seen": 1792117376.7660425,
+    "ast_hash": "a5ece69457ae9c630883a8c432bb7f59",
+    "semantic_hash": ""
+  },
+  "docs/research/ndx-strategy/NDX-02-recording-upstream-review.md": {
+    "mtime": 1792108339.9641259,
+    "seen": 1792117376.766399,
+    "ast_hash": "e5b1d4b8f0788e484f038bcfceb98107",
     "semantic_hash": ""
   }
 }
