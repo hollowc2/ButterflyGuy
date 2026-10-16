@@ -3,45 +3,45 @@
 - Asset: SPX
 - Cohort label: prospective
 - Prospective start: 2026-10-02
-- Generated: 2026-10-15T01:33:11.491710+00:00
+- Generated: 2026-10-16T01:33:45.355054+00:00
 - Primary result: **stressed_marketable** (corrected midpoint is a comparison baseline only)
 
 ## Sessions
 
-- Sessions recorded: 8
+- Sessions recorded: 9
 - No signal: 0
 - Incomplete data: 1
-- Session completion coverage: 88.9%
-- Deferred sessions: 2026-10-14
-- Eligible trades: 8
-- Cash-settled trades: 2
+- Session completion coverage: 90.0%
+- Deferred sessions: 2026-10-15
+- Eligible trades: 9
+- Cash-settled trades: 3
 
 ## Accounting models
 
 | Model | Trades | Net P&L | Expectancy | PF | Win% | Median | Max DD | Avg MFE | MFE cap | Top-3 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| stressed_marketable | 8 | $707.60 | $88.45 | 1.589 | 25.0% | $-172.70 | $684.60 | $492.35 | 48.5% | 100.0% |
-| marketable | 8 | $987.60 | $123.45 | 2.027 | 25.0% | $-132.70 | $525.60 | $522.35 | 46.6% | 100.0% |
-| corrected_midpoint | 8 | $1,184.60 | $148.07 | 2.482 | 25.0% | $-104.20 | $454.60 | $552.02 | 44.9% | 100.0% |
+| stressed_marketable | 9 | $2,011.00 | $223.44 | 2.674 | 33.3% | $-160.20 | $684.60 | $618.73 | 57.7% | 100.0% |
+| marketable | 9 | $2,311.00 | $256.78 | 3.404 | 33.3% | $-120.20 | $525.60 | $649.84 | 56.0% | 100.0% |
+| corrected_midpoint | 9 | $2,519.00 | $279.89 | 4.152 | 33.3% | $-98.20 | $454.60 | $685.18 | 53.8% | 100.0% |
 
 ## Coverage
 
-- stressed_marketable: eligible=8 priced=8 unpriced=0 coverage=100.0% missing_entry=0 crossed_entry=0 missing_exit=0 crossed_exit=0 skipped_exit_obs=0 settlement_fallbacks=0
-- marketable: eligible=8 priced=8 unpriced=0 coverage=100.0% missing_entry=0 crossed_entry=0 missing_exit=0 crossed_exit=0 skipped_exit_obs=0 settlement_fallbacks=0
-- corrected_midpoint: eligible=8 priced=8 unpriced=0 coverage=100.0% missing_entry=0 crossed_entry=0 missing_exit=0 crossed_exit=0 skipped_exit_obs=0 settlement_fallbacks=0
+- stressed_marketable: eligible=9 priced=9 unpriced=0 coverage=100.0% missing_entry=0 crossed_entry=0 missing_exit=0 crossed_exit=0 skipped_exit_obs=0 settlement_fallbacks=0
+- marketable: eligible=9 priced=9 unpriced=0 coverage=100.0% missing_entry=0 crossed_entry=0 missing_exit=0 crossed_exit=0 skipped_exit_obs=0 settlement_fallbacks=0
+- corrected_midpoint: eligible=9 priced=9 unpriced=0 coverage=100.0% missing_entry=0 crossed_entry=0 missing_exit=0 crossed_exit=0 skipped_exit_obs=0 settlement_fallbacks=0
 
 ## stressed_marketable by half
 
 | Group | Trades | Net P&L | Expectancy | PF | Win% |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| first_half | 4 | $951.80 | $237.95 | 2.521 | 25.0% |
-| second_half | 4 | $-244.20 | $-61.05 | 0.576 | 25.0% |
+| first_half | 5 | $746.60 | $149.32 | 1.899 | 20.0% |
+| second_half | 4 | $1,264.40 | $316.10 | 4.414 | 50.0% |
 
 ## stressed_marketable by settlement
 
 | Group | Trades | Net P&L | Expectancy | PF | Win% |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| cash_settled | 2 | $1,908.80 | $954.40 | 999.000 | 100.0% |
+| cash_settled | 3 | $3,212.20 | $1,070.73 | 999.000 | 100.0% |
 | intraday_exit | 6 | $-1,201.20 | $-200.20 | 0.000 | 0.0% |
 
 ## stressed_marketable by direction
@@ -49,28 +49,28 @@
 | Group | Trades | Net P&L | Expectancy | PF | Win% |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | CALL | 5 | $1,348.20 | $269.64 | 3.405 | 40.0% |
-| PUT | 3 | $-640.60 | $-213.53 | 0.000 | 0.0% |
+| PUT | 4 | $662.80 | $165.70 | 2.035 | 25.0% |
 
 ## stressed_marketable by month
 
 | Group | Trades | Net P&L | Expectancy | PF | Win% |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 2026-10 | 8 | $707.60 | $88.45 | 1.589 | 25.0% |
+| 2026-10 | 9 | $2,011.00 | $223.44 | 2.674 | 33.3% |
 
 ## stressed_marketable by exit_reason
 
 | Group | Trades | Net P&L | Expectancy | PF | Win% |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| cash_settled | 2 | $1,908.80 | $954.40 | 999.000 | 100.0% |
+| cash_settled | 3 | $3,212.20 | $1,070.73 | 999.000 | 100.0% |
 | drawdown_afternoon | 1 | $-155.20 | $-155.20 | 0.000 | 0.0% |
 | drawdown_late_morning | 1 | $-280.20 | $-280.20 | 0.000 | 0.0% |
 | drawdown_morning | 4 | $-765.80 | $-191.45 | 0.000 | 0.0% |
 
 ## Registered endpoint
 
-- eligible_trades: 8/120 (not met)
-- cash_settled_trades: 2/20 (not met)
-- stressed_winners: 2/15 (not met)
+- eligible_trades: 9/120 (not met)
+- cash_settled_trades: 3/20 (not met)
+- stressed_winners: 3/15 (not met)
 - Endpoint reached: no
 
 ## Decision gates
@@ -79,7 +79,7 @@
 - stressed_net_pnl_positive: pass
 - stressed_expectancy_positive: pass
 - stressed_profit_factor_above_one: pass
-- marketable_positive_in_both_halves: fail
+- marketable_positive_in_both_halves: pass
 - executable_entry_coverage: pass
 - top3_within_limit: fail
 - drawdown_within_limit: pass
