@@ -40,6 +40,17 @@ def capture():
 
 @pytest.fixture(scope="session")
 def postgres_cluster():
+    # Only the task-owned exact-image harness supplies this private local socket.
+    target_socket = os.environ.get("NDX_TIMESCALE_SOCKET")
+    if target_socket:
+        import re
+        if not re.fullmatch(r"/tmp/ndx-timescale-[0-9a-f]{32}/socket", target_socket):
+            raise ValueError("task-owned isolated TimescaleDB socket required")
+        if str(Path(target_socket).resolve()) != target_socket:
+            raise ValueError("test socket must not redirect to another location")
+        yield {"host": target_socket, "port": 5432, "user": "ndx_research_test",
+               "database": "postgres"}
+        return
     binary = os.environ.get("NDX_POSTGRES_BIN")
     if not binary:
         pytest.skip("NDX_POSTGRES_BIN required for isolated PostgreSQL tests")
@@ -72,6 +83,11 @@ async def pg(postgres_cluster):
     params["database"] = name
     pool = await asyncpg.create_pool(**params, min_size=1, max_size=5, command_timeout=5)
     async with pool.acquire() as conn:
+        if os.environ.get("NDX_TIMESCALE_SOCKET"):
+            await conn.execute("CREATE EXTENSION IF NOT EXISTS timescaledb VERSION '2.25.2'")
+            assert await conn.fetchval("SHOW server_version") == "16.11"
+            assert await conn.fetchval("SELECT extversion FROM pg_extension "
+                                       "WHERE extname='timescaledb'") == "2.25.2"
         await install_empty_schema(conn)
     try:
         yield PostgresRecorder(pool), params

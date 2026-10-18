@@ -1,0 +1,28 @@
+{
+  "runs": {
+    "target-run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/target-run-01",
+      "run_sha256": "693fb6868dc4e5c9ec359fedd7fd5a5231b7148c7c2759b0e38942f779b486a3",
+      "summary_sha256": "4dd7f2cde641e5edc5fb97275934aacfeb9350a1d1c78524a4e836b523e1515c"
+    },
+    "target-run-02": {
+      "path": "reports/research/ndx-02-observer-20261015/target-run-02",
+      "run_sha256": "ea58df20ef7ae6b908d359b7ee47fcc06a17e535a88e3a7ff9e60506582f9ef8",
+      "summary_sha256": "366bfc92228dfb32e92d5cbc2f96a5906aa3c2209cb9dbf0d1a7d9bc908a69a8"
+    },
+    "resources-run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/resources-run-01",
+      "run_sha256": "db84a745f5b66353aea6173381ca198316c332aa4c15a6d175ed699b05daf1de",
+      "summary_sha256": "baba493e21808c023e9eea21411ce0a839b5a6ebddb7f49c43671f8ad02d9dfc"
+    },
+    "resources-run-02": {
+      "path": "reports/research/ndx-02-observer-20261015/resources-run-02",
+      "run_sha256": "31017ee10225729adb4a5edcee84e70ff7f8d2d1416de55e01ff6a2b3e24d897",
+      "summary_sha256": "ea08494494691896ccb49adac1f9cbaeafe1f7aa6dcb9a52be4472fc5f86ffbc"
+    }
+  },
+  "contract_sha256": "f29c2c4591acbb92b1732082123072fec8947ab964fa6f3b9752296a99eaa905",
+  "source_lock_sha256": "2f4a73afecc536fea5bd70fcd68f89a14daa54d5ebbc3bfbad819578ec945a3e",
+  "previous_contract_sha256": "7319ad30465c1855c0feec5758137144621f079e47b31b5e37f13bbb04505534",
+  "previous_source_lock_sha256": "09c92d36c32a687d1d14d2acda93e14e866b36aab639e5b22670ea413e1c1e36"
+}

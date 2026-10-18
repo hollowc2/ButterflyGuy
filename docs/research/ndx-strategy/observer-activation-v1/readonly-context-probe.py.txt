@@ -1,0 +1,37 @@
+import datetime,json,subprocess
+
+def run(args, data=None):
+ p=subprocess.run(args,input=data,text=True,capture_output=True,timeout=25)
+ if p.returncode: return {'status':'failed','exit_code':p.returncode}
+ try:return json.loads(p.stdout)
+ except ValueError:return {'status':'invalid_output'}
+report={'observed_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'read-only context and topology; no broker or gateway request'}
+report['networks']={}
+for name in ['butterfly_ndx_app','butterfly_timescaledb','schwab_gateway_live']:
+ report['networks'][name]=run(['docker','inspect','--format','{"image":{{json .Image}},"networks":{{json .NetworkSettings.Networks}}}',name])
+program='''import asyncio,contextlib,datetime,hashlib,io,json
+result={"status":"failed"}
+try:
+ with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+  import asyncpg
+  from butterfly_guy.core.config import load_config
+  from butterfly_guy.core.time_utils import session_date,is_trading_day,market_close_time,EASTERN,now_eastern,is_market_open
+  from pathlib import Path
+  c=load_config("configs/config_ndx.yaml");day=session_date()
+  async def query():
+   conn=await asyncpg.connect(c.database.dsn,timeout=5,server_settings={"default_transaction_read_only":"on","statement_timeout":"5000","lock_timeout":"1000"})
+   try:
+    rows=await conn.fetch("SELECT id,trade_date,status,lower_symbol,center_symbol,upper_symbol,entry_time FROM butterfly_trades WHERE underlying='NDX' AND trade_date=$1 ORDER BY id",day)
+    return [dict(row) for row in rows]
+   finally:await conn.close()
+  rows=asyncio.run(query())
+  result={"status":"completed","session":str(day),"paper_trading":c.execution.paper_trading,"underlying":c.strategy.underlying,"is_trading_day":is_trading_day(day),"market_open":is_market_open(),"close_utc":datetime.datetime.combine(day,market_close_time(day),tzinfo=EASTERN).astimezone(datetime.timezone.utc).isoformat(),"config_file_sha256":hashlib.sha256(Path("configs/config_ndx.yaml").read_bytes()).hexdigest(),"current_session_selected_trades":rows}
+except BaseException as exc:result={"status":"failed","category":type(exc).__name__}
+print(json.dumps(result,default=str))
+'''
+report['context']=run(['docker','exec','-i','butterfly_ndx_app','python','-'],program)
+# Only retain network names and DNS aliases, never environment or addresses.
+for name,data in list(report['networks'].items()):
+ if 'networks' in data:
+  report['networks'][name]={'image':data['image'],'networks':{k:{'aliases':v.get('Aliases',[])} for k,v in data['networks'].items()}}
+print(json.dumps(report,indent=2))

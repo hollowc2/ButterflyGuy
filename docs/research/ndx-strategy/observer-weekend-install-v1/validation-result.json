@@ -1,0 +1,41 @@
+{
+  "observed_utc": "2026-10-17T02:25:03.836131+00:00",
+  "capture_enabled": false,
+  "market_data_requests": 0,
+  "image_archive_sha256": "e71bc003c95e5d89bfbe47fcb96dadf92784940dbc6ad68e874562fa477613ab",
+  "loaded_image_id": "sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99",
+  "disabled_result": {
+    "status": "disabled"
+  },
+  "connectivity": {
+    "status": "passed",
+    "database": {
+      "login": "ndx_observer_capture",
+      "superuser": false,
+      "can_create_role": false,
+      "can_create_db": false,
+      "connection_limit": 3,
+      "memberships": [
+        "ndx_evidence_recorder"
+      ],
+      "research_create": false,
+      "trading_select": false,
+      "trading_insert": false,
+      "research_insert": true,
+      "research_update": false,
+      "research_delete": false,
+      "research_truncate": false,
+      "schema_sql_sha256": "cd99bb8c27aedef901cbb9567cb09d3bd53e5fb22e7a9ba2e039176993bceb59",
+      "installation_id": "d18ac329-cccf-4a57-93ba-ffc9759ed172",
+      "quotes": 0,
+      "publications": 0,
+      "journal": 0
+    },
+    "gateway_health_http": 200,
+    "market_data_requests": 0
+  },
+  "initial_research_export_sha256": "70f1247b23df4cea10b6a4e836c5013e7af1c10cac6fbbe84f782264183567a1",
+  "remaining_free_bytes": 20621971456,
+  "status": "passed",
+  "completed_utc": "2026-10-17T02:26:01.073685+00:00"
+}

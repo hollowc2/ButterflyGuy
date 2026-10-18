@@ -1,0 +1,92 @@
+{
+  "observed_utc": "2026-10-16T05:50:41.995374+00:00",
+  "completed_utc": "2026-10-16T05:50:56.580759+00:00",
+  "status": "passed_with_declared_session_order_scope",
+  "audit": {
+    "observed_utc": "2026-10-16T05:50:41.995374+00:00",
+    "completed_utc": "2026-10-16T05:50:56.580759+00:00",
+    "target": "billy@helios / butterfly_ndx_app",
+    "command": [
+      "docker",
+      "exec",
+      "-i",
+      "butterfly_ndx_app",
+      "python",
+      "-",
+      "--config",
+      "configs/config_ndx.yaml"
+    ],
+    "scope": "existing read-only flatness helper; normal authentication/token refresh authorized; counts only",
+    "helper_sha256": "9f215ecd3f6cd1cba048ea1921821da0730ad44a32cbb859fc468fbb443427f0",
+    "db_session_default_transaction_read_only": true,
+    "raw_logs_or_account_payload_retained": false,
+    "orders_placed_cancelled_replaced": false,
+    "live_ddl_or_capture": false,
+    "order_scope_limitation": "current runtime session-date entry window only; not an all-history or all-GTC-order inventory",
+    "result": {
+      "status": "completed",
+      "flat": true,
+      "normal_token_write_callback_calls": 1,
+      "order_query_bounds": {
+        "from_entered_datetime": "2026-10-16T00:00:00",
+        "to_entered_datetime": "2026-10-16T23:59:59.999999"
+      },
+      "audit_exit_code": 0,
+      "date": "2026-10-16",
+      "generated_at": "2026-10-16T05:50:56.037013+00:00",
+      "database_open_trades": 0,
+      "database_nonterminal_intents": 0,
+      "broker_option_position_counts": {
+        "SPX": 0,
+        "NDX": 0,
+        "XSP": 0
+      },
+      "orders": {
+        "SPX": {
+          "top_level_orders": 0,
+          "order_nodes": 0,
+          "active_order_nodes": 0,
+          "missing_status_nodes": 0,
+          "replaced_terminal_nodes": 0,
+          "duplicate_order_ids": 0,
+          "unmapped_statuses": []
+        },
+        "NDX": {
+          "top_level_orders": 0,
+          "order_nodes": 0,
+          "active_order_nodes": 0,
+          "missing_status_nodes": 0,
+          "replaced_terminal_nodes": 0,
+          "duplicate_order_ids": 0,
+          "unmapped_statuses": []
+        },
+        "XSP": {
+          "top_level_orders": 0,
+          "order_nodes": 0,
+          "active_order_nodes": 0,
+          "missing_status_nodes": 0,
+          "replaced_terminal_nodes": 0,
+          "duplicate_order_ids": 0,
+          "unmapped_statuses": []
+        }
+      }
+    }
+  },
+  "archive": "reports/research/ndx-02-observer-20261015/broker-flatness-run-01",
+  "run_sha256": "d85cbb21b16431de9019f949c4289ee3a7e0a0012ca590540d64bd395bc8f6d3",
+  "archive_members_verified": true,
+  "source_probe_sha256": "d6bdd9fc0783ca43c1a037ea32aa591e1b85d6431d5625929945c5d4bb18022f",
+  "existing_helper_sha256": "9f215ecd3f6cd1cba048ea1921821da0730ad44a32cbb859fc468fbb443427f0",
+  "no_manual_credential_rotation_or_reauthorization": true,
+  "normal_token_write_callback_calls": 1,
+  "callback_count_is_not_a_token_value_or_independent_file_write_attestation": true,
+  "historical_paths_eligible": 0,
+  "capture_enabled": false,
+  "live_schema_installed": false,
+  "remaining": [
+    "exact one-shot real NDXP/session/symbol/calendar/build/config context",
+    "reviewed transfer/release/connectivity and dedicated role/secret references",
+    "storage reserve/WAL/retention review and explicitly scoped live DDL/capture approval",
+    "fresh preflight at activation; current-day helper does not establish all older/GTC order absence"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "verified_utc": "2026-10-16T15:58:38.376194+00:00",
+  "acquisition_constructor": "passed",
+  "observed_trade_identity": "passed",
+  "capture_policy_digest": "passed",
+  "observer_and_cli_source_matches_runtime_contract": "passed",
+  "compose_static_no_env_resolution": "passed",
+  "git_diff_check": "passed",
+  "live_capture": false,
+  "live_ddl_or_grants": false,
+  "service_changes": false,
+  "activation": "hold",
+  "reasons": [
+    "open paper trade observed",
+    "dedicated schema/login/key not provisioned",
+    "image not transferred",
+    "storage/WAL/backup acceptance pending",
+    "fresh activation preflight and named approval pending"
+  ],
+  "context_expires_utc": "2026-10-16T20:00:00+00:00",
+  "gateway_metadata_observation": {
+    "exposed_ports": [
+      "8011/tcp"
+    ],
+    "published_port": "127.0.0.1:8011",
+    "source": "read-only docker inspect; no HTTP request"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "observed_utc": "2026-10-17T02:26:28.001614+00:00",
+  "services": {
+    "butterfly_ndx_app": {
+      "image": "sha256:1fbc1ab3aed0aec85bcccab9e5009679789baab10fc333cfd0e4636ef1e7cc61",
+      "started": "2026-10-08T00:20:53.5404703Z",
+      "state": "running"
+    },
+    "butterfly_spx_app": {
+      "image": "sha256:4771356b52d76788c1e5766b54c6a146ab5600d1e5eac7c2c04c2c98199cad0d",
+      "started": "2026-10-04T21:21:27.226141891Z",
+      "state": "running"
+    },
+    "butterfly_xsp_app": {
+      "image": "sha256:df144a93aaa2b71d8f773820acc8f11af85acaaa135f873c86967794f5fd4f35",
+      "started": "2026-10-12T20:13:09.86985708Z",
+      "state": "running"
+    },
+    "schwab_gateway_live": {
+      "image": "sha256:2a2236931f85c79c27171d966c5486852f9aa9a5287806565bffd674576df35e",
+      "started": "2026-10-11T21:09:30.983775219Z",
+      "state": "running"
+    }
+  },
+  "health": {
+    "8000/health": 200,
+    "8000/ready": 200,
+    "8001/health": 200,
+    "8001/ready": 200,
+    "8003/health": 200,
+    "8003/ready": 200
+  },
+  "observer_checks": {
+    "ndx_observer_disabled_check_20261017": {
+      "status": "exited",
+      "exit_code": 0
+    },
+    "ndx_observer_connectivity_check_20261017": {
+      "status": "exited",
+      "exit_code": 0
+    }
+  },
+  "secret_modes_verified": true,
+  "session_context_absent": true,
+  "active_observer_containers": 0,
+  "status": "passed"
+}

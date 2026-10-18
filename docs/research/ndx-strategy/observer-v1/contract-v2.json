@@ -1,0 +1,120 @@
+{
+  "model": "NDX-timescale-observer-v1",
+  "registered_utc": "2026-10-16T03:20:42.185211+00:00",
+  "scope": "synthetic isolated mechanics/resource preparation; capture disabled; no economic evaluation",
+  "parents": {
+    "fidelity": {
+      "path": "reports/research/ndx-02-fidelity-20261015/run-01",
+      "run_sha256": "b2a17d7b15e589c94fc9b9a568efd26802e9e3e048638d352cec0631bea08f66"
+    },
+    "accounting": {
+      "path": "reports/research/ndx-02-20261015/run-02",
+      "run_sha256": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261"
+    },
+    "continuation": {
+      "path": "reports/research/ndx-02-continuation-20261015/run-01",
+      "run_sha256": "5ff727a579cc1af46fdd41d888502a78d638a4bd9f5ec2e45a4e08051c9aae92"
+    },
+    "baseline": {
+      "path": "reports/research/ndx-01-20261015/run-03",
+      "run_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee"
+    },
+    "native_postgres": {
+      "path": "reports/research/ndx-02-native-postgres-20261015/run-01",
+      "run_sha256": "53a6973c8baec839b68d8f683363cafa431df30a070e2055e991f4fb7bd9b2fe"
+    },
+    "recording": {
+      "path": "reports/research/ndx-02-recording-20261015/run-02",
+      "run_sha256": "1d8c0a7979c20bf1e3eb0650b418f901d367873ab0e46eb134f30eaf8f62930a"
+    },
+    "provenance": {
+      "path": "reports/research/ndx-02-provenance-20261015/run-01",
+      "run_sha256": "bc3bed787450da14f5b093089f52ee7d2fcd732fc950a0f33b91d71075163ca8"
+    }
+  },
+  "corrections": [
+    {
+      "parent_contract_sha256": "7319ad30465c1855c0feec5758137144621f079e47b31b5e37f13bbb04505534",
+      "parent_source_lock_sha256": "09c92d36c32a687d1d14d2acda93e14e866b36aab639e5b22670ea413e1c1e36",
+      "failed_resource_run_sha256": "db84a745f5b66353aea6173381ca198316c332aa4c15a6d175ed699b05daf1de",
+      "reason": "source-locked verification helper imports need checkout root for direct script invocation; no runtime change"
+    }
+  ],
+  "input": "docs/research/ndx-strategy/postgres-v1/native-synthetic.json",
+  "universe": "docs/research/ndx-strategy/postgres-v1/universe.json",
+  "roles": "docs/research/ndx-strategy/observer-v1/roles.sql",
+  "target": {
+    "image": "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+    "architecture": "amd64",
+    "postgres": "16.11",
+    "timescaledb": "2.25.2"
+  },
+  "limits": {
+    "body_bytes": 2097152,
+    "storage_bytes": 536870912,
+    "operation_seconds": 10,
+    "startup_seconds": 5,
+    "shutdown_seconds": 3,
+    "journal_seconds": 1
+  },
+  "resource_cases": [
+    {
+      "name": "small",
+      "samples": 3
+    },
+    {
+      "name": "varied-5000",
+      "samples": 3
+    },
+    {
+      "name": "byte-boundary",
+      "samples": 3
+    },
+    {
+      "name": "over-boundary",
+      "samples": 3
+    }
+  ],
+  "resource_recipe": {
+    "varied_seed": 78020301,
+    "contracts": 5000,
+    "flags": "32 deterministic pseudo-random bytes as hex per unselected contract",
+    "selected_fields": "unchanged numerically; small native fixture bytes unchanged",
+    "boundary": "append JSON whitespace to exact limit, then one extra byte",
+    "timing": "SDK-only separate from SDK/observer/publish/read; export outside measured operation",
+    "pressure_outage_crash": "registered focused tests, separate from sequential resource cases"
+  },
+  "mechanism_tests": [
+    "test_disabled_factory_does_not_construct_or_inspect_dependencies",
+    "test_disabled_executable_ignores_context_and_secrets",
+    "test_acquisition_requires_explicit_identity",
+    "test_clean_success_and_restart_inventory",
+    "test_singleton_and_dead_lease_fail_before_gateway",
+    "test_pending_shutdown_cancel_and_busy_admission",
+    "test_recording_oversize_does_not_change_sdk_result",
+    "test_rejection_preserves_sdk_validation_and_safe_failure_ledger",
+    "test_storage_outage_identity_and_failure_journal",
+    "test_gateway_failure_and_operation_timeout",
+    "test_roles_publish_receipt_and_forbidden_operations",
+    "test_cancelled_publication_recovers_without_invented_ack",
+    "test_pool_pressure_and_storage_budget_do_not_request_market",
+    "test_startup_failure_and_shutdown_timeout_are_bounded",
+    "test_concurrent_publication_out_of_order_and_lock_timeout",
+    "test_observer_process_crash_releases_lease_and_keeps_durable_attempt",
+    "test_owned_database_restart_preserves_publications_and_reconnects"
+  ],
+  "production_budget_validated": false,
+  "replay_eligible": false,
+  "historical_eligible_paths": 0,
+  "prior_source_drift": [
+    {
+      "path": "tests/test_ndx_postgres_recording.py",
+      "reason": "strict private exact-image fixture hook and per-test DB extension/version assertions",
+      "frozen_source": "reports/research/ndx-02-native-postgres-20261015/run-01/source/tests/test_ndx_postgres_recording.py"
+    }
+  ],
+  "input_sha256": "702d9aee35020c19844ba3938d47ccd6f57183041be0b252ec0cbf8454a84f6c",
+  "universe_sha256": "e9d168a6476f3a8997aeacadce30146a58d7706d3953568d93661b7ab806efc6",
+  "roles_sha256": "ac99f2d92f3be7e9871e733bccf03afb63168cd48916eb316036690d92fcdadb",
+  "revision": 2
+}

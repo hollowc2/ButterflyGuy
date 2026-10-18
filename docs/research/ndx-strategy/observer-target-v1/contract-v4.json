@@ -1,0 +1,171 @@
+{
+  "model": "NDX-exact-target-resources-restore-v1",
+  "registered_utc": "2026-10-16T04:36:24.590378+00:00",
+  "scope": "isolated exact-image synthetic resources and research-schema restore only; read-only operational review separate; no activation",
+  "parents": {
+    "fidelity": {
+      "path": "reports/research/ndx-02-fidelity-20261015/run-01",
+      "run_sha256": "b2a17d7b15e589c94fc9b9a568efd26802e9e3e048638d352cec0631bea08f66"
+    },
+    "accounting": {
+      "path": "reports/research/ndx-02-20261015/run-02",
+      "run_sha256": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261"
+    },
+    "continuation": {
+      "path": "reports/research/ndx-02-continuation-20261015/run-01",
+      "run_sha256": "5ff727a579cc1af46fdd41d888502a78d638a4bd9f5ec2e45a4e08051c9aae92"
+    },
+    "baseline": {
+      "path": "reports/research/ndx-01-20261015/run-03",
+      "run_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee"
+    },
+    "native_postgres": {
+      "path": "reports/research/ndx-02-native-postgres-20261015/run-01",
+      "run_sha256": "53a6973c8baec839b68d8f683363cafa431df30a070e2055e991f4fb7bd9b2fe"
+    },
+    "recording": {
+      "path": "reports/research/ndx-02-recording-20261015/run-02",
+      "run_sha256": "1d8c0a7979c20bf1e3eb0650b418f901d367873ab0e46eb134f30eaf8f62930a"
+    },
+    "provenance": {
+      "path": "reports/research/ndx-02-provenance-20261015/run-01",
+      "run_sha256": "bc3bed787450da14f5b093089f52ee7d2fcd732fc950a0f33b91d71075163ca8"
+    },
+    "exact_image": {
+      "path": "reports/research/ndx-02-observer-20261015/target-run-04",
+      "run_sha256": "1bdaf08f2f575863b01855921f5fc18ae0ebe3c73be02242a70acd814588ac46"
+    },
+    "ordinary_pg_resources": {
+      "path": "reports/research/ndx-02-observer-20261015/resources-run-02",
+      "run_sha256": "31017ee10225729adb4a5edcee84e70ff7f8d2d1416de55e01ff6a2b3e24d897"
+    },
+    "image_entrypoint_source": {
+      "path": "reports/research/ndx-02-observer-20261015/target-entrypoint-source-review/run-01",
+      "run_sha256": "1f0e397c73a83815b2a8dd551f3e2df3ba16d79f2ee96d6ef31800e71d3f9576"
+    }
+  },
+  "corrections": [
+    {
+      "parent_contract_sha256": "f29c2c4591acbb92b1732082123072fec8947ab964fa6f3b9752296a99eaa905",
+      "parent_source_lock_sha256": "2f4a73afecc536fea5bd70fcd68f89a14daa54d5ebbc3bfbad819578ec945a3e",
+      "reason": "same registered resources on exact engine plus restore; optional resource-helper hooks for extension setup and container PID namespace sampling"
+    },
+    {
+      "parent_contract_sha256": "c7ffe3ed3c67d611ece8a4083fe416bab65b299d836c09793a1133913ac9a7ef",
+      "parent_source_lock_sha256": "2c4254edaa115fddc764911bd107d1a5907138fc12897f04968185a4a2d21140",
+      "failed_run_sha256": "464c0eaf8f36624c9b923bc09fff4cb532285469734dec2a66a0b0f9225dd4b8",
+      "reason": "PGHOST private socket and final-postmaster initialization proof; exact compatibility rerun required"
+    },
+    {
+      "parent_contract_sha256": "738760a594a69dec0e9882ad6041948b1612075ad508f2dfd6d8207bf96561bb",
+      "parent_source_lock_sha256": "06854d8da96702c8608b10ae00271faaa1415f302e2e1a90b6670f2dfdeafb63",
+      "failed_compatibility_run_sha256": "f991188083827204580daa53e9c64924d94febf2c01aa2e9be855d849ce657a3",
+      "reason": "exact image clears PGHOST during bootstrap; preserve its default container-only socket alongside private host-visible socket"
+    },
+    {
+      "parent_contract_sha256": "5b46d26bb1c356c77d7a3c4ab5f184415ed81e092f84e025cb1b2b7b057054e2",
+      "parent_source_lock_sha256": "e1e5845f1642569fb6278bbdfd233fd9a0ee6a42ab7cba1bb74107fc3e009275",
+      "failed_compatibility_run_sha256": "b9752d998d974e80958f2cc086175d4bfce06f1209471a0fe095ac62f002328c",
+      "reason": "fully initialized template1 already has TimescaleDB; fixture uses IF NOT EXISTS while retaining exact version assertions"
+    }
+  ],
+  "input": "docs/research/ndx-strategy/postgres-v1/native-synthetic.json",
+  "universe": "docs/research/ndx-strategy/postgres-v1/universe.json",
+  "roles": "docs/research/ndx-strategy/observer-v1/roles.sql",
+  "target": {
+    "image": "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+    "architecture": "amd64",
+    "postgres": "16.11",
+    "timescaledb": "2.25.2"
+  },
+  "limits": {
+    "body_bytes": 2097152,
+    "storage_bytes": 536870912,
+    "operation_seconds": 10,
+    "startup_seconds": 5,
+    "shutdown_seconds": 3,
+    "journal_seconds": 1
+  },
+  "resource_cases": [
+    {
+      "name": "small",
+      "samples": 3
+    },
+    {
+      "name": "varied-5000",
+      "samples": 3
+    },
+    {
+      "name": "byte-boundary",
+      "samples": 3
+    },
+    {
+      "name": "over-boundary",
+      "samples": 3
+    }
+  ],
+  "resource_recipe": {
+    "varied_seed": 78020301,
+    "contracts": 5000,
+    "flags": "32 deterministic pseudo-random bytes as hex per unselected contract",
+    "selected_fields": "unchanged numerically; small native fixture bytes unchanged",
+    "boundary": "append JSON whitespace to exact limit, then one extra byte",
+    "timing": "SDK-only separate from SDK/observer/publish/read; export outside measured operation",
+    "pressure_outage_crash": "registered focused tests, separate from sequential resource cases"
+  },
+  "mechanism_tests": [
+    "test_disabled_factory_does_not_construct_or_inspect_dependencies",
+    "test_disabled_executable_ignores_context_and_secrets",
+    "test_acquisition_requires_explicit_identity",
+    "test_clean_success_and_restart_inventory",
+    "test_singleton_and_dead_lease_fail_before_gateway",
+    "test_pending_shutdown_cancel_and_busy_admission",
+    "test_recording_oversize_does_not_change_sdk_result",
+    "test_rejection_preserves_sdk_validation_and_safe_failure_ledger",
+    "test_storage_outage_identity_and_failure_journal",
+    "test_gateway_failure_and_operation_timeout",
+    "test_roles_publish_receipt_and_forbidden_operations",
+    "test_cancelled_publication_recovers_without_invented_ack",
+    "test_pool_pressure_and_storage_budget_do_not_request_market",
+    "test_startup_failure_and_shutdown_timeout_are_bounded",
+    "test_concurrent_publication_out_of_order_and_lock_timeout",
+    "test_observer_process_crash_releases_lease_and_keeps_durable_attempt",
+    "test_owned_database_restart_preserves_publications_and_reconnects"
+  ],
+  "production_budget_validated": false,
+  "replay_eligible": false,
+  "historical_eligible_paths": 0,
+  "prior_source_drift": [
+    {
+      "path": "tests/test_ndx_postgres_recording.py",
+      "reason": "strict private exact-image fixture hook and per-test DB extension/version assertions",
+      "frozen_source": "reports/research/ndx-02-native-postgres-20261015/run-01/source/tests/test_ndx_postgres_recording.py"
+    },
+    {
+      "path": "tools/check_ndx_observer_resources.py",
+      "reason": "optional database initializer and process-sampler hooks; existing ordinary-PG defaults unchanged",
+      "frozen_source": "reports/research/ndx-02-observer-20261015/resources-run-02/source/tools/check_ndx_observer_resources.py"
+    }
+  ],
+  "input_sha256": "702d9aee35020c19844ba3938d47ccd6f57183041be0b252ec0cbf8454a84f6c",
+  "universe_sha256": "e9d168a6476f3a8997aeacadce30146a58d7706d3953568d93661b7ab806efc6",
+  "roles_sha256": "ac99f2d92f3be7e9871e733bccf03afb63168cd48916eb316036690d92fcdadb",
+  "revision": 4,
+  "restore_grants": "docs/research/ndx-strategy/observer-target-v1/restore-grants.sql",
+  "restore_grants_sha256": "45ed983665793d7fda5f99c09b0d263d7f62d4701951276ff0d519fb82869d1b",
+  "restore_cases": [
+    "exact table fingerprint and installation UUID equality before new reads",
+    "custom schema-only dump manifest verification",
+    "nine restricted reader body/precision/negative composite and receipt checks",
+    "original acknowledgement timestamps/counts unchanged",
+    "one explicitly synthetic unpublished attempt remains unacknowledged",
+    "task-owned fixture shutdown and output archive hashes"
+  ],
+  "fixture_startup": {
+    "PGHOST": "/socket",
+    "resource_postmaster_pid": "1 after image initialization completes",
+    "compatibility_postmaster_pid": "equals original entrypoint child PID under persistent shell PID1",
+    "bootstrap_server_eligible": false,
+    "unix_socket_directories": "/var/run/postgresql,/socket"
+  }
+}

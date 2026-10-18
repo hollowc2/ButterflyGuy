@@ -1,0 +1,34 @@
+# Proposed standalone project. No live installation or invocation authorized.
+name: ndx-observer-review-v1
+services:
+  observer:
+    profiles: [manual-capture]
+    image: sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99
+    pull_policy: never
+    command: [python, -m, butterfly_guy.research.ndx_observer_cli]
+    environment:
+      NDX_OBSERVER_ENABLED: "false"
+      NDX_OBSERVER_GATEWAY_URL: http://schwab-gateway:8011
+      NDX_OBSERVER_CONTEXT_FILE: /run/ndx-observer/context.json
+    env_file:
+      - path: /home/billy/.config/ndx-observer/observer.env
+        required: true
+    # No session context is mounted during weekend preparation.
+    networks: [monitoring_net]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    restart: "no"
+    stop_grace_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "1"
+networks:
+  monitoring_net:
+    external: true
+    name: monitoring_net

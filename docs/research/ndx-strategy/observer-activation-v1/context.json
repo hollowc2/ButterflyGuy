@@ -1,0 +1,21 @@
+{
+  "snapshot_id": "ndx-20261016-t355-ffe96f7a9fb7-snapshot",
+  "record_id": "ndx-20261016-t355-ffe96f7a9fb7-record",
+  "request_id": "ndx-20261016-t355-ffe96f7a9fb7-request",
+  "pass_id": "ndx-20261016-t355-ffe96f7a9fb7-pass",
+  "acquisition_id": "ndx-20261016-t355-ffe96f7a9fb7-acquisition",
+  "session": "2026-10-16",
+  "expected_symbols": [
+    "NDXP  261016P29310000",
+    "NDXP  261016P29410000",
+    "NDXP  261016P29510000"
+  ],
+  "calendar": "deployed-core-time-utils-cash-close-20261016",
+  "close_utc": "2026-10-16T20:00:00+00:00",
+  "build_sha256": "e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99",
+  "config_sha256": "64d7d5e6bedd96a674ec8f26b4cfcb7a0ebef227856a0f88986b486245343b52",
+  "consumer": "ndx-timescale-observer-v1",
+  "evidence_kind": "prospective",
+  "version": 1,
+  "parent_document_sha256": null
+}

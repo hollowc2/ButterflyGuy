@@ -1,0 +1,70 @@
+{
+  "observed_utc": "2026-10-17T02:20:39.279839+00:00",
+  "completed_utc": "2026-10-17T02:20:52.979588+00:00",
+  "target": "billy@helios / butterfly_ndx_app",
+  "command": [
+    "docker",
+    "exec",
+    "-i",
+    "butterfly_ndx_app",
+    "python",
+    "-",
+    "--config",
+    "configs/config_ndx.yaml"
+  ],
+  "scope": "existing read-only flatness helper; normal authentication/token refresh authorized; counts only",
+  "helper_sha256": "9f215ecd3f6cd1cba048ea1921821da0730ad44a32cbb859fc468fbb443427f0",
+  "db_session_default_transaction_read_only": true,
+  "raw_logs_or_account_payload_retained": false,
+  "orders_placed_cancelled_replaced": false,
+  "live_ddl_or_capture": false,
+  "order_scope_limitation": "current runtime session-date entry window only; not an all-history or all-GTC-order inventory",
+  "result": {
+    "status": "completed",
+    "flat": true,
+    "normal_token_write_callback_calls": 0,
+    "order_query_bounds": {
+      "from_entered_datetime": "2026-10-16T00:00:00",
+      "to_entered_datetime": "2026-10-16T23:59:59.999999"
+    },
+    "audit_exit_code": 0,
+    "date": "2026-10-16",
+    "generated_at": "2026-10-17T02:20:52.451918+00:00",
+    "database_open_trades": 0,
+    "database_nonterminal_intents": 0,
+    "broker_option_position_counts": {
+      "SPX": 0,
+      "NDX": 0,
+      "XSP": 0
+    },
+    "orders": {
+      "SPX": {
+        "top_level_orders": 0,
+        "order_nodes": 0,
+        "active_order_nodes": 0,
+        "missing_status_nodes": 0,
+        "replaced_terminal_nodes": 0,
+        "duplicate_order_ids": 0,
+        "unmapped_statuses": []
+      },
+      "NDX": {
+        "top_level_orders": 0,
+        "order_nodes": 0,
+        "active_order_nodes": 0,
+        "missing_status_nodes": 0,
+        "replaced_terminal_nodes": 0,
+        "duplicate_order_ids": 0,
+        "unmapped_statuses": []
+      },
+      "XSP": {
+        "top_level_orders": 0,
+        "order_nodes": 0,
+        "active_order_nodes": 0,
+        "missing_status_nodes": 0,
+        "replaced_terminal_nodes": 0,
+        "duplicate_order_ids": 0,
+        "unmapped_statuses": []
+      }
+    }
+  }
+}

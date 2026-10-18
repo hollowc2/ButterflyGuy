@@ -40,6 +40,30 @@ asyncpg publication/receipt tables and real PostgreSQL tests. It supersedes the
 SQLite-only integration limitation without activating capture. Deployed TimescaleDB
 validation and upstream provider/reference/build/clock gaps remain open.
 
+Use the [next-stage prompt](NEXT-STAGE-TIMESCALE-OBSERVER-PROMPT.md) for isolated
+exact TimescaleDB-image validation and a tested default-off observer review package.
+Capture activation and economic research remain separately gated.
+
+The [latest observer operational review](NDX-02-observer-operational-review.md)
+now completes isolated exact-image, target resource/restore and separate runtime
+image checks. The corrected final-server harness passed 50 tests with zero skips;
+resource/restore passed nine exact restored publications/new receipts and retained
+an unpublished attempt. The local default-off image passed disabled packaging
+and an enabled synthetic image-to-target roundtrip. The earlier 186-test private
+result is separate, not added to these reruns. Bootstrap-only and failed attempts
+remain preserved and explicitly superseded.
+
+Use [observer-target-v1 revision 4](observer-target-v1/INITIALIZATION-CORRECTION-4.md)
+and its contract/source lock for new target reproduction. Successful/failed bulk
+runs remain under `reports/research/ndx-02-observer-20261015/`. The
+[current verification](evidence/2026-10-15/ndx02-observer-target-resource-restore-verification.json)
+records tests, resource/restore/image and read-only Helios evidence. The subsequent
+[authorized broker audit](NDX-02-observer-broker-flatness.md) passed for its declared
+current-session order scope, with zero tracked positions/orders and a normal
+authentication/refresh callback; older orders outside the query remain untested.
+Real one-shot context and release/role/secret/storage decisions remain outstanding.
+**No live DDL, deployment, order operation or capture is activated.**
+
 [Reconciliation and evidence audit](NDX-01-reconciliation.md) explains the source
 identities, trade 222, accounting, coverage and remaining limitations. The
 [final contract](evidence/2026-10-15/r0-reproduction-final.json) defines eligibility
@@ -187,3 +211,22 @@ local Git. Without the two environment arguments it skips only that private-data
 test; the independent fixtures still run. See
 [verification.json](evidence/2026-10-15/verification.json) for this session's
 results, isolated-checkout check and graph update.
+
+### One-shot activation proposal — October 16
+
+The [disabled activation package](observer-activation-v1/README.md) binds real NDX
+paper trade 355 to three current-session NDXP symbols, the tested observer image,
+policy hash and verified Helios network aliases. At 15:56 UTC the paper trade was
+OPEN; the earlier flatness observation is stale. Activation remains on hold.
+The proposed context expires at 20:00 UTC October 16; no capture, DDL, grants,
+transfer, key provisioning or service changes were performed.
+
+### Approved weekend Helios preparation — October 17 UTC
+
+[Disabled installation completed](observer-weekend-install-v1/README.md): verified
+image loaded, additive research schema and restricted login installed, new
+credentials stored privately, real DB permissions/connectivity and disabled
+execution passed. Trading apps and gateway retain their original images/start
+times and healthy endpoints. No capture or session context is installed. The
+new gateway key is staged; registering it requires a separately approved gateway
+restart because the deployed authenticator loads keys only at startup.

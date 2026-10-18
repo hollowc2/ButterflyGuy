@@ -1,0 +1,19 @@
+# PROPOSED REVIEW ONLY. Not referenced by active Compose or automatically loaded.
+# The profile and application flag are both off by default. No ports/production volumes.
+services:
+  ndx_observer_review:
+    profiles: [ndx-observer-review]
+    image: ${NDX_OBSERVER_REVIEW_IMAGE:?reviewed immutable image required}
+    command: [python, -m, butterfly_guy.research.ndx_observer_cli]
+    environment:
+      NDX_OBSERVER_ENABLED: "false"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    restart: "no"
+    # Deliberately no secret mounts, DB connectivity or context file. Enabling
+    # traffic requires a reviewed replacement overlay plus separate approval.

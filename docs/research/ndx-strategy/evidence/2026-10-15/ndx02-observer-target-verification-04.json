@@ -1,0 +1,75 @@
+{
+  "created_utc": "2026-10-16T04:25:29.968850+00:00",
+  "scope": "isolated exact-image compatibility/restricted-role/observer verification; no live activation",
+  "gate": "passed",
+  "starting_git_sha": "47e7d331255f412c0fa90a8c8708dd5dea7c524c",
+  "contract_sha256": "f29c2c4591acbb92b1732082123072fec8947ab964fa6f3b9752296a99eaa905",
+  "source_lock_sha256": "2f4a73afecc536fea5bd70fcd68f89a14daa54d5ebbc3bfbad819578ec945a3e",
+  "source_and_parent_output_hashes_verified": true,
+  "archive_copy_and_output_hashes_verified": true,
+  "archive": "reports/research/ndx-02-observer-20261015/target-run-04",
+  "run_sha256": "1bdaf08f2f575863b01855921f5fc18ae0ebe3c73be02242a70acd814588ac46",
+  "commands_sha256": "23ead7e1e037fd1eb8da15b9f7c269dc749013a02246973337177030714de1ff",
+  "tests_xml_sha256": "a43a4b90c5bd7ad03bc5c08e1865687582dbf183b67a0f0f2a1c221472d622af",
+  "summary": {
+    "gate": "passed",
+    "reason": "actual_exact_engine_and_restricted_role_checks_passed",
+    "container_name": "ndx-timescale-4054df420cbb45a48bb572630c1e14db",
+    "container_created": true,
+    "container_stopped": true,
+    "owned_local_root": "/tmp/ndx-timescale-4054df420cbb45a48bb572630c1e14db",
+    "requested_image": "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+    "image_identity": [
+      "sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+      [
+        "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6"
+      ],
+      "amd64"
+    ],
+    "container_id": "55ad8c6bc9e67ef5e255df3c51d6c2521f470dc429f83784db7821d7c9b97217",
+    "engine": {
+      "server_version": "16.11",
+      "timescaledb": "2.25.2"
+    }
+  },
+  "pytest": {
+    "tests": 50,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "wall_seconds_reported": 12.41,
+    "command": "NDX_TIMESCALE_SOCKET=/tmp/ndx-timescale-4054df420cbb45a48bb572630c1e14db/socket /mnt/Repos/Trading/Butterflyguy/.venv/bin/python -m pytest tests/test_ndx_postgres_recording.py tests/test_ndx_native_response.py tests/test_ndx_observer.py -q --junitxml=/tmp/ndx-timescale-observer-target/run-04/tests.xml"
+  },
+  "local_docker_start": {
+    "explicit_user_authorization": "procede, after explanation that starting local Docker needs authorization",
+    "command": "systemctl start docker",
+    "result": "success; ActiveState=active, SubState=running",
+    "left_running": true
+  },
+  "container_postcheck": {
+    "name": "ndx-timescale-4054df420cbb45a48bb572630c1e14db",
+    "state": "exited",
+    "running": false,
+    "network_mode": "none",
+    "memory_bytes": 1073741824,
+    "nano_cpus": 1000000000,
+    "pids_limit": 128
+  },
+  "resource_observation": {
+    "docker_stats": "529.6 MiB / 1 GiB; 0.10% CPU; 15 PIDs; one post-suite sample including disposable tmpfs test databases",
+    "production_budget_validated": false,
+    "target_resource_scenarios_or_restore_drill_executed": false
+  },
+  "prior_verification": "Prior combined private-enabled 186-test result retained; only the affected 50-test subset rerun on exact TimescaleDB; do not add 50 to 186 as unique tests",
+  "remaining": [
+    "target resource/restore validation and storage reserve/quota review",
+    "current named-target operational preflight/release/image/health/disk/permissions/uniqueness and relevant positions/orders",
+    "independent backup and upstream age-reference/build/cache/clock/provider-original-body evidence",
+    "full NDX-02, actual complex execution/XQC and NDX-03 through NDX-06"
+  ],
+  "historical_eligibility": "all 17 paths remain ineligible",
+  "capture_enabled": false,
+  "helios_contacted": false,
+  "live_ddl_or_service_change": false,
+  "next_action": "complete target resource/restore and current operational review; separately authorize any live schema/grants or capture"
+}

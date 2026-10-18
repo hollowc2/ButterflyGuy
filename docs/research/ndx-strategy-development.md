@@ -61,15 +61,47 @@ The earlier SQLite package remains preserved. All 164 private/real-engine checks
 pass. Gateway-normalized bytes do not establish original provider data or missing
 upstream age-reference/build/clock evidence.
 
-**Next action: validate against the deployed TimescaleDB version and prepare a
-reviewed, default-off observer integration** with explicit scope, role/pool/drop
-budgets, retention and rollback. The adapter was tested on PostgreSQL 16.2 without
-the extension; read-only Helios metadata now identifies PostgreSQL 16.11 with
-TimescaleDB 2.25.2 as the isolated validation target. Upstream freshness-reference/build
-and provider-body gaps remain separate. The
+**Next action: finalize the concrete one-shot observer capture plan**: exact real
+capture context, release/secret/role/connectivity choices and storage reserve/
+retention review. The subsequently authorized read-only broker audit passed for
+its current-session order scope; see the
+[broker supplement](ndx-strategy/NDX-02-observer-broker-flatness.md). Exact-image
+compatibility, target synthetic resources, schema restore and separate image
+packaging/roundtrip now pass; see the
+[completed operational review](ndx-strategy/NDX-02-observer-operational-review.md).
+Upstream freshness-reference/build/provider-body gaps remain separate. The
 [remaining-stage gates](ndx-strategy/NDX-remaining-roadmap.md) still apply. No capture,
-replay, threshold selection, promotion or deployment is activated. Both saved
-next-session prompts remain preserved as historical instructions.
+replay, threshold selection, promotion or deployment is activated; prior prompts
+and failed/superseded evidence remain preserved.
+
+The [next-stage implementation prompt](ndx-strategy/NEXT-STAGE-TIMESCALE-OBSERVER-PROMPT.md)
+scopes exact-image validation, least-privilege roles, default-off observer lifecycle,
+resource/drop/retention checks and an activation review package. It authorizes no
+live activation or economic experiments.
+
+**Default-off observer, exact target, resource/restore and runtime image checks
+complete; live activation review remains incomplete.** The
+[latest review](ndx-strategy/NDX-02-observer-operational-review.md) supersedes earlier
+bootstrap-only image evidence. The corrected harness proves completed image
+initialization and exact PG 16.11/TimescaleDB 2.25.2: compatibility run-07 passed
+**50 tests, zero skips**. Target resource/restore run-02 passed with nine exact
+restored publications, nine new restricted-reader receipts and one preserved
+unpublished/unacknowledged synthetic attempt. A separate local default-off image
+passed disabled/spied packaging checks and one enabled synthetic image-to-target
+roundtrip. The earlier 186-test private-enabled result is retained; repeated
+subsets and synthetic smoke cases are not summed as new unique historical coverage.
+
+Read-only Helios review found healthy endpoints, zero DB OPEN/nonterminal intent
+rows, no installed observer schema/roles/process, preserved dirty source/config,
+about 22.10 GB free. After explicit authorization for the normal authentication/
+refresh scope, the broker supplement records zero tracked option positions,
+zero October 16 queried orders and zero OPEN/nonterminal DB rows; one normal
+persistence callback was observed without inspecting token values. Orders outside
+that date window are not covered. The intended observer image is local only.
+No deployment, live DDL/grant or real capture occurred. **Next bounded action:**
+name the one-shot real context and review release/role/secret/connectivity/storage
+choices, with an appropriately fresh activation preflight. No operational capture
+approval is requested from an incomplete named-target package.
 
 ## Intended finished system
 
@@ -1066,3 +1098,265 @@ check is now specifically an **isolated instance of that observed image**,
 not a mutation of the live container. Current local tests remain PostgreSQL 16.2
 without the extension; the read-only observation does not retroactively validate
 the target image or alter any frozen run/config/source lock.
+
+## Default-off observer implementation and exact-target gate — 2026-10-15
+
+Implemented `research/ndx_observer.py` and `ndx_observer_cli.py` as a separate,
+caller-driven, one-acquisition consumer. Default-off factory/CLI do not read
+secrets/context, connect, request, parse/copy or start workers. Enabled research
+uses the pinned SDK's client injection and existing native/asyncpg protocols,
+with no active trading-path import, polling, retry or queue. Explicit identities,
+calendar close and build/config artifact hashes precede acquisition. One leased
+observer per research DB admits one request and uses a separate max-three pool;
+body/storage pause and lifecycle time budgets are resource proposals, not strategy
+thresholds. HTTP buffering and synchronous parsing remain outside hard async/body
+allocation bounds; busy/journal-failed memory counters cannot prove completeness
+across a crash.
+
+The [review package](ndx-strategy/NDX-02-timescale-observer-review.md) contains
+NOLOGIN ownership/recorder/reader grants outside automatic migrations, the disabled
+review-only overlay, one-shot traffic scope, drop/recovery definitions, retention/
+restore and startup/validation/rollback procedures. Operational target identities,
+current release/image/health/disk/positions/orders, independent backup, storage
+quota/reserve, target capacity/restore and missing upstream facts remain open.
+No current operational preflight or activation approval is claimed or requested.
+
+Parent output hashes, required private snapshot membership (347/4/2/2/11 files),
+applicable source pins and retained upstream source copies verified. Extending
+`tests/test_ndx_postgres_recording.py` for the task-owned exact-image fixture is
+explicit drift from the old postgres-v1 test pin; its archived original remains
+available. All earlier contracts/source locks/evidence stay unchanged. Observer-v1
+resource run-01 failed at helper import before starting a DB/request. It and the
+original source copies were preserved; revision 2 preregistered the invocation
+path correction before successful resource evaluation. The correction changes
+verification helper loading only. A preparatory restart test's subprocess pipe
+capture timeout was corrected before registration by directing server output to
+the owned fixture log; its subsequent focused suite passed all 22 checks.
+
+Verification: full private-enabled native/PostgreSQL/observer/provenance/fidelity/
+continuation/accounting/baseline/state/position suite **186 passed, zero skipped,
+28.99 s**. The 22 new observer checks cover disabled factory/CLI, explicit identity,
+restricted roles, one-request success, duplicate/refused correction, native/SDK
+rejection, oversized/busy/storage admission, unavailable gateway/DB/journal,
+pool/lock pressure, bounded pending shutdown/cancellation, hard observer-process
+crash, dead-lease refusal, real owned-DB restart and reconnect/reconciliation.
+Repository ruff and whitespace checks passed. Graphify AST refresh completed:
+10,697 nodes, 23,345 edges, 374 communities; optional SQL parser absent (24 SQL
+files omitted), three symbol-free files, 58 unclassified files and stale community
+labels disclosed. No semantic/API work or parser installation occurred.
+
+Both exact-target runs preserved an **incomplete** gate at Docker version lookup:
+no running local daemon/socket. Zero target tests executed; this is not a skipped
+fixture counted as a pass, a failed image pull, resolved manifest or extension
+proof. No fixture container was created. The harness pins the observed repository
+digest/amd64 identity, verifies actual PG 16.11/TimescaleDB 2.25.2 in every new test
+DB, and will run the actual adapter/role/lifecycle checks only on that isolated
+image. It never substitutes plain PG for the exact-target gate.
+
+Independent resource run-02 used a new private Unix-socket-only local /tmp PG 16.2
+cluster, then stopped it before archiving outputs on Eros. Twelve synthetic SDK/
+observer acquisitions: nine publications, nine acknowledgements and nine consumer
+receipts; three oversized-recording rejections with SDK success retained. Twelve
+additional SDK-only baseline calls were timed separately. Varied 5,000-contract
+body: 1,800,259 bytes; full cycle max 0.376067 s versus SDK-only max 0.060684 s.
+Exact 2,097,152-byte padded body accepted; one byte over rejected for preservation.
+Peak retained recording body 2 MiB, zero queued items, two sampled connections
+(max allowed three), Python process peak RSS 117,916 KiB, DB growth 1,843,200 bytes,
+clean shutdown max 0.003850 s. DB CPU/RSS are endpoint samples, not peaks; padding
+and seeded random flag/price variation do not establish real compression, durable
+storage, production throughput or a safe trading delay. No economic result follows.
+
+Immutable bulk archive:
+`reports/research/ndx-02-observer-20261015/{target-run-01,target-run-02,resources-run-01,resources-run-02}/`.
+All copies and run output hashes verified. Versioned summary/run/verification
+records are `ndx-strategy/evidence/2026-10-15/ndx02-observer-*.json`.
+Read the [revision-2 commands](ndx-strategy/observer-v1/REVISION-2.md); use **new**
+output directories. The exact next command, after providing an available isolated
+runtime, is:
+
+```bash
+uv run --offline --frozen python tools/check_ndx_timescale.py \
+  --config docs/research/ndx-strategy/observer-v1/contract-v2.json \
+  --source-lock docs/research/ndx-strategy/observer-v1/source-lock-v2.json \
+  --output /tmp/ndx-timescale-observer-target/run-04
+```
+
+Overall stage remains incomplete. All 17 historical paths remain ineligible;
+full NDX-02, actual complex execution/XQC and NDX-03–06 retain their separate gates.
+No live DDL/grants, capture, service change, credentials, account/routing/limit
+change, order, paper observation, new P&L or exit-variant experiment occurred.
+
+
+### Exact-target verification retry — run-03
+
+Retried the unchanged revision-2 harness after the owner requested verification
+again. Source/config and all parent output hashes passed. Docker version lookup
+still failed because `/var/run/docker.sock` does not exist; no image pull,
+container creation or target tests occurred. No alternative supported isolated
+runtime was established. The stage remains incomplete; no daemon or live service
+was started. Closed run-03 was archived with byte-for-byte and manifest verification
+at `reports/research/ndx-02-observer-20261015/target-run-03/`; see
+[the retry record](ndx-strategy/evidence/2026-10-15/ndx02-observer-target-retry-03.json).
+Next attempt must use a new `run-04` output after a supported isolated runtime
+is available. Prior 186-test and resource results are unchanged, not rerun here.
+
+
+### Exact-image validation passed — run-04
+
+After the owner explicitly authorized starting local Docker, `systemctl start
+docker` succeeded and the unchanged revision-2 exact-image harness completed.
+The pinned digest/amd64 identity resolved; server PG 16.11 and extension 2.25.2
+were verified, including each newly created test DB. Native/adapter/observer
+checks passed **50 tests, zero failures/errors/skips in 12.41 s**. Restricted-role
+publication/receipt, transaction/MVCC/commit-fault, immutable/duplicate/correction,
+crash/restart/reconnect, bounded resources and disabled construction checks passed.
+The 50 are a subset rerun of the earlier 186, not additional unique coverage.
+
+The task-owned container was confirmed stopped, with no network exposure and
+registered resource limits; local Docker remains running as authorized. Helios
+was not contacted or changed. Run-04 source/config/parent/output and archive-copy
+hashes verified. See [the exact-image supplement](ndx-strategy/observer-v1/EXACT-TARGET-RUN-04.md)
+and [versioned verification](ndx-strategy/evidence/2026-10-15/ndx02-observer-target-verification-04.json).
+Closed evidence is `reports/research/ndx-02-observer-20261015/target-run-04/`.
+Earlier unavailable-runtime and failed resource records remain unchanged.
+
+The runtime/image compatibility blocker is resolved. Target resource/restore
+validation, storage reserve/quota and current named-target operational preflight
+remain before activation review can be called ready. The old implementation
+review's unavailable-runtime section is historical and superseded by run-04.
+Capture and live DDL/grants remain disabled; no strategy, routing, account, token,
+limit, fill, historical eligibility or economic-experiment change occurred.
+
+
+## Exact-target resources, restore and runtime artifact — 2026-10-15
+
+Completed the next authorized local preparation and read-only operational review.
+The [final review](ndx-strategy/NDX-02-observer-operational-review.md) and
+[verification record](ndx-strategy/evidence/2026-10-15/ndx02-observer-target-resource-restore-verification.json)
+are the current handoff. Earlier packages remain immutable and their limitations
+are not silently rewritten.
+
+The resource fixture exposed a weakness in the first exact harness: it could run
+checks on a temporary bootstrap server while image initialization failed its
+psql socket. Resource run-01 and compatibility run-05 were stopped and archived.
+Exact-image entrypoint source shows PGHOST is deliberately cleared; preserving
+the default container-only socket alongside /socket fixed initialization. Run-06
+then reached the final server but had 20 passing tests and 30 setup errors because
+fully initialized template1 already includes TimescaleDB. The fixture now uses
+IF NOT EXISTS followed by strict PG/extension version assertions. Registered
+observer-target-v1 revisions 1–4 preserve each parent/correction and source copy;
+no quote, permission or evidence constraint was weakened.
+
+Final compatibility run-07 passed 50 tests with zero failures/errors/skips in
+6.36 s on a fully initialized exact image. Target resource/restore run-02 passed:
+12 synthetic acquisitions, nine publications/acks/receipts and three oversized
+recording rejections preserving SDK success; nine original publications restored
+byte-for-byte with complete table/journal/installation fingerprints unchanged,
+nine new restricted-reader receipts, original acknowledgement stamps/counts
+preserved, and one intentionally unpublished synthetic attempt still unresolved.
+Dump 1,165,646 bytes; export 1.098118 s; restore 0.228080 s. Varied 5,000-contract
+full cycle max 0.375659 s; Python peak RSS 112,556 KiB; DB growth 1,818,624 bytes.
+Namespaced backend CPU/RSS are endpoint samples, not production peaks. Same-
+container tmpfs restore is not independent backup or production capacity. All
+new fixture containers were stopped.
+
+A separate default-off Dockerfile fixes missing SQL asset/source-root packaging
+without altering the active app image or configs. A source-only 164-file/2.39 MB
+staged build produced local immutable image
+`sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99`.
+Two bounded disabled checks and one enabled synthetic mock-SDK-to-target check
+passed in that actual image under UID 1001/Python 3.12.15. The enabled check made
+exactly one synthetic GET, published/read/recorded receipt under the restricted
+role and preserved exact body/-4.0200 arithmetic with replay eligibility false.
+Unsupported legacy-builder flag and interrupted broad-context attempts remain
+archived; no project dependency lock or source strategy changed. The image was
+not pushed, transferred, deployed or enabled on Helios.
+
+Read-only Helios review: /opt/butterflyguy main HEAD 288d6cb321e611a94acc819fa96fc5e429ff836e
+with existing tracked source/config edits preserved; this does not attest app
+image source. Current NDX infra/app_ndx image 1fbc1ab3aed0aec85bcccab9e5009679789baab10fc333cfd0e4636ef1e7cc61
+was running on loopback 8001; DB monitoring/timescaledb matches the tested image.
+All three strategy health/readiness endpoints returned 200. DB OPEN trades and
+nonterminal intents were zero, observer schema/roles absent, matching observer
+CLI process count zero. NDX-only recent log summary: 11 lines, zero errors or
+warnings, no raw messages retained. An earlier SPX log read timeout and missing
+app-healthcheck template diagnostics are preserved. Broker positions/orders are
+not verified: the existing helper can refresh/write tokens and was not invoked
+under the no-token-change constraint. No live DDL/DML, token/account access,
+real market request, service restart or capture occurred.
+
+Closed evidence is under reports/research/ndx-02-observer-20261015/: target-run-05/06/07,
+target-resources-restore-run-01/02, target-entrypoint-source-review/run-01,
+image-build-run-01/02/03, image-enabled-smoke-run-01 and helios-readonly-review-run-01/02.
+All manifest members and archive copies verify. Existing Eros retention remains
+accepted; independent backup unestablished. Use observer-target-v1/contract-v4.json
+and source-lock-v4.json for any new target runs, with new output directories.
+Overall activation remains incomplete pending the named decisions in the final
+review. All 17 historical paths, full NDX-02 and NDX-03–06 retain their gates.
+
+
+### Authorized read-only broker audit — 2026-10-16 05:50 UTC
+
+After Corey explicitly approved the audit including normal token refresh, the
+existing helper ran through the NDX container's configured environment. Deployed
+read-method source was checked first; transient pool settings forced DB sessions
+read-only, and redacted output suppressed all raw logs/account/auth context.
+The audit passed: zero SPX/NDX/XSP option positions, zero returned orders for its
+October 16 entry-date window, zero OPEN DB trades and zero nonterminal intents.
+One normal token-write callback was invoked; no token values were inspected and
+no manual rotation or reauthorization occurred. This does not prove that all
+older/GTC orders are absent. The helper's exact original date arguments and the
+scope limit are recorded, without invented timezone attribution.
+
+See the [broker supplement](ndx-strategy/NDX-02-observer-broker-flatness.md) and
+[versioned redacted audit](ndx-strategy/evidence/2026-10-15/ndx02-observer-broker-flatness-20261016T0550Z.json).
+Closed source/probe/wrapper/output hashes verified under
+reports/research/ndx-02-observer-20261015/broker-flatness-run-01/. No orders, live
+DDL/grants, market capture, deployment or service restart occurred. Next: finalize
+the concrete one-shot real context and release/role/secret/connectivity/storage
+choices before separately scoped live schema/capture approval. Earlier read-only
+reviews and test records remain immutable; no Python source changed this step.
+
+### Concrete observer activation proposal — 2026-10-16 15:56 UTC
+
+Prepared [observer-activation-v1](ndx-strategy/observer-activation-v1/README.md)
+with a real preselected three-leg context for NDX paper trade 355, immutable
+observer image ID, policy digest, disabled standalone Compose, proposed dedicated
+login/key references, verified network aliases and explicit admission/rollback.
+The deployed calendar returned 20:00 UTC cash close. Context constructor, identity,
+source/policy hashes and Compose static validation pass; no code changed.
+
+Read-only Helios evidence now shows trade 355 OPEN, entered 14:00:15 UTC. This
+supersedes the earlier DB-flat snapshot. Broker state was not queried again;
+no fresh broker-flat claim is made. Live changes remain on hold pending a safe
+fresh preflight, named approval and reviewed storage/backup and provisioning.
+This session-specific context expires at close and must never be automatically
+rolled over or replayed later. No gateway capture, orders, live DDL/grants,
+credentials, image transfer or service restart occurred. Historical research
+eligibility and all later NDX gates remain unchanged.
+
+### Authorized disabled Helios installation — 2026-10-17 UTC
+
+Corey approved the named weekend preparation. The
+[installation record](ndx-strategy/observer-weekend-install-v1/README.md) binds
+preflight/broker audit, transactional research-only DDL and new restricted login,
+private new credentials, verified image transfer/load, actual disabled Compose
+execution and read-only connectivity/permission checks. Postflight confirms
+unchanged image/start identities for all trading apps and gateway, healthy app
+endpoints and zero active observer containers. No market capture ran and the
+expired context was not installed. Research evidence tables remain empty.
+
+Free disk after image/archive retention: 20.62 GB; observed WAL 512 MiB before
+installation. Empty research schema/identity export is hash-verified in the
+accepted Eros-backed archive, not an independent full DB backup. No retention
+cleanup or unlimited collection was enabled. The fresh broker helper audit
+passed its tracked-root/current-day scope; older GTC orders remain outside it.
+
+The dedicated background/read-only gateway key is generated and its proposed
+merged principal validates, but the live registry is unchanged. The deployed
+authenticator loads once; registering this new key and restarting the separately
+named gateway still requires approval. See the concrete gateway restart review.
+No existing credential was rotated, no existing service restarted, and no remote
+Git/configuration dirt was changed. A fresh market-session context and capture
+approval remain necessary after gateway registration. Historical eligibility
+and later research gates remain unchanged.
