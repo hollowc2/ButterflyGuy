@@ -96,8 +96,10 @@ deployment each require separate operational authorization. No automatic promoti
 
 ## Exact next bounded action
 
-Review v1 field meanings, DB publication protocol, same-domain limitations, original
-market-body boundary, upstream ownership and resource/retention requirements.
-Then, under a separately scoped Stage B implementation instruction, prepare the
-smallest DB-channel recording diff with isolated failure tests and a concrete
-activation/rollback plan. Capture remains inactive until separately authorized.
+Stage B status (2026-10-18): recording implemented and reviewed (PR #53), observer
+installed disabled on Helios (2026-10-17), and its background `market_data:read`
+gateway consumer registered and loaded (2026-10-18). Nothing has been captured.
+
+Next: on a trading day, build a fresh real NDXP session context (never reuse an
+expired one) and obtain separately scoped approval for one bounded manual capture.
+Its real records then feed Stage C. Capture remains inactive until authorized.

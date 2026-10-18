@@ -1360,3 +1360,17 @@ No existing credential was rotated, no existing service restarted, and no remote
 Git/configuration dirt was changed. A fresh market-session context and capture
 approval remain necessary after gateway registration. Historical eligibility
 and later research gates remain unchanged.
+
+### Gateway consumer registration — 2026-10-18 UTC
+
+Corey approved the gateway restart review. The registration script appended only
+the validated `ndx-timescale-observer-v1` entry (background, `market_data:read`)
+after a baseline-hash check and exact 0600 backup, preserved the registry inode,
+and restarted only `schwab_gateway_live` on its unchanged image. Host and container
+hashes match (`32ac923c…`); the deployed loader sees four unique consumers. Trading
+app images/start times were unchanged; `/ready` stayed at its weekend 503
+`gateway_market_data_unavailable` state (pre-existing since the 2026-10-17 23:29 UTC
+host restart). A first attempt stopped in preflight on that 503 with no change.
+No capture ran and the new key has not yet been exercised. See the
+[registration record](../../reports/research/ndx-02-observer-gateway-20261018/run-01/README.md).
+Next: fresh trading-day NDXP context and separate capture approval.
