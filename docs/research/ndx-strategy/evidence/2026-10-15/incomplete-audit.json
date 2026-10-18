@@ -1,0 +1,32 @@
+{
+  "excluded_by_leg_count_and_invalid_count": [
+    {
+      "legs": "2",
+      "invalid_legs": "0",
+      "observations": 3103
+    },
+    {
+      "legs": "1",
+      "invalid_legs": "0",
+      "observations": 1274
+    }
+  ],
+  "per_trade": {
+    "278": {
+      "count": 281,
+      "first": "2026-09-09 18:27:22.828173+00",
+      "last": "2026-09-09 19:59:44.978536+00"
+    },
+    "280": {
+      "count": 1044,
+      "first": "2026-09-10 16:51:32.910418+00",
+      "last": "2026-09-10 19:59:01.700301+00"
+    },
+    "284": {
+      "count": 3052,
+      "first": "2026-09-11 14:36:58.1255+00",
+      "last": "2026-09-11 19:56:25.701725+00"
+    }
+  },
+  "meaning": "Grouped observations; missing held legs are excluded, never filled or valued as zero. Constituent event timestamps unavailable."
+}

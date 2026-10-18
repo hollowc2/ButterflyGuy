@@ -1,0 +1,203 @@
+{
+  "schema_version": "NDX-provenance-v1",
+  "evidence_kind": "synthetic",
+  "record_id": "02-db-complete",
+  "snapshot_id": "02-db-complete",
+  "version": 1,
+  "acquisition_id": "synthetic-acquisition",
+  "pass_id": "pass1",
+  "request_id": "request1",
+  "channel": "db-research",
+  "session": "2030-01-02",
+  "close_utc": "2030-01-02T20:00:00+00:00",
+  "parent_record_sha256": null,
+  "expected_symbols": [
+    "NDXP  300102P30000000",
+    "NDXP  300102P30100000",
+    "NDXP  300102P30200000"
+  ],
+  "payload": {
+    "response_id": "02-db-complete",
+    "path": "02-db-complete-response.json",
+    "sha256": "677d6fce71a55cdc1c8237bd70426d5a0b2cf74d214fc8884ef8560e382a54e1",
+    "scope": "market-only-body-v1",
+    "redaction": "synthetic allowlisted market body; no headers or accounts"
+  },
+  "clocks": {
+    "collector-boot1-process1": {
+      "owner": "synthetic-host",
+      "process": "process1",
+      "boot": "boot1",
+      "source": "synthetic UTC and monotonic pair",
+      "sync_evidence": "synthetic stipulated common clock, not physical clock evidence",
+      "uncertainty_seconds": "0",
+      "discontinuity": false
+    }
+  },
+  "stamps": {
+    "scheduled_deadline": null,
+    "pass_start": {
+      "wall_utc": "2030-01-02T19:59:00+00:00",
+      "monotonic_ns": 1000000000000,
+      "clock": "collector-boot1-process1"
+    },
+    "request_start": {
+      "wall_utc": "2030-01-02T19:59:00.100000+00:00",
+      "monotonic_ns": 1000100000000,
+      "clock": "collector-boot1-process1"
+    },
+    "gateway_receipt": null,
+    "response_receipt": {
+      "wall_utc": "2030-01-02T19:59:02+00:00",
+      "monotonic_ns": 1002000000000,
+      "clock": "collector-boot1-process1"
+    },
+    "fetch_completion": {
+      "wall_utc": "2030-01-02T19:59:02.100000+00:00",
+      "monotonic_ns": 1002100000000,
+      "clock": "collector-boot1-process1"
+    },
+    "normalization_completion": {
+      "wall_utc": "2030-01-02T19:59:03+00:00",
+      "monotonic_ns": 1003000000000,
+      "clock": "collector-boot1-process1"
+    },
+    "insert_start": {
+      "wall_utc": "2030-01-02T19:59:03.050000+00:00",
+      "monotonic_ns": 1003050000000,
+      "clock": "collector-boot1-process1"
+    },
+    "transaction_start": {
+      "wall_utc": "2030-01-02T19:59:03.010000+00:00",
+      "monotonic_ns": 1003010000000,
+      "clock": "collector-boot1-process1"
+    },
+    "commit_ack": null,
+    "publication_ack": null,
+    "read_start": null,
+    "read_end": null,
+    "consumer_receipt": null
+  },
+  "legs": [
+    {
+      "symbol": "NDXP  300102P30000000",
+      "root": "NDXP",
+      "expiry": "2030-01-02",
+      "option_type": "PUT",
+      "strike": "30000",
+      "multiplier": "100",
+      "bid": "10.00",
+      "ask": "10.20",
+      "provider_mark": "10.10",
+      "bid_size": 5,
+      "ask_size": 6,
+      "event": {
+        "wall_utc": "2030-01-02T19:59:01+00:00",
+        "monotonic_ns": 1001000000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_seconds": "2.0",
+      "age_reference": {
+        "wall_utc": "2030-01-02T19:59:03+00:00",
+        "monotonic_ns": 1003000000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_semantics": "synthetic reference.wall minus event.wall; exact decimal seconds; no defaults",
+      "source": "synthetic-provider",
+      "flags": [],
+      "normalization": "synthetic verbatim decimal strings; no defaults"
+    },
+    {
+      "symbol": "NDXP  300102P30100000",
+      "root": "NDXP",
+      "expiry": "2030-01-02",
+      "option_type": "PUT",
+      "strike": "30100",
+      "multiplier": "100",
+      "bid": "12.00",
+      "ask": "12.20",
+      "provider_mark": "12.11",
+      "bid_size": 5,
+      "ask_size": 6,
+      "event": {
+        "wall_utc": "2030-01-02T19:59:01.100000+00:00",
+        "monotonic_ns": 1001100000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_seconds": "1.9",
+      "age_reference": {
+        "wall_utc": "2030-01-02T19:59:03+00:00",
+        "monotonic_ns": 1003000000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_semantics": "synthetic reference.wall minus event.wall; exact decimal seconds; no defaults",
+      "source": "synthetic-provider",
+      "flags": [],
+      "normalization": "synthetic verbatim decimal strings; no defaults"
+    },
+    {
+      "symbol": "NDXP  300102P30200000",
+      "root": "NDXP",
+      "expiry": "2030-01-02",
+      "option_type": "PUT",
+      "strike": "30200",
+      "multiplier": "100",
+      "bid": "10.00",
+      "ask": "10.20",
+      "provider_mark": "10.10",
+      "bid_size": 5,
+      "ask_size": 6,
+      "event": {
+        "wall_utc": "2030-01-02T19:59:01.200000+00:00",
+        "monotonic_ns": 1001200000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_seconds": "1.8",
+      "age_reference": {
+        "wall_utc": "2030-01-02T19:59:03+00:00",
+        "monotonic_ns": 1003000000000,
+        "clock": "collector-boot1-process1"
+      },
+      "age_semantics": "synthetic reference.wall minus event.wall; exact decimal seconds; no defaults",
+      "source": "synthetic-provider",
+      "flags": [],
+      "normalization": "synthetic verbatim decimal strings; no defaults"
+    }
+  ],
+  "chain_source": "synthetic-provider",
+  "chain_flags": [],
+  "builds": {
+    "collector": "9c63b54b5bd2b476610d50f9db848b929f482df80a335b1c69de26c16ea1ad71",
+    "adapter": "9c63b54b5bd2b476610d50f9db848b929f482df80a335b1c69de26c16ea1ad71",
+    "gateway": "9c63b54b5bd2b476610d50f9db848b929f482df80a335b1c69de26c16ea1ad71",
+    "schema": "9c63b54b5bd2b476610d50f9db848b929f482df80a335b1c69de26c16ea1ad71",
+    "config": "9c63b54b5bd2b476610d50f9db848b929f482df80a335b1c69de26c16ea1ad71",
+    "dependencies": "9c63b54b5bd2b476610d50f9db848b929f482df80a335b1c69de26c16ea1ad71"
+  },
+  "effective_settings": {
+    "provider_channel": "synthetic-direct",
+    "age_normalization": "no defaults; decimal seconds",
+    "clock_policy": "synthetic common domain",
+    "selected_universe": "exact three symbols"
+  },
+  "publication": {
+    "publication_id": "synthetic-pub",
+    "transaction_id": "synthetic-tx",
+    "snapshot_id": "02-db-complete",
+    "quote_write": "success",
+    "metadata_write": "success",
+    "complete_manifest_sha256": null,
+    "complete_manifest_path": null,
+    "visibility_evidence": "synthetic atomic manifest and immutable rows read together",
+    "failure": null
+  },
+  "consumer": {
+    "identity": "synthetic-local-research-consumer",
+    "build_sha256": "9c63b54b5bd2b476610d50f9db848b929f482df80a335b1c69de26c16ea1ad71",
+    "returned_snapshot_id": null,
+    "returned_symbols": [],
+    "read_status": "unknown"
+  },
+  "dropped_records": 0,
+  "gap_before_seconds": null
+}

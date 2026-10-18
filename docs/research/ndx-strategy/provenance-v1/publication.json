@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "snapshot_id": "02-db-complete",
+  "symbols": [
+    "NDXP  300102P30000000",
+    "NDXP  300102P30100000",
+    "NDXP  300102P30200000"
+  ],
+  "response_sha256": "d5103327af892d6831340c94ebfe915c43308b6aeb0ee8eb6b7837b280db0d12",
+  "quote_write": "success",
+  "metadata_write": "success"
+}

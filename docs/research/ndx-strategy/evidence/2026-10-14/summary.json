@@ -1,0 +1,1258 @@
+{
+  "study_id": "NDX-R0",
+  "created_on": "2026-10-15",
+  "last_session": "2026-10-14",
+  "decision": "refine execution/data; reject the six tested exit candidates",
+  "scope": "Retrospective fixed-entry paper-strategy review; not a validated portfolio backtest",
+  "source": {
+    "provider": "Helios ButterflyGuy TimescaleDB Schwab/gateway paper records",
+    "retrieved_utc": "2026-10-15T05:23:43.750837+00:00",
+    "host": "billy@helios",
+    "remote_repository": "/opt/butterflyguy",
+    "remote_git_sha": "288d6cb321e611a94acc819fa96fc5e429ff836e",
+    "inclusive_last_session": "2026-10-14",
+    "timezone": "UTC; session summaries in America/New_York"
+  },
+  "all_recorded": {
+    "n": 113,
+    "pnl": -9832.4,
+    "expectancy": -87.01,
+    "win_rate": 0.1504,
+    "profit_factor": 0.844,
+    "average_win": 3140.33,
+    "average_loss": -658.52,
+    "max_close_drawdown": 22854.77,
+    "top3_removed": -32821.07,
+    "best": 8814.46,
+    "worst": -2658.0
+  },
+  "audit": {
+    "rows": 514551,
+    "invalid_observations": 4377,
+    "mark_mismatch_rows": 4377,
+    "covered_trades": 75
+  },
+  "newer_mark_v1": {
+    "recorded_gross": {
+      "n": 53,
+      "pnl": 9254.84,
+      "expectancy": 174.62,
+      "win_rate": 0.1509,
+      "profit_factor": 1.304,
+      "average_win": 4961.98,
+      "average_loss": -676.47,
+      "max_close_drawdown": 9933.0,
+      "top3_removed": -13733.83,
+      "best": 8814.46,
+      "worst": -948.0
+    },
+    "recorded_after_fees": {
+      "n": 53,
+      "pnl": 9254.84,
+      "expectancy": 174.62,
+      "win_rate": 0.1509,
+      "profit_factor": 1.304,
+      "average_win": 4961.98,
+      "average_loss": -676.47,
+      "max_close_drawdown": 9933.0,
+      "top3_removed": -13733.83,
+      "best": 8814.46,
+      "worst": -948.0
+    },
+    "execution_stress": {
+      "n": 53,
+      "pnl": -30978.16,
+      "expectancy": -584.49,
+      "win_rate": 0.1509,
+      "profit_factor": 0.511,
+      "average_win": 4052.6,
+      "average_loss": -1408.87,
+      "max_close_drawdown": 38260.53,
+      "top3_removed": -49701.35,
+      "best": 8434.46,
+      "worst": -4038.0
+    },
+    "execution_stress_missing": 0,
+    "entry_drag_mean": 726.5283018867924,
+    "entry_drag_median": 454.9999999999999,
+    "entry_drag_total": 38506.0,
+    "width_counts": {
+      "100": 49,
+      "80": 4
+    },
+    "direction_stats": {
+      "CALL": {
+        "n": 27,
+        "pnl": -1117.01,
+        "expectancy": -41.37,
+        "win_rate": 0.1481,
+        "profit_factor": 0.93,
+        "average_win": 3702.75,
+        "average_loss": -692.52,
+        "max_close_drawdown": 12815.41,
+        "top3_removed": -15323.41,
+        "best": 5847.34,
+        "worst": -798.0
+      },
+      "PUT": {
+        "n": 26,
+        "pnl": 10371.85,
+        "expectancy": 398.92,
+        "win_rate": 0.1538,
+        "profit_factor": 1.715,
+        "average_win": 6221.21,
+        "average_loss": -659.68,
+        "max_close_drawdown": 6740.0,
+        "top3_removed": -12216.34,
+        "best": 8814.46,
+        "worst": -948.0
+      }
+    },
+    "profitable_peak_then_loss": {
+      "1.5": {
+        "count": 34,
+        "net_pnl": -21820.0
+      },
+      "2": {
+        "count": 23,
+        "net_pnl": -13837.0
+      },
+      "3": {
+        "count": 15,
+        "net_pnl": -8544.0
+      }
+    },
+    "top_trades": [
+      {
+        "id": 336,
+        "trade_date": "2026-10-08",
+        "recorded_dollars": 8814.46,
+        "execution_stress_net": 8434.460000000001
+      },
+      {
+        "id": 265,
+        "trade_date": "2026-08-28",
+        "recorded_dollars": 8326.869999999999,
+        "execution_stress_net": 5261.87
+      },
+      {
+        "id": 214,
+        "trade_date": "2026-08-03",
+        "recorded_dollars": 5847.34,
+        "execution_stress_net": 4705.339999999999
+      },
+      {
+        "id": 288,
+        "trade_date": "2026-09-15",
+        "recorded_dollars": 5446.860000000001,
+        "execution_stress_net": 5026.860000000001
+      },
+      {
+        "id": 201,
+        "trade_date": "2026-07-27",
+        "recorded_dollars": 5273.81,
+        "execution_stress_net": 4318.8099999999995
+      }
+    ],
+    "ask_to_mark": {
+      "count": 53.0,
+      "mean": 1.9980627113131184,
+      "std": 1.0176295710142576,
+      "min": 1.3103448275862069,
+      "25%": 1.4689655172413796,
+      "50%": 1.6075949367088613,
+      "75%": 1.9710144927536237,
+      "max": 6.486486486486478
+    },
+    "unfavorable_entry_quote_count": 36
+  },
+  "common_complete_newer": {
+    "common_ids": [
+      191,
+      198,
+      201,
+      202,
+      206,
+      211,
+      214,
+      217,
+      222,
+      226,
+      229,
+      233,
+      236,
+      238,
+      240,
+      245,
+      248,
+      254,
+      257,
+      258,
+      263,
+      265,
+      267,
+      271,
+      275,
+      278,
+      280,
+      284,
+      288,
+      292,
+      294,
+      297,
+      299,
+      302,
+      306,
+      309,
+      313,
+      316,
+      317,
+      322,
+      323,
+      326,
+      332,
+      333,
+      336,
+      339,
+      343,
+      346,
+      349
+    ],
+    "variants": {
+      "baseline": {
+        "paper": {
+          "n": 49,
+          "pnl": 7969.59,
+          "expectancy": 162.64,
+          "win_rate": 0.1429,
+          "profit_factor": 1.278,
+          "average_win": 5230.08,
+          "average_loss": -681.93,
+          "max_close_drawdown": 9321.0,
+          "top3_removed": -15019.08,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "exit_bid": {
+          "n": 49,
+          "pnl": 6307.59,
+          "expectancy": 128.73,
+          "win_rate": 0.1429,
+          "profit_factor": 1.208,
+          "average_win": 5230.08,
+          "average_loss": -721.5,
+          "max_close_drawdown": 10216.68,
+          "top3_removed": -16681.08,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "executable": {
+          "n": 49,
+          "pnl": -29848.41,
+          "expectancy": -609.15,
+          "win_rate": 0.1429,
+          "profit_factor": 0.499,
+          "average_win": 4240.08,
+          "average_loss": -1417.36,
+          "max_close_drawdown": 37739.34,
+          "top3_removed": -48571.6,
+          "best": 8434.46,
+          "worst": -4038.0
+        },
+        "paired_paper_delta": 0.0,
+        "paired_executable_delta": 0.0,
+        "first_half_paper_delta": 0.0,
+        "second_half_paper_delta": 0.0,
+        "changed_pnl_trades": 0,
+        "improved": 0,
+        "worsened": 0,
+        "low_quality_signals": 0,
+        "mean_hold_minutes": 332.0
+      },
+      "trail70": {
+        "paper": {
+          "n": 49,
+          "pnl": 6299.91,
+          "expectancy": 128.57,
+          "win_rate": 0.2245,
+          "profit_factor": 1.338,
+          "average_win": 2269.17,
+          "average_loss": -491.08,
+          "max_close_drawdown": 8514.55,
+          "top3_removed": -13808.75,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "exit_bid": {
+          "n": 49,
+          "pnl": -1960.09,
+          "expectancy": -40.0,
+          "win_rate": 0.1224,
+          "profit_factor": 0.922,
+          "average_win": 3875.65,
+          "average_loss": -586.37,
+          "max_close_drawdown": 14290.55,
+          "top3_removed": -22068.75,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "executable": {
+          "n": 49,
+          "pnl": -38116.09,
+          "expectancy": -777.88,
+          "win_rate": 0.102,
+          "profit_factor": 0.345,
+          "average_win": 4019.98,
+          "average_loss": -1323.09,
+          "max_close_drawdown": 45864.21,
+          "top3_removed": -56282.75,
+          "best": 8434.46,
+          "worst": -4038.0
+        },
+        "paired_paper_delta": -1669.68,
+        "paired_executable_delta": -8267.68,
+        "first_half_paper_delta": -6790.68,
+        "second_half_paper_delta": 5121.0,
+        "changed_pnl_trades": 29,
+        "improved": 27,
+        "worsened": 2,
+        "low_quality_signals": 0,
+        "mean_hold_minutes": 224.49
+      },
+      "trail60": {
+        "paper": {
+          "n": 49,
+          "pnl": 10201.32,
+          "expectancy": 208.19,
+          "win_rate": 0.3061,
+          "profit_factor": 1.649,
+          "average_win": 1728.35,
+          "average_loss": -462.47,
+          "max_close_drawdown": 5673.0,
+          "top3_removed": -9907.34,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "exit_bid": {
+          "n": 49,
+          "pnl": -110.68,
+          "expectancy": -2.26,
+          "win_rate": 0.1429,
+          "profit_factor": 0.995,
+          "average_win": 3229.62,
+          "average_loss": -540.9,
+          "max_close_drawdown": 13126.14,
+          "top3_removed": -20219.34,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "executable": {
+          "n": 49,
+          "pnl": -36266.68,
+          "expectancy": -740.14,
+          "win_rate": 0.0816,
+          "profit_factor": 0.353,
+          "average_win": 4952.08,
+          "average_loss": -1246.11,
+          "max_close_drawdown": 44424.8,
+          "top3_removed": -54433.34,
+          "best": 8434.46,
+          "worst": -4038.0
+        },
+        "paired_paper_delta": 2231.73,
+        "paired_executable_delta": -6418.27,
+        "first_half_paper_delta": -4349.68,
+        "second_half_paper_delta": 6581.41,
+        "changed_pnl_trades": 30,
+        "improved": 27,
+        "worsened": 3,
+        "low_quality_signals": 0,
+        "mean_hold_minutes": 205.8
+      },
+      "trail50": {
+        "paper": {
+          "n": 49,
+          "pnl": 13380.32,
+          "expectancy": 273.07,
+          "win_rate": 0.3469,
+          "profit_factor": 1.977,
+          "average_win": 1592.43,
+          "average_loss": -427.84,
+          "max_close_drawdown": 4621.0,
+          "top3_removed": -6728.34,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "exit_bid": {
+          "n": 49,
+          "pnl": 1564.32,
+          "expectancy": 31.92,
+          "win_rate": 0.1633,
+          "profit_factor": 1.073,
+          "average_win": 2892.04,
+          "average_loss": -526.15,
+          "max_close_drawdown": 12051.14,
+          "top3_removed": -18544.34,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "executable": {
+          "n": 49,
+          "pnl": -34591.68,
+          "expectancy": -705.95,
+          "win_rate": 0.0816,
+          "profit_factor": 0.364,
+          "average_win": 4952.08,
+          "average_loss": -1208.89,
+          "max_close_drawdown": 43189.8,
+          "top3_removed": -52758.34,
+          "best": 8434.46,
+          "worst": -4038.0
+        },
+        "paired_paper_delta": 5410.73,
+        "paired_executable_delta": -4743.27,
+        "first_half_paper_delta": -2972.68,
+        "second_half_paper_delta": 8383.41,
+        "changed_pnl_trades": 30,
+        "improved": 27,
+        "worsened": 3,
+        "low_quality_signals": 0,
+        "mean_hold_minutes": 195.99
+      },
+      "profitprotector": {
+        "paper": {
+          "n": 49,
+          "pnl": 7507.32,
+          "expectancy": 153.21,
+          "win_rate": 0.6735,
+          "profit_factor": 1.76,
+          "average_win": 526.71,
+          "average_loss": -617.12,
+          "max_close_drawdown": 4812.0,
+          "top3_removed": -7403.0,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "exit_bid": {
+          "n": 49,
+          "pnl": -8532.68,
+          "expectancy": -174.14,
+          "win_rate": 0.0816,
+          "profit_factor": 0.627,
+          "average_win": 3582.33,
+          "average_loss": -508.04,
+          "max_close_drawdown": 16613.14,
+          "top3_removed": -22853.0,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "executable": {
+          "n": 49,
+          "pnl": -44688.68,
+          "expectancy": -912.01,
+          "win_rate": 0.0408,
+          "profit_factor": 0.231,
+          "average_win": 6730.66,
+          "average_loss": -1237.23,
+          "max_close_drawdown": 50329.14,
+          "top3_removed": -57814.0,
+          "best": 8434.46,
+          "worst": -4038.0
+        },
+        "paired_paper_delta": -462.27,
+        "paired_executable_delta": -14840.27,
+        "first_half_paper_delta": -7553.02,
+        "second_half_paper_delta": 7090.75,
+        "changed_pnl_trades": 36,
+        "improved": 31,
+        "worsened": 5,
+        "low_quality_signals": 11,
+        "mean_hold_minutes": 142.6
+      },
+      "floor2x": {
+        "paper": {
+          "n": 49,
+          "pnl": 8372.47,
+          "expectancy": 170.87,
+          "win_rate": 0.449,
+          "profit_factor": 1.425,
+          "average_win": 1276.38,
+          "average_loss": -729.93,
+          "max_close_drawdown": 8805.14,
+          "top3_removed": -11736.19,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "exit_bid": {
+          "n": 49,
+          "pnl": 857.47,
+          "expectancy": 17.5,
+          "win_rate": 0.0816,
+          "profit_factor": 1.035,
+          "average_win": 6345.62,
+          "average_loss": -545.0,
+          "max_close_drawdown": 14821.14,
+          "top3_removed": -19251.19,
+          "best": 8814.46,
+          "worst": -948.0
+        },
+        "executable": {
+          "n": 49,
+          "pnl": -35298.53,
+          "expectancy": -720.38,
+          "win_rate": 0.0816,
+          "profit_factor": 0.389,
+          "average_win": 5621.37,
+          "average_loss": -1284.09,
+          "max_close_drawdown": 42343.8,
+          "top3_removed": -53465.19,
+          "best": 8434.46,
+          "worst": -4038.0
+        },
+        "paired_paper_delta": 402.88,
+        "paired_executable_delta": -5450.12,
+        "first_half_paper_delta": -1317.87,
+        "second_half_paper_delta": 1720.75,
+        "changed_pnl_trades": 18,
+        "improved": 15,
+        "worsened": 3,
+        "low_quality_signals": 0,
+        "mean_hold_minutes": 263.86
+      },
+      "stop50": {
+        "paper": {
+          "n": 49,
+          "pnl": -2589.14,
+          "expectancy": -52.84,
+          "win_rate": 0.102,
+          "profit_factor": 0.844,
+          "average_win": 2804.37,
+          "average_loss": -377.52,
+          "max_close_drawdown": 9938.14,
+          "top3_removed": -16180.0,
+          "best": 5847.34,
+          "worst": -798.0
+        },
+        "exit_bid": {
+          "n": 49,
+          "pnl": -16377.14,
+          "expectancy": -334.23,
+          "win_rate": 0.0612,
+          "profit_factor": 0.454,
+          "average_win": 4530.29,
+          "average_loss": -651.48,
+          "max_close_drawdown": 20449.14,
+          "top3_removed": -29968.0,
+          "best": 5847.34,
+          "worst": -936.0
+        },
+        "executable": {
+          "n": 49,
+          "pnl": -52533.14,
+          "expectancy": -1072.1,
+          "win_rate": 0.0612,
+          "profit_factor": 0.178,
+          "average_win": 3791.29,
+          "average_loss": -1389.28,
+          "max_close_drawdown": 54174.8,
+          "top3_removed": -63907.0,
+          "best": 5026.86,
+          "worst": -4026.0
+        },
+        "paired_paper_delta": -10558.73,
+        "paired_executable_delta": -22684.73,
+        "first_half_paper_delta": -6648.68,
+        "second_half_paper_delta": -3910.05,
+        "changed_pnl_trades": 44,
+        "improved": 40,
+        "worsened": 4,
+        "low_quality_signals": 29,
+        "mean_hold_minutes": 103.25
+      }
+    },
+    "censoring_by_variant": {
+      "baseline": {
+        "settlement": 34,
+        "exit": 17,
+        "censored_fill": 1,
+        "censored_continuation": 1
+      },
+      "trail70": {
+        "exit": 32,
+        "settlement": 20,
+        "censored_continuation": 1
+      },
+      "trail60": {
+        "exit": 33,
+        "settlement": 19,
+        "censored_fill": 1
+      },
+      "trail50": {
+        "exit": 34,
+        "settlement": 19
+      },
+      "profitprotector": {
+        "exit": 40,
+        "settlement": 13
+      },
+      "floor2x": {
+        "settlement": 26,
+        "exit": 26,
+        "censored_continuation": 1
+      },
+      "stop50": {
+        "exit": 48,
+        "settlement": 4,
+        "censored_fill": 1
+      }
+    }
+  },
+  "gap_free_sensitivity": {
+    "ids": [
+      198,
+      201,
+      202,
+      206,
+      214,
+      217,
+      226,
+      229,
+      233,
+      236,
+      238,
+      240,
+      245,
+      248,
+      258,
+      263,
+      265,
+      267,
+      288,
+      292,
+      294,
+      297,
+      299,
+      302,
+      313,
+      316,
+      322,
+      323,
+      336,
+      339,
+      346,
+      349
+    ],
+    "variants": {
+      "baseline": {
+        "n": 32,
+        "paper": 19684.59,
+        "executable": -6042.41,
+        "paper_delta": 0.0,
+        "executable_delta": 0.0,
+        "first_half_delta": 0.0,
+        "second_half_delta": 0.0,
+        "first_half_executable_delta": 0.0,
+        "second_half_executable_delta": 0.0
+      },
+      "trail70": {
+        "n": 32,
+        "paper": 13286.91,
+        "executable": -17283.09,
+        "paper_delta": -6397.68,
+        "executable_delta": -11240.68,
+        "first_half_delta": -606.81,
+        "second_half_delta": -5790.87,
+        "first_half_executable_delta": -3991.81,
+        "second_half_executable_delta": -7248.87
+      },
+      "trail60": {
+        "n": 32,
+        "paper": 15369.32,
+        "executable": -16280.68,
+        "paper_delta": -4315.27,
+        "executable_delta": -10238.27,
+        "first_half_delta": 901.19,
+        "second_half_delta": -5216.46,
+        "first_half_executable_delta": -2881.81,
+        "second_half_executable_delta": -7356.46
+      },
+      "trail50": {
+        "n": 32,
+        "paper": 17661.32,
+        "executable": -15210.68,
+        "paper_delta": -2023.27,
+        "executable_delta": -9168.27,
+        "first_half_delta": 1710.19,
+        "second_half_delta": -3733.46,
+        "first_half_executable_delta": -2426.81,
+        "second_half_executable_delta": -6741.46
+      },
+      "profitprotector": {
+        "n": 32,
+        "paper": 10602.32,
+        "executable": -25252.68,
+        "paper_delta": -9082.27,
+        "executable_delta": -19210.27,
+        "first_half_delta": -4426.15,
+        "second_half_delta": -4656.12,
+        "first_half_executable_delta": -9609.15,
+        "second_half_executable_delta": -9601.12
+      },
+      "floor2x": {
+        "n": 32,
+        "paper": 16305.47,
+        "executable": -14076.53,
+        "paper_delta": -3379.12,
+        "executable_delta": -8034.12,
+        "first_half_delta": 4814.0,
+        "second_half_delta": -8193.12,
+        "first_half_executable_delta": 2767.0,
+        "second_half_executable_delta": -10801.12
+      },
+      "stop50": {
+        "n": 32,
+        "paper": 3797.86,
+        "executable": -29661.14,
+        "paper_delta": -15886.73,
+        "executable_delta": -23618.73,
+        "first_half_delta": -356.81,
+        "second_half_delta": -15529.92,
+        "first_half_executable_delta": -4519.81,
+        "second_half_executable_delta": -19098.92
+      }
+    }
+  },
+  "baseline_parity_newer": [
+    {
+      "id": 191,
+      "date": "2026-07-22",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 198,
+      "date": "2026-07-24",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 201,
+      "date": "2026-07-27",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 202,
+      "date": "2026-07-28",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 206,
+      "date": "2026-07-29",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 211,
+      "date": "2026-07-31",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 214,
+      "date": "2026-08-03",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 217,
+      "date": "2026-08-04",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 222,
+      "date": "2026-08-06",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 150.0,
+      "exit_time_delta_seconds": -1144.245,
+      "coverage_eligible": true
+    },
+    {
+      "id": 226,
+      "date": "2026-08-10",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 229,
+      "date": "2026-08-11",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 233,
+      "date": "2026-08-12",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 236,
+      "date": "2026-08-13",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 238,
+      "date": "2026-08-14",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 240,
+      "date": "2026-08-17",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 245,
+      "date": "2026-08-18",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 248,
+      "date": "2026-08-19",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 249,
+      "date": "2026-08-20",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 254,
+      "date": "2026-08-21",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 257,
+      "date": "2026-08-24",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 258,
+      "date": "2026-08-26",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 263,
+      "date": "2026-08-27",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 265,
+      "date": "2026-08-28",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 267,
+      "date": "2026-08-31",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 271,
+      "date": "2026-09-01",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 275,
+      "date": "2026-09-02",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 278,
+      "date": "2026-09-09",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 280,
+      "date": "2026-09-10",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 284,
+      "date": "2026-09-11",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 288,
+      "date": "2026-09-15",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": -0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 292,
+      "date": "2026-09-16",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 294,
+      "date": "2026-09-17",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 16.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 297,
+      "date": "2026-09-18",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 299,
+      "date": "2026-09-21",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 302,
+      "date": "2026-09-22",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 306,
+      "date": "2026-09-23",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": -35.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 309,
+      "date": "2026-09-24",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 313,
+      "date": "2026-09-25",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 316,
+      "date": "2026-09-28",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": -20.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 317,
+      "date": "2026-09-29",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 322,
+      "date": "2026-09-30",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 323,
+      "date": "2026-10-01",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 326,
+      "date": "2026-10-02",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 328,
+      "date": "2026-10-05",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 332,
+      "date": "2026-10-06",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 333,
+      "date": "2026-10-07",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 336,
+      "date": "2026-10-08",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 339,
+      "date": "2026-10-09",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 343,
+      "date": "2026-10-12",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 346,
+      "date": "2026-10-13",
+      "modern": true,
+      "recorded_reason": "drawdown_afternoon",
+      "replayed_reason": "drawdown_afternoon",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    },
+    {
+      "id": 349,
+      "date": "2026-10-14",
+      "modern": true,
+      "recorded_reason": "cash_settled",
+      "replayed_reason": "cash_settled",
+      "pnl_delta": 0.0,
+      "exit_time_delta_seconds": 0.0,
+      "coverage_eligible": true
+    }
+  ],
+  "runtime_source_observations": {
+    "observed_during": "2026-10-15 UTC initial research session",
+    "container": "butterfly_ndx_app",
+    "image": "sha256:1fbc1ab3aed0aec85bcccab9e5009679789baab10fc333cfd0e4636ef1e7cc61",
+    "package_source_sha256": {
+      "position/state_machine.py": "ae80343fb0fcbb60fd0102c02e29ae3ba82df8f9e7a50d1d41576bf592f95521",
+      "position/position_manager.py": "91252c2b7f26eabf080c9deb0f3e22dda1f20e96030779ebab8764a12ff3870e",
+      "core/config.py": "ecada2dd5c23eb894975de2f4cca44ccda881d8315e451994639169332e53ff3",
+      "strategy/entry_selection.py": "a5e943fdaf471ab4f68ff3c4e51d2baa185e34a92a30753196b40e3d28f398ad"
+    },
+    "qualification": "State-machine and position-manager files matched local hashes; local core/config.py differed. No claim of complete source parity."
+  },
+  "accounting_notes": [
+    "mark_v1 records and marketable diagnostics already include commissions; do not deduct them twice.",
+    "The legacy recorded_gross descriptive key contains the same commission-inclusive result as recorded_after_fees.",
+    "Negative stressed exit proceeds were floored at zero; disclose and challenge this assumption.",
+    "Only final outputs are preserved in this small snapshot; pre-fix outputs in the full bundle are superseded."
+  ],
+  "full_bundle_relative_path": "reports/research/ndx-review-2026-10-14",
+  "full_bundle_git_tracked": false,
+  "durable_bulk_backup_location": null
+}

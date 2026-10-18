@@ -1,0 +1,39 @@
+{
+  "model": "NDX-native-postgres-check-v1",
+  "registered_utc": "2026-10-16T02:21:28.615001+00:00",
+  "scope": "synthetic native SDK response preservation and PostgreSQL mechanics/resources only; no activation or economic evaluation",
+  "input_sha256": "702d9aee35020c19844ba3938d47ccd6f57183041be0b252ec0cbf8454a84f6c",
+  "universe_sha256": "e9d168a6476f3a8997aeacadce30146a58d7706d3953568d93661b7ab806efc6",
+  "body_schema_sha256": "2193acb896842a210bfaa1415fa1da47d11629e8fd83559de8cf0daaefa247fc",
+  "parents": {
+    "provenance": {
+      "path": "reports/research/ndx-02-provenance-20261015/run-01",
+      "run_sha256": "bc3bed787450da14f5b093089f52ee7d2fcd732fc950a0f33b91d71075163ca8"
+    },
+    "recording": {
+      "path": "reports/research/ndx-02-recording-20261015/run-02",
+      "run_sha256": "1d8c0a7979c20bf1e3eb0650b418f901d367873ab0e46eb134f30eaf8f62930a"
+    }
+  },
+  "cases": [
+    {
+      "name": "native-small",
+      "contracts": 4,
+      "samples": 5
+    },
+    {
+      "name": "sdk-contract-limit",
+      "contracts": 5000,
+      "samples": 3
+    }
+  ],
+  "production_budget_validated": false,
+  "replay_eligible": false,
+  "test_runtime": {
+    "package": "pgserver==0.1.4",
+    "python_environment": "separate CPython 3.12",
+    "postgres_version": "16.2",
+    "connection": "new local private Unix socket; no TCP or supplied DSN"
+  },
+  "corrections": []
+}

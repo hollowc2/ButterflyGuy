@@ -1,0 +1,88 @@
+{
+  "model": "NDX-02-constituent-fidelity-v1",
+  "registered_before_new_attribution": true,
+  "inputs": {
+    "r0": {
+      "root": "ndx-r0-20261014",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/snapshot.json",
+      "manifest_sha256": "0599bbd58ea30246c3329113b12b00ca7ac36a0f4944ef7dd8ab785aac114967",
+      "required": [
+        "raw/trades.csv",
+        "raw/events.csv",
+        "raw/paths.csv"
+      ]
+    },
+    "supplement": {
+      "root": "ndx-01-supplement-20261015",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/supplement-manifest.json",
+      "manifest_sha256": "da4d8beb577b506ab91c5989d76aedad395676f9dcb8c5ec3ca35bcabfdd7122",
+      "required": [
+        "supplement.csv"
+      ]
+    },
+    "inventory": {
+      "root": "ndx-continuation-inventory-20261015",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/continuation-inventory-manifest.json",
+      "manifest_sha256": "44c1e57bb71abf348d60ef31dc63f6b7431bae5be534720a3686d5bd787cde07",
+      "required": [
+        "extract.csv"
+      ]
+    },
+    "runtime": {
+      "root": "helios-ndx-source-20261015",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/runtime-source-manifest.json",
+      "manifest_sha256": "2862993bc456d9405910e3f5a88e785584d0f9740408223cfbd3df7fdf3f5c77",
+      "required": [
+        "container-source.tar.gz"
+      ]
+    },
+    "continuation": {
+      "root": "ndx-minute-continuation-20261015-v2",
+      "manifest": "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-snapshot.json",
+      "manifest_sha256": "2332897f0d59377b9acf83f87eaadd7229048224b812db4c719ba4999f7b55e1",
+      "required": [
+        "prices/extract.csv",
+        "schema/extract.csv",
+        "cohort.json",
+        "contract.json"
+      ]
+    }
+  },
+  "parents": {
+    "continuation": {
+      "path": "reports/research/ndx-02-continuation-20261015/run-01",
+      "run_sha256": "5ff727a579cc1af46fdd41d888502a78d638a4bd9f5ec2e45a4e08051c9aae92"
+    },
+    "execution": {
+      "path": "reports/research/ndx-02-20261015/run-02",
+      "run_sha256": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261"
+    },
+    "baseline": {
+      "path": "reports/research/ndx-01-20261015/run-03",
+      "run_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee"
+    }
+  },
+  "reporting_tolerance_points": "0.00011",
+  "timestamp_equality_tolerance_seconds": 1e-06,
+  "tolerances": {
+    "price": "Retain four-decimal parent reporting allowance, not a trading filter. Decimal arithmetic has no extra epsilon; signed raw values retained.",
+    "timestamp": "One microsecond stored timestamp equality, also used only for recorded clock ordering. No clock synchronization tolerance invented.",
+    "leg_midpoint_rounding": "Diagnostic bound 0.005 points: half of a displayed hundredth; empirical compatibility, not attestation of provider rounding. No midpoint substitution.",
+    "age_reference": "No age-to-clock equality test without historical reference clock semantics; record implied reference-minus-completion only as a diagnostic, not a derived timestamp."
+  },
+  "rounding_compatibility_bound_points": "0.005",
+  "scope": "All verified modern closed mark_v1 non-cash-settled trades and exact-symbol continuation groups; development evidence. No P&L, replay, filter calibration, deployment or remote acquisition.",
+  "eligibility": {
+    "R0_30_second_continuation_eligible": false,
+    "minute_replay_eligible": false
+  },
+  "example_selection": [
+    "most negative mark",
+    "closest-to-zero negative",
+    "largest absolute midpoint difference",
+    "largest timed absolute midpoint difference",
+    "largest event dispersion",
+    "largest reported leg age"
+  ],
+  "retention": "Private ignored evidence on Eros; independent backup not established"
+}

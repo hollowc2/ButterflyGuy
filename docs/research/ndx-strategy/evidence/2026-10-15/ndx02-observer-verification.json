@@ -1,0 +1,201 @@
+{
+  "created_utc": "2026-10-16T03:23:52.154598+00:00",
+  "stage": "incomplete",
+  "status": "independent default-off observer implementation and ordinary PG validation complete; exact target unavailable; capture disabled",
+  "starting_git_sha": "47e7d331255f412c0fa90a8c8708dd5dea7c524c",
+  "starting_branch": "fix/xsp-floor-wing-alert-spam",
+  "upstream": "origin/fix/xsp-floor-wing-alert-spam",
+  "initial_dirty": [
+    "docs/research/ndx-strategy-development.md",
+    "docs/research/ndx-strategy/README.md",
+    "untracked docs/research/ndx-strategy/NEXT-STAGE-TIMESCALE-OBSERVER-PROMPT.md"
+  ],
+  "preserved_initial_changes": true,
+  "python": "3.13.13 (main, May 10 2026, 19:26:54) [Clang 22.1.3 ]",
+  "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
+  "dependencies": {
+    "asyncpg": "0.31.0",
+    "httpx": "0.28.1",
+    "schwab-gateway-sdk": "0.8.0",
+    "pytest": "9.0.2",
+    "ruff": "0.15.5"
+  },
+  "dependency_acquisition": "none; existing locked environment and existing separate pgserver binary reused",
+  "checks": [
+    {
+      "command": "NDX_POSTGRES_BIN=/home/corey/.cache/uv/archive-v0/ZWZ0Mqbj4Iv7hOst/pgserver/pginstall/bin NDX_FIDELITY_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_CONTINUATION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-minute-continuation-20261015-v2 NDX_EXECUTION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-r0-20261014 NDX_SUPPLEMENT=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-01-supplement-20261015 UV_CACHE_DIR=/tmp/butterfly-uv-cache uv run --offline --frozen pytest tests/test_ndx_observer.py tests/test_ndx_native_response.py tests/test_ndx_postgres_recording.py tests/test_ndx_recording.py tests/test_ndx_provenance.py tests/test_ndx_quote_fidelity.py tests/test_ndx_quote_fidelity_raw.py tests/test_ndx_continuation.py tests/test_ndx_execution_audit.py tests/test_ndx_baseline.py tests/test_state_machine.py tests/test_position_manager.py -q",
+      "passed": 186,
+      "skipped": 0,
+      "failed": 0,
+      "seconds": 28.99,
+      "scope": "136 prior private/offline/position checks + 28 native/ordinary-PG checks + 22 new observer checks; not exact TimescaleDB"
+    },
+    {
+      "command": "UV_CACHE_DIR=/tmp/butterfly-uv-cache uv run --offline --frozen ruff check .",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "/home/corey/.cache/uv/archive-v0/Yo1tT0lFfjWucooJ/bin/graphify update .",
+      "result": "AST-only completed",
+      "nodes": 10697,
+      "edges": 23345,
+      "communities": 374,
+      "limitations": [
+        "tree_sitter_sql missing; 24 SQL files contributed no symbols",
+        "3 symbol-free files; 58 unclassified files",
+        "community labels stale; no semantic/API refresh"
+      ]
+    }
+  ],
+  "target": {
+    "executed_tests": 0,
+    "skipped_tests": 0,
+    "gate": "incomplete",
+    "image_resolved": false,
+    "extension_tested": false,
+    "reason": "escalated docker version reports absent daemon/socket; no container created; no shared daemon started",
+    "archived_runs": [
+      "target-run-01",
+      "target-run-02"
+    ]
+  },
+  "resource_run": {
+    "path": "reports/research/ndx-02-observer-20261015/resources-run-02",
+    "run_sha256": "31017ee10225729adb4a5edcee84e70ff7f8d2d1416de55e01ff6a2b3e24d897",
+    "summary_sha256": "ea08494494691896ccb49adac1f9cbaeafe1f7aa6dcb9a52be4472fc5f86ffbc"
+  },
+  "parents": {
+    "fidelity": {
+      "path": "reports/research/ndx-02-fidelity-20261015/run-01",
+      "run_sha256": "b2a17d7b15e589c94fc9b9a568efd26802e9e3e048638d352cec0631bea08f66",
+      "all_output_hashes_verified": true
+    },
+    "accounting": {
+      "path": "reports/research/ndx-02-20261015/run-02",
+      "run_sha256": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261",
+      "all_output_hashes_verified": true
+    },
+    "continuation": {
+      "path": "reports/research/ndx-02-continuation-20261015/run-01",
+      "run_sha256": "5ff727a579cc1af46fdd41d888502a78d638a4bd9f5ec2e45a4e08051c9aae92",
+      "all_output_hashes_verified": true
+    },
+    "baseline": {
+      "path": "reports/research/ndx-01-20261015/run-03",
+      "run_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee",
+      "all_output_hashes_verified": true
+    },
+    "native_postgres": {
+      "path": "reports/research/ndx-02-native-postgres-20261015/run-01",
+      "run_sha256": "53a6973c8baec839b68d8f683363cafa431df30a070e2055e991f4fb7bd9b2fe",
+      "all_output_hashes_verified": true
+    },
+    "recording": {
+      "path": "reports/research/ndx-02-recording-20261015/run-02",
+      "run_sha256": "1d8c0a7979c20bf1e3eb0650b418f901d367873ab0e46eb134f30eaf8f62930a",
+      "all_output_hashes_verified": true
+    },
+    "provenance": {
+      "path": "reports/research/ndx-02-provenance-20261015/run-01",
+      "run_sha256": "bc3bed787450da14f5b093089f52ee7d2fcd732fc950a0f33b91d71075163ca8",
+      "all_output_hashes_verified": true
+    }
+  },
+  "snapshots": {
+    "r0": {
+      "files_verified": 347,
+      "required_membership_verified": true,
+      "manifest_sha256": "0599bbd58ea30246c3329113b12b00ca7ac36a0f4944ef7dd8ab785aac114967"
+    },
+    "supplement": {
+      "files_verified": 4,
+      "required_membership_verified": true,
+      "manifest_sha256": "da4d8beb577b506ab91c5989d76aedad395676f9dcb8c5ec3ca35bcabfdd7122"
+    },
+    "inventory": {
+      "files_verified": 2,
+      "required_membership_verified": true,
+      "manifest_sha256": "44c1e57bb71abf348d60ef31dc63f6b7431bae5be534720a3686d5bd787cde07"
+    },
+    "runtime": {
+      "files_verified": 2,
+      "required_membership_verified": true,
+      "manifest_sha256": "2862993bc456d9405910e3f5a88e785584d0f9740408223cfbd3df7fdf3f5c77"
+    },
+    "continuation": {
+      "files_verified": 11,
+      "required_membership_verified": true,
+      "manifest_sha256": "2332897f0d59377b9acf83f87eaadd7229048224b812db4c719ba4999f7b55e1"
+    }
+  },
+  "old_source_drift": [
+    {
+      "path": "tests/test_ndx_postgres_recording.py",
+      "reason": "task-owned exact-image hook and per-test DB identity checks",
+      "original_retained_path": "reports/research/ndx-02-native-postgres-20261015/run-01/source/tests/test_ndx_postgres_recording.py"
+    }
+  ],
+  "failures_preserved": [
+    {
+      "run": "resources-run-01",
+      "reason": "script-mode verification helper import unavailable before fixture startup",
+      "correction": "contract-v2.json/source-lock-v2.json; source copies preserved"
+    },
+    {
+      "phase": "pre-registration focused tests",
+      "result": "21 passed, 1 failed; task-owned pg_ctl restart output pipe remained open",
+      "correction": "owned fixture log redirects server output; next focused run 22 passed"
+    },
+    {
+      "phase": "registration wrapper",
+      "reason": "Path helper called with str then resource command attempted before config-v2 existed; no fixture/evaluation/output created",
+      "correction": "fixed wrapper Path and registered v2 before actual resource evaluation"
+    }
+  ],
+  "artifacts": {
+    "target-run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/target-run-01",
+      "run_sha256": "693fb6868dc4e5c9ec359fedd7fd5a5231b7148c7c2759b0e38942f779b486a3",
+      "summary_sha256": "4dd7f2cde641e5edc5fb97275934aacfeb9350a1d1c78524a4e836b523e1515c"
+    },
+    "target-run-02": {
+      "path": "reports/research/ndx-02-observer-20261015/target-run-02",
+      "run_sha256": "ea58df20ef7ae6b908d359b7ee47fcc06a17e535a88e3a7ff9e60506582f9ef8",
+      "summary_sha256": "366bfc92228dfb32e92d5cbc2f96a5906aa3c2209cb9dbf0d1a7d9bc908a69a8"
+    },
+    "resources-run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/resources-run-01",
+      "run_sha256": "db84a745f5b66353aea6173381ca198316c332aa4c15a6d175ed699b05daf1de",
+      "summary_sha256": "baba493e21808c023e9eea21411ce0a839b5a6ebddb7f49c43671f8ad02d9dfc"
+    },
+    "resources-run-02": {
+      "path": "reports/research/ndx-02-observer-20261015/resources-run-02",
+      "run_sha256": "31017ee10225729adb4a5edcee84e70ff7f8d2d1416de55e01ff6a2b3e24d897",
+      "summary_sha256": "ea08494494691896ccb49adac1f9cbaeafe1f7aa6dcb9a52be4472fc5f86ffbc"
+    }
+  },
+  "source_lock_sha256": "2f4a73afecc536fea5bd70fcd68f89a14daa54d5ebbc3bfbad819578ec945a3e",
+  "limitations": [
+    "ordinary PG 16.2 resources only; target image manifest/PG16.11/Timescale2.25.2/restricted-role execution unvalidated",
+    "HTTP original buffering and synchronous SDK/native parse are not hard async/memory bounds",
+    "busy and unjournaled counters are memory-only; no durable completeness after crash",
+    "research disk pause is sampled and allows overshoot; filesystem/WAL reserve/quota unvalidated",
+    "DB CPU/RSS endpoint samples; no production throughput/durable network storage claim",
+    "retention/restore and independent backup remain unvalidated",
+    "current target operational preflight/release/image/health/disk/positions/orders and rollback baseline unavailable",
+    "gateway age reference/build/cache/physical-clock attestation and provider-original bytes missing",
+    "all 17 historical paths remain ineligible; actual execution and XQC plus NDX03-06 remain open"
+  ],
+  "no_live_activation": true,
+  "no_ddl_on_live_db": true,
+  "no_order_or_strategy_experiment": true,
+  "next_action": "provide supported isolated local container runtime; run check_ndx_timescale.py with contract-v2/source-lock-v2 into /tmp/ndx-timescale-observer-target/run-03; resolve identity discrepancy if any, then target resource/restore and current named-target operational preflight",
+  "versioned_artifact_sha256": {
+    "ndx02-observer-summary.json": "ea08494494691896ccb49adac1f9cbaeafe1f7aa6dcb9a52be4472fc5f86ffbc",
+    "ndx02-observer-runs.json": "638dde8186249f8ed5b7b0563020ab096ca7454b25ef678770250d65cccaac5b"
+  }
+}

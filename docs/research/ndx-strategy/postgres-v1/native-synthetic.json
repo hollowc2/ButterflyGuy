@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "option_chain": {
+    "symbol": "$NDX",
+    "expiration": "2030-01-02",
+    "underlying_price": 30100,
+    "call_contract_count": 1,
+    "put_contract_count": 3,
+    "strike_count": 3,
+    "contracts": [
+      {
+        "symbol": "NDXP  300102P30000000",
+        "option_type": "PUT",
+        "expiration": "2030-01-02",
+        "strike": 30000,
+        "bid": 10.00,
+        "ask": 10.20,
+        "mark": 10.1000,
+        "bid_size": 0,
+        "ask_size": 2,
+        "event_timestamp": "2030-01-02T19:59:01+00:00",
+        "stale": false,
+        "age_seconds": 0.0000
+      },
+      {
+        "symbol": "NDXP  300102P30100000",
+        "option_type": "PUT",
+        "expiration": "2030-01-02",
+        "strike": 30100,
+        "bid": 12.00,
+        "ask": 12.20,
+        "mark": 12.1100,
+        "bid_size": 0,
+        "ask_size": 2,
+        "event_timestamp": "2030-01-02T19:59:01+00:00",
+        "stale": false,
+        "age_seconds": 0.0000,
+        "multiplier": 100
+      },
+      {
+        "symbol": "NDXP  300102P30200000",
+        "option_type": "PUT",
+        "expiration": "2030-01-02",
+        "strike": 30200,
+        "bid": 10.00,
+        "ask": 10.20,
+        "mark": 10.1000,
+        "bid_size": 0,
+        "ask_size": 2,
+        "event_timestamp": "2030-01-02T19:59:01+00:00",
+        "stale": false,
+        "age_seconds": 0.0000
+      },
+      {
+        "symbol": "NDXP  300102C30000000",
+        "option_type": "CALL",
+        "expiration": "2030-01-02",
+        "strike": 30000,
+        "bid": 10.00,
+        "ask": 10.20,
+        "mark": 10.1000,
+        "bid_size": 0,
+        "ask_size": 2,
+        "event_timestamp": "2030-01-02T19:59:01+00:00",
+        "stale": false,
+        "age_seconds": 0.0000
+      }
+    ],
+    "event_timestamp": "2030-01-02T19:59:01+00:00",
+    "gateway_received_at": "2030-01-02T19:59:00+00:00",
+    "source": "synthetic_native_gateway",
+    "stale": false,
+    "age_seconds": 0.0000,
+    "data_quality_flags": [
+      "stale_contracts_present"
+    ]
+  }
+}

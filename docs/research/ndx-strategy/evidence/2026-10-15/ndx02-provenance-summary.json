@@ -1,0 +1,12 @@
+{
+  "model": "NDX-provenance-v1",
+  "records": 18,
+  "status_counts": {
+    "sufficient": 6,
+    "insufficient": 8,
+    "rejected": 4
+  },
+  "synthetic_records": 18,
+  "new_historical_coverage": 0,
+  "historical_replay_eligibility_changed": false
+}

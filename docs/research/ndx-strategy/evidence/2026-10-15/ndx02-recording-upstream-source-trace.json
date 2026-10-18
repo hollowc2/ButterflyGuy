@@ -1,0 +1,28 @@
+{
+  "repository": "/mnt/Repos/Trading/SchwabGateway",
+  "inspected_revision": "0d0125e51266740de0f43c72b540002a4dcfc25d",
+  "checkout_head": "806fff5286aeecbdeb19f5129308a45752991bc0",
+  "scope": "Read-only Git object inspection of ButterflyGuy-pinned SDK revision; no remote/deployment attestation or other-repository modification",
+  "source_sha256": {
+    "src/schwab_gateway/upstream.py": "a5c1aaef3b0df3c65efa5b9ce04aa4b20bc5e22e9ddfad49e0bb7700dd364c26",
+    "packages/sdk/src/schwab_gateway_sdk/client.py": "34e7c2c2447e61b155cd6696431341b9c60958e4ae21a29219c6d803ddb09786",
+    "src/schwab_gateway/api.py": "6c84ad0bf3fe5bd509cd05b9d042bfc17676f1ef1e08007b0875fb2aeeb885d1"
+  },
+  "retained_source": "reports/research/ndx-02-recording-20261015/upstream-source-review",
+  "observations": {
+    "_event_time": "upstream.py:322-329: takes maximum positive integer quoteTime/tradeTime/quoteTimeInLong/tradeTimeInLong, epoch milliseconds -> UTC datetime",
+    "_age_seconds": "upstream.py:332-335: null event gives null; otherwise max(0.0, reference-event total_seconds()), so zero can include a future event relative to the reference",
+    "_normalize_contract": "upstream.py:502-552: reference is supplied received_at; source event extraction above; supplied mark converted numerically; crossed nonnegative bid/ask endpoints can be reordered with flags",
+    "_fetch_option_chain": "upstream.py:1194-1210: supplied received_at is gateway self._utcnow() after provider.get_option_chain returns; default clock is datetime.now(UTC)",
+    "cached_option_chain": "upstream.py:1135-1155 and 1063-1093: a cache hit recomputes each constituent age against a new evaluation instant, leaving gateway_received_at on the cached model; returned age reference therefore need not equal gateway_received_at",
+    "_get_typed": "SDK client.py:207: returns typed model from response.json(); public API lacks exact original response bytes",
+    "option_chain_response": "api.py:734-739: gateway response envelope wraps option_chain typed model; not the selected-leg fixture envelope"
+  },
+  "unresolved": [
+    "Server build and effective cache/clock settings for any historical response",
+    "Actual age reference/evaluation instant and synchronization uncertainty per observed response",
+    "Provider quote-versus-trade clock semantics and native number precision",
+    "Original provider/gateway body capture boundary and reviewed allowlist for actual native schema"
+  ],
+  "historical_conclusion": "Static pinned source narrows prospective requirements only; it cannot fill missing historical times, attribute historical deployment, establish physical synchronization or make any prior path eligible."
+}

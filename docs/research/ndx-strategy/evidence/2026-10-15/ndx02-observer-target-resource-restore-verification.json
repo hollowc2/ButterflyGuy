@@ -1,0 +1,369 @@
+{
+  "created_utc": "2026-10-16T04:49:53.991167+00:00",
+  "status": "isolated target/resources/restore/runtime checks passed; operational activation review incomplete",
+  "capture_enabled": false,
+  "live_ddl_or_grants": false,
+  "live_service_changes": false,
+  "broker_or_token_operations": false,
+  "starting_git_sha": "47e7d331255f412c0fa90a8c8708dd5dea7c524c",
+  "python": "3.13.13 (main, May 10 2026, 19:26:54) [Clang 22.1.3 ]",
+  "platform": "Linux-7.2.9-2-cachyos-x86_64-with-glibc2.44",
+  "target_contract_sha256": "4f33fd04943c3755ece5717ffd082903f2737c480d6a5a6bb103015f977d4088",
+  "target_source_lock_sha256": "898354a0c35792a273e9a2c5b3a50abeee5e59ac33b4d1beebfd45950a840a30",
+  "source_config_and_parent_hashes_verified": true,
+  "checks": {
+    "exact_image_compatibility": {
+      "tests": 50,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "seconds": 6.36,
+      "image": "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+      "architecture": "amd64",
+      "postgres": "16.11",
+      "timescaledb": "2.25.2",
+      "final_postmaster_after_completed_initialization": true
+    },
+    "target_resources": {
+      "acquisitions": 12,
+      "sdk_only_baseline_requests": 12,
+      "publications": 9,
+      "commit_acknowledgements": 9,
+      "consumer_receipts": 9,
+      "recording_oversize_rejections": 3,
+      "all_sdk_quotes_succeeded": true,
+      "max_varied_5000_full_cycle_seconds": 0.375659336001263,
+      "max_shutdown_seconds": 0.004994446000637254,
+      "python_peak_rss_kib_linux": 112556,
+      "database_size_growth_bytes": 1818624,
+      "backend_process_sample_namespace": "owned container",
+      "resource_raw_summary_sha256": "61236c4dbaffae19bb2a1ab48ffe4f90629478bcee1f5042575cafad8fffb36b",
+      "production_capacity_validated": false
+    },
+    "restore": {
+      "status": "passed",
+      "dump_sha256": "7595aa545d481fdf3426f382ab347bc4bf93ee78fe3193d4410bf9d860202c6a",
+      "dump_bytes": 1165646,
+      "dump_seconds": 1.0981179920017894,
+      "restore_seconds": 0.22807998899952509,
+      "installation_id": "51f2c16f-7d6a-4193-8c28-332db1c5ff08",
+      "all_research_rows_identical_before_new_receipts": true,
+      "restored_publications": 9,
+      "new_restricted_reader_receipts": 9,
+      "commit_ack_count_preserved": 9,
+      "unpublished_attempt_preserved": true,
+      "restore_database_bytes": 11350499,
+      "storage_scope": "same task-owned container/local tmpfs; not independent backup"
+    },
+    "runtime_image": {
+      "image_id": "sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99",
+      "source_context_files": 164,
+      "schema_sha256": "cd99bb8c27aedef901cbb9567cb09d3bd53e5fb22e7a9ba2e039176993bceb59",
+      "python_environment": "home = /usr/local/bin\nimplementation = CPython\nuv = 0.11.16\nversion_info = 3.12.15\ninclude-system-site-packages = false\nprompt = butterfly-guy\n",
+      "disabled_checks": 2,
+      "disabled_checks_all_passed": true,
+      "enabled_synthetic_smoke": {
+        "status": "passed",
+        "no_live_activation": true,
+        "result": {
+          "status": "passed",
+          "requests": 1,
+          "published": true,
+          "acknowledgement_recorded": true,
+          "receipt_recorded": true,
+          "body_exact": true,
+          "signed_composite": "-4.0200",
+          "replay_eligible": false,
+          "counts": {
+            "lifecycle_events_journaled": 2,
+            "requests_started": 1,
+            "responses_received": 1,
+            "recording_accepted": 1,
+            "publication_calls": 1,
+            "published": 1,
+            "acknowledgements": 1,
+            "quotes_succeeded": 1,
+            "consumer_reads": 1,
+            "receipt_records": 1
+          }
+        },
+        "image_container_state": {
+          "status": "exited",
+          "exit_code": 0,
+          "running": false
+        },
+        "observer_image": "sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99",
+        "image_container": "ndx-observer-enabled-smoke-4f5cd4d455da46eab1672352478e7871",
+        "database_container": "ndx-target-restore-b9129e8764724a60815932a463a47518",
+        "database_container_stopped": true
+      },
+      "smoke_actual_invocation": "PYTHONPATH=/mnt/Repos/Trading/Butterflyguy UV_CACHE_DIR=/tmp/butterfly-uv-cache uv run --offline --frozen python /tmp/ndx_observer_image_enabled_check.py",
+      "transferred_or_deployed": false
+    },
+    "ruff_check": "UV_CACHE_DIR=/tmp/butterfly-uv-cache uv run --offline --frozen ruff check . passed",
+    "whitespace_check": "git diff --check passed",
+    "graphify": {
+      "command": "/home/corey/.cache/uv/archive-v0/Yo1tT0lFfjWucooJ/bin/graphify update .",
+      "mode": "AST only",
+      "nodes": 10839,
+      "edges": 23528,
+      "communities": 379,
+      "limitations": [
+        "25 SQL files contributed no symbols because optional tree_sitter_sql absent",
+        "3 symbol-free files and 59 unclassified files",
+        "stale community labels; no semantic/API work or parser installation"
+      ]
+    }
+  },
+  "prior_test_denominators": "Prior private-enabled 186 remains preserved; the 50 current tests rerun a subset. Packaging/smoke assertions are separate, not extra historical coverage.",
+  "infrastructure_corrections": [
+    {
+      "resource_run_01": "bootstrap socket failure before resource evaluation; stopped and preserved"
+    },
+    {
+      "compatibility_run_05": "PGHOST alone ineffective because entrypoint clears it; final-server gate refused bootstrap postmaster"
+    },
+    {
+      "compatibility_run_06": "final startup proved; 20 passed and 30 fixture setup errors because template1 already has extension"
+    },
+    {
+      "compatibility_run_07": "retain default container-only socket plus private socket and final-PID proof; IF NOT EXISTS still followed by strict version checks; all 50 passed"
+    },
+    {
+      "image_build_01": "unsupported legacy-builder --progress rejected, no image"
+    },
+    {
+      "image_build_02": "task-owned process interrupted to avoid broad repository build context; no image"
+    },
+    {
+      "image_build_03": "staged verified 164 source files (2387398 bytes), image built and checked"
+    }
+  ],
+  "helios_readonly": {
+    "scope": "read-only observer activation review; no credentials/token/API access; no live DDL or service changes",
+    "observed_utc": "2026-10-16T04:28:34.238601+00:00",
+    "repository": {
+      "path": "/opt/butterflyguy",
+      "sha": "288d6cb321e611a94acc819fa96fc5e429ff836e",
+      "branch": "main",
+      "dirty_paths": "M  .gitignore\nM  configs/config.yaml\n M configs/config_ndx.yaml\n M configs/config_xsp.yaml\nA  infra/cron/gateway_minute_backfill.cron\n M infra/grafana/dashboards/butterfly_trade_detail.json\n M infra/grafana/dashboards/butterfly_trading.json\n M infra/grafana/dashboards/performance.json\nA  tests/test_gateway_minute_backfill.py\nA  tools/gateway_minute_backfill.py\nA  tools/run_gateway_minute_backfill.sh"
+    },
+    "database_service": {
+      "id": "85fd8c7d5bc955bf2909fb5f06ad321ad2739c6547a018c2fe82f8231569e318",
+      "image_id": "sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+      "configured_image": "timescale/timescaledb:latest-pg16",
+      "state": "running",
+      "health": "healthy",
+      "started_at": "2026-10-06T05:36:46.814798382Z",
+      "project": "monitoring",
+      "service": "timescaledb",
+      "ports": {
+        "5432/tcp": [
+          {
+            "HostIp": "127.0.0.1",
+            "HostPort": "5432"
+          }
+        ]
+      },
+      "image_identity": {
+        "id": "sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+        "repo_digests": [
+          "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6"
+        ],
+        "architecture": "amd64"
+      }
+    },
+    "app_services": {
+      "butterfly_ndx_app": {
+        "id": "1cde9f04d55cf5da3b28ad9cc45e7fab28889fe89d875350fb3052bc65a2d790",
+        "image_id": "sha256:1fbc1ab3aed0aec85bcccab9e5009679789baab10fc333cfd0e4636ef1e7cc61",
+        "configured_image": "sha256:1fbc1ab3aed0aec85bcccab9e5009679789baab10fc333cfd0e4636ef1e7cc61",
+        "state": "running",
+        "started_at": "2026-10-08T00:20:53.5404703Z",
+        "project": "infra",
+        "service": "app_ndx",
+        "ports": {
+          "8000/tcp": [
+            {
+              "HostIp": "127.0.0.1",
+              "HostPort": "8001"
+            }
+          ]
+        }
+      },
+      "butterfly_spx_app": {
+        "id": "65a3d2e3bd0be00631cfce33a060818264a8732cf82f0a2d33919b408edc23f4",
+        "image_id": "sha256:4771356b52d76788c1e5766b54c6a146ab5600d1e5eac7c2c04c2c98199cad0d",
+        "configured_image": "sha256:4771356b52d76788c1e5766b54c6a146ab5600d1e5eac7c2c04c2c98199cad0d",
+        "state": "running",
+        "started_at": "2026-10-04T21:21:27.226141891Z",
+        "project": "infra",
+        "service": "app_spx",
+        "ports": {
+          "8000/tcp": [
+            {
+              "HostIp": "127.0.0.1",
+              "HostPort": "8000"
+            }
+          ]
+        }
+      },
+      "butterfly_xsp_app": {
+        "id": "9cc8f46e1c9a71d13129fbbf1bcf00684269ee764efa9bfc3175207ee5acd901",
+        "image_id": "sha256:df144a93aaa2b71d8f773820acc8f11af85acaaa135f873c86967794f5fd4f35",
+        "configured_image": "sha256:df144a93aaa2b71d8f773820acc8f11af85acaaa135f873c86967794f5fd4f35",
+        "state": "running",
+        "started_at": "2026-10-12T20:13:09.86985708Z",
+        "project": "infra",
+        "service": "app_xsp",
+        "ports": {
+          "8000/tcp": [
+            {
+              "HostIp": "127.0.0.1",
+              "HostPort": "8003"
+            }
+          ]
+        }
+      }
+    },
+    "health": {
+      "8000/health": {
+        "http": 200,
+        "status": "ok",
+        "service": "SPX"
+      },
+      "8000/ready": {
+        "http": 200,
+        "status": "ready",
+        "service": null
+      },
+      "8001/health": {
+        "http": 200,
+        "status": "ok",
+        "service": "NDX"
+      },
+      "8001/ready": {
+        "http": 200,
+        "status": "ready",
+        "service": null
+      },
+      "8003/health": {
+        "http": 200,
+        "status": "ok",
+        "service": "XSP"
+      },
+      "8003/ready": {
+        "http": 200,
+        "status": "ready",
+        "service": null
+      }
+    },
+    "disk": "Mounted on    1B-blocks        Used       Avail Use%\n/          102888095744 80768049152 22103269376  79%\n/          102888095744 80768049152 22103269376  79%",
+    "database_state": {
+      "postgres": "16.11",
+      "timescaledb": "2.25.2",
+      "research_schema_present": false,
+      "observer_roles_present": 0,
+      "database_bytes": 8359875043,
+      "open_trades": [],
+      "nonterminal_intents": [],
+      "todays_intents": []
+    },
+    "ndx_log_and_uniqueness_supplement": {
+      "observed_utc": "2026-10-16T04:46:38.380425+00:00",
+      "scope": "NDX-only categorical log/image-label check; no raw messages, environment, credentials or broker API",
+      "ndx_recent_logs": {
+        "command_exit_code": 0,
+        "lines": 11,
+        "errors": 0,
+        "warnings": 0,
+        "raw_messages_retained": false
+      },
+      "ndx_image_revision_label": null,
+      "matching_observer_cli_process_count": 0
+    },
+    "broker_state": {
+      "verified": false,
+      "reason": "existing helper initializes token-refreshing client; not executed under no-token-change scope; health/readiness and DB counts do not establish broker flatness"
+    },
+    "running_app_image_source_revision_attested": false,
+    "raw_logs_retained": false,
+    "source_config_dirt_preserved": true
+  },
+  "runs": {
+    "target-run-05": {
+      "path": "reports/research/ndx-02-observer-20261015/target-run-05",
+      "run_sha256": "f991188083827204580daa53e9c64924d94febf2c01aa2e9be855d849ce657a3",
+      "all_manifest_members_verified": true
+    },
+    "target-run-06": {
+      "path": "reports/research/ndx-02-observer-20261015/target-run-06",
+      "run_sha256": "b9752d998d974e80958f2cc086175d4bfce06f1209471a0fe095ac62f002328c",
+      "all_manifest_members_verified": true
+    },
+    "target-run-07": {
+      "path": "reports/research/ndx-02-observer-20261015/target-run-07",
+      "run_sha256": "b35de31e6c03f86c685bd8571d91bf6da2676132ee0546f2971ed3dd7286e2ed",
+      "all_manifest_members_verified": true
+    },
+    "target-resources-restore-run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/target-resources-restore-run-01",
+      "run_sha256": "464c0eaf8f36624c9b923bc09fff4cb532285469734dec2a66a0b0f9225dd4b8",
+      "all_manifest_members_verified": true
+    },
+    "target-resources-restore-run-02": {
+      "path": "reports/research/ndx-02-observer-20261015/target-resources-restore-run-02",
+      "run_sha256": "59a055fb3bf19c3ce99d013a5fb66ce805dc197aa489ab5fc0112986d6af9be1",
+      "all_manifest_members_verified": true
+    },
+    "target-entrypoint-source-review/run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/target-entrypoint-source-review/run-01",
+      "run_sha256": "1f0e397c73a83815b2a8dd551f3e2df3ba16d79f2ee96d6ef31800e71d3f9576",
+      "all_manifest_members_verified": true
+    },
+    "image-build-run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/image-build-run-01",
+      "run_sha256": "242c764f2ef761004783fe4285f80ed7e222e648a2c488a283aa586afde5f1ae",
+      "all_manifest_members_verified": true
+    },
+    "image-build-run-02": {
+      "path": "reports/research/ndx-02-observer-20261015/image-build-run-02",
+      "run_sha256": "80a4152557f4da85fff9d65fadade76be34eb57553e2ed4a7eefbb1d30f4aeec",
+      "all_manifest_members_verified": true
+    },
+    "image-build-run-03": {
+      "path": "reports/research/ndx-02-observer-20261015/image-build-run-03",
+      "run_sha256": "dd07f084725434f7316efe9e181e667318d2c1408442849d1bfc585d08e35742",
+      "all_manifest_members_verified": true
+    },
+    "image-enabled-smoke-run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/image-enabled-smoke-run-01",
+      "run_sha256": "3cfc510f764fbfc8e6fe07d6bc74282603276c4564d721de9b1ab30859ff74b2",
+      "all_manifest_members_verified": true
+    },
+    "helios-readonly-review-run-01": {
+      "path": "reports/research/ndx-02-observer-20261015/helios-readonly-review-run-01",
+      "run_sha256": "cc7313443499f18aac39788d81159fcda2b3f8e1a2dc191f3d4e4bf4a48d9d80",
+      "all_manifest_members_verified": true
+    },
+    "helios-readonly-review-run-02": {
+      "path": "reports/research/ndx-02-observer-20261015/helios-readonly-review-run-02",
+      "run_sha256": "16cbfeb9148e02e92e9f2e1efc42231a649ef490496f8439c0a3a7464460d3f7",
+      "all_manifest_members_verified": true
+    }
+  },
+  "all_task_owned_test_containers_stopped": true,
+  "independent_backup_validated": false,
+  "new_historical_coverage": 0,
+  "replay_eligible": false,
+  "historical_paths_eligible": 0,
+  "remaining_activation_decisions": [
+    "current broker positions/orders evidence under approved token scope",
+    "real one-shot exact NDXP/session/calendar/identity/build/config context",
+    "reviewed transfer/release/connectivity and dedicated research role/secret references",
+    "storage reserve/WAL policy and evidence owner/independent backup expectations",
+    "fresh named-target preflight before any actual live DDL/capture approval"
+  ],
+  "final_review_path": "docs/research/ndx-strategy/NDX-02-observer-operational-review.md",
+  "final_review_sha256": "3cb85e33e6b2664b57aea8a6726d784e3bdde776317dca59eafdfdc7f4796882"
+}

@@ -1,0 +1,10 @@
+{
+  "snapshot_id": "helios-ndx-source-20261015",
+  "retrieved_utc": "2026-10-15T17:33:15.893419+00:00",
+  "image_identity": "sha256:1fbc1ab3aed0aec85bcccab9e5009679789baab10fc333cfd0e4636ef1e7cc61 sha256:1fbc1ab3aed0aec85bcccab9e5009679789baab10fc333cfd0e4636ef1e7cc61 2026-10-08T00:20:52.653119939Z",
+  "meaning": "Current Oct 15 container source, not a per-session historical runtime attestation",
+  "files": {
+    "container-source.tar.gz": "804cac00fe1bba2346cc5d61cfa05131da217a63bbedbfbe0758a2fe0f545d7b",
+    "repository-hashes.txt": "0d6e57433bdeb4a9149eb487a704ede36581b56f0607c690179b5211902b64c5"
+  }
+}

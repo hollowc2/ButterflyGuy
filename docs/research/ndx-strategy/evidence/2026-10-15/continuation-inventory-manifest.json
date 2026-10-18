@@ -1,0 +1,11 @@
+{
+  "provider": "Helios TimescaleDB read-only export",
+  "host": "billy@helios",
+  "query": "continuation-inventory.sql",
+  "files": {
+    "extract.csv": "14afa09e8848eda6d11a2c16bbe1dc7fe45821504af97a974b5c445ba3488d6d",
+    "continuation-inventory.sql": "1ac4ff077a1d91d339b098522d056e08ad9ce02521211fca323fddbd0f3d0a6a"
+  },
+  "meaning": "Inventory only, exact recorded symbols and expiration. Quotes are not imported into R0; cadence, gaps and event freshness not validated.",
+  "snapshot_location": "/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-continuation-inventory-20261015"
+}

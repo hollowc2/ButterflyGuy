@@ -1,0 +1,16 @@
+{
+  "created_utc": "2026-10-16T04:01:32.508222+00:00",
+  "gate": "incomplete",
+  "run": "reports/research/ndx-02-observer-20261015/target-run-03",
+  "run_sha256": "091f9ad002085c9bd623c8fa4b249f93b2fc4e45e519e79f1f89efbbb8ce1812",
+  "commands_sha256": "d4dfaa8c4678ddd5b7b4d755b00e8592abb4a4f48bd91d6dd8cfd9ba7c7be9dd",
+  "source_lock_verified": true,
+  "parent_output_hashes_verified": true,
+  "archive_copy_hashes_verified": true,
+  "actual_failure": "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory\n",
+  "executed_target_tests": 0,
+  "container_created": false,
+  "runtime_fallback_check": "podman, nerdctl, dockerd-rootless.sh and rootlesskit not available on PATH; containerd binary present but no alternative supported isolated runtime established",
+  "live_service_changes": false,
+  "next_action": "provide an available supported isolated container runtime; rerun unchanged contract-v2/source-lock-v2 into /tmp/ndx-timescale-observer-target/run-04"
+}

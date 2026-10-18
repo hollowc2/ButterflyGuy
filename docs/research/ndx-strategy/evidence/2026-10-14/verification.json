@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "checks": [
+    "53-trade recorded P&L reconciles",
+    "53-trade stress P&L reconciles",
+    "October 14 settlement hand accounting",
+    "October 13 paper and stress hand accounting",
+    "Every modeled exit follows its signal by at most 30 seconds",
+    "All six candidates fail both accounting modes on uninterrupted common paths",
+    "510174 complete observations retained; composite marks reconcile"
+  ],
+  "unit_tests": "28 passed: tests/test_state_machine.py tests/test_position_manager.py",
+  "canvas_typecheck": "passed: TypeScript against installed cursor/canvas declarations",
+  "graphify_update": "completed AST-only; SQL extraction skipped because tree_sitter_sql is not installed"
+}

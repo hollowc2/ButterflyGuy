@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "registered_utc": "2026-10-17T02:21:49.393177+00:00",
+  "authorization": "Corey: proceed after named disabled installation, dedicated permissions/credentials and non-market connectivity/storage validation",
+  "host": "helios",
+  "release": "/opt/ndx-observer-review/v1",
+  "image": "sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99",
+  "enabled": false,
+  "context_installed": false,
+  "secret_file": "/home/billy/.config/ndx-observer/observer.env",
+  "secret_owner": "billy mode 0600; parent 0700",
+  "new_login": "ndx_observer_capture",
+  "new_gateway_consumer": "ndx-timescale-observer-v1",
+  "gateway_registration": "stage new credential only; do not modify existing registry or restart gateway without named approval",
+  "storage_floor_bytes": 10737418240,
+  "backup_expectation": "existing Eros retention accepted; independent backup remains unestablished; additive research-only transaction does not alter pre-existing trading data; archive empty installed schema plus manifest",
+  "rollback": "keep disabled; stop only standalone observer if needed; retain append-only research data; no DROP, secrets rotation, existing service restarts or cleanup",
+  "sha256": {
+    "preflight.json": "6655572b16efdbc60290e99a39ceb5833b7e22db352569e72f0be4ceed8ee656",
+    "compose.yaml": "8a76e9953b19c6241bb6da8b6ecb7c2a2a0f53c0f07085f83c598f9d39d9b37c",
+    "roles.sql": "ac99f2d92f3be7e9871e733bccf03afb63168cd48916eb316036690d92fcdadb",
+    "schema.sql": "cd99bb8c27aedef901cbb9567cb09d3bd53e5fb22e7a9ba2e039176993bceb59",
+    "target-details.jsonl": "4efca0075effc474e84b042c383a4a5f49cc5443ed455ba7fac404c57af2ad4e",
+    "broker-audit.json": "732e6c1645de9fd4f8b1e723a25d59c190c0b4131336d7baaba1b43eec9ec378"
+  }
+}

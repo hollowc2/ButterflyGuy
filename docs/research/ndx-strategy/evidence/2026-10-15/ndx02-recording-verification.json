@@ -1,0 +1,92 @@
+{
+  "created_utc": "2026-10-15T23:52:54.986061+00:00",
+  "status": "isolated recording preparation implemented; target-engine/upstream integration and activation incomplete",
+  "starting_git_sha": "49da0284d24814ed2bc0838bbd543444b48019b9",
+  "initial_dirty": "Preserved prior NDX fidelity/provenance docs/source/tests/evidence and graph work",
+  "checks": [
+    {
+      "command": "NDX_FIDELITY_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_CONTINUATION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-minute-continuation-20261015-v2 NDX_EXECUTION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-r0-20261014 NDX_SUPPLEMENT=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-01-supplement-20261015 uv run --offline --frozen pytest tests/test_ndx_recording.py tests/test_ndx_provenance.py tests/test_ndx_quote_fidelity.py tests/test_ndx_quote_fidelity_raw.py tests/test_ndx_continuation.py tests/test_ndx_execution_audit.py tests/test_ndx_baseline.py tests/test_state_machine.py tests/test_position_manager.py -q",
+      "result": "136 passed, 0 skipped in 30.53 seconds"
+    },
+    {
+      "command": "uv run --offline --frozen ruff check .",
+      "result": "All checks passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "/home/corey/.cache/uv/archive-v0/Yo1tT0lFfjWucooJ/bin/graphify update .",
+      "result": "AST-only completed: 9574 nodes, 21812 edges, 358 communities",
+      "limitations": [
+        "Optional tree_sitter_sql absent: 22 SQL files contributed nothing",
+        "3 files yielded no symbols; 58 unclassified files skipped",
+        "Saved community labels stale; no semantic/API refresh or unrelated dependency installation"
+      ]
+    },
+    {
+      "command": "Local digest verification of final config/source lock and all run-01/run-02 outputs after closed-file archival",
+      "result": "all matched; original source copies preserved"
+    }
+  ],
+  "run_commands": {
+    "run-01": "/mnt/Repos/Trading/Butterflyguy/.venv/bin/python3 /mnt/Repos/Trading/Butterflyguy/tools/check_ndx_recording.py --input /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/recording-v1/producer.json --response /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/recording-v1/response.json --config /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/recording-v1/contract.json --source-lock /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/recording-v1/source-lock.json --output /tmp/ndx-recording-20261015/run-01",
+    "run-02": "/mnt/Repos/Trading/Butterflyguy/.venv/bin/python3 /mnt/Repos/Trading/Butterflyguy/tools/check_ndx_recording.py --input /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/recording-v1/producer.json --response /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/recording-v1/response.json --config /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/recording-v1/contract-v2.json --source-lock /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/recording-v1/source-lock-v2.json --output /tmp/ndx-recording-20261015/run-02"
+  },
+  "final_summary": {
+    "samples": 25,
+    "evidence_kind": "synthetic",
+    "new_historical_coverage": 0,
+    "publication_and_receipt_successes": 25,
+    "wall_seconds_min": 0.0018497799999863673,
+    "wall_seconds_max": 0.0028471310000099948,
+    "wall_seconds_p95_nearest_rank": 0.0021527559999867663,
+    "wall_seconds_total": 0.04967377100001613,
+    "cpu_seconds_total": 0.0483737539999998,
+    "process_peak_rss_kib_linux": 53652,
+    "closed_database_bytes": 446464,
+    "measurement_scope": "local synthetic 3-leg input; excludes export writes; no broker/Timescale",
+    "production_budget_validated": false,
+    "freshness_verified": false,
+    "replay_eligible": false
+  },
+  "archive": "Executed on /tmp tmpfs; closed complete trees copied to Eros NFS reports; run/output hashes match original local runs. No live shared SQLite-on-NFS approval.",
+  "artifacts_sha256": {
+    "reports/research/ndx-02-recording-20261015/run-01/run.json": "0e27d2ae2b8dfdc79501b41b3adc9979e9a1c31b31bb9d38920e9f8387f391e1",
+    "reports/research/ndx-02-recording-20261015/run-02/run.json": "1d8c0a7979c20bf1e3eb0650b418f901d367873ab0e46eb134f30eaf8f62930a",
+    "reports/research/ndx-02-recording-20261015/run-02/summary.json": "29db7ca5c54bf22e9d1762d318ee139aa76c09360296bfb6f6e9e02b245c3734",
+    "docs/research/ndx-strategy/recording-v1/contract.json": "d023474d3ca862870f60a7ff77cb973bccb793d50db23f61645f1727095c0233",
+    "docs/research/ndx-strategy/recording-v1/source-lock.json": "1c4df99a88ff8e1d60563c87ac43b6e254fd346cac19c23de62e7757a12c12c6",
+    "docs/research/ndx-strategy/recording-v1/contract-v2.json": "1008250ef2e084f39695eb4f136adf6855a55dd3c9961d3fe15ae5f11de3cd29",
+    "docs/research/ndx-strategy/recording-v1/source-lock-v2.json": "dc1dcf830cb8882378db152fdb610669b2c3dba0a38ffa1f7d72b842c93e2bd6",
+    "docs/research/ndx-strategy/NDX-02-recording-implementation.md": "37f3e55ad54aac985b157240e58397bfb027f71df3ac6e75cfcc5989e0578f80",
+    "docs/research/ndx-strategy/NDX-02-recording-upstream-review.md": "f3808cac29520b96c2e7b314af6731e4f5984a01b9b441db36f665f3ae444f3a",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-recording-upstream-source-trace.json": "924aff5587ea641fc14ecef99e5630ef192380bdde8905efb66a2278c71872be",
+    "docs/research/ndx-strategy-development.md": "2a97bd3691c077bd7c9736cacef3353ff9d48ebc6b677ca0d10258680d389e9a",
+    "docs/research/ndx-strategy/README.md": "f9b077e745f95ba44029c265d798348b381982835a5bb70117b800753489d4e8"
+  },
+  "corrections": [
+    "Run-01 succeeded; a new test had a long line. Preserved run/source lock. Run-02 uses line-wrapped test, correction-parent verification and corrected reproduction paths; no recording-semantic or parameter change."
+  ],
+  "focused_tests": "23 real SQLite checks, including actual deferred COMMIT failure and child os._exit before commit; no mock-only transaction claim",
+  "not_tested": [
+    {
+      "scope": "PostgreSQL/TimescaleDB engine and live collector integration",
+      "reason": "Not implemented by this standalone SQLite prototype; local PostgreSQL executables absent and Docker daemon unavailable. No service started or packages installed."
+    },
+    {
+      "scope": "Operational capture, production resource/retention budgets and clock attestation",
+      "reason": "No activation authorized; native response envelope and target integration remain unresolved."
+    }
+  ],
+  "upstream_source_review": "Read-only local Git objects from pinned 0d0125e51266740de0f43c72b540002a4dcfc25d; separate hashed source trace; no other-repository modifications or remote access",
+  "unchanged": [
+    "Frozen historical contracts/outputs",
+    "All 17 historical paths remain ineligible",
+    "Trading/runtime configuration, limits, execution, routing, credentials, account guards and paper/live mode"
+  ],
+  "no_new_historical_coverage": true,
+  "no_operational_actions": true,
+  "next_action": "Review/implement actual native-response preservation and target DB/consumer integration with explicit age-reference/build/cache provenance; isolated target-engine and real-size resource/drop tests precede named-target preflight/activation authorization."
+}

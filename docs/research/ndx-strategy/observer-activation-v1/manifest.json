@@ -1,0 +1,12 @@
+{
+  "model": "ndx-observer-activation-proposal-v1",
+  "sha256": {
+    "README.md": "6aa2b1c98947be44647093c68bf13bbd6943a579eabfd200d9906c8b76e0298c",
+    "capture-policy.json": "64d7d5e6bedd96a674ec8f26b4cfcb7a0ebef227856a0f88986b486245343b52",
+    "compose.yaml": "b8ca58aa6262f85d38250d39ad0734be9eff9f4c1bc7c2c805ad99a02df52b71",
+    "context.json": "42d7bcc158b505a2ab47315b0b00c0c12e7d3f72b3cc4cab4a9bed5eaea54db4",
+    "helios-context-observation.json": "27760acb243355cd9bb69945d4414e7a65b98a2120c3d993951139996835efd0",
+    "readonly-context-probe.py.txt": "c67303ecf0078d194c79d52118539db6bed9a3e48bc2fe03ea5c678c87928fbb",
+    "verification.json": "3b7c6cbdbfbf1325aab11c156d6f7f85d75753a295cd1f99e4204dace26f82b1"
+  }
+}

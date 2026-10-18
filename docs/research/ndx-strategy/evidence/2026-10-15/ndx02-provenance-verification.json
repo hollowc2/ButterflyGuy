@@ -1,0 +1,76 @@
+{
+  "created_utc": "2026-10-15T21:04:45.173599+00:00",
+  "status": "bounded offline provenance specification complete; full NDX-02 remains open",
+  "starting_git_sha": "49da0284d24814ed2bc0838bbd543444b48019b9",
+  "starting_dirty": "Existing living plan/index, fidelity source/tests/docs/evidence and graph modifications preserved; no reset or commit.",
+  "registration_utc": "2026-10-15T21:01:53.455178+00:00",
+  "checks": [
+    {
+      "command": "NDX_FIDELITY_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_CONTINUATION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-minute-continuation-20261015-v2 NDX_EXECUTION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-r0-20261014 NDX_SUPPLEMENT=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-01-supplement-20261015 uv run --offline --frozen pytest tests/test_ndx_provenance.py tests/test_ndx_quote_fidelity.py tests/test_ndx_quote_fidelity_raw.py tests/test_ndx_continuation.py tests/test_ndx_execution_audit.py tests/test_ndx_baseline.py tests/test_state_machine.py tests/test_position_manager.py -q",
+      "result": "113 passed, 0 skipped in 22.52 seconds; private snapshots enabled"
+    },
+    {
+      "command": "uv run --offline --frozen ruff check .",
+      "result": "All checks passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "/home/corey/.cache/uv/archive-v0/Yo1tT0lFfjWucooJ/bin/graphify update .",
+      "result": "AST-only update completed; 8925 nodes, 21076 edges, 337 communities",
+      "limitations": [
+        "tree_sitter_sql missing; 21 SQL files contributed no nodes",
+        "3 files yielded no symbols",
+        "58 unclassified files skipped",
+        "Community set changed; saved labels stale. No semantic/API refresh or optional package install performed."
+      ]
+    },
+    {
+      "command": "Local digest comparison of source-lock source/config and every run output_sha256 entry",
+      "result": "all matched"
+    }
+  ],
+  "run_command": "/mnt/Repos/Trading/Butterflyguy/.venv/bin/python3 -m butterfly_guy.research.ndx_provenance --input /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/provenance-v1/fixtures.jsonl --config /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/provenance-v1/contract.json --source-lock /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/provenance-v1/source-lock.json --output /mnt/Repos/Trading/Butterflyguy/reports/research/ndx-02-provenance-20261015/run-01",
+  "summary": {
+    "model": "NDX-provenance-v1",
+    "records": 18,
+    "status_counts": {
+      "sufficient": 6,
+      "insufficient": 8,
+      "rejected": 4
+    },
+    "synthetic_records": 18,
+    "new_historical_coverage": 0,
+    "historical_replay_eligibility_changed": false
+  },
+  "artifacts_sha256": {
+    "docs/research/ndx-strategy/provenance-v1/contract.json": "2c3d7a46c57c48fb6085a89771cba74857a7ce6916993f9d8f6716ae0ffa143b",
+    "docs/research/ndx-strategy/provenance-v1/source-lock.json": "627c10cd43a23434f625fb49f73e89c13ab7136507020a84b26f8f553908822c",
+    "docs/research/ndx-strategy/provenance-v1/manifest.json": "982630409b7ca68e022d7725ef8a1aff04c7e7740111860ccd816817e1a2ef16",
+    "reports/research/ndx-02-provenance-20261015/run-01/run.json": "bc3bed787450da14f5b093089f52ee7d2fcd732fc950a0f33b91d71075163ca8",
+    "reports/research/ndx-02-provenance-20261015/run-01/summary.json": "ef5b0bb3ea5e73f329646a79ef8639d572b95795613987e4c264afa1759bbf10",
+    "docs/research/ndx-strategy/NDX-02-prospective-provenance.md": "33a11008e5c4a85393431a8d76bd981de8350ef22a5871c96e432179f5ab8211",
+    "docs/research/ndx-strategy/NDX-02-provenance-reproduction.md": "3eb25c820070a7897b8d0c15b64d0c8397c79933dc37bd1b26bab8f2ae3ff0e1",
+    "docs/research/ndx-strategy/NDX-remaining-roadmap.md": "ded7ce31b7373bb3a5a636f1d1a8aa7cb851a2df26b012743dcc7400c8cb7f62",
+    "docs/research/ndx-strategy-development.md": "84e443031dad4d76cf0f268242401ad64450e66e80299492ec837c86064b0224",
+    "docs/research/ndx-strategy/README.md": "30ae09e5c2fee797e7d6b79615802de3969d241e223aa50cf8bce76b1735be76"
+  },
+  "verified_private_evidence": "All five manifests and required file membership, four parent run/output maps and source pins verified by checker and private-enabled tests; existing fidelity/raw/continuation/accounting/baseline suite passed.",
+  "frozen_failures": [],
+  "pre_registration_corrections": [
+    "Initial registration helper passed str to Path-only read_json; failed before any contract/output creation. Fixed before registration.",
+    "Two long lines and unused test import corrected before source lock."
+  ],
+  "limits": [
+    "18 fixtures including historical-shaped missingness are entirely synthetic; zero new coverage",
+    "Every result has false freshness/replay eligibility, no decision/fill and null earliest availability",
+    "All 17 historical trades remain ineligible for both prior replay contracts",
+    "Original historical bodies, age/reference clock attestation, synchronization, consumer receipt and complete producer deployment identity remain unavailable",
+    "Actual complex-order execution and official XQC remain separate gaps",
+    "Eros retention preserved; independent backup remains unestablished",
+    "No runtime integration, network/broker/DB operation, credential changes, capture activation, service restart, deployment, economic experiment or promotion"
+  ],
+  "next_action": "Review v1 DB complete-snapshot protocol, original-body boundary, clock assumptions and upstream ownership; separately scope Stage B recording integration with isolated failure/resource tests and activation/rollback plan. Operational activation requires separate authorization."
+}

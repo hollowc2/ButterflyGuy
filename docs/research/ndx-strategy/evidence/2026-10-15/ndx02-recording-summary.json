@@ -1,0 +1,17 @@
+{
+  "samples": 25,
+  "evidence_kind": "synthetic",
+  "new_historical_coverage": 0,
+  "publication_and_receipt_successes": 25,
+  "wall_seconds_min": 0.0018497799999863673,
+  "wall_seconds_max": 0.0028471310000099948,
+  "wall_seconds_p95_nearest_rank": 0.0021527559999867663,
+  "wall_seconds_total": 0.04967377100001613,
+  "cpu_seconds_total": 0.0483737539999998,
+  "process_peak_rss_kib_linux": 53652,
+  "closed_database_bytes": 446464,
+  "measurement_scope": "local synthetic 3-leg input; excludes export writes; no broker/Timescale",
+  "production_budget_validated": false,
+  "freshness_verified": false,
+  "replay_eligible": false
+}

@@ -1,0 +1,17 @@
+{
+  "started_utc": "2026-10-17T02:22:24.330500+00:00",
+  "enabled": false,
+  "capture_requests": 0,
+  "existing_services_restarted": false,
+  "gateway_registry_changed": false,
+  "status": "installed_disabled",
+  "schema_sha256": "cd99bb8c27aedef901cbb9567cb09d3bd53e5fb22e7a9ba2e039176993bceb59",
+  "installation_id": "d18ac329-cccf-4a57-93ba-ffc9759ed172",
+  "release": "/opt/ndx-observer-review/v1",
+  "secret_file": "/home/billy/.config/ndx-observer/observer.env",
+  "database_login": "ndx_observer_capture",
+  "gateway_consumer": "ndx-timescale-observer-v1",
+  "gateway_registration": "pending_restart_approval",
+  "context_installed": false,
+  "completed_utc": "2026-10-17T02:22:24.656739+00:00"
+}

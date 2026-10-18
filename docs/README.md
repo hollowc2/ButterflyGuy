@@ -58,6 +58,10 @@ New SPX research runs through the [canonical research core](research/research-co
 
 Current decision and verification records:
 
+- [NDX strategy development](research/ndx-strategy-development.md): living plan,
+  evidence, experiment decisions, and handoff for improving the NDX strategy.
+- [NDX-01 baseline reproduction](research/ndx-strategy/README.md): verified private
+  snapshot, offline command, coverage eligibility and accounting reconciliation.
 - [SPX session-quality ledger](research/spx-session-quality-ledger-2026-10-02.md).
 - [ThetaData development completion](research/thetadata-backtesting-completion-2026-10-01.md).
 - [Prospective v2 registration and activation](research/spx-prospective-v2-activation-2026-10-01.md).

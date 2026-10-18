@@ -1,0 +1,348 @@
+{
+  "cases": [
+    {
+      "case": "small",
+      "body_bytes": 2042,
+      "zlib_bytes": 434,
+      "sdk_only": [
+        {
+          "wall_seconds": 0.0009020099987537833,
+          "cpu_seconds": 0.0008901889999999857
+        },
+        {
+          "wall_seconds": 0.0003848409996862756,
+          "cpu_seconds": 0.0003786000000000067
+        },
+        {
+          "wall_seconds": 0.00032182299946725834,
+          "cpu_seconds": 0.0003223639999999639
+        }
+      ],
+      "sdk_observer_publish_read": [
+        {
+          "wall_seconds": 0.014737378000063472,
+          "cpu_seconds": 0.006293905000000044,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.014737378000063472
+        },
+        {
+          "wall_seconds": 0.00716409499909787,
+          "cpu_seconds": 0.004561690000000063,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.00716409499909787
+        },
+        {
+          "wall_seconds": 0.007051053999020951,
+          "cpu_seconds": 0.004139448999999962,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.007051053999020951
+        }
+      ],
+      "shutdown_seconds": 0.002304759000253398,
+      "counts": {
+        "lifecycle_events_journaled": 5,
+        "requests_started": 3,
+        "responses_received": 3,
+        "recording_accepted": 3,
+        "publication_calls": 3,
+        "published": 3,
+        "acknowledgements": 3,
+        "quotes_succeeded": 3,
+        "consumer_reads": 3,
+        "receipt_records": 3
+      },
+      "peak_retained_body_bytes": 2042,
+      "queue_items": 0,
+      "peak_connections_sampled": 2,
+      "db_process_before": {
+        "51939": {
+          "cpu_ticks": 0,
+          "rss_bytes": 14856192
+        },
+        "51940": {
+          "cpu_ticks": 0,
+          "rss_bytes": 15015936
+        }
+      },
+      "db_process_after": {
+        "51939": {
+          "cpu_ticks": 0,
+          "rss_bytes": 17739776
+        },
+        "51940": {
+          "cpu_ticks": 0,
+          "rss_bytes": 18452480
+        }
+      }
+    },
+    {
+      "case": "varied-5000",
+      "body_bytes": 1800259,
+      "zlib_bytes": 295815,
+      "sdk_only": [
+        {
+          "wall_seconds": 0.060684242998831905,
+          "cpu_seconds": 0.06028531199999998
+        },
+        {
+          "wall_seconds": 0.05606969600012235,
+          "cpu_seconds": 0.05562756400000002
+        },
+        {
+          "wall_seconds": 0.055708138999762014,
+          "cpu_seconds": 0.05527427400000007
+        }
+      ],
+      "sdk_observer_publish_read": [
+        {
+          "wall_seconds": 0.36125272500066785,
+          "cpu_seconds": 0.29304344400000004,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.36125272500066785
+        },
+        {
+          "wall_seconds": 0.3381944630000362,
+          "cpu_seconds": 0.27618415099999993,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.3381944630000362
+        },
+        {
+          "wall_seconds": 0.37606685499849846,
+          "cpu_seconds": 0.314206499,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.37606685499849846
+        }
+      ],
+      "shutdown_seconds": 0.003849253000225872,
+      "counts": {
+        "lifecycle_events_journaled": 5,
+        "requests_started": 3,
+        "responses_received": 3,
+        "recording_accepted": 3,
+        "publication_calls": 3,
+        "published": 3,
+        "acknowledgements": 3,
+        "quotes_succeeded": 3,
+        "consumer_reads": 3,
+        "receipt_records": 3
+      },
+      "peak_retained_body_bytes": 1800259,
+      "queue_items": 0,
+      "peak_connections_sampled": 2,
+      "db_process_before": {
+        "51941": {
+          "cpu_ticks": 0,
+          "rss_bytes": 14925824
+        },
+        "51942": {
+          "cpu_ticks": 0,
+          "rss_bytes": 15212544
+        }
+      },
+      "db_process_after": {
+        "51941": {
+          "cpu_ticks": 0,
+          "rss_bytes": 17547264
+        },
+        "51942": {
+          "cpu_ticks": 18,
+          "rss_bytes": 27561984
+        }
+      }
+    },
+    {
+      "case": "byte-boundary",
+      "body_bytes": 2097152,
+      "zlib_bytes": 2525,
+      "sdk_only": [
+        {
+          "wall_seconds": 0.0036847750016022474,
+          "cpu_seconds": 0.003666797000000166
+        },
+        {
+          "wall_seconds": 0.0034875359997386113,
+          "cpu_seconds": 0.0034714289999999703
+        },
+        {
+          "wall_seconds": 0.0036116179999226006,
+          "cpu_seconds": 0.0035937779999999364
+        }
+      ],
+      "sdk_observer_publish_read": [
+        {
+          "wall_seconds": 0.07725544800086936,
+          "cpu_seconds": 0.03485575299999999,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.07725544800086936
+        },
+        {
+          "wall_seconds": 0.05191061099867511,
+          "cpu_seconds": 0.030356867000000065,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.05191061099867511
+        },
+        {
+          "wall_seconds": 0.0671433879997494,
+          "cpu_seconds": 0.030261026000000024,
+          "quote_status": "success",
+          "recording_status": "published",
+          "receipt_recorded": true,
+          "consumer_lag_upper_bound_seconds": 0.0671433879997494
+        }
+      ],
+      "shutdown_seconds": 0.0018112750003638212,
+      "counts": {
+        "lifecycle_events_journaled": 5,
+        "requests_started": 3,
+        "responses_received": 3,
+        "recording_accepted": 3,
+        "publication_calls": 3,
+        "published": 3,
+        "acknowledgements": 3,
+        "quotes_succeeded": 3,
+        "consumer_reads": 3,
+        "receipt_records": 3
+      },
+      "peak_retained_body_bytes": 2097152,
+      "queue_items": 0,
+      "peak_connections_sampled": 2,
+      "db_process_before": {
+        "51944": {
+          "cpu_ticks": 0,
+          "rss_bytes": 14925824
+        },
+        "51945": {
+          "cpu_ticks": 0,
+          "rss_bytes": 15208448
+        }
+      },
+      "db_process_after": {
+        "51944": {
+          "cpu_ticks": 0,
+          "rss_bytes": 17547264
+        },
+        "51945": {
+          "cpu_ticks": 10,
+          "rss_bytes": 25636864
+        }
+      }
+    },
+    {
+      "case": "over-boundary",
+      "body_bytes": 2097153,
+      "zlib_bytes": 2525,
+      "sdk_only": [
+        {
+          "wall_seconds": 0.0038076949986134423,
+          "cpu_seconds": 0.003795957999999988
+        },
+        {
+          "wall_seconds": 0.0035741179999604356,
+          "cpu_seconds": 0.0035614090000000154
+        },
+        {
+          "wall_seconds": 0.003556233999916003,
+          "cpu_seconds": 0.0035422119999999335
+        }
+      ],
+      "sdk_observer_publish_read": [
+        {
+          "wall_seconds": 0.00630205100060266,
+          "cpu_seconds": 0.0043876380000000825,
+          "quote_status": "success",
+          "recording_status": "oversized",
+          "receipt_recorded": false,
+          "consumer_lag_upper_bound_seconds": null
+        },
+        {
+          "wall_seconds": 0.005232315999819548,
+          "cpu_seconds": 0.004197742999999976,
+          "quote_status": "success",
+          "recording_status": "oversized",
+          "receipt_recorded": false,
+          "consumer_lag_upper_bound_seconds": null
+        },
+        {
+          "wall_seconds": 0.00491954899916891,
+          "cpu_seconds": 0.00412027699999995,
+          "quote_status": "success",
+          "recording_status": "oversized",
+          "receipt_recorded": false,
+          "consumer_lag_upper_bound_seconds": null
+        }
+      ],
+      "shutdown_seconds": 0.002000448999751825,
+      "counts": {
+        "lifecycle_events_journaled": 8,
+        "requests_started": 3,
+        "responses_received": 3,
+        "recording_rejected": 3,
+        "quotes_succeeded": 3
+      },
+      "peak_retained_body_bytes": 0,
+      "queue_items": 0,
+      "peak_connections_sampled": 2,
+      "db_process_before": {
+        "51947": {
+          "cpu_ticks": 0,
+          "rss_bytes": 14925824
+        },
+        "51948": {
+          "cpu_ticks": 0,
+          "rss_bytes": 15208448
+        }
+      },
+      "db_process_after": {
+        "51947": {
+          "cpu_ticks": 0,
+          "rss_bytes": 17547264
+        },
+        "51948": {
+          "cpu_ticks": 0,
+          "rss_bytes": 15486976
+        }
+      }
+    }
+  ],
+  "server_version": "PostgreSQL 16.2 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 10.2.1 20210130 (Red Hat 10.2.1-11), 64-bit",
+  "timescaledb": null,
+  "database_size_growth_bytes": 1843200,
+  "python_peak_rss_kib_linux": 117916,
+  "limits": {
+    "body_bytes": 2097152,
+    "storage_bytes": 536870912,
+    "operation_seconds": 10,
+    "startup_seconds": 5,
+    "shutdown_seconds": 3,
+    "journal_seconds": 1
+  },
+  "db_cpu_ticks_per_second": 100,
+  "storage": "local /tmp fixture; not network/durable storage validation",
+  "exact_target_gate": "not_tested_by_this_runner",
+  "production_budget_validated": false,
+  "replay_eligible": false,
+  "new_historical_coverage": 0,
+  "limitations": [
+    "RSS/CPU are endpoint samples, not DB peak profiling",
+    "consumer lag is an operation-duration upper bound, not earliest availability",
+    "synchronous parsing cannot be preempted by asyncio timeouts",
+    "varied random hex is not a production compression estimate",
+    "pressure/outage/cancellation mechanisms are covered by separately recorded tests"
+  ]
+}

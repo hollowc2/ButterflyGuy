@@ -1,0 +1,11 @@
+{
+  "snapshot_id": "ndx-01-supplement-20261015",
+  "provider": "Helios TimescaleDB; read-only provenance supplement, not substituted R0 observations",
+  "retrieved_utc": "2026-10-15T17:18:38.221220+00:00",
+  "files": {
+    "supplement.csv": "944e46f5830c41a2228c400072401815c2b46c9e0d0a0446a609ea34d0f55fb4",
+    "supplement.sql": "a7c662259c2d22547973cc05644476c25a3cb93323d74543c8104cde7488135b",
+    "trade-222-events.sql": "ec413ebaa336c0bb9ce8389389e3f9bb06eea49da8cbd5ad82801560dc7d29f7",
+    "trade-222-events.csv": "2934ecaed56fbbaa9d4a8ba82675c3d2bbbe1b5ec316ce62b6f683f108fe6b3d"
+  }
+}

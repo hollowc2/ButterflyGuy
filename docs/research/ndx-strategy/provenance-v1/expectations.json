@@ -1,0 +1,74 @@
+{
+  "01-direct-complete": {
+    "status": "sufficient",
+    "reason_contains": null
+  },
+  "02-db-complete": {
+    "status": "sufficient",
+    "reason_contains": null
+  },
+  "03-events-during-pass": {
+    "status": "sufficient",
+    "reason_contains": null
+  },
+  "04-fetch-without-receipt": {
+    "status": "insufficient",
+    "reason_contains": "consumer_availability_unknown"
+  },
+  "05-partial-null-and-zero": {
+    "status": "insufficient",
+    "reason_contains": "missing_leg:"
+  },
+  "06-old-zero-size": {
+    "status": "sufficient",
+    "reason_contains": "zero_bid_size:"
+  },
+  "07-signed-marks": {
+    "status": "sufficient",
+    "reason_contains": null
+  },
+  "08a-incomplete": {
+    "status": "rejected",
+    "reason_contains": "incomplete_or_mismatched_legs"
+  },
+  "08b-duplicate-leg": {
+    "status": "rejected",
+    "reason_contains": "duplicate_leg"
+  },
+  "08c-wrong-identity": {
+    "status": "rejected",
+    "reason_contains": "instrument_identity_mismatch:"
+  },
+  "08d-out-of-order": {
+    "status": "rejected",
+    "reason_contains": "wall_clock_reversal:"
+  },
+  "09-quote-success-meta-failure": {
+    "status": "insufficient",
+    "reason_contains": "publication_incomplete_quote_and_metadata_separate"
+  },
+  "10-transaction-start-only": {
+    "status": "insufficient",
+    "reason_contains": "transaction_start_is_not_commit_or_visibility"
+  },
+  "11a-clock-discontinuity": {
+    "status": "insufficient",
+    "reason_contains": "clock_discontinuity:"
+  },
+  "11b-incompatible-domains": {
+    "status": "insufficient",
+    "reason_contains": "cross_domain_order_unproven:"
+  },
+  "12-after-close-gap-no-later": {
+    "status": "sufficient",
+    "reason_contains": "receipt_after_close_no_decision_or_fill"
+  },
+  "13-read-failure": {
+    "status": "insufficient",
+    "reason_contains": "consumer_read:failed"
+  },
+  "14-historical-insufficient": {
+    "status": "insufficient",
+    "reason_contains": "original_response_missing"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "model": "NDX-observer-image-enabled-smoke-v1",
+  "registered_utc": "2026-10-16T04:45:52.741687+00:00",
+  "scope": "new private DB fixture, synthetic mock gateway and research image only; no credentials or live activation",
+  "observer_image": "sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99",
+  "database_image": "timescale/timescaledb@sha256:0af03ecf697825f6ddae76fd275d16bf46007bed6d00eb3d754779cb7db96fa6",
+  "target_source_lock_sha256": "898354a0c35792a273e9a2c5b3a50abeee5e59ac33b4d1beebfd45950a840a30",
+  "body": "docs/research/ndx-strategy/postgres-v1/native-synthetic.json",
+  "universe": "docs/research/ndx-strategy/postgres-v1/universe.json",
+  "input_sha256": {
+    "docs/research/ndx-strategy/postgres-v1/native-synthetic.json": "702d9aee35020c19844ba3938d47ccd6f57183041be0b252ec0cbf8454a84f6c",
+    "docs/research/ndx-strategy/postgres-v1/universe.json": "e9d168a6476f3a8997aeacadce30146a58d7706d3953568d93661b7ab806efc6"
+  },
+  "checker_sha256": "361dd3cc358b5c4f0b6dec6c754a74d3f94091b0bd6a77724ddec2e09587fef8",
+  "image_build_parent_run_sha256": "dd07f084725434f7316efe9e181e667318d2c1408442849d1bfc585d08e35742",
+  "checks": [
+    "one SDK GET",
+    "exact native bytes and signed -4.02 composite",
+    "restricted-role atomic publish/ack/read/receipt",
+    "false replay eligibility",
+    "both new fixture processes stopped"
+  ],
+  "runtime_bounds": {
+    "app_memory_bytes": 268435456,
+    "app_cpu": 0.5,
+    "app_pids": 64,
+    "db_memory_bytes": 1073741824,
+    "db_cpu": 1,
+    "db_data_tmpfs_bytes": 536870912,
+    "network": "none"
+  }
+}

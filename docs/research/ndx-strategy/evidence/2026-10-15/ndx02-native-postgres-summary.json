@@ -1,0 +1,40 @@
+{
+  "model": "NDX-native-postgres-check-v1",
+  "cases": [
+    {
+      "case": "native-small",
+      "contracts_per_body": 4,
+      "body_bytes": 2042,
+      "samples": 5,
+      "request_count": 5,
+      "wall_seconds_max": 0.01125884499924723,
+      "wall_seconds_p95_nearest_rank": 0.01125884499924723,
+      "cpu_seconds_total": 0.025686357999999965
+    },
+    {
+      "case": "sdk-contract-limit",
+      "contracts_per_body": 5000,
+      "body_bytes": 1295450,
+      "samples": 3,
+      "request_count": 3,
+      "wall_seconds_max": 0.3177010599993082,
+      "wall_seconds_p95_nearest_rank": 0.3177010599993082,
+      "cpu_seconds_total": 0.8002384470000001
+    }
+  ],
+  "table_rows": {
+    "quotes": 8,
+    "provenance": 8,
+    "publications": 8,
+    "journal": 24
+  },
+  "new_historical_coverage": 0,
+  "evidence_kind": "synthetic",
+  "database_size_growth_bytes": 352256,
+  "server_version": "PostgreSQL 16.2 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 10.2.1 20210130 (Red Hat 10.2.1-11), 64-bit",
+  "timescaledb_extension_available": false,
+  "process_peak_rss_kib_linux": 77392,
+  "resource_scope": "Native synthetic SDK parsing, actual PostgreSQL publish/read; excludes exports",
+  "production_budget_validated": false,
+  "replay_eligible": false
+}

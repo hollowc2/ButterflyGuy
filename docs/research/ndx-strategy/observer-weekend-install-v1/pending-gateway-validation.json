@@ -1,0 +1,1 @@
+{"existing_consumer_count": 3, "proposed_consumer": "ndx-timescale-observer-v1", "proposed_capability": "market_data:read", "proposed_priority": "background", "merged_document_valid": true, "live_registry_modified": false, "new_consumer_registered": false, "live_registry_sha256": "074e1a25088dec50bbbdf429c2c791f10f733e9fb5ea82826bc8643d7867a481"}

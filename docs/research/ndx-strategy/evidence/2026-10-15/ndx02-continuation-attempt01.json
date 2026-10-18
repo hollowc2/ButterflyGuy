@@ -1,0 +1,14 @@
+{
+  "snapshot_id": "ndx-minute-continuation-20261015",
+  "status": "failed",
+  "files": {
+    "acquisition-start.json": "40f5ccef1b2648519546f4f194df24f38d957c48de237992042c45698efd082a",
+    "cohort.json": "4064b835c8e55f5396f628ee07eacd438f298e02216a030113a7e8772aca15bc",
+    "failure.json": "ec99061bccd098cc4d4ee0a8e624d7f5651c2893125c1879796b45377020144b",
+    "schema/extract.csv": "6b7bb34d10e1eddc8a9fc4decd29d7636d73adf46dd6c32223a61585258d0599",
+    "schema/continuation-schema.sql": "4865b02870158c994ccda2365fa58654a6834c55e2f356db2014ce8b5d314880",
+    "schema/manifest.json": "a9007cea6f1bf8f4d71a5fc2c7fcdd9656ed410d79906d134471b97209fc57fd",
+    "prices/continuation-prices.sql": "4dddd2eff87c3e65f36ae705ba95cda6d278ae2693245b1049b635d98e97e906",
+    "prices/extract.csv": "cff6d9dc0078a407e1f224ea41db61fbc4e2f528e1e21a886b0e09a1ed7ef985"
+  }
+}

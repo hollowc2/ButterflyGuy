@@ -1,0 +1,21 @@
+{
+  "model": "ndx-observer-weekend-install-package-v1",
+  "archive_run_sha256": "b9107b948f04601ccf8e0a76d4602507f75b47c72ef58e8e56c51075423c7f86",
+  "archive_path": "reports/research/ndx-02-observer-weekend-20261017/run-01",
+  "sha256": {
+    "GATEWAY-RESTART-REVIEW.md": "18807fbd03fd6b0832fa9bc0d1bb5d1ccf626b8929845c10931e6b4525d29294",
+    "README.md": "410d51dc6192967538b5b3b3db50bef5405a1544564c6f6f3c2553a880894250",
+    "broker-audit.json": "732e6c1645de9fd4f8b1e723a25d59c190c0b4131336d7baaba1b43eec9ec378",
+    "compose.disabled.yaml": "318d7812aab8a881b57aaca6f9d442c31d14314c4184157ff67ffce585410ad5",
+    "compose.yaml": "8a76e9953b19c6241bb6da8b6ecb7c2a2a0f53c0f07085f83c598f9d39d9b37c",
+    "contract.json": "b532718c5bae47c8295fed8135f35572b9d56a59a47be6cea682b45b1c9a6b93",
+    "installation-result.json": "87a765023379274d5ede8e06072e39a0d204112f847686ebaa5178197b53080c",
+    "pending-gateway-validation.json": "084ba1be6945083f92936e5e39d5bbd8bcaba6c50225fa2ef76df00ab7effa74",
+    "postflight-result.json": "5b293f00f786e6be867357cf2796cba97b7c8c3a23eb2e2f70cb6b958c8f0d6c",
+    "preflight.json": "6655572b16efdbc60290e99a39ceb5833b7e22db352569e72f0be4ceed8ee656",
+    "roles.sql": "ac99f2d92f3be7e9871e733bccf03afb63168cd48916eb316036690d92fcdadb",
+    "schema.sql": "cd99bb8c27aedef901cbb9567cb09d3bd53e5fb22e7a9ba2e039176993bceb59",
+    "target-details.jsonl": "4efca0075effc474e84b042c383a4a5f49cc5443ed455ba7fac404c57af2ad4e",
+    "validation-result.json": "32e73622ad424f7f4455a42b9bcb4d0945adc84453c3bdff73c6a3188143bc42"
+  }
+}

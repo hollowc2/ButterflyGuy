@@ -1,0 +1,115 @@
+{
+  "created_utc": "2026-10-15T20:26:58.354954+00:00",
+  "task_status": "Bounded import/cadence/gap audit complete; no R0 or minute replay eligibility; NDX-02 liquidity remains open",
+  "verified_evidence": {
+    "evidence/ndx/ndx-r0-20261014": {
+      "verified_files": 347,
+      "manifest_sha256": "0599bbd58ea30246c3329113b12b00ca7ac36a0f4944ef7dd8ab785aac114967"
+    },
+    "evidence/ndx/ndx-01-supplement-20261015": {
+      "verified_files": 4,
+      "manifest_sha256": "da4d8beb577b506ab91c5989d76aedad395676f9dcb8c5ec3ca35bcabfdd7122"
+    },
+    "evidence/ndx/ndx-continuation-inventory-20261015": {
+      "verified_files": 2,
+      "manifest_sha256": "44c1e57bb71abf348d60ef31dc63f6b7431bae5be534720a3686d5bd787cde07"
+    },
+    "evidence/ndx/ndx-minute-continuation-20261015": {
+      "verified_files": 8,
+      "manifest_sha256": "265d271efdcdc6145d6008c4c67271e3a4fd5d9115bf7acc6324ab524a53780d"
+    },
+    "evidence/ndx/ndx-minute-continuation-20261015-v2": {
+      "verified_files": 11,
+      "manifest_sha256": "2332897f0d59377b9acf83f87eaadd7229048224b812db4c719ba4999f7b55e1"
+    },
+    "reports/research/ndx-01-20261015/run-03": {
+      "outputs_verified": 12,
+      "run_sha256": "88374e4139c034ac6e435df96be41e2ab69873fc16f4fb9f9a9cf72099b95cee"
+    },
+    "reports/research/ndx-02-20261015/run-02": {
+      "outputs_verified": 8,
+      "run_sha256": "9ec28b43c990131a5e4a6baa40894e771c4e732549541658c72dd4f93e7f5261"
+    },
+    "reports/research/ndx-02-continuation-20261015/run-01": {
+      "outputs_verified": 9,
+      "run_sha256": "5ff727a579cc1af46fdd41d888502a78d638a4bd9f5ec2e45a4e08051c9aae92"
+    }
+  },
+  "source_pins_verified": 142,
+  "tests": {
+    "command": "NDX_CONTINUATION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-minute-continuation-20261015-v2 NDX_EXECUTION_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx NDX_EVIDENCE=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-r0-20261014 NDX_SUPPLEMENT=/mnt/Repos/Trading/Butterflyguy/evidence/ndx/ndx-01-supplement-20261015 uv run --offline --frozen pytest tests/test_ndx_continuation.py tests/test_ndx_execution_audit.py tests/test_ndx_baseline.py tests/test_state_machine.py tests/test_position_manager.py -q",
+    "result": "72 passed in 19.00s",
+    "continuation_tests": 15,
+    "existing_tests": 57,
+    "full_snapshot_policy": "socket.socket blocked; subprocess.run restricted to local git rev-parse HEAD and git status --short"
+  },
+  "lint": {
+    "command": "uv run --offline --frozen ruff check .",
+    "result": "All checks passed!"
+  },
+  "diff_check": {
+    "command": "git diff --check",
+    "result": "passed"
+  },
+  "graphify": {
+    "command": "/home/corey/.cache/uv/archive-v0/Yo1tT0lFfjWucooJ/bin/graphify update .",
+    "result": "AST-only completed: 7925 nodes, 19885 edges, 336 communities",
+    "warnings": [
+      "21 SQL files skipped; optional tree_sitter_sql absent",
+      "3 files yielded no symbols",
+      "Stale community labels; no LLM labeling used"
+    ],
+    "log_sha256": "712d28c46a1e1e5827543f3c7bc55c8275d9b66c04395ad04a51e7966b46e4ab"
+  },
+  "acquisition": {
+    "started_utc": "2026-10-15T20:19:52.965265+00:00",
+    "completed_utc": "2026-10-15T20:20:00.296467+00:00",
+    "raw_preserved": true
+  },
+  "failed_attempt": {
+    "path": "evidence/ndx/ndx-minute-continuation-20261015",
+    "reason": "First dynamic query hit fixed 60-second statement timeout, producing only a header. Retained as failed evidence; new literal per-session query/snapshot/contract; no tolerance/timeout widening."
+  },
+  "mechanical_checks": [
+    "All inventory IDs/counts/first/last timestamps match",
+    "Raw3364 = 1114*3 complete + 11*2 incomplete legs",
+    "157 negative provider composite marks retained unclipped",
+    "All publication/consumer availability timestamps remain null",
+    "All 17 R0 and minute-replay eligibility flags remain false",
+    "Versionable result copies match run bytes; prior baseline/accounting outputs unchanged"
+  ],
+  "not_performed": [
+    "Signals or strategy/P&L evaluation",
+    "Hold-after-exit replay",
+    "Parameter optimization or P&L-selected thresholds",
+    "Credential/account inspection, orders, runtime changes or deployment",
+    "New dependency installation or official settlement acquisition"
+  ],
+  "file_sha256": {
+    "src/butterfly_guy/research/ndx_continuation.py": "91eb792441d6a6b52602b6d2a3245cdb27f91bf3120f6fb22473d5569dc8e548",
+    "tests/test_ndx_continuation.py": "765195b1febd615aaf7af637db435c0ac1825c8e606f0338dcd253dc2ce5d0ec",
+    "docs/research/ndx-strategy/NDX-02-continuation.md": "d4b70012c794d5df12927bad3f868d6e68c7b4afae9f1e1bcc27463caa10a939",
+    "docs/research/ndx-strategy/NDX-02-continuation-reproduction.md": "bb31b1c57f5270f19024f9a13446739ec3b735151ef395f67e005fd427625735",
+    "docs/research/ndx-strategy/README.md": "817c64e8e5d9fc86638b551a88101efd226a2e91b5f1086a5c1acce9da9c01ea",
+    "docs/research/ndx-strategy-development.md": "ba190a000492dab9a36d6ff1455fb2ead1b5acbd4418818aeec17f34fc510762",
+    "docs/research/ndx-strategy/sql/continuation-schema.sql": "4865b02870158c994ccda2365fa58654a6834c55e2f356db2014ce8b5d314880",
+    "docs/research/ndx-strategy/sql/continuation-prices.sql": "4dddd2eff87c3e65f36ae705ba95cda6d278ae2693245b1049b635d98e97e906",
+    "docs/research/ndx-strategy/sql/continuation-prices-v2.sql": "20deedc173aaa521deec24d0a1aaf699f96ffc5223ee26b0db86979023075d0e",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-snapshot.json": "2332897f0d59377b9acf83f87eaadd7229048224b812db4c719ba4999f7b55e1",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-source-lock.json": "90a937fde64286366d7025ca6e80b1a39a5e509ca3a51661bb005b562a04b992",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-coverage.jsonl": "df814ab7ddf7a70b83747d12b00420c74f3d7fcf6ddc075e982b3d332494bfce",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-contract-v2.json": "70af72b2bbdb23ecd7cf01b37e6ecc881eea76c6fb1623675e2f7039532a5e5e",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-contract.json": "9a7f2a22ca92691664fd465eff16f45a1cbd10765910cc39a589d1d2e2668678",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-rejected-groups.jsonl": "774e37d4803e292700655ab21588c5c62e3fd7b571c11cd6ab3bf306eb3d76f0",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-summary.json": "c737412e97cc8351e414346161a4180691be8cd4d5c4a3a81a6bb57f6c3a0dba",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-attempt01.json": "265d271efdcdc6145d6008c4c67271e3a4fd5d9115bf7acc6324ab524a53780d",
+    "docs/research/ndx-strategy/evidence/2026-10-15/ndx02-continuation-run-01.json": "5ff727a579cc1af46fdd41d888502a78d638a4bd9f5ec2e45a4e08051c9aae92"
+  },
+  "graph_sha256": {
+    "graphify-out/GRAPH_REPORT.md": "54887a96ffd2e3d6d2c90cfdf21baad2f53e70ceb6bd49bc850f09ceadf426bf",
+    "graphify-out/graph.html": "46c772bcf502ff3029661287e337a5c316c06d21be17811e4f661130907141d6",
+    "graphify-out/graph.json": "86e8a2192500e7b497191e3f1fa4b86f675e09590863a645f3f826aca83faf94",
+    "graphify-out/manifest.json": "7c22bd4f09194a58406341bc234bc2c1d2bc1ecc2edcf1326c48dd754f650cd0"
+  },
+  "retention": "Accepted Eros NFS; independent backup not established"
+}
