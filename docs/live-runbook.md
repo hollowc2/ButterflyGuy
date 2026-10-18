@@ -99,6 +99,30 @@ rebuilt paper-only with flat `/ready` proof. Evidence is in
 The 2026-07-14 recovery tabletop passed. Real re-authentication requires the
 owner/browser; mocked expiry and external-alert delivery remain separate tests.
 
+## Deploy
+
+Deploys are manual, on Helios, for one exact commit. No CI runner touches the
+host, and the apps do not run the `/opt/butterflyguy` checkout HEAD.
+
+1. Wait for `CI / validate` and `Database Smoke / timescaledb` to pass on the
+   commit. Deploy outside market hours, and only the services that changed.
+2. Confirm flat: no `butterfly_trades` rows with `status = 'OPEN'`, no
+   non-terminal `broker_order_intents`, no live `trade_id` monitor lines in
+   `docker logs` (the DB check alone has missed a monitored trade), and
+   `docker exec -i butterfly_spx_app python - < tools/deploy_broker_flat_check.py`
+   exits 0 (Schwab shows no positions or active orders, read-only).
+3. SPX/NDX: `git archive` the commit into a release snapshot, build
+   `butterflyguy:release-<sha7>`, write a rollback compose override pinning the
+   current image digests, then `up -d --no-deps --no-build --pull never` the
+   changed services with a release-image override.
+4. XSP runs from `/opt/butterflyguy-releases/<sha7>/`; reuse the argv, rollback
+   argv and env from the latest release's `deployment/prepared-deployment.json`.
+5. `configs/config.yaml` is bind-mounted from the checkout, so a config change
+   ships only by updating that file there.
+6. Check `docker logs` for `migration_complete` and the expected startup events.
+   After hours `/ready` stays 503 (`gateway_market_data_unavailable`) until the
+   next open; that is expected.
+
 ## Rollback
 
 1. Revert the deployed commit.
