@@ -1374,3 +1374,14 @@ host restart). A first attempt stopped in preflight on that 503 with no change.
 No capture ran and the new key has not yet been exercised. See the
 [registration record](../../reports/research/ndx-02-observer-gateway-20261018/run-01/README.md).
 Next: fresh trading-day NDXP context and separate capture approval.
+
+### First prospective observer capture — 2026-10-19 UTC
+
+One approved acquisition for NDX paper trade 358 (`NDXP 261019C 29510/29610/29710`)
+was **accepted** at 16:08:55 UTC. Exactly one publication with a journaled commit
+acknowledgement and consumer receipt; trading apps and gateway undisturbed. The
+first prepare attempt failed harmlessly on a busybox `df` incompatibility and was
+fixed. The gateway served the request in 12 ms, so the recorded body most likely
+came from its option-chain cache; cache and freshness provenance is an open Stage C
+question. See the [capture record](ndx-strategy/observer-capture-20261019/README.md).
+Stage B is complete. Next: export and archive the research schema, then plan Stage C.

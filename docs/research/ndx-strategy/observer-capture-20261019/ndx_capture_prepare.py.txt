@@ -85,8 +85,11 @@ try:
  assert len(open_rows)==1,'multiple_open_selections'
  t=open_rows[0];symbols=[t['lower_symbol'],t['center_symbol'],t['upper_symbol']]
  # Storage admission
- st=run(['docker','exec','butterfly_timescaledb','sh','-c','df -B1 --output=avail "$PGDATA" | tail -1; du -sb "$PGDATA/pg_wal" | cut -f1']).split()
- r['storage']={'db_fs_free_bytes':int(st[0]),'wal_bytes':int(st[1]),'floor_bytes':FLOOR};assert int(st[0])>=FLOOR,'below_free_floor'
+ # busybox in the DB image: POSIX df -Pk / du -sk only (KiB)
+ st=run(['docker','exec','butterfly_timescaledb','sh','-c','df -Pk "$PGDATA" | tail -1 | awk \'{print $4}\'; du -sk "$PGDATA/pg_wal" | cut -f1']).split()
+ assert len(st)==2 and all(x.isdigit() for x in st),'storage_probe_unparseable'
+ free,wal=int(st[0])*1024,int(st[1])*1024
+ r['storage']={'db_fs_free_bytes':free,'wal_bytes':wal,'floor_bytes':FLOOR};assert free>=FLOOR,'below_free_floor'
  base=['docker','run','--rm','-i','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true','--memory','256m','--cpus','0.5','--pids-limit','64','--entrypoint','python']
  rs=json.loads(run(base[:2]+['--env-file',ENV]+base[2:]+['--network','monitoring_net',IMAGE,'-'],RESEARCH))
  r['research_before']=rs;assert rs['login']=='ndx_observer_capture' and rs['relation_bytes']<512*1024**2,'research_budget'
