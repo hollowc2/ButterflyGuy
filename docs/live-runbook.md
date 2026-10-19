@@ -118,7 +118,14 @@ host, and the apps do not run the `/opt/butterflyguy` checkout HEAD.
 4. XSP runs from `/opt/butterflyguy-releases/<sha7>/`; reuse the argv, rollback
    argv and env from the latest release's `deployment/prepared-deployment.json`.
 5. `configs/config.yaml` is bind-mounted from the checkout, so a config change
-   ships only by updating that file there.
+   ships only by updating that file there. The host cron jobs (report card,
+   performance page, realized-vs-implied) run the checkout's code against those
+   same configs, so fast-forward the checkout to the deployed commit
+   (`git merge --ff-only`, then `uv sync --frozen --no-dev`) whenever a config gains a
+   key. A new key with stale checkout code breaks every cron job in
+   `load_config()` (2026-10-05 → 10-16). Confirm with
+   `.venv/bin/python tools/check_runtime_configs.py`, which also runs daily at
+   13:00 UTC under `tools/cron_guard.py` and alerts Discord on failure.
 6. Check `docker logs` for `migration_complete` and the expected startup events.
    After hours `/ready` stays 503 (`gateway_market_data_unavailable`) until the
    next open; that is expected.
