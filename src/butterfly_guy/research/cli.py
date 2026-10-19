@@ -52,7 +52,7 @@ from butterfly_guy.research.holdout import VALIDATION
 from butterfly_guy.research.registry import Registry
 from butterfly_guy.research.report import dump_canonical, trade_record, write_run
 from butterfly_guy.research.simulate import DEFAULT_EXIT_DELAY, canonical_json, run_variants
-from butterfly_guy.research.tieset import TiesetScorer
+from butterfly_guy.research.tieset import NEIGHBOR_OFFSETS, TiesetScorer
 from butterfly_guy.research.variants import CATALOG, resolve
 
 REPORTS = REPO_ROOT / "reports" / "research"
@@ -283,7 +283,7 @@ def _simulate(args: argparse.Namespace, ds: Dataset, profile_name: str, names: l
     ctx = RunContext(load_spx_config(), features=features)
     floor = 0.0 if args.floor_stressed_exits else None
     costs = Costs(ctx.config.execution.paper_commission_per_contract, stressed_exit_floor=floor)
-    scorer = TiesetScorer() if tieset else None
+    scorer = TiesetScorer(neighbors=NEIGHBOR_OFFSETS) if tieset else None
     result = run_variants(SessionLoader(ds, profile), variants, ctx, start=start, end=end,
                           costs=costs, exit_delay=args.exit_delay, tieset=scorer)
     params = EvalParams(split=args.split, bootstrap_reps=args.reps,
