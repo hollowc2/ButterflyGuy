@@ -1,0 +1,167 @@
+# Step 1 of 2 for the 2026-10-19 session: build a fresh one-shot observer context
+# from today's real NDX paper selection. Run on Helios as billy, AFTER the NDX entry
+# window closes (07:45 PT = 14:45 UTC) and at least 45 minutes before the cash close:
+#   ssh billy@helios python3 - < ndx_capture_prepare.py
+# No gateway market-data request, no capture, no DB writes. Writes only new files in
+# /opt/ndx-observer-review/v1/sessions/<session>/ (package/ is exclusive-create, once). Prints no secrets.
+import datetime,hashlib,json,os,secrets,subprocess,urllib.error,urllib.request
+from pathlib import Path
+ROOT=Path('/opt/ndx-observer-review/v1');ENV='/home/billy/.config/ndx-observer/observer.env'
+IMAGE='sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99'
+REG=Path('/opt/schwab-gateway/secrets/schwab-gateway-keys.json')
+REG_SHA='32ac923c7b3d85b76d80d7d87b0041a02e226f48c2d9033da7e6fc483049a53c'
+APP_IMAGES={'butterfly_ndx_app':'sha256:1fbc1ab3aed0aec85bcccab9e5009679789baab10fc333cfd0e4636ef1e7cc61',
+ 'butterfly_spx_app':'sha256:4771356b52d76788c1e5766b54c6a146ab5600d1e5eac7c2c04c2c98199cad0d',
+ 'butterfly_xsp_app':'sha256:df144a93aaa2b71d8f773820acc8f11af85acaaa135f873c86967794f5fd4f35',
+ 'schwab_gateway_live':'sha256:2a2236931f85c79c27171d966c5486852f9aa9a5287806565bffd674576df35e'}
+FLOOR=10*1024**3;MARGIN=datetime.timedelta(minutes=45)
+sha=lambda b:hashlib.sha256(b).hexdigest()
+now=datetime.datetime.now(datetime.timezone.utc)
+r={'observed_utc':now.isoformat(),'scope':'read-only preparation; no market-data request or capture','checks':{}}
+def run(args,data=None,timeout=40):
+ p=subprocess.run(args,input=data,capture_output=True,text=True,timeout=timeout)
+ if p.returncode:raise RuntimeError('command_failed:'+' '.join(args[:3]))
+ return p.stdout
+def inspect(n):return json.loads(run(['docker','inspect','--format','{"image":{{json .Image}},"started":{{json .State.StartedAt}},"state":{{json .State.Status}},"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}}}',n]))
+def probe(url):
+ try:
+  with urllib.request.urlopen(url,timeout=5) as resp:return resp.status,json.loads(resp.read() or b'{}')
+ except urllib.error.HTTPError as e:return e.code,json.loads(e.read() or b'{}')
+SELECTION='''import asyncio,contextlib,datetime,hashlib,io,json
+result={"status":"failed"}
+try:
+ with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+  import asyncpg
+  from pathlib import Path
+  from butterfly_guy.core.config import load_config
+  from butterfly_guy.core.time_utils import session_date,is_trading_day,market_close_time,EASTERN,is_market_open
+  c=load_config("configs/config_ndx.yaml");day=session_date()
+  async def query():
+   conn=await asyncpg.connect(c.database.dsn,timeout=5,server_settings={"default_transaction_read_only":"on","statement_timeout":"5000","lock_timeout":"1000"})
+   try:return [dict(x) for x in await conn.fetch("SELECT id,trade_date,status,lower_symbol,center_symbol,upper_symbol,entry_time FROM butterfly_trades WHERE underlying='NDX' AND trade_date=$1 ORDER BY id",day)]
+   finally:await conn.close()
+  rows=asyncio.run(query())
+  result={"status":"completed","session":str(day),"paper_trading":c.execution.paper_trading,"underlying":c.strategy.underlying,"is_trading_day":is_trading_day(day),"market_open":is_market_open(),"close_utc":datetime.datetime.combine(day,market_close_time(day),tzinfo=EASTERN).astimezone(datetime.timezone.utc).isoformat(),"config_file_sha256":hashlib.sha256(Path("configs/config_ndx.yaml").read_bytes()).hexdigest(),"trades":rows}
+except BaseException as exc:result={"status":"failed","category":type(exc).__name__}
+print(json.dumps(result,default=str))
+'''
+RESEARCH='''import asyncio,json,os,asyncpg
+async def main():
+ conn=await asyncpg.connect(os.environ["NDX_OBSERVER_DATABASE_DSN"],timeout=5,server_settings={"default_transaction_read_only":"on","statement_timeout":"3000"})
+ try:return json.loads(await conn.fetchval("""SELECT json_build_object('login',current_user,'relation_bytes',(SELECT coalesce(sum(pg_total_relation_size(oid)),0) FROM pg_class WHERE relnamespace='ndx_provenance_v1'::regnamespace AND relkind='r'),'quotes',(SELECT count(*) FROM ndx_provenance_v1.quotes),'publications',(SELECT count(*) FROM ndx_provenance_v1.publications),'journal',(SELECT count(*) FROM ndx_provenance_v1.journal))"""))
+ finally:await conn.close()
+print(json.dumps(asyncio.run(main())))
+'''
+VALIDATE='''import json
+from pathlib import Path
+from butterfly_guy.research.ndx_observer import Acquisition
+raw=json.loads(Path("/run/ndx-observer/context.json").read_text());raw["expected_symbols"]=tuple(raw["expected_symbols"])
+Acquisition(**raw);print("ok")
+'''
+try:
+ # Services, registry, readiness
+ svc={n:inspect(n) for n in APP_IMAGES}
+ for n,img in APP_IMAGES.items():assert svc[n]['image']==img and svc[n]['state']=='running','service_'+n
+ assert svc['schwab_gateway_live']['health']=='healthy','gateway_health'
+ r['services']=svc
+ assert sha(REG.read_bytes())==REG_SHA,'registry_changed'
+ assert run(['docker','exec','schwab_gateway_live','sha256sum','/run/secrets/schwab-gateway-keys.json']).split()[0]==REG_SHA,'registry_container'
+ ready={}
+ for port in [8000,8001,8003]:
+  hc,_=probe(f'http://127.0.0.1:{port}/health');rc,body=probe(f'http://127.0.0.1:{port}/ready')
+  ready[str(port)]={'health':hc,'ready':rc,'reason':body.get('reason')};assert hc==200,f'health_{port}'
+ r['app_health']=ready;assert ready['8001']['ready']==200,'ndx_app_not_ready'
+ assert len(run(['docker','ps','--filter','name=ndx_observer','--format','{{.Names}}']).splitlines())==0,'observer_running'
+ assert not (ROOT/'context.json').exists(),'stale_root_context'
+ # Real selection from the NDX app (read-only)
+ sel=json.loads(run(['docker','exec','-i','butterfly_ndx_app','python','-'],SELECTION))
+ assert sel.get('status')=='completed','selection_probe_failed'
+ r['selection']=sel
+ assert sel['paper_trading'] is True and sel['underlying']=='NDX' and sel['is_trading_day'] and sel['market_open'],'session_not_open_paper_ndx'
+ assert sel['session']==now.date().isoformat(),'session_date_mismatch'
+ close=datetime.datetime.fromisoformat(sel['close_utc']);assert now<close-MARGIN,'too_close_to_close'
+ open_rows=[t for t in sel['trades'] if t['status']=='OPEN']
+ if not open_rows:raise RuntimeError('no_open_ndx_selection_today_skip_session')
+ assert len(open_rows)==1,'multiple_open_selections'
+ t=open_rows[0];symbols=[t['lower_symbol'],t['center_symbol'],t['upper_symbol']]
+ # Storage admission
+ # busybox in the DB image: POSIX df -Pk / du -sk only (KiB)
+ st=run(['docker','exec','butterfly_timescaledb','sh','-c','df -Pk "$PGDATA" | tail -1 | awk \'{print $4}\'; du -sk "$PGDATA/pg_wal" | cut -f1']).split()
+ assert len(st)==2 and all(x.isdigit() for x in st),'storage_probe_unparseable'
+ free,wal=int(st[0])*1024,int(st[1])*1024
+ r['storage']={'db_fs_free_bytes':free,'wal_bytes':wal,'floor_bytes':FLOOR};assert free>=FLOOR,'below_free_floor'
+ base=['docker','run','--rm','-i','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true','--memory','256m','--cpus','0.5','--pids-limit','64','--entrypoint','python']
+ rs=json.loads(run(base[:2]+['--env-file',ENV]+base[2:]+['--network','monitoring_net',IMAGE,'-'],RESEARCH))
+ r['research_before']=rs;assert rs['login']=='ndx_observer_capture' and rs['relation_bytes']<512*1024**2,'research_budget'
+ # Build session package (exclusive create)
+ day=sel['session'];d=ROOT/'sessions'/day/'package';d.mkdir(parents=True,exist_ok=False)
+ tag=f"ndx-{day.replace('-','')}-t{t['id']}-{secrets.token_hex(6)}"
+ policy={'version':1,'enabled':False,'host':'helios','deployment_root':str(ROOT),'session_dir':str(d),'observer_image':IMAGE,
+  'network':'monitoring_net','gateway_url':'http://schwab-gateway:8011','database_host':'timescaledb','database_port':5432,'database_name':'butterfly_guy',
+  'database_login':'ndx_observer_capture','group_role':'ndx_evidence_recorder','secret_env_file':ENV,'gateway_consumer':'ndx-timescale-observer-v1',
+  'gateway_registry_sha256':REG_SHA,'strategy_config_file_sha256':sel['config_file_sha256'],'selected_trade_id':t['id'],'selected_entry_time':t['entry_time'],
+  'session':day,'close_utc':sel['close_utc'],'one_shot':True,'retries':0,'automatic_rollover':False,'maximum_gateway_acquisitions':1,
+  'memory_bytes':268435456,'cpu':0.5,'pids':64,'body_bytes':2097152,'research_relation_pause_bytes':536870912,'operation_seconds':10,'startup_seconds':5,
+  'shutdown_seconds':3,'journal_seconds':1,'filesystem_free_floor_bytes':FLOOR,'capture_deadline_utc':(close-datetime.timedelta(minutes=15)).isoformat(),
+  'activation_state':'PREPARED_AWAITING_SEPARATE_CAPTURE_APPROVAL'}
+ pb=(json.dumps(policy,indent=2)+'\n').encode()
+ ctx={'snapshot_id':tag+'-snapshot','record_id':tag+'-record','request_id':tag+'-request','pass_id':tag+'-pass','acquisition_id':tag+'-acquisition',
+  'session':day,'expected_symbols':symbols,'calendar':'deployed-core-time-utils-cash-close-'+day.replace('-',''),'close_utc':sel['close_utc'],
+  'build_sha256':IMAGE.split(':')[1],'config_sha256':sha(pb),'consumer':'ndx-timescale-observer-v1','evidence_kind':'prospective','version':1,'parent_document_sha256':None}
+ cb=(json.dumps(ctx,indent=2)+'\n').encode()
+ compose=f'''# One-shot capture project for session {day}. Flag stays false here; only the
+# separately approved capture step overrides it with `run -e NDX_OBSERVER_ENABLED=true` once.
+name: ndx-observer-capture-{day.replace('-','')}
+services:
+  observer:
+    profiles: [manual-capture]
+    image: {IMAGE}
+    pull_policy: never
+    command: [python, -m, butterfly_guy.research.ndx_observer_cli]
+    environment:
+      NDX_OBSERVER_ENABLED: "false"
+      NDX_OBSERVER_GATEWAY_URL: http://schwab-gateway:8011
+      NDX_OBSERVER_CONTEXT_FILE: /run/ndx-observer/context.json
+    env_file:
+      - path: {ENV}
+        required: true
+    volumes:
+      - type: bind
+        source: {d}/context.json
+        target: /run/ndx-observer/context.json
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [monitoring_net]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    restart: "no"
+    stop_grace_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "1"
+networks:
+  monitoring_net:
+    external: true
+    name: monitoring_net
+'''.encode()
+ for name,data in [('capture-policy.json',pb),('context.json',cb),('compose.capture.yaml',compose)]:
+  with (d/name).open('xb') as f:f.write(data)
+ # Static validation, no network
+ assert run(base+['--network','none','-v',f'{d}/context.json:/run/ndx-observer/context.json:ro',IMAGE,'-'],VALIDATE).strip()=='ok','context_invalid'
+ run(['docker','compose','-f',str(d/'compose.capture.yaml'),'--profile','manual-capture','config','--no-env-resolution','--quiet'])
+ r['package']={'dir':str(d),'sha256':{n:sha((d/n).read_bytes()) for n in ['capture-policy.json','context.json','compose.capture.yaml']},
+  'selected_trade_id':t['id'],'expected_symbols':symbols,'close_utc':sel['close_utc'],'capture_deadline_utc':policy['capture_deadline_utc']}
+ r['status']='prepared'
+except BaseException as exc:
+ r['failure']=type(exc).__name__+':'+str(exc)[:100];r['status']='not_prepared'
+out=ROOT/'sessions'/(r.get('selection',{}).get('session') or now.date().isoformat())
+out.mkdir(parents=True,exist_ok=True)
+with (out/f'prepare-result-{int(now.timestamp())}.json').open('x') as f:json.dump(r,f,indent=2,default=str);f.write('\n')
+print(json.dumps(r,indent=2,default=str))

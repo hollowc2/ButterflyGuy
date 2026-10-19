@@ -1,0 +1,122 @@
+# Step 2 of 2: the single approved observer acquisition for today's prepared session.
+# Requires a successful ndx_capture_prepare.py package for today. Run on Helios as billy
+# only after Corey's separate capture approval, before the package's capture deadline:
+#   ssh billy@helios python3 - < ndx_capture_run.py
+# Exactly one observer invocation (one background option-chain request via the
+# registered consumer). No retry under any outcome. Prints no secrets.
+import datetime,glob,hashlib,json,os,subprocess,urllib.error,urllib.request
+from pathlib import Path
+ROOT=Path('/opt/ndx-observer-review/v1');ENV='/home/billy/.config/ndx-observer/observer.env'
+IMAGE='sha256:e55ee57b97aa8a1a624677876853574831fb83f8b6ea77bf1ca8228978669a99'
+REG=Path('/opt/schwab-gateway/secrets/schwab-gateway-keys.json')
+REG_SHA='32ac923c7b3d85b76d80d7d87b0041a02e226f48c2d9033da7e6fc483049a53c'
+SERVICES=['butterfly_ndx_app','butterfly_spx_app','butterfly_xsp_app','schwab_gateway_live']
+sha=lambda b:hashlib.sha256(b).hexdigest()
+now=datetime.datetime.now(datetime.timezone.utc);day=now.date().isoformat()
+S=ROOT/'sessions'/day;P=S/'package'
+r={'observed_utc':now.isoformat(),'session':day,'capture_attempted':False}
+def run(args,data=None,timeout=40,check=True):
+ p=subprocess.run(args,input=data,capture_output=True,text=True,timeout=timeout)
+ if check and p.returncode:raise RuntimeError('command_failed:'+' '.join(args[:3]))
+ return p
+def inspect(n):return json.loads(run(['docker','inspect','--format','{"image":{{json .Image}},"started":{{json .State.StartedAt}},"state":{{json .State.Status}},"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}null{{end}}}',n]).stdout)
+def probe(url):
+ try:
+  with urllib.request.urlopen(url,timeout=5) as resp:return resp.status,json.loads(resp.read() or b'{}')
+ except urllib.error.HTTPError as e:return e.code,json.loads(e.read() or b'{}')
+def health():
+ h={}
+ for port in [8000,8001,8003]:
+  hc,_=probe(f'http://127.0.0.1:{port}/health');rc,b=probe(f'http://127.0.0.1:{port}/ready');h[str(port)]={'health':hc,'ready':rc,'reason':b.get('reason')}
+ return h
+SELECTION='''import asyncio,contextlib,io,json
+result={"status":"failed"}
+try:
+ with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+  import asyncpg
+  from butterfly_guy.core.config import load_config
+  from butterfly_guy.core.time_utils import session_date,is_market_open
+  c=load_config("configs/config_ndx.yaml");day=session_date()
+  async def query():
+   conn=await asyncpg.connect(c.database.dsn,timeout=5,server_settings={"default_transaction_read_only":"on","statement_timeout":"5000","lock_timeout":"1000"})
+   try:return dict(await conn.fetchrow("SELECT id,status,lower_symbol,center_symbol,upper_symbol FROM butterfly_trades WHERE id=$1",TRADE_ID) or {})
+   finally:await conn.close()
+  result={"status":"completed","session":str(day),"market_open":is_market_open(),"trade":asyncio.run(query())}
+except BaseException as exc:result={"status":"failed","category":type(exc).__name__}
+print(json.dumps(result,default=str))
+'''
+RESEARCH='''import asyncio,json,os,asyncpg
+SNAP=SNAPSHOT
+async def main():
+ conn=await asyncpg.connect(os.environ["NDX_OBSERVER_DATABASE_DSN"],timeout=5,server_settings={"default_transaction_read_only":"on","statement_timeout":"3000"})
+ try:
+  q=lambda t:conn.fetchval(f"SELECT count(*) FROM ndx_provenance_v1.{t} WHERE snapshot_id=$1",SNAP)
+  kinds={k:n for k,n in await conn.fetch("SELECT kind,count(*) FROM ndx_provenance_v1.journal WHERE snapshot_id=$1 GROUP BY kind",SNAP)}
+  return {"publications_total":await conn.fetchval("SELECT count(*) FROM ndx_provenance_v1.publications"),
+   "quotes":await q("quotes"),"provenance":await q("provenance"),"publications":await q("publications"),"journal_kinds":kinds,
+   "quote_sha256":await conn.fetchval("SELECT sha256 FROM ndx_provenance_v1.quotes WHERE snapshot_id=$1",SNAP),
+   "response_sha256":await conn.fetchval("SELECT response_sha256 FROM ndx_provenance_v1.provenance WHERE snapshot_id=$1",SNAP),
+   "publication_sha256":await conn.fetchval("SELECT sha256 FROM ndx_provenance_v1.publications WHERE snapshot_id=$1",SNAP)}
+ finally:await conn.close()
+print(json.dumps(asyncio.run(main())))
+'''
+def research(snap):
+ args=['docker','run','--rm','-i','--env-file',ENV,'--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true','--memory','256m','--cpus','0.5','--pids-limit','64','--network','monitoring_net','--entrypoint','python',IMAGE,'-']
+ return json.loads(run(args,RESEARCH.replace('SNAPSHOT',repr(snap))).stdout)
+claim=None
+try:
+ # Package integrity
+ prep=[json.loads(Path(f).read_text()) for f in sorted(glob.glob(str(S/'prepare-result-*.json')))]
+ ok=[x for x in prep if x.get('status')=='prepared'];assert len(ok)==1,'no_unique_prepared_package'
+ pkg=ok[0]['package'];assert pkg['dir']==str(P)
+ for n,h in pkg['sha256'].items():assert sha((P/n).read_bytes())==h,'package_changed:'+n
+ ctx=json.loads((P/'context.json').read_text());pol=json.loads((P/'capture-policy.json').read_text())
+ assert ctx['config_sha256']==sha((P/'capture-policy.json').read_bytes()) and ctx['session']==day
+ r['acquisition_id']=ctx['acquisition_id'];r['snapshot_id']=ctx['snapshot_id']
+ deadline=datetime.datetime.fromisoformat(pol['capture_deadline_utc']);assert now<deadline,'past_capture_deadline'
+ assert not (S/'capture-claim.json').exists(),'already_claimed'
+ # Fresh preflight
+ pre={n:inspect(n) for n in SERVICES};r['pre_services']=pre
+ assert all(v['state']=='running' for v in pre.values()) and pre['schwab_gateway_live']['health']=='healthy','service_state'
+ for n in SERVICES:assert pre[n]['image']==ok[0]['services'][n]['image'],'image_changed:'+n
+ assert sha(REG.read_bytes())==REG_SHA,'registry_changed'
+ r['pre_health']=health();assert r['pre_health']['8001']['ready']==200,'ndx_app_not_ready'
+ sel=json.loads(run(['docker','exec','-i','butterfly_ndx_app','python','-'],SELECTION.replace('TRADE_ID',str(int(pol['selected_trade_id'])))).stdout)
+ r['selection']=sel;assert sel.get('status')=='completed' and sel['session']==day and sel['market_open'],'session_not_open'
+ t=sel['trade'];assert [t.get('lower_symbol'),t.get('center_symbol'),t.get('upper_symbol')]==ctx['expected_symbols'],'selection_changed'
+ assert t.get('status')=='OPEN','selected_trade_no_longer_open_skip'
+ assert len(run(['docker','ps','-a','--filter','name=ndx_observer_capture_','--format','{{.Names}}']).stdout.split())==0,'prior_capture_container'
+ before=research(ctx['snapshot_id']);r['research_before']=before
+ assert before['quotes']==before['provenance']==before['publications']==0 and not before['journal_kinds'],'snapshot_already_used'
+ # The single acquisition
+ claim=S/'capture-claim.json'  # exclusive one-shot claim; never removed
+ with claim.open('x') as f:json.dump({'claimed_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'acquisition_id':ctx['acquisition_id']},f);f.write('\n')
+ r['capture_attempted']=True;r['capture_started_utc']=datetime.datetime.now(datetime.timezone.utc).isoformat()
+ name='ndx_observer_capture_'+day.replace('-','')
+ p=run(['docker','compose','-f',str(P/'compose.capture.yaml'),'--profile','manual-capture','run','--name',name,'--no-deps','-T',
+  '-e','NDX_OBSERVER_ENABLED=true','observer'],timeout=90,check=False)
+ lines=[l for l in p.stdout.splitlines() if l.strip().startswith('{')]
+ r['observer_exit_code']=p.returncode
+ try:r['observer_output']=json.loads(lines[-1]) if lines else None
+ except ValueError:r['observer_output']='unparseable'
+ r['container']=json.loads(run(['docker','inspect','--format','{"status":{{json .State.Status}},"exit_code":{{json .State.ExitCode}},"oom":{{json .State.OOMKilled}}}',name]).stdout)
+ # Independent reconciliation
+ after=research(ctx['snapshot_id']);r['research_after']=after
+ r['acceptance']={
+  'exit_zero':p.returncode==0,
+  'output':r['observer_output']=={'quote_status':'success','recording_status':'published','receipt_journaled':True},
+  'one_quote_provenance_publication':after['quotes']==after['provenance']==after['publications']==1,
+  'one_attempt_one_ack':after['journal_kinds'].get('attempt')==1 and after['journal_kinds'].get('commit_ack')==1,
+  'publications_total_plus_one':after['publications_total']==before['publications_total']+1}
+ # Postflight
+ post={n:inspect(n) for n in SERVICES};r['post_services']=post
+ r['acceptance']['services_unchanged']=all((post[n]['image'],post[n]['started'])==(pre[n]['image'],pre[n]['started']) for n in SERVICES)
+ r['post_health']=health();r['acceptance']['apps_health_200']=all(v['health']==200 for v in r['post_health'].values())
+ r['acceptance']['ndx_ready_200']=r['post_health']['8001']['ready']==200
+ r['status']='accepted' if all(r['acceptance'].values()) else 'needs_reconciliation_do_not_retry'
+except BaseException as exc:
+ r['failure']=type(exc).__name__+':'+str(exc)[:100]
+ r['status']='needs_reconciliation_do_not_retry' if r['capture_attempted'] else 'not_captured'
+S.mkdir(parents=True,exist_ok=True)
+with (S/f'capture-result-{int(now.timestamp())}.json').open('x') as f:json.dump(r,f,indent=2,default=str);f.write('\n')
+print(json.dumps(r,indent=2,default=str))

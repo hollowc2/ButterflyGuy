@@ -96,10 +96,12 @@ deployment each require separate operational authorization. No automatic promoti
 
 ## Exact next bounded action
 
-Stage B status (2026-10-18): recording implemented and reviewed (PR #53), observer
-installed disabled on Helios (2026-10-17), and its background `market_data:read`
-gateway consumer registered and loaded (2026-10-18). Nothing has been captured.
+Stage B status (2026-10-19): **complete.** Recording was reviewed (PR #53), the
+observer was installed disabled (10-17), its gateway consumer was registered (10-18),
+and the first one-shot capture for trade 358 was accepted
+([record](observer-capture-20261019/README.md)).
 
-Next: on a trading day, build a fresh real NDXP session context (never reuse an
-expired one) and obtain separately scoped approval for one bounded manual capture.
-Its real records then feed Stage C. Capture remains inactive until authorized.
+Next: export and verify the research schema in the accepted archive. Then scope Stage C,
+starting with whether the 12 ms cache-served body is acceptable evidence, or whether
+captures need a guaranteed upstream fetch. Further captures each need a fresh
+same-day context and their own approval; there is no automatic collection.
