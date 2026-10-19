@@ -42,6 +42,9 @@ execution:
   order_timeout_seconds: 300
   paper_trading: true
   paper_fill_buffer: 0.00
+  # All-in Schwab SPXW cost per contract, from four live fills on 2026-10-19:
+  # $0.65 commission + ~$0.49 index option fee + $0.01 regulatory fee ($4.61 per fly side).
+  paper_commission_per_contract: 1.15
 profit_management:
   strategy: "peakvaluetrailer"
   profitprotector:

@@ -46,6 +46,13 @@ EXCEPTIONS = {
 EXCEPTION_P = {"D2": 0.0622, "D3": 0.103}
 
 
+def _published_config():
+    """The frozen ledgers and sweeps were priced at the pre-2026-10-19 $0.65 commission."""
+    config = load_spx_config()
+    config.execution.paper_commission_per_contract = 0.65
+    return config
+
+
 def test_every_published_variant_is_ported():
     published = {k for k in PUBLISHED if not k.startswith(("_", "diag"))}
     assert published <= set(CATALOG)
@@ -61,7 +68,7 @@ def evaluation():
     structlog.configure(wrapper_class=structlog.make_filtering_bound_logger(logging.ERROR))
     try:
         result = run_variants(SessionLoader(ds, PROFILES["sweep_20260925"]),
-                              resolve(["E0", *CODES]), RunContext(load_spx_config()),
+                              resolve(["E0", *CODES]), RunContext(_published_config()),
                               start=dt.date(2026, 3, 13), end=dt.date(2026, 9, 24))
     finally:
         structlog.configure(**saved)
