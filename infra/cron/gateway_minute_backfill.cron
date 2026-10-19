@@ -4,4 +4,5 @@
 # Vixie cron ignores CRON_TZ in user crontabs; use UTC slot.
 # Install:
 #   crontab -l 2>/dev/null | grep -v run_gateway_minute_backfill | cat - infra/cron/gateway_minute_backfill.cron | crontab -
-0 23 1 * * cd /opt/butterflyguy && tools/run_gateway_minute_backfill.sh >> /opt/butterflyguy/gateway_minute_backfill.log 2>&1
+# cron_guard posts a Discord alert (DISCORD_WEBHOOK_URL) if the job exits non-zero.
+0 23 1 * * cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/cron_guard.py --job gateway_minute_backfill -- tools/run_gateway_minute_backfill.sh >> /opt/butterflyguy/gateway_minute_backfill.log 2>&1
