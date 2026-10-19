@@ -1,6 +1,7 @@
 # Helios weekend preparation — October 17 UTC
 
-**Disabled installation completed; gateway registration remains pending.** Corey
+**Disabled installation completed; gateway registration completed 2026-10-18** — see
+[the registration record](../../../../reports/research/ndx-02-observer-gateway-20261018/run-01/README.md). Corey
 approved proceeding after the named plan to install the tested observer disabled,
 create dedicated permissions/credentials and verify non-market connectivity and
 storage. No capture was authorized or performed. The expired October 16 context
