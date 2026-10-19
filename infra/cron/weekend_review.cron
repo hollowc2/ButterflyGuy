@@ -1,4 +1,5 @@
 # SPX weekend review; reporting release is independent of the trading containers.
 # Run from the host checkout to read its existing config and .env.
 # UTC schedule matches 09:00 Pacific during daylight saving time.
-0 16 * * 6 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/.releases/weekend-review-current/tools/send_weekend_review.py --assets SPX --recap-assets SPX >> /opt/butterflyguy/weekend_review.log 2>&1
+# cron_guard posts a Discord alert (DISCORD_WEBHOOK_URL) if the job exits non-zero.
+0 16 * * 6 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/cron_guard.py --job weekend_review -- /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/.releases/weekend-review-current/tools/send_weekend_review.py --assets SPX --recap-assets SPX >> /opt/butterflyguy/weekend_review.log 2>&1
