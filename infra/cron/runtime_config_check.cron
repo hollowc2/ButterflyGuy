@@ -1,0 +1,7 @@
+# Runtime config check — 13:00 UTC daily (9 AM ET in EDT, 8 AM in EST).
+# Loads configs/*.yaml with the checkout's own code so config/code drift alerts
+# hours before the evening Discord jobs would fail in load_config().
+# cron_guard posts a Discord alert (DISCORD_WEBHOOK_URL) if the check fails.
+# Install:
+#   crontab -l 2>/dev/null | grep -v check_runtime_configs | cat - infra/cron/runtime_config_check.cron | crontab -
+0 13 * * * cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/cron_guard.py --job runtime_config_check -- /opt/butterflyguy/.venv/bin/python tools/check_runtime_configs.py >> /opt/butterflyguy/runtime_config_check.log 2>&1

@@ -13,7 +13,7 @@ from butterfly_guy.backtest.simulation_engine import DayResult
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.position.position_manager import fly_settlement_value
 
-ExecutionModel = Literal["marketable", "stressed_marketable"]
+ExecutionModel = Literal["marketable", "stressed_marketable", "calibrated"]
 MarketStatus = Literal[
     "priced",
     "missing_entry_market",
@@ -24,6 +24,10 @@ MarketStatus = Literal[
 
 CONTRACTS_PER_BUTTERFLY = 4
 STRESSED_LEG_SLIPPAGE = 0.05
+#: Share of the butterfly half-spread (midpoint to natural) given up per fill in the
+#: calibrated model. Live XSP fills gave up 25-33% on entry (2026-07-13, 2026-07-16)
+#: and 50% on one manual exit; recalibrate as live SPX fills accumulate.
+LIVE_HALF_SPREAD_FRACTION = 0.30
 
 
 @dataclass(frozen=True)
@@ -141,6 +145,16 @@ def _exit_credit(market: QuoteMarket) -> float:
     return market.lower.bid + market.upper.bid - 2 * market.center.ask
 
 
+def _fill_prices(market: QuoteMarket, model: ExecutionModel) -> tuple[float, float]:
+    """Return the (entry debit, exit credit) a butterfly fills at under *model*."""
+    natural_debit = _entry_debit(market)
+    natural_credit = _exit_credit(market)
+    if model != "calibrated":
+        return natural_debit, natural_credit
+    give_back = (1 - LIVE_HALF_SPREAD_FRACTION) * (natural_debit - natural_credit) / 2
+    return natural_debit - give_back, natural_credit + give_back
+
+
 def price_frozen_trade(
     *,
     baseline: DayResult,
@@ -155,6 +169,8 @@ def price_frozen_trade(
     Entry buys the two outer contracts at ask and sells two center contracts at bid.
     Intraday exit uses the inverse sides. Cash settlement has no closing order. The
     stressed model moves every contract fill $0.05 adversely from its executable side.
+    The calibrated model fills at the butterfly midpoint plus LIVE_HALF_SPREAD_FRACTION
+    of the half-spread toward the executable side, on entry and on intraday exit.
 
     An intraday exit observation that is missing or crossed is skipped, and the exit
     rolls forward to the next recorded monitoring time. If no executable exit remains
@@ -163,7 +179,7 @@ def price_frozen_trade(
     """
     if not baseline.traded or baseline.entry_time is None or baseline.exit_time is None:
         raise ValueError("baseline must be a completed, traded simulation result")
-    if model not in {"marketable", "stressed_marketable"}:
+    if model not in {"marketable", "stressed_marketable", "calibrated"}:
         raise ValueError(f"unsupported execution model: {model}")
 
     adverse_slippage = STRESSED_LEG_SLIPPAGE if model == "stressed_marketable" else 0.0
@@ -191,7 +207,7 @@ def price_frozen_trade(
             crossed_strikes=entry_market.crossed_strikes,
         )
 
-    entry_price = _entry_debit(entry_market) + commission + per_side_stress
+    entry_price = _fill_prices(entry_market, model)[0] + commission + per_side_stress
     exit_ts: dt.datetime | None = None
     exit_price: float | None = None
     skipped_exit_observations = 0
@@ -219,7 +235,7 @@ def price_frozen_trade(
                 gap_crossed = exit_market.crossed_strikes
                 continue
             exit_ts = snapshot_time
-            exit_price = _exit_credit(exit_market) - commission - per_side_stress
+            exit_price = _fill_prices(exit_market, model)[1] - commission - per_side_stress
             break
         if exit_price is None:
             if settlement_spot is None:
@@ -256,7 +272,7 @@ def price_frozen_trade(
             continue
         usable_path_snapshots += 1
         executable_pnls.append(
-            _exit_credit(market) - commission - per_side_stress - entry_price
+            _fill_prices(market, model)[1] - commission - per_side_stress - entry_price
         )
 
     pnl = exit_price - entry_price

@@ -410,7 +410,8 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Single-config research report: preserve corrected-midpoint decisions and "
             "compare corrected midpoint with marketable bid/ask accounting and the same "
-            "accounting stressed by $0.05 adverse slippage per contract leg."
+            "accounting stressed by $0.05 adverse slippage per contract leg, plus a "
+            "calibrated model at midpoint + 30%% of the half-spread from live fills."
         ),
     )
     p.add_argument("--vix-max", type=float, default=None,
@@ -1331,7 +1332,7 @@ def _accounting_comparison_rows(day_rows: list[dict]) -> list[dict]:
     }
     rows = [baseline]
 
-    for model in ("marketable", "stressed_marketable"):
+    for model in ("marketable", "stressed_marketable", "calibrated"):
         executions: list[ExecutableTrade] = [
             row["accounting"][model]
             for row in day_rows
@@ -2496,7 +2497,7 @@ async def run_single(args: argparse.Namespace) -> None:
 
             accounting: dict[str, ExecutableTrade] = {}
             if args.execution_accounting_report and result.traded:
-                for execution_model in ("marketable", "stressed_marketable"):
+                for execution_model in ("marketable", "stressed_marketable", "calibrated"):
                     accounting[execution_model] = price_frozen_trade(
                         baseline=result,
                         candidate=chosen,

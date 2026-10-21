@@ -32,6 +32,13 @@ EXPECTED = json.loads((FIXTURES / "mini_expected.json").read_text())
 TOLERANCE = 0.005  # dollars per trade and model
 
 
+def _published_config():
+    """The frozen ledgers and sweeps were priced at the pre-2026-10-19 $0.65 commission."""
+    config = load_spx_config()
+    config.execution.paper_commission_per_contract = 0.65
+    return config
+
+
 @pytest.fixture(autouse=True)
 def _quiet():
     saved = structlog.get_config()
@@ -42,7 +49,7 @@ def _quiet():
 
 def _run(ds: Dataset, profile: str, start: dt.date, end: dt.date):
     loader = SessionLoader(ds, PROFILES[profile])
-    return run_variants(loader, resolve(["E0"]), RunContext(load_spx_config()),
+    return run_variants(loader, resolve(["E0"]), RunContext(_published_config()),
                         start=start, end=end)
 
 

@@ -1,0 +1,6 @@
+# Weekly economic/earnings calendar post — Monday 02:00 UTC (Sunday evening US time).
+# Vixie cron ignores CRON_TZ in user crontabs; use UTC slot.
+# Install:
+#   crontab -l 2>/dev/null | grep -v send_weekly_calendar | cat - infra/cron/weekly_calendar.cron | crontab -
+# cron_guard posts a Discord alert (DISCORD_WEBHOOK_URL) if the job exits non-zero.
+0 2 * * 1 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/cron_guard.py --job weekly_calendar -- /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/send_weekly_calendar.py >> /opt/butterflyguy/weekly_calendar.log 2>&1

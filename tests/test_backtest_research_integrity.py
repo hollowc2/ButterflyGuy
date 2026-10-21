@@ -144,6 +144,29 @@ def test_stressed_marketable_charges_five_cents_per_contract_leg_per_side():
     assert stressed.pnl == pytest.approx(marketable.pnl - 8 * 0.05)
 
 
+def test_calibrated_fills_give_up_thirty_percent_of_half_spread_per_side():
+    date = dt.date(2026, 7, 2)
+    entry_time = dt.datetime(2026, 7, 2, 14, 0, tzinfo=dt.timezone.utc)
+    exit_time = entry_time + dt.timedelta(hours=2)
+    chains = {
+        entry_time: _quotes(date, "CALL", ((1.0, 1.1), (0.5, 0.6), (0.2, 0.3))),
+        exit_time: _quotes(date, "CALL", ((2.0, 2.1), (0.8, 0.9), (0.4, 0.5))),
+    }
+
+    result = price_frozen_trade(
+        baseline=_baseline(date, entry_time, exit_time),
+        candidate=_candidate(),
+        chains=chains,
+        model="calibrated",
+    )
+
+    # Fly bid/ask 0.00 / 0.40 at entry (mid 0.20) and 0.60 / 1.00 at exit (mid 0.80);
+    # half-spread is 0.20, so each fill gives up 0.06 from the midpoint.
+    assert result.entry_price == pytest.approx(0.20 + 0.06 + 0.026)
+    assert result.exit_price == pytest.approx(0.80 - 0.06 - 0.026)
+    assert result.pnl == pytest.approx(0.60 - 0.12 - 0.052)
+
+
 def test_cash_settlement_has_entry_commission_but_no_exit_fill_cost():
     date = dt.date(2026, 7, 2)
     entry_time = dt.datetime(2026, 7, 2, 14, 0, tzinfo=dt.timezone.utc)

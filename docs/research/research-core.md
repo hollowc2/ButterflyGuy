@@ -19,7 +19,7 @@ here changes live-trading code.
 | `exits.py` | Exit rules and the monitoring loop; the peak trailer uses the shared `profit_policy` functions |
 | `simulate.py` | Variants over sessions (the session is the outer loop, so each is loaded once); fits, histories, exit delay |
 | `evaluate.py` | Session vectors, paired moving-block bootstrap, H1/H2, rolling blocks, top-3-removed P&L, fit windows |
-| `tieset.py` | Near-tied fly scoring at $0.10 / $0.25 with paired draws, fed from the main replay loop |
+| `tieset.py` | Near-tied fly scoring at $0.10 / $0.25 with paired draws, fed from the main replay loop; snapshot-neighbor tie sets in `run` |
 | `registry.py` | Append-only, hash-chained variant registry |
 | `variants.py` | Named variant catalog: every idea-sweep variant (E0, X1–X5, C1/C2, D1–D4, T1–T6, K1, G1/G2, R1–R5) and HLV1 |
 | `shadow.py` | Exploratory paired shadow on an open cohort's recorded sessions (ledger read with `git show`) |
@@ -404,6 +404,11 @@ sessions no interval is reported. Each run also reports:
 - for fitted rules, figures after the fit window;
 - **tie-set robustness at $0.10 and $0.25, by default** (`--no-tieset` skips it). Rules
   whose flies do not come from the live selector are reported as not applicable.
+- **neighbor tie sets** (`nbr 0.10`, `nbr 0.25`), on with the tie set in `run`: the same
+  tie sets rerun on the snapshots either side of the entry snapshot (each with its own
+  spot and VIX), averaged over neighbors first. They measure sensitivity to snapshot
+  timing. Snapshot +1 is look-ahead, so they are never a tradable rule. See
+  [neighbor-tieset-2026-10-18.md](neighbor-tieset-2026-10-18.md).
 
 The full 26-variant catalog, tie-sets included, runs in about 85 s. E0, X1 and R1 alone
 take 9 s.
