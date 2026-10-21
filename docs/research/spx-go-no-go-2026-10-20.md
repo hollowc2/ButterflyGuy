@@ -45,6 +45,23 @@ if available, every open operational gate, reviewer and date. A favorable record
 needs an explicit explanation of why forward evidence should outweigh the
 losing replays. If that explanation remains unsupported, retain NO-GO.
 
+Implementation-review recheck: the frozen checkout remains clean at `2eaf522`.
+Verification under its existing updater lock passes all ledger checks and all
+39 source/lock hashes; the manifest and earlier append-only evidence are intact.
+There are still twelve trades, four settlements and the October 20 deferral.
+The updater service is inactive after a successful run and its timer remains
+scheduled; no retry or frozen-source change was made in this review. Manifest
+and ledger hashes are recorded in the [readiness checklist](../spx-go-live.md).
+
+Current main `fe4dbd0` also introduces an explicit SPX paper all-in fee of $1.15
+per contract, compared with v2's registered $0.65 commission. Collector timing
+fields already differ from the registered config. Entry, strategy, risk and
+profit-management sections match, but the raw config hash does not. The owner
+review must reconcile these differences and any new broker evidence. Preserve
+the original v2 results and cost assumption; any supplemental cost sensitivity
+must be separately labeled. Neither merging main nor passing safety tests
+resolves the economic or operational NO-GO gates.
+
 Read-only ledger verification (run from the dedicated pinned v2 checkout):
 
 ```bash

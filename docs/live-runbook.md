@@ -68,7 +68,8 @@ runbook nor the existence of a Compose overlay authorizes deployment or an order
    `LIVE_SUPERVISION_UNTIL` to an ISO timestamp **with UTC offset**, on that
    session date, through its cash close. Example format:
    `2026-10-20T16:30:00-04:00`. Renew it each session. The runtime checks the
-   attestation at startup and before entry; this does not prove a phone is
+   attestation at startup, under the entry lock before each attempt, and while
+   monitoring a position (including after close); this does not prove a phone is
    reachable. Continue supervision until orders and settlement reconcile even
    if that extends beyond the attested timestamp. If nobody can cover the whole
    holding window, keep paper mode.
