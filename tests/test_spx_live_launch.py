@@ -107,6 +107,25 @@ def test_launch_guard_rejects_increased_size_or_trade_count(monkeypatch, supervi
         _assert_live_config_supported(config, GatewayClientSettings())
 
 
+@pytest.mark.parametrize("failure", ["allocation", "loss_cap", "supervisor"])
+def test_startup_rejects_unconfirmed_spx_risk_or_supervision(monkeypatch, supervised, failure):
+    monkeypatch.setenv("LIVE_EXPECTED_SCHWAB_ACCOUNT_ID", "reviewed-account")
+    monkeypatch.setenv("LIVE_ACCOUNT_ALLOCATION", "20000")
+    monkeypatch.setenv("LIVE_MAX_ACCOUNT_DAILY_LOSS", "500")
+    config = AppConfig(
+        schwab={"account_id": "reviewed-account"},
+        execution={"paper_trading": False, "allow_live_trading": True},
+    )
+    if failure == "allocation":
+        monkeypatch.setenv("LIVE_ACCOUNT_ALLOCATION", "20001")
+    elif failure == "loss_cap":
+        config.risk.max_daily_loss = 501
+    else:
+        monkeypatch.delenv("LIVE_SUPERVISOR")
+    with pytest.raises(RuntimeError):
+        _assert_live_config_supported(config, GatewayClientSettings())
+
+
 def test_combined_compose_keeps_ndx_xsp_paper_and_requires_an_account_pin():
     if shutil.which("docker") is None:
         pytest.skip("Docker Compose is not installed")
@@ -264,8 +283,6 @@ async def test_entry_halt_preserves_active_monitor(monkeypatch, supervised, trig
     if trigger == "manual":
         # A persisted entry halt is read by can_trade, never by position monitoring.
         risk.get_or_create = AsyncMock(return_value={"halted": True})
-    if trigger == "expiry":
-        monkeypatch.setenv("LIVE_SUPERVISION_UNTIL", "2026-10-19T16:30:00-04:00")
 
     finished = asyncio.Event()
     started = asyncio.Event()
@@ -285,6 +302,8 @@ async def test_entry_halt_preserves_active_monitor(monkeypatch, supervised, trig
         await real_sleep(0)
         assert started.is_set()
         assert not task.cancelled()
+        if calls == 1 and trigger == "expiry":
+            monkeypatch.setenv("LIVE_SUPERVISION_UNTIL", "2026-10-19T16:30:00-04:00")
         if calls == 2:
             if trigger == "expiry":
                 risk.halt_entries.assert_awaited_once()
