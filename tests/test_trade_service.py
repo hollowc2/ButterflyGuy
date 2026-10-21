@@ -152,6 +152,7 @@ async def test_attempt_entry_blocks_stale_vix_before_chain_fetch():
 
 @pytest.mark.asyncio
 async def test_live_attempt_entry_blocks_stale_chain_snapshot_before_spot_fetch():
+    from butterfly_guy.risk.live_safety import LiveSafetyError
     config = AppConfig(
         execution=ExecutionSettings(
             paper_trading=False,
@@ -186,9 +187,9 @@ async def test_live_attempt_entry_blocks_stale_chain_snapshot_before_spot_fetch(
         "butterfly_guy.services.trade_service.get_0dte_expiration",
         return_value=dt.date(2026, 6, 25),
     ):
-        result = await service.attempt_entry()
+        with pytest.raises(LiveSafetyError, match="chain_snapshot"):
+            await service.attempt_entry()
 
-    assert result is None
     schwab.get_spot_price.assert_not_called()
     schwab.get_option_chain.assert_not_called()
     assert any(

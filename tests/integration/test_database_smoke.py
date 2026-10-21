@@ -45,5 +45,25 @@ async def test_migrations_and_weekly_pnl_query():
         risk_queries = RiskQueries(db)
         assert await risk_queries.get_weekly_pnl("SPX", dt.date(2026, 7, 15)) == -250.0
         assert await risk_queries.get_recent_closed_pnls("SPX", 1) == [-250.0]
+
+        # Operational kill is asset-scoped, survives a second call, and never
+        # overwrites P&L, trade counts, or a real loss-limit flag.
+        date = dt.date(2026, 10, 20)
+        await risk_queries.get_or_create(date, "NDX")
+        await risk_queries.get_or_create(date, "SPX")
+        await risk_queries.increment_trade_count(date, "SPX")
+        await risk_queries.update_pnl(date, -123.0, "SPX")
+        for _ in range(2):
+            await risk_queries.halt_entries(date, "SPX", "smoke-test")
+        state = await risk_queries.get_or_create(date, "SPX")
+        assert state["halted"] is True
+        assert state["max_loss_hit"] is False
+        assert state["trade_count"] == 1
+        assert state["realized_pnl"] == -123.0
+        assert (await risk_queries.get_or_create(date, "NDX"))["halted"] is False
+        assert await db.pool.fetchval(
+            "SELECT COUNT(*) FROM decision_log WHERE event_type = 'live_entry_halted' "
+            "AND underlying = 'SPX' AND data->>'reason' = 'smoke-test'"
+        ) == 2
     finally:
         await db.close()

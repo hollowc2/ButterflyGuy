@@ -569,6 +569,32 @@ class RiskQueries:
             trade_date, underlying,
         )
 
+    async def halt_entries(
+        self, trade_date: dt.date, underlying: str, reason: str
+    ) -> None:
+        """Atomically latch today's entries and audit why, without changing P&L.
+
+        Unlike a loss-limit halt, an operational stop does not set max_loss_hit.
+        This never cancels orders, closes positions, or disables monitoring.
+        """
+        async with self.db.pool.acquire() as conn, conn.transaction():
+            await conn.execute(
+                """
+                INSERT INTO daily_risk_state (trade_date, underlying, halted)
+                VALUES ($1, $2, TRUE)
+                ON CONFLICT (trade_date, underlying) DO UPDATE SET halted = TRUE
+                """,
+                trade_date, underlying,
+            )
+            await conn.execute(
+                """
+                INSERT INTO decision_log (event_type, data, underlying)
+                VALUES ('live_entry_halted', $1::jsonb, $2)
+                """,
+                json.dumps({"trade_date": trade_date.isoformat(), "reason": reason}),
+                underlying,
+            )
+
     async def get_weekly_pnl(self, underlying: str, session_date: dt.date) -> float:
         """Dollar PnL for the rolling 7-day window (closed trades only).
 

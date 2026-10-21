@@ -105,6 +105,15 @@ class AmbiguousOrderError(RuntimeError):
     """A broker write may have succeeded; reconciliation is required."""
 
 
+def _assert_known_order_statuses(order: dict) -> None:
+    known = (
+        WORKING_ORDER_STATUSES | PARTIAL_FILL_STATUSES
+        | CANCEL_PENDING_STATUSES | TERMINAL_ORDER_STATUSES
+    )
+    if any(node.get("status") not in known for node in walk_orders(order)):
+        raise AmbiguousOrderError("Broker order has a missing or unknown status")
+
+
 class BrokerFill(NamedTuple):
     order_id: str
     net_fill_price: float
@@ -459,6 +468,11 @@ class OrderManager:
             log.warning("open_orders_check_failed", error=str(e))
             return True
 
+        for order in todays_orders:
+            _assert_known_order_statuses(order)
+            if order_statuses(order) & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES):
+                raise PartialFillError("Existing broker order requires manual reconciliation")
+
         known_order_ids: set[str] = set()
         if self.intent_queries is not None:
             try:
@@ -775,6 +789,7 @@ class OrderManager:
         """After a cancel, confirm the order didn't sneak through as filled."""
         try:
             status = await self.schwab.get_order_status(order_id)
+            _assert_known_order_statuses(status)
             order_status = status.get("status")
             statuses = order_statuses(status)
             terminal_failure = next(
@@ -808,6 +823,8 @@ class OrderManager:
                     **_fill_result(fill, intent_id),
                     "post_cancel": True,
                 }
+            if statuses != {"CANCELED"}:
+                raise AmbiguousOrderError("Cancel is not confirmed terminal at the broker")
         except Exception as e:
             if isinstance(
                 e,
@@ -834,6 +851,7 @@ class OrderManager:
         while monotonic() < deadline:
             try:
                 status = await self.schwab.get_order_status(order_id)
+                _assert_known_order_statuses(status)
                 order_status = status.get("status", "")
                 statuses = order_statuses(status)
                 terminal_failure = next(
@@ -863,9 +881,12 @@ class OrderManager:
                     return False
 
             except Exception as e:
-                if isinstance(e, (BrokerFillError, PartialFillError, TerminalOrderError)):
+                if isinstance(
+                    e, (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError)
+                ):
                     raise
                 log.warning("order_poll_error", error=str(e))
+                raise AmbiguousOrderError("Broker order status could not be read") from e
 
             await asyncio.sleep(poll_interval)
 

@@ -378,6 +378,52 @@ async def test_single_attempt_raises_on_partial_or_cancel_pending_status(unsafe_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [
+    {}, {"status": "NEW_BROKER_STATUS"},
+    {"status": "WORKING", "childOrderStrategies": [{}]},
+    {"status": "WORKING", "childOrderStrategies": [{"status": "UNKNOWN"}]},
+])
+async def test_live_unknown_status_never_cancels_or_retries(payload):
+    om, schwab = make_order_manager(make_settings(retry_interval_seconds=2))
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    schwab.get_order_status = AsyncMock(return_value=payload)
+    with pytest.raises(AmbiguousOrderError):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+    schwab.place_order.assert_awaited_once()
+    schwab.get_order_status.assert_awaited_once()
+    schwab.cancel_order.assert_not_called()
+    om.intent_queries.mark_unknown.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,error", [
+    ("UNKNOWN", AmbiguousOrderError), (None, AmbiguousOrderError),
+    ("PARTIALLY_FILLED", PartialFillError), ("CANCEL_PENDING", PartialFillError),
+])
+async def test_existing_unsafe_order_stops_before_a_live_submission(status, error):
+    om, schwab = make_order_manager(make_settings(retry_interval_seconds=2))
+    schwab.get_todays_orders = AsyncMock(return_value=[{"status": status}])
+    with pytest.raises(error):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+    schwab.place_order.assert_not_awaited()
+    schwab.cancel_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [
+    {"status": "WORKING"}, {}, {"status": "UNKNOWN"},
+    {"status": "CANCELED", "childOrderStrategies": [{"status": "WORKING"}]},
+])
+async def test_post_cancel_requires_confirmed_terminal_cancellation(payload):
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(return_value=payload)
+    with pytest.raises(AmbiguousOrderError):
+        await om._check_post_cancel_fill("ORD1", 1)
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("unsafe_status", ["PARTIALLY_FILLED", "CANCEL_PENDING"])
 async def test_single_attempt_raises_on_partial_or_cancel_pending_child_status(
     unsafe_status,
@@ -917,6 +963,7 @@ async def test_exit_falls_back_to_current_value_when_fetch_fails():
 async def test_exit_steps_down_from_live_bid():
     settings = make_settings(price_ladder_steps=4)
     om, schwab = make_order_manager(settings)
+    om.schwab.get_order_status = AsyncMock(return_value={"status": "CANCELED"})
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     live_bid = 3.20
 
@@ -944,6 +991,7 @@ async def test_exit_steps_down_from_live_bid():
 async def test_exit_limits_round_up_to_the_underlyings_increment(underlying, expected):
     settings = make_settings(price_ladder_steps=4)
     om, _ = make_order_manager(settings, underlying=underlying)
+    om.schwab.get_order_status = AsyncMock(return_value={"status": "CANCELED"})
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     live_spread = LiveSpread(bid=3.21, mark=3.40, ask=3.60)
     with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=live_spread)), \
@@ -959,6 +1007,7 @@ async def test_exit_limits_round_up_to_the_underlyings_increment(underlying, exp
 async def _exit_limits_for_bids(bids: list[float]) -> list[float]:
     settings = make_settings(price_ladder_steps=4)
     om, _ = make_order_manager(settings)
+    om.schwab.get_order_status = AsyncMock(return_value={"status": "CANCELED"})
     candidate = make_candidate(5900, 5950, 6000, 2.50)
     spreads = [LiveSpread(bid=b, mark=b + 0.20, ask=b + 0.40) for b in bids]
     fills = [False] * (len(bids) - 1) + [broker_fill()]

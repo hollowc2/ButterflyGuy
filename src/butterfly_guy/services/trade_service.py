@@ -50,6 +50,7 @@ from butterfly_guy.execution.order_manager import (
     BrokerFillError,
     OrderManager,
 )
+from butterfly_guy.risk.live_safety import LiveSafetyError
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, build_entry_chart_png
@@ -223,7 +224,7 @@ class TradeService:
         chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
 
         if not await self._live_chain_snapshot_fresh(underlying, expiration):
-            return None
+            raise LiveSafetyError("chain_snapshot_unavailable_or_stale")
 
         # Get initial spot price for chain scanning and VIX anchoring
         try:

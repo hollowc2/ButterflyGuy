@@ -85,6 +85,7 @@ from butterfly_guy.execution.order_manager import (
 )
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
+from butterfly_guy.risk.live_safety import LiveSafetyError, require_spx_supervision
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import (
     AlertmanagerNotifier,
@@ -374,8 +375,9 @@ async def _expired_trade_has_broker_settlement(
 
 
 class BrokerStateGate:
-    def __init__(self) -> None:
+    def __init__(self, *, latched: bool = False) -> None:
         self.reason: str | None = None
+        self.latched = latched
 
     @property
     def unsafe(self) -> bool:
@@ -673,7 +675,9 @@ async def broker_reconciler_loop(
     interval_seconds: int = 15,
     critical_notifier: AlertmanagerNotifier | None = None,
     active_monitor: ActiveMonitor | None = None,
+    risk_queries: RiskQueries | None = None,
 ) -> None:
+    halt_persisted = False
     while True:
         try:
             await _reconcile_broker_state(
@@ -688,7 +692,7 @@ async def broker_reconciler_loop(
             )
             if critical_notifier:
                 await critical_notifier.retry_pending_resolutions()
-            if gate.unsafe:
+            if gate.unsafe and not gate.latched:
                 log.info("broker_state_gate_cleared")
                 gate.clear()
                 clear_readiness("broker_reconciliation_unsafe")
@@ -698,6 +702,13 @@ async def broker_reconciler_loop(
             gate.set_unsafe(str(e))
             set_readiness("broker_reconciliation_unsafe")
             log.error("broker_state_unsafe", error=str(e))
+            if risk_queries is not None and not halt_persisted:
+                try:
+                    await risk_queries.halt_entries(session_date(), underlying, "broker_mismatch")
+                    halt_persisted = True
+                except Exception:
+                    # The in-memory gate stays latched even when the DB is down.
+                    log.error("live_halt_persistence_failed")
         await asyncio.sleep(interval_seconds)
 
 
@@ -747,6 +758,24 @@ def _assert_live_config_supported(
         raise RuntimeError(
             f"Live trading requires risk.max_daily_loss={max_daily_loss:g}"
         )
+    if underlying == "SPX":
+        if config.risk.max_position_size != 1 or config.risk.max_trades_per_day != 1:
+            raise RuntimeError("SPX launch requires one contract and one trade per day")
+        require_spx_supervision()
+
+
+async def _halt_live_entry_loop(trade_service: TradeService, reason: str) -> None:
+    if trade_service.config.execution.paper_trading is not False:
+        return
+    set_readiness("live_entry_halted")
+    try:
+        await trade_service.risk_engine.risk_queries.halt_entries(
+            session_date(), trade_service.config.strategy.underlying, reason
+        )
+    except Exception:
+        # The caller still exits the entry loop; do not lose the alert or any
+        # running position monitor because persistence failed during an incident.
+        log.error("live_halt_persistence_failed", reason=reason)
 
 
 async def entry_loop(
@@ -794,10 +823,12 @@ async def entry_loop(
                         PartialFillError,
                         SettlementEvidenceError,
                         TerminalOrderError,
+                        LiveSafetyError,
                     ),
                 ):
                     set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
+                    await _halt_live_entry_loop(trade_service, type(exc).__name__)
                     if critical_notifier:
                         condition = (
                             "settlement_failure"
@@ -817,6 +848,9 @@ async def entry_loop(
         if active_trade is None:
             if broker_gate is not None and broker_gate.unsafe:
                 log.error("entry_blocked_broker_state_unsafe", reason=broker_gate.reason)
+                if trade_service.config.execution.paper_trading is False:
+                    await _halt_live_entry_loop(trade_service, "broker_mismatch")
+                    return
                 await asyncio.sleep(15)
                 continue
             if token_reload_gate is not None and token_reload_gate.unsafe:
@@ -824,6 +858,11 @@ async def entry_loop(
                 await asyncio.sleep(15)
                 continue
             try:
+                if (
+                    trade_service.config.execution.paper_trading is False
+                    and trade_service.config.strategy.underlying == "SPX"
+                ):
+                    require_spx_supervision()
                 result = await trade_service.attempt_entry()
                 if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
                     clear_readiness("entry_loop_repeated_failures")
@@ -847,10 +886,12 @@ async def entry_loop(
                         BrokerFillError,
                         PartialFillError,
                         TerminalOrderError,
+                        LiveSafetyError,
                     ),
                 ):
                     set_readiness("broker_order_state_unsafe")
                     log.error("entry_loop_stopped_unknown_broker_state")
+                    await _halt_live_entry_loop(trade_service, type(e).__name__)
                     if critical_notifier:
                         await critical_notifier.notify_critical("broker_ambiguity")
                     return
@@ -1244,7 +1285,7 @@ async def main() -> None:
         await _sync_startup_risk_pnl(risk_engine, realized_pnl, recovered_trade, today)
 
         daily_pnl.labels(underlying=underlying).set(realized_pnl)
-        broker_gate = BrokerStateGate()
+        broker_gate = BrokerStateGate(latched=not config.execution.paper_trading)
         token_reload_gate = BrokerStateGate()
         active_monitor = ActiveMonitor()
 
@@ -1318,6 +1359,7 @@ async def main() -> None:
                                 broker_gate,
                                 critical_notifier=critical_notifier,
                                 active_monitor=active_monitor,
+                                risk_queries=risk_q,
                             ),
                             name="broker_reconciler",
                         )
