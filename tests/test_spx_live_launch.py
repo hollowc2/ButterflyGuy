@@ -43,7 +43,9 @@ def supervised(monkeypatch):
 @pytest.mark.parametrize("paper", [True, False])
 def test_compose_execution_controls_override_yaml_in_both_directions(tmp_path, monkeypatch, paper):
     path = tmp_path / "config.yaml"
-    path.write_text(yaml.safe_dump({"execution": {"paper_trading": not paper}}))
+    path.write_text(yaml.safe_dump({"execution": {
+        "paper_trading": not paper, "allow_live_trading": paper,
+    }}))
     monkeypatch.setenv("EXECUTION__PAPER_TRADING", str(paper).lower())
     monkeypatch.setenv("EXECUTION__ALLOW_LIVE_TRADING", str(not paper).lower())
     monkeypatch.setenv("ALLOW_LIVE_TRADING", "true")
@@ -219,6 +221,118 @@ async def test_live_broker_gate_never_auto_recovers(monkeypatch):
             )
         assert gate.unsafe
         risk.halt_entries.assert_awaited_once()
+    finally:
+        set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_latched_broker_halt_retries_persistence_after_reconciliation_recovers(monkeypatch):
+    gate = BrokerStateGate(latched=True)
+    risk = Mock(halt_entries=AsyncMock(side_effect=[RuntimeError("DB down"), None]))
+    reconcile = AsyncMock(side_effect=[RuntimeError("mismatch"), None])
+    monkeypatch.setattr("butterfly_guy.scripts.run_live._reconcile_broker_state", reconcile)
+    calls = 0
+
+    async def sleep(_):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.asyncio.sleep", sleep)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await broker_reconciler_loop(
+                Mock(), "SPX", Mock(), Mock(), gate, risk_queries=risk
+            )
+        assert gate.unsafe
+        assert risk.halt_entries.await_count == 2
+    finally:
+        set_readiness(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["expiry", "broker", "manual"])
+async def test_entry_halt_preserves_active_monitor(monkeypatch, supervised, trigger):
+    config = AppConfig(execution={"paper_trading": False, "allow_live_trading": True})
+    risk = Mock(halt_entries=AsyncMock())
+    service = Mock(config=config, attempt_entry=AsyncMock(), risk_engine=Mock(risk_queries=risk))
+    notifier = Mock(notify_critical=AsyncMock())
+    gate = BrokerStateGate(latched=True)
+    if trigger == "broker":
+        gate.set_unsafe("mismatch")
+    if trigger == "manual":
+        # A persisted entry halt is read by can_trade, never by position monitoring.
+        risk.get_or_create = AsyncMock(return_value={"halted": True})
+    if trigger == "expiry":
+        monkeypatch.setenv("LIVE_SUPERVISION_UNTIL", "2026-10-19T16:30:00-04:00")
+
+    finished = asyncio.Event()
+    started = asyncio.Event()
+    real_sleep = asyncio.sleep
+    task = None
+    calls = 0
+
+    async def monitor(*args, **kwargs):
+        nonlocal task
+        task = asyncio.current_task()
+        started.set()
+        await finished.wait()
+
+    async def sleep(_):
+        nonlocal calls
+        calls += 1
+        await real_sleep(0)
+        assert started.is_set()
+        assert not task.cancelled()
+        if calls == 2:
+            if trigger == "expiry":
+                risk.halt_entries.assert_awaited_once()
+                notifier.notify_critical.assert_awaited_once()
+            finished.set()
+            await real_sleep(0)
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.asyncio.sleep", sleep)
+    set_readiness(None)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await entry_loop(
+                service, Mock(monitor_loop=monitor), recovered_trade=Mock(trade_id=7),
+                recovered_candidate=Mock(), broker_gate=gate, critical_notifier=notifier,
+            )
+        service.attempt_entry.assert_not_awaited()
+        assert task.done() and task.exception() is None
+    finally:
+        finished.set()
+        if task is not None:
+            await task
+        set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_supervision_halt_retries_database_without_entry(monkeypatch, supervised):
+    config = AppConfig(execution={"paper_trading": False, "allow_live_trading": True})
+    risk = Mock(halt_entries=AsyncMock(side_effect=[RuntimeError("DB down"), None]))
+    service = Mock(config=config, attempt_entry=AsyncMock(), risk_engine=Mock(risk_queries=risk))
+    notifier = Mock(notify_critical=AsyncMock())
+    monkeypatch.setenv("LIVE_SUPERVISOR", "")
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+    sleeps = 0
+
+    async def sleep(_):
+        nonlocal sleeps
+        sleeps += 1
+        assert sleeps < 3
+
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.asyncio.sleep", sleep)
+    set_readiness(None)
+    try:
+        await entry_loop(service, Mock(), critical_notifier=notifier)
+        assert risk.halt_entries.await_count == 2
+        service.attempt_entry.assert_not_awaited()
+        notifier.notify_critical.assert_awaited_once()
     finally:
         set_readiness(None)
 

@@ -702,13 +702,14 @@ async def broker_reconciler_loop(
             gate.set_unsafe(str(e))
             set_readiness("broker_reconciliation_unsafe")
             log.error("broker_state_unsafe", error=str(e))
-            if risk_queries is not None and not halt_persisted:
-                try:
-                    await risk_queries.halt_entries(session_date(), underlying, "broker_mismatch")
-                    halt_persisted = True
-                except Exception:
-                    # The in-memory gate stays latched even when the DB is down.
-                    log.error("live_halt_persistence_failed")
+        # Retry a failed DB write even if broker reads have since recovered.
+        # A live gate is latched for this process, independent of DB availability.
+        if gate.unsafe and risk_queries is not None and not halt_persisted:
+            try:
+                await risk_queries.halt_entries(session_date(), underlying, "broker_mismatch")
+                halt_persisted = True
+            except Exception:
+                log.error("live_halt_persistence_failed")
         await asyncio.sleep(interval_seconds)
 
 
@@ -764,18 +765,20 @@ def _assert_live_config_supported(
         require_spx_supervision()
 
 
-async def _halt_live_entry_loop(trade_service: TradeService, reason: str) -> None:
+async def _halt_live_entry_loop(trade_service: TradeService, reason: str) -> bool:
     if trade_service.config.execution.paper_trading is not False:
-        return
+        return True
     set_readiness("live_entry_halted")
     try:
         await trade_service.risk_engine.risk_queries.halt_entries(
             session_date(), trade_service.config.strategy.underlying, reason
         )
+        return True
     except Exception:
         # The caller still exits the entry loop; do not lose the alert or any
         # running position monitor because persistence failed during an incident.
         log.error("live_halt_persistence_failed", reason=reason)
+        return False
 
 
 async def entry_loop(
@@ -793,6 +796,8 @@ async def entry_loop(
     active_trade: TradeRecord | None = recovered_trade
     monitor_task: asyncio.Task | None = None
     consecutive_errors = 0
+    supervision_halted = False
+    supervision_halt_persisted = False
 
     if recovered_trade is not None and recovered_candidate is not None:
         log.info("resuming_monitor_for_recovered_trade", trade_id=recovered_trade.trade_id)
@@ -839,6 +844,30 @@ async def entry_loop(
                     return
             active_trade = None
             monitor_task = None
+
+        # Supervision covers the holding window, including settlement after
+        # close. Latch entries without interrupting a running position monitor.
+        if (
+            trade_service.config.execution.paper_trading is False
+            and trade_service.config.strategy.underlying == "SPX"
+            and (active_trade is not None or is_market_open())
+            and not supervision_halted
+        ):
+            try:
+                require_spx_supervision()
+            except LiveSafetyError:
+                supervision_halted = True
+                if critical_notifier:
+                    await critical_notifier.notify_critical("broker_ambiguity")
+        if supervision_halted:
+            if not supervision_halt_persisted:
+                supervision_halt_persisted = await _halt_live_entry_loop(
+                    trade_service, "supervision_expired"
+                )
+            if active_trade is None and supervision_halt_persisted:
+                return
+            await asyncio.sleep(15)
+            continue
 
         if not is_market_open():
             await asyncio.sleep(30)

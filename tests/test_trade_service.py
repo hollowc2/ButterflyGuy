@@ -270,7 +270,7 @@ async def test_attempt_entry_does_not_restart_after_terminal_rejection():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure_point", ["trade", "intent", "risk"])
+@pytest.mark.parametrize("failure_point", ["trade", "intent", "risk", "supervision", "risk_read"])
 async def test_filled_entry_persistence_failure_stops_for_reconciliation(
     failure_point,
 ):
@@ -356,8 +356,18 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
         order_manager.intent_queries.link_trade.side_effect = RuntimeError(
             "intent unavailable"
         )
-    else:
+    elif failure_point == "risk":
         risk_engine.record_trade.side_effect = RuntimeError("risk unavailable")
+    elif failure_point == "risk_read":
+        risk_engine.can_trade.side_effect = [(True, "ok"), RuntimeError("risk read failed")]
+
+    from butterfly_guy.risk.live_safety import LiveSafetyError
+
+    error_type, error_text = AmbiguousOrderError, "broker fill was not fully persisted"
+    if failure_point == "supervision":
+        error_type, error_text = LiveSafetyError, "supervision expired"
+    elif failure_point == "risk_read":
+        error_type, error_text = RuntimeError, "risk read failed"
 
     with patch("butterfly_guy.services.trade_service.time_in_window", return_value=True), patch(
         "butterfly_guy.services.trade_service.get_0dte_expiration",
@@ -365,16 +375,24 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
     ), patch(
         "butterfly_guy.services.trade_service.select_entry_candidate",
         return_value=selection,
-    ), pytest.raises(AmbiguousOrderError, match="broker fill was not fully persisted"):
+    ), patch(
+        "butterfly_guy.services.trade_service.require_spx_supervision",
+        side_effect=LiveSafetyError("supervision expired")
+        if failure_point == "supervision" else None,
+    ), pytest.raises(error_type, match=error_text):
         await service.attempt_entry()
 
+    service._release_entry_lock.assert_awaited_once()
+    if failure_point in {"supervision", "risk_read"}:
+        order_manager.execute_single_attempt.assert_not_awaited()
+        trade_queries.insert_trade.assert_not_awaited()
+        return
     order_manager.execute_single_attempt.assert_awaited_once()
     inserted = trade_queries.insert_trade.await_args.args[0]
     assert inserted["metadata"]["paper_fill_model"] == "mark_v1"
     assert inserted["metadata"]["entry_execution_diagnostics"] == {
         "estimated_execution_drag": 0.25
     }
-    service._release_entry_lock.assert_awaited_once()
 
 
 
