@@ -158,3 +158,25 @@ def test_default_config_keeps_the_old_loop():
         asyncio.run(c.run_loop())
     c.run_aligned_loop.assert_not_awaited()
     assert sleeps == [60]  # a fixed interval after the work, as before
+
+
+@pytest.mark.parametrize("offset", [0.0, 2.0, 4.0])
+def test_runtime_phases_survive_pass_duration_and_clock_boundaries(offset):
+    scheduled, started, _, missed = _run(
+        et(9, 29, 59), et(9, 34, 30), {0: .2, 1: 1.4, 2: .8}, offset=offset,
+    )
+    assert scheduled == [et(9, m, offset) for m in range(30, 35)]
+    assert started == scheduled
+    assert missed == []
+
+
+@pytest.mark.parametrize("asset,offset", [("spx", 0.0), ("ndx", 2.0), ("xsp", 4.0)])
+def test_shipped_collector_phases(asset, offset):
+    from pathlib import Path
+
+    import yaml
+    filename = "config.yaml" if asset == "spx" else f"config_{asset}.yaml"
+    settings = yaml.safe_load((Path(__file__).parents[1] / "configs" / filename).read_text())
+    assert settings["collector"]["align_to_minute"] is True
+    assert settings["collector"]["align_offset_seconds"] == offset
+    assert settings["collector"]["snapshot_interval_seconds"] == 60
