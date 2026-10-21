@@ -3776,9 +3776,9 @@
     "semantic_hash": ""
   },
   "tests/test_spx_live_launch.py": {
-    "mtime": 1792552560.9873219,
-    "seen": 1792553402.043151,
-    "ast_hash": "dac94db27a290d3ab2b618cf971b1d31",
+    "mtime": 1792554375.2123857,
+    "seen": 1792554432.0493195,
+    "ast_hash": "07c54b38aea5d8e5b33f986e49a23d77",
     "semantic_hash": ""
   },
   "tools/deploy_broker_flat_check.py": {
@@ -3872,9 +3872,9 @@
     "semantic_hash": ""
   },
   "docs/spx-go-live.md": {
-    "mtime": 1792553245.8323393,
-    "seen": 1792553402.0434809,
-    "ast_hash": "2b0465d4da71292899682191e1ce0ffb",
+    "mtime": 1792554410.184209,
+    "seen": 1792554432.0553987,
+    "ast_hash": "42f5bb12a2a2a526172ccd4438507db3",
     "semantic_hash": ""
   },
   "infra/docker-compose.spx-live.yml": {
