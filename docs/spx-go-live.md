@@ -177,7 +177,14 @@ with synthetic interpolation values and `config --no-env-resolution --format
 json`, and checks the merged service fields and missing-account rejection.
 It does not start services, load production env files, authenticate or prove
 broker acceptance. CI and Database Smoke must also pass on the final PR head;
-only documentation/generated graph changes follow the locally tested source.
+runtime source/configs still match the locally tested source. Follow-up
+`2e1b439` makes the Compose test portable to runners that stat env files even
+with `--no-env-resolution`: temporary copies preserve the three overlay bodies
+and tags, replacing only env_file paths with an empty synthetic file. The local
+launch suite then passed all 29 tests and Ruff passed. The first PR CI attempt
+failed solely on that env-file existence check; Database Smoke passed. Require
+both checks to pass on the updated final head rather than counting that failed
+CI attempt as validation.
 
 Remaining skips: **30** isolated NDX PostgreSQL tests require
 `NDX_POSTGRES_BIN`; **six** NDX baseline/continuation/execution-audit/provenance/
@@ -185,10 +192,14 @@ quote-fidelity tests require private snapshots. The Timescale smoke does not
 substitute for those NDX tests. The three warnings are a websockets legacy
 deprecation and two multiprocessing fork warnings. No broker write, real alert,
 credential renewal, calendar installation or load test was performed.
+The CI default suite additionally lacks the local research cache (30 tests)
+and leaves `CI_DATABASE_URL` unset (one smoke-test skip); its separate Database
+Smoke workflow supplies an isolated TimescaleDB and must pass independently.
 
 The required AST-only graph refresh ran with graphifyy 0.9.93 and
-`GRAPHIFY_BACKEND=none`; no semantic/LLM extraction ran. Its JSON has 11,034
-unique nodes and 24,730 edges, with all edge endpoints present. Generated files
+`GRAPHIFY_BACKEND=none`; no semantic/LLM extraction ran. After the Compose test
+portability fix its JSON has 11,035 unique nodes and 24,731 edges, with all edge
+endpoints present. Generated files
 belong in their own commit. Extraction reports 27 SQL files omitted because
 the optional `tree_sitter_sql` parser is absent and three code/data files with
 no modeled symbols. The graph does not validate runtime behavior or refresh
