@@ -126,14 +126,31 @@ def test_startup_rejects_unconfirmed_spx_risk_or_supervision(monkeypatch, superv
         _assert_live_config_supported(config, GatewayClientSettings())
 
 
-def test_combined_compose_keeps_ndx_xsp_paper_and_requires_an_account_pin():
+def test_combined_compose_keeps_ndx_xsp_paper_and_requires_an_account_pin(tmp_path):
     if shutil.which("docker") is None:
         pytest.skip("Docker Compose is not installed")
+    # Some Compose versions still stat required env_file paths with
+    # --no-env-resolution. Preserve the three real overlay bodies and tags,
+    # substituting only env_file paths with an existing empty synthetic file.
+    # Never create /opt paths or read a developer's deployment credentials.
+    empty_env = tmp_path / "synthetic.env"
+    empty_env.write_text("")
+    overlay_args = []
+    for name in (
+        "docker-compose.yml", "docker-compose.gateway-paper-cutover.yml",
+        "docker-compose.spx-live.yml",
+    ):
+        source = (Path("infra") / name).read_text()
+        for env_path in (
+            "../.env", "/opt/butterflyguy/.env", "/opt/butterflyguy-gateway-consumer.env",
+        ):
+            source = source.replace(f"      - {env_path}\n", f"      - {empty_env}\n")
+        target = tmp_path / name
+        target.write_text(source)
+        overlay_args.extend(["-f", str(target)])
     argv = [
         "docker", "compose", "--env-file", "/dev/null",
-        "-f", "infra/docker-compose.yml",
-        "-f", "infra/docker-compose.gateway-paper-cutover.yml",
-        "-f", "infra/docker-compose.spx-live.yml",
+        *overlay_args,
         "--profile", "ndx", "--profile", "xsp",
         "config", "--no-env-resolution", "--format", "json",
     ]
