@@ -121,6 +121,22 @@ def broker_fill():
     return parse_broker_fill(filled_order(), 1, "ORD1")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["poll", "cancel", "repair"])
+async def test_filled_parent_with_working_child_is_not_a_confirmed_fill(path):
+    manager, schwab = make_order_manager(make_settings())
+    payload = filled_order()
+    payload["childOrderStrategies"] = [{"status": "WORKING", "orderId": "CHILD"}]
+    schwab.get_order_status.return_value = payload
+    with pytest.raises(AmbiguousOrderError):
+        if path == "cancel":
+            await manager._check_post_cancel_fill("ORD1", 1)
+        elif path == "repair":
+            parse_broker_fill(payload, 1)
+        else:
+            await manager._wait_for_fill("ORD1", 5)
+
+
 def test_captured_trade_177_fill_uses_execution_net_not_limit() -> None:
     fill = parse_broker_fill(filled_order(), 1, "REDACTED")
 
@@ -140,10 +156,12 @@ def test_fill_parser_combines_multiple_activities_and_nested_executions() -> Non
     activity = payload.pop("orderActivityCollection")[0]
     payload["childOrderStrategies"] = [
         {
+            "status": "FILLED",
             "orderLegCollection": payload["orderLegCollection"],
             "orderActivityCollection": [activity],
         },
         {
+            "status": "FILLED",
             "orderLegCollection": payload["orderLegCollection"],
             "orderActivityCollection": [activity],
         },

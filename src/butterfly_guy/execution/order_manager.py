@@ -112,6 +112,8 @@ def _assert_known_order_statuses(order: dict) -> None:
     )
     if any(node.get("status") not in known for node in walk_orders(order)):
         raise AmbiguousOrderError("Broker order has a missing or unknown status")
+    if order.get("status") == "FILLED" and order_statuses(order) & WORKING_ORDER_STATUSES:
+        raise AmbiguousOrderError("Filled broker order still has a working child")
 
 
 class BrokerFill(NamedTuple):
@@ -142,6 +144,8 @@ def parse_broker_fill(
     """Return a validated net butterfly fill derived only from broker executions."""
     if order.get("status") != "FILLED":
         raise BrokerFillError("order is not FILLED")
+    # Startup repair uses this parser directly, outside the polling path.
+    _assert_known_order_statuses(order)
 
     try:
         requested = float(requested_quantity)
