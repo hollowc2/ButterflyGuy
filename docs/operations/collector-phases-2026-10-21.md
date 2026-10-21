@@ -35,3 +35,23 @@ Validate distinct recurring collector phases, fresh snapshots, unchanged two-sec
 monitor cadence, entry-halt monitoring and zero new failures across a full session.
 Do not touch the frozen prospective-v2 checkout or its updater. Roll back only the
 affected service to its recorded image if freshness or monitoring regresses.
+
+
+Validation: full suite 1,366 passed, 37 skipped (30 need NDX_POSTGRES_BIN,
+six need private NDX snapshots, one needs CI_DATABASE_URL). The isolated local
+TimescaleDB migration/risk-read smoke separately passed with synthetic test data.
+Ruff, actual base Compose rendering and the paper overlay render passed. Overlay
+rendering used --no-env-resolution and synthetic inputs; production env files were
+not accessed. Graph refresh is a separate commit; SQL extraction was unavailable
+because tree_sitter_sql is not installed. No real-provider validation was performed.
+
+The paper cutover overlay bind-mounts configs from /opt/butterflyguy/configs;
+a replacement image alone will not activate these settings. A future approved
+rollout must record and back up each service's actual mounted config, verify it
+is the mutable paper config rather than the frozen prospective-v2 path, stage the
+reviewed two collector fields, and recreate only that named paper service using
+its exact approved image and existing guards. Validate the recurring phase before
+the next service. Rollback restores that service's config bytes and retained image;
+never replace the shared config directory or frozen checkout. The historical
+cutover runbook documents database/broker flatness gates; use a newly recorded
+baseline rather than its historical image IDs.
