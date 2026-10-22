@@ -81,6 +81,10 @@ The trading/gateway uid must be able to write to this directory, because token r
 
 ## Before trading real money
 
+The one-contract SPX launch is tracked in [SPX go-live readiness](docs/spx-go-live.md),
+with a [go/no-go record](docs/research/spx-go-no-go-2026-10-20.md). Preparation of
+the live overlay does not open the evidence gate or authorize a deployment.
+
 All three assets are paper-only unless the owner explicitly authorizes a supervised live canary. Before any restart, deploy, or live pilot, follow [`docs/live-runbook.md`](docs/live-runbook.md). The runbook requires:
 
 - zero `OPEN` trades in the database,

@@ -50,6 +50,7 @@ from butterfly_guy.execution.order_manager import (
     BrokerFillError,
     OrderManager,
 )
+from butterfly_guy.risk.live_safety import LiveSafetyError, require_spx_supervision
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, build_entry_chart_png
@@ -223,7 +224,7 @@ class TradeService:
         chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(underlying, underlying)
 
         if not await self._live_chain_snapshot_fresh(underlying, expiration):
-            return None
+            raise LiveSafetyError("chain_snapshot_unavailable_or_stale")
 
         # Get initial spot price for chain scanning and VIX anchoring
         try:
@@ -518,25 +519,27 @@ class TradeService:
             )
 
             entry_lock: tuple[Any, str] | None = None
-            if not self.config.execution.paper_trading:
-                entry_lock = await self._acquire_entry_lock(underlying, expiration)
-                if entry_lock is None:
-                    return None
-
-                allowed, reason = await self.risk_engine.can_trade(
-                    buying_power=buying_power
-                )
-                if not allowed:
-                    await self._release_entry_lock(*entry_lock)
-                    await self.decision_queries.log_event(
-                        "entry_blocked",
-                        {"reason": reason},
-                        underlying=underlying,
-                    )
-                    log.info("entry_blocked", reason=reason)
-                    return None
-
             try:
+                if not self.config.execution.paper_trading:
+                    entry_lock = await self._acquire_entry_lock(underlying, expiration)
+                    if entry_lock is None:
+                        return None
+                    if underlying == "SPX":
+                        require_spx_supervision()
+                    allowed, reason = await self.risk_engine.can_trade(
+                        buying_power=buying_power
+                    )
+                    if not allowed:
+                        await self._release_entry_lock(*entry_lock)
+                        entry_lock = None
+                        await self.decision_queries.log_event(
+                            "entry_blocked",
+                            {"reason": reason},
+                            underlying=underlying,
+                        )
+                        log.info("entry_blocked", reason=reason)
+                        return None
+
                 fill = await self.order_manager.execute_single_attempt(best, limit_price)
                 if fill:
                     fill_price = float(fill["fill_price"])

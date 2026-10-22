@@ -1,7 +1,9 @@
 # Live Runbook
 
-Treat SPX, NDX, and XSP as paper-only unless the owner explicitly authorizes a supervised live
-canary.
+Paper is the default. SPX real-money launch requires Gate A in
+[SPX go-live readiness](spx-go-live.md) and approval of the exact deployment.
+NDX and XSP remain paper during this launch. The historical XSP canary procedure
+below is retained for reference; it is not another launch requirement.
 
 ## Startup
 
@@ -41,6 +43,133 @@ uv run python src/butterfly_guy/scripts/report_broker_order_statuses.py \
 
 6. Restore `execution.paper_trading: true` and rebuild/restart only the XSP
    service before ending supervision.
+
+## SPX live: one contract
+
+Gate A must be signed off before the first order. The current
+[go/no-go record](research/spx-go-no-go-2026-10-20.md) says **NO-GO**. Neither this
+runbook nor the existence of a Compose overlay authorizes deployment or an order.
+
+1. Keep `configs/config.yaml` frozen. The final overlay,
+   `infra/docker-compose.spx-live.yml`, overrides only SPX to direct market data,
+   `paper_trading=false`, and `allow_live_trading=true`. The base file followed by
+   `infra/docker-compose.gateway-paper-cutover.yml` still supplies NDX/XSP paper
+   gateway settings. Apply the live overlay **last**. Replace `app_spx` in place;
+   never start a second live SPX service or a separate Compose project.
+2. Use the tested immutable image ID in `BUTTERFLY_SPX_LIVE_IMAGE`. Pin
+   `LIVE_EXPECTED_SCHWAB_ACCOUNT_ID` independently from the reviewed account
+   record; never derive it from `SCHWAB_ACCOUNT_ID` in a wrapper. Require the
+   options approval for index spreads and $20,000 allocation. Confirm
+   `LIVE_ACCOUNT_ALLOCATION=20000`, `LIVE_MAX_ACCOUNT_DAILY_LOSS=500`,
+   `risk.max_daily_loss=500`, `max_position_size=1`, and `max_trades_per_day=1`.
+   The startup guard rejects mismatches, NDX live, and gateway live market data.
+3. Corey supervises all ten Stage 1 trades during market hours. In both live
+   stages, name the reachable operator in `LIVE_SUPERVISOR` and set
+   `LIVE_SUPERVISION_UNTIL` to an ISO timestamp **with UTC offset**, on that
+   session date, through its cash close. Example format:
+   `2026-10-20T16:30:00-04:00`. Renew it each session. The runtime checks the
+   attestation at startup, under the entry lock before each attempt, and while
+   monitoring a position (including after close); this does not prove a phone is
+   reachable. Continue supervision until orders and settlement reconcile even
+   if that extends beyond the attested timestamp. If nobody can cover the whole
+   holding window, keep paper mode.
+4. `entry.live_require_leg_bids` remains **false**, the frozen default. A zero
+   bid on a purchased wing alone is not evidence that the complex limit cannot
+   execute. Enabling this filter would change eligible entries relative to E0;
+   it needs a new cohort. Executable leg prices, the debit cap, and broker state
+   checks still apply. Require review of this choice before Gate A is signed.
+5. Review the existing four $0.10 entry steps, 20-second retry interval and
+   300-second timeout against contemporaneous SPX spreads. Save timestamps,
+   selected spread bid/ask, each limit, cancellations, and actual fills. Do not
+   change the ladder to force a fill. Code rounds SPX limits to $0.05, but that
+   is not broker acceptance proof. Use a supported Schwab preview if available;
+   otherwise the first approved supervised order is the acceptance test.
+6. On the exact release, run the full tests and Ruff, then render the exact
+   Compose argv with `config --quiet`. Use protected env files; do not print
+   rendered configuration containing secrets. Follow the Deploy section for
+   the image, flatness checks, uniqueness check and rollback record. After
+   startup, require `/health`, `/ready`, the direct read path and effective
+   live mode in the deployment evidence. A successful config render alone
+   cannot prove authenticated startup.
+7. After every session, compare actual Schwab executions and cash settlements
+   with `butterfly_trades`, `broker_order_intents`, `daily_risk_state` and
+   `decision_log`. No unknown statuses may remain. A cash settlement must use
+   broker transaction evidence; manual DB edits are not a successful M10 test.
+   Save the redacted reporter output:
+
+   ```bash
+   python -m butterfly_guy.scripts.report_broker_order_statuses \
+     --config configs/config.yaml --underlying SPX --date YYYY-MM-DD
+   ```
+
+8. Complete ten clean supervised trades for Gate B, then twenty additional
+   clean routine trades for Gate C. Keep one contract and one trade/day in
+   both stages. Record each trade's broker execution evidence and stressed
+   cost comparison. Gate C requires all thirty to reconcile with no manual
+   DB edits and average execution costs no worse than the registered bid/ask
+   plus $0.05 adverse slippage per option contract per executed side. Include
+   fees consistently; cash settlement has no closing execution cost.
+
+## SPX kill procedure and stop rules
+
+Any unknown status, partial fill, cancel-pending state, broker/DB mismatch,
+stale chain, missed critical phone alert, or loss of supervision stops live
+entries. Do not wait for a second incident or for the daily loss limit.
+
+First latch today's halt and audit the incident in the running SPX container:
+
+```bash
+docker exec butterfly_spx_app python -m butterfly_guy.scripts.halt_live_entries \
+  --config configs/config.yaml --reason 'INCIDENT-ID: stop-rule reason'
+```
+
+This commits `daily_risk_state.halted=true` and a `live_entry_halted` audit event
+in one transaction. It does not set a fictitious loss, cancel an order, or
+flatten. In-flight orders still need operator attention. The entry risk check
+also runs before every live submission under the existing entry lock. Automated
+broker/settlement/stale-chain stops exit the entry loop; a broker mismatch
+latches its gate for the lifetime of that process, even if later reads agree.
+Monitoring and reconciliation continue while the operator takes control.
+
+Once the operator is watching the position directly in Schwab, stop the app:
+
+```bash
+docker stop butterfly_spx_app
+```
+
+If the DB halt fails or the app is unresponsive, take broker control and stop
+the app immediately. Its live overlay uses `restart: "no"`. Follow Manual
+Flatten below for working orders and positions. Never assume stopping a
+container canceled its broker orders or closed its position.
+
+Reconcile and write an incident record, then return SPX to paper with a targeted,
+approved deployment using the existing gateway-paper/release-image overlays
+**without** the SPX live overlay. Confirm effective `paper_trading=true`,
+`allow_live_trading=false`, `/ready`, no duplicate SPX runtime, and broker/DB
+flatness. Preserve NDX/XSP images and services. Never clear the halt or edit
+trade/order rows just to resume live. The DB flag is daily, not a permanent
+cross-session kill switch: keep the live container stopped until a reviewed
+re-entry is approved. Restart the affected stage's clean-trade count at zero.
+Previously completed stages need not be repeated. A failure at the registered
+60-trade early-failure review uses this same return-to-paper procedure.
+
+## SPX credentials and alert coverage
+
+Reserve **Saturday 10:00 America/Los_Angeles** for Corey's interactive weekly
+Schwab reauthorization, outside market hours. This is the operating schedule;
+calendar installation and the owner/browser action remain readiness tasks.
+Use the established token-owner renewal procedure, preserving shared token
+storage and automatic consumer reloads. Do not introduce a second token file
+or rewrite credentials as part of a deployment.
+
+The shared gateway's `schwab_gateway_refresh_token_expires_timestamp_seconds`
+and `infra/alerts.yml` (in SchwabGateway) provide expiry warning within 24 hours.
+Before Gate A, verify that rule is loaded and its route reaches the phone used
+for live supervision. Check direct SPX authentication after renewal as well.
+An accepted Alertmanager HTTP request is not end-to-end phone delivery. Arrange
+an explicitly approved critical-alert drill, record the phone receipt and
+acknowledgment time, and halt live on a missed alert. Do not send a real alert
+as part of an offline test.
 
 ## During Session
 

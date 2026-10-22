@@ -1,0 +1,21 @@
+# PREPARED ONLY. Apply LAST, after the gateway-paper overlay, only after Gate A
+# and explicit approval of the Helios SPX deployment. It replaces app_spx in place;
+# NDX/XSP retain their existing PAPER/gateway configuration and image.
+services:
+  app_spx:
+    build: !reset null
+    image: "${BUTTERFLY_SPX_LIVE_IMAGE:?set the tested immutable SPX image ID}"
+    pull_policy: never
+    restart: "no"
+    environment:
+      SCHWAB_ACCESS_MODE: direct
+      SCHWAB_GATEWAY_SHADOW_READS: "false"
+      SCHWAB_GATEWAY_API_KEY: ""
+      EXECUTION__PAPER_TRADING: "false"
+      EXECUTION__ALLOW_LIVE_TRADING: "true"
+      ALLOW_LIVE_TRADING: "true"
+      LIVE_EXPECTED_SCHWAB_ACCOUNT_ID: "${LIVE_EXPECTED_SCHWAB_ACCOUNT_ID:?pin the reviewed account independently}"
+      LIVE_ACCOUNT_ALLOCATION: "20000"
+      LIVE_MAX_ACCOUNT_DAILY_LOSS: "500"
+      LIVE_SUPERVISOR: "${LIVE_SUPERVISOR:?name the reachable session supervisor}"
+      LIVE_SUPERVISION_UNTIL: "${LIVE_SUPERVISION_UNTIL:?set an aware timestamp through today's cash close}"

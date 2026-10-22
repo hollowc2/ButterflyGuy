@@ -911,6 +911,12 @@ def test_live_config_rejects_spx_live_without_account_confirmation(monkeypatch):
 
 
 def test_live_config_allows_spx_live_when_explicitly_confirmed(monkeypatch):
+    from butterfly_guy.core.time_utils import now_eastern
+
+    monkeypatch.setenv("LIVE_SUPERVISOR", "Corey")
+    monkeypatch.setenv(
+        "LIVE_SUPERVISION_UNTIL", now_eastern().replace(hour=23, minute=59).isoformat()
+    )
     monkeypatch.setenv("LIVE_EXPECTED_SCHWAB_ACCOUNT_ID", "123")
     monkeypatch.setenv("LIVE_ACCOUNT_ALLOCATION", "20000")
     monkeypatch.setenv("LIVE_MAX_ACCOUNT_DAILY_LOSS", "500")

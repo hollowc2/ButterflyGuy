@@ -302,6 +302,13 @@ def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env")
     allow_live = os.getenv("ALLOW_LIVE_TRADING", "").lower() in {"1", "true", "yes"}
     if allow_live:
         execution_data["allow_live_trading"] = True
+    # Pydantic gives constructor/YAML values precedence over environment values.
+    # These two deployment controls must override YAML in both directions, so a
+    # paper rollback also wins over a live YAML file. Keep strategy inputs frozen.
+    for field in ("paper_trading", "allow_live_trading"):
+        value = os.getenv(f"EXECUTION__{field.upper()}")
+        if value is not None:
+            execution_data[field] = value
     yaml_data["execution"] = execution_data
 
     return AppConfig(**yaml_data)
