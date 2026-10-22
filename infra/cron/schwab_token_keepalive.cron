@@ -1,0 +1,8 @@
+# Schwab token keepalive — hourly, plus the Friday 14:00 UTC (7 AM PDT) re-auth reminder.
+# Refreshes the access token and owns the ButterflyGuyTokenExpiry Alertmanager alert.
+# cron_guard posts a Discord alert (DISCORD_WEBHOOK_URL) if the job exits non-zero,
+# which includes any failed refresh -- a revoked token used to fail here silently.
+# Install:
+#   crontab -l 2>/dev/null | grep -v schwab_token_keepalive | cat - infra/cron/schwab_token_keepalive.cron | crontab -
+0 * * * * cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/cron_guard.py --job schwab_token_keepalive -- /opt/butterflyguy/.venv/bin/python tools/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
+0 14 * * 5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/cron_guard.py --job schwab_token_weekly_reminder -- /opt/butterflyguy/.venv/bin/python tools/schwab_token_keepalive.py --weekly-reminder >> /opt/butterflyguy/keepalive.log 2>&1
