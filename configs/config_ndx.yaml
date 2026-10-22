@@ -66,6 +66,8 @@ risk:
   max_weekly_loss: 5000.0  # Wider NDX flies need more weekly room
 collector:
   snapshot_interval_seconds: 60
+  align_to_minute: true
+  align_offset_seconds: 2.0
   record_timing: true
 position_data:
   shadow_held_quotes: true
