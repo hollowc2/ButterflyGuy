@@ -1,7 +1,8 @@
 """Keep the Schwab OAuth token alive and alert before refresh token expiry.
 
 Schwab refresh tokens have a hard 7-day expiry from issue date.
-This script raises one centrally deduplicated alert starting 24 hours before expiry.
+This script raises one centrally deduplicated alert starting 24 hours before expiry,
+or as soon as Schwab rejects the refresh token, whatever the clock says.
 Also sends a weekly reminder the day before, so the re-auth can be planned.
 
 The re-auth cadence is Saturday: each new expiry is exactly 7 days after the moment of
@@ -9,9 +10,8 @@ re-authorization, so re-authorizing on a Saturday keeps every future deadline on
 Saturday. The reminder therefore fires Friday, and the alert window has to be wide
 enough to open before that Saturday morning.
 
-Cron: run hourly plus a dedicated Friday 07:00 PDT reminder.
-  0 * * * * /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py >> /opt/butterflyguy/keepalive.log 2>&1
-  0 14 * * 5 /opt/butterflyguy/.venv/bin/python /opt/butterflyguy/tools/schwab_token_keepalive.py --weekly-reminder >> /opt/butterflyguy/keepalive.log 2>&1
+Cron: run hourly plus a dedicated Friday 07:00 PDT reminder, both under cron_guard so a
+failed refresh also reaches Discord. See infra/cron/schwab_token_keepalive.cron.
 """
 
 import json
@@ -47,6 +47,19 @@ REFRESH_TOKEN_TTL = 7 * 24 * 3600  # 7 days in seconds
 WARN_BEFORE = 24 * 3600             # start alerting 24 hours before expiry
 LOCK_TIMEOUT = 30.0                 # wait out a gateway write before giving up
 
+
+def token_rejected(error: Exception) -> bool:
+    """True when Schwab refused the credential itself, not when the call merely failed.
+
+    A revoked or expired refresh token surfaces from authlib as an ``OAuthError`` whose
+    text carries ``invalid_grant``; a rejected access token surfaces as an HTTP 401.
+    """
+    if type(error).__name__ == "OAuthError" or "invalid_grant" in str(error):
+        return True
+    response = getattr(error, "response", None)
+    return getattr(response, "status_code", None) == 401
+
+
 if not TOKEN_PATH.exists():
     print(f"ERROR: token file not found at {TOKEN_PATH}")
     sys.exit(1)
@@ -79,38 +92,6 @@ if WEEKLY_REMINDER:
         f"({hours_remaining:.1f}h)"
     )
 
-if seconds_remaining <= 0:
-    alert_accepted = send_alertmanager(
-        ALERTMANAGER_URL,
-        "token_expiry",
-        "ALL",
-    )
-    alert_result = "sent" if alert_accepted else "failed"
-    print(
-        f"TOKEN ALERT: {alert_result}; refresh token expired "
-        f"{abs(hours_remaining):.1f}h ago"
-    )
-elif seconds_remaining <= WARN_BEFORE:
-    alert_accepted = send_alertmanager(
-        ALERTMANAGER_URL,
-        "token_expiry",
-        "ALL",
-    )
-    alert_result = "sent" if alert_accepted else "failed"
-    print(
-        f"TOKEN ALERT: {alert_result}; refresh token expires in "
-        f"{hours_remaining:.1f}h"
-    )
-else:
-    alert_accepted = send_alertmanager(
-        ALERTMANAGER_URL,
-        "token_expiry",
-        "ALL",
-        resolved=True,
-    )
-    alert_result = "resolved" if alert_accepted else "failed"
-    print(f"TOKEN ALERT: {alert_result}; refresh token is healthy")
-
 # Always try to refresh the access token. The gateway writes this same document, so the
 # whole read-refresh-write has to be one critical section: the two writers would otherwise
 # interleave and the later write would clobber the earlier one's access token.
@@ -118,6 +99,7 @@ else:
 # Schwab does NOT rotate the refresh token on an ordinary access-token refresh -- verified
 # 2026-08-08, where the same value survived both a gateway refresh and a keepalive firing.
 # The lock is still required for the reason above; it is not guarding a consumable token.
+refresh_error = None
 try:
     from schwab.auth import client_from_token_file
     from schwab_token_store import (
@@ -143,8 +125,60 @@ try:
         f"refresh token expires in {hours_remaining:.1f}h"
     )
 except Exception as e:
+    refresh_error = e
     print(f"ERROR: {e}")
-    sys.exit(1)
 
-if not alert_accepted:
+
+# The alert state is decided only after the refresh, so a token Schwab has already
+# rejected can never be reported healthy. On 2026-10-20 a second mint revoked the live
+# refresh token with ~100h left on the clock; the old clock-only check resolved this
+# alert every hour while every refresh failed with invalid_grant.
+if refresh_error is not None and token_rejected(refresh_error):
+    alert_accepted = send_alertmanager(
+        ALERTMANAGER_URL,
+        "token_expiry",
+        "ALL",
+    )
+    alert_result = "sent" if alert_accepted else "failed"
+    print(
+        f"TOKEN ALERT: {alert_result}; Schwab rejected the refresh token "
+        f"({hours_remaining:.1f}h left on the clock)"
+    )
+elif seconds_remaining <= 0:
+    alert_accepted = send_alertmanager(
+        ALERTMANAGER_URL,
+        "token_expiry",
+        "ALL",
+    )
+    alert_result = "sent" if alert_accepted else "failed"
+    print(
+        f"TOKEN ALERT: {alert_result}; refresh token expired "
+        f"{abs(hours_remaining):.1f}h ago"
+    )
+elif seconds_remaining <= WARN_BEFORE:
+    alert_accepted = send_alertmanager(
+        ALERTMANAGER_URL,
+        "token_expiry",
+        "ALL",
+    )
+    alert_result = "sent" if alert_accepted else "failed"
+    print(
+        f"TOKEN ALERT: {alert_result}; refresh token expires in "
+        f"{hours_remaining:.1f}h"
+    )
+elif refresh_error is None:
+    alert_accepted = send_alertmanager(
+        ALERTMANAGER_URL,
+        "token_expiry",
+        "ALL",
+        resolved=True,
+    )
+    alert_result = "resolved" if alert_accepted else "failed"
+    print(f"TOKEN ALERT: {alert_result}; refresh token is healthy")
+else:
+    # A transient failure (network, Schwab 5xx) says nothing about the token either
+    # way, so leave the alert where it is; the non-zero exit reaches cron_guard.
+    alert_accepted = True
+
+if refresh_error is not None or not alert_accepted:
     sys.exit(1)

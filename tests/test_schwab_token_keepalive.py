@@ -269,3 +269,94 @@ def test_token_keepalive_exits_when_the_token_lock_is_held(monkeypatch, capsys):
     assert exc.value.code == 1
     assert "ERROR: token lock held by another writer" in capsys.readouterr().out
     client_from_token_file.assert_not_called()
+
+
+class OAuthError(Exception):
+    """Stand-in carrying authlib's class name, which is what the keepalive keys on."""
+
+
+@pytest.mark.parametrize(
+    "error,rejected",
+    [
+        # The exact text the gateway and keepalive logged on 2026-10-20.
+        (
+            OAuthError(
+                'unsupported_token_type: 400 Bad Request: "{"error_description":'
+                '"Refresh token is invalid, expired or revoked","error":"invalid_grant"}"'
+            ),
+            True,
+        ),
+        (RuntimeError("401 Unauthorized"), False),
+        (ConnectionError("timed out"), False),
+    ],
+)
+def test_token_keepalive_alert_follows_the_refresh(
+    monkeypatch, capsys, error, rejected
+):
+    """A healthy clock no longer resolves the alert when the refresh itself failed.
+
+    A rejected token fires the expiry alert however many hours the clock shows; a
+    transient failure leaves the alert state alone. Both exit non-zero for cron_guard.
+    """
+    alerts = []
+
+    def send_alertmanager(url, condition, underlying, **kwargs):
+        alerts.append((condition, kwargs))
+        return True
+
+    _run_with_stub_token(monkeypatch)
+    monkeypatch.setattr(
+        "schwab.auth.client_from_token_file", MagicMock(side_effect=error)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "butterfly_guy.notify",
+        types.SimpleNamespace(
+            send=lambda _message: True,
+            send_alertmanager=send_alertmanager,
+        ),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path("tools/schwab_token_keepalive.py", run_name="__main__")
+
+    out = capsys.readouterr().out
+    assert exc.value.code == 1
+    assert "refresh token is healthy" not in out
+    if rejected:
+        assert alerts == [("token_expiry", {})]
+        assert "TOKEN ALERT: sent; Schwab rejected the refresh token (168.0h" in out
+    else:
+        assert alerts == []
+
+
+def test_token_keepalive_treats_http_401_as_rejected(monkeypatch, capsys):
+    """An access token Schwab answers with 401 is a credential failure, not a blip."""
+    alerts = []
+    response = MagicMock(status_code=401)
+    response.raise_for_status.side_effect = RuntimeError("401 Unauthorized")
+    response.raise_for_status.side_effect.response = response
+
+    def send_alertmanager(url, condition, underlying, **kwargs):
+        alerts.append((condition, kwargs))
+        return True
+
+    _run_with_stub_token(monkeypatch)
+    monkeypatch.setattr(
+        "schwab.auth.client_from_token_file",
+        MagicMock(return_value=MagicMock(get_quote=MagicMock(return_value=response))),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "butterfly_guy.notify",
+        types.SimpleNamespace(
+            send=lambda _message: True,
+            send_alertmanager=send_alertmanager,
+        ),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path("tools/schwab_token_keepalive.py", run_name="__main__")
+
+    assert exc.value.code == 1
+    assert alerts == [("token_expiry", {})]
