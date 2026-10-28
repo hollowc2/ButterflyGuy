@@ -410,6 +410,25 @@ class OrderIntentQueries:
             json.dumps(candidate_snapshot),
         )
 
+    async def append_execution_observation(
+        self, intent_id: int, observation: dict[str, Any]
+    ) -> None:
+        """Append audit evidence without replacing broker status or fill payload."""
+        result = await self.db.pool.execute(
+            """
+            UPDATE broker_order_intents
+            SET candidate_snapshot = jsonb_set(
+                candidate_snapshot, '{execution_observations}',
+                COALESCE(candidate_snapshot->'execution_observations', '[]'::jsonb)
+                    || $2::jsonb
+            ), updated_at = NOW()
+            WHERE id = $1
+            """,
+            intent_id, json.dumps([observation]),
+        )
+        if result != "UPDATE 1":
+            raise RuntimeError("execution observation has no durable order intent")
+
     async def mark_broker_order_id(self, intent_id: int, broker_order_id: str) -> None:
         await self.db.pool.execute(
             """
