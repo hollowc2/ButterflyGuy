@@ -315,6 +315,10 @@ def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env")
     yaml_data["database"] = database_data
 
     execution_data = yaml_data.get("execution", {})
+    # Deployment overrides must win over the checked-in paper default. Pass the
+    # string through Pydantic so malformed booleans fail instead of enabling live.
+    if "EXECUTION__PAPER_TRADING" in os.environ:
+        execution_data["paper_trading"] = os.environ["EXECUTION__PAPER_TRADING"]
     allow_live = os.getenv("ALLOW_LIVE_TRADING", "").lower() in {"1", "true", "yes"}
     if allow_live:
         execution_data["allow_live_trading"] = True

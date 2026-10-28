@@ -126,3 +126,31 @@ async def test_live_test_exit_does_not_submit_with_missing_fresh_quotes():
     with pytest.raises(Exception, match="requires fresh leg quotes"):
         await om.execute_exit(make_candidate(5900, 5950, 6000, 3), 3)
     schwab.place_order.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "environment,yaml_value,expected",
+    [
+        ("false", True, False),
+        ("true", False, True),
+    ],
+)
+def test_deployment_paper_override_wins_over_yaml(
+    tmp_path, monkeypatch, environment, yaml_value, expected
+):
+    from butterfly_guy.core.config import load_config
+
+    path = tmp_path / "config.yaml"
+    path.write_text(f"execution:\n  paper_trading: {str(yaml_value).lower()}\n")
+    monkeypatch.setenv("EXECUTION__PAPER_TRADING", environment)
+    assert (
+        load_config(path, env_file=str(tmp_path / "absent.env")).execution.paper_trading is expected
+    )
+
+
+def test_invalid_deployment_mode_fails_closed(tmp_path, monkeypatch):
+    from butterfly_guy.core.config import load_config
+
+    monkeypatch.setenv("EXECUTION__PAPER_TRADING", "typo")
+    with pytest.raises(ValueError):
+        load_config(tmp_path / "absent.yaml", env_file=str(tmp_path / "absent.env"))
