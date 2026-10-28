@@ -4,7 +4,7 @@ Definitions match docs/research/strategy-discovery-journal.md (2026-09-25):
 - implied sigma of the rest of the session = 1.25 x the 10:00 ET ATM straddle mid
   (the straddle is about 0.8 sigma of the remaining move);
 - z = (official close - 10:00 spot) / sigma;
-- realized/implied = RMS of z (1.0 means the chain priced the move correctly);
+- realized/implied = RMS of z (1.0 means RMS normalized displacement matches implied sigma);
 - a "landing" is a close 0.9-2.3 sigma in the opening-gap direction, where the baseline
   butterfly's tent sits.
 """
@@ -110,10 +110,10 @@ def verdict(rms_z: float | None) -> str:
     if rms_z is None:
         return "no completed sessions"
     if rms_z >= 1.0:
-        return "moves at/above priced: conditions like H1, when the strategy made money"
+        return "10:00-to-close movement at/above implied"
     if rms_z >= 0.95:
-        return "moves slightly below priced: neutral"
-    return "moves below priced: conditions like H2, when the strategy lost"
+        return "10:00-to-close movement approximately matched implied"
+    return "10:00-to-close movement below implied"
 
 
 def format_message(
@@ -138,8 +138,8 @@ def format_message(
         )
     ws, cs, ts = summarize(week), summarize(cohort), summarize(trailing)
     lines = [
-        f"**SPX realized vs implied — week {week_start:%b %d}–{week_end:%b %d}**",
-        f"Last {ts.sessions} sessions realized/implied: **{_fmt(ts.rms_z, '.2f')}** — "
+        f"**SPX 10:00-to-close movement vs implied — week {week_start:%b %d}–{week_end:%b %d}**",
+        f"Last {ts.sessions} sessions movement/implied: **{_fmt(ts.rms_z, '.2f')}** — "
         f"{verdict(ts.rms_z)} (this week {_fmt(ws.rms_z, '.2f')} on {ws.sessions}, noisy)",
         "```",
         "session    strdl   move      z  gap land",
@@ -151,8 +151,11 @@ def format_message(
         _summary_line("last 20 sess", ts),
         *(f"{name:<37} {rms:4.2f}   land {land:.0%}" for name, rms, land in REFERENCE_PERIODS),
         "```",
-        "z = (close − 10:00 spot) / (1.25 × 10:00 ATM straddle). RMSz 1.0 = the chain priced "
-        "the move correctly. land = close 0.9–2.3σ in the gap direction (the fly's profit zone). "
-        "strdl$ = long 10:00 straddle held to close, pts. Diagnostic only; no rule uses it.",
+        "z = (close − 10:00 spot) / (1.25 × 10:00 ATM straddle). "
+        "RMSz 1.0 = RMS normalized displacement matches implied sigma. This measures net "
+        "movement, not intraday path volatility. land = close 0.9–2.3σ in the gap direction. "
+        "strdl$ = approximate long straddle P&L, pts: |close − 10:00 spot| − premium; "
+        "uses spot rather than strike, before costs. land is a closing-location proxy, not actual "
+        "fly P&L. Diagnostic only; no rule uses it.",
     ]
     return "\n".join(lines)

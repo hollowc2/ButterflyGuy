@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
 from schwab_gateway_sdk.config import GatewayClientSettings
+from schwab_token_store import TokenLockTimeoutError
 
 from butterfly_guy.core.config import (
     AppConfig,
@@ -22,6 +23,7 @@ from butterfly_guy.data.providers import (
     GatewayAuthoritativeMarketDataProvider,
 )
 from butterfly_guy.data.schemas import TradeRecord
+from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
@@ -984,11 +986,11 @@ async def test_token_reload_loop_survives_a_failed_reload(monkeypatch):
     bad document is to log and try again -- not to fault the TaskGroup.
     """
     outcomes = [RuntimeError("bad document"), True]
-    calls: list[str] = []
+    calls: list[bool] = []
 
-    async def reload_if_reauthorized():
+    async def reload_if_reauthorized(*, force_reload=False):
         outcome = outcomes[len(calls)]
-        calls.append("called")
+        calls.append(force_reload)
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
@@ -1004,14 +1006,62 @@ async def test_token_reload_loop_survives_a_failed_reload(monkeypatch):
     task.cancel()
 
     assert len(calls) == 2, "loop stopped after the failure instead of retrying"
+    assert calls == [False, True]
     errors.assert_called_once()
     assert errors.call_args.args[0] == "schwab_token_reload_failed"
     assert not token_reload_gate.unsafe
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("account_status", [200, 401])
+async def test_token_lock_timeout_recovery_validates_unchanged_token(monkeypatch, account_status):
+    """An unchanged token must be validated before clearing a transient reload failure."""
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    old_client = Mock()
+    schwab._client = old_client
+    schwab._account_hash = "HASH"
+    schwab._creation_timestamp = 1000
+    read_marker = Mock(
+        side_effect=[TokenLockTimeoutError("timed out waiting for the token lock"), 1000]
+    )
+    monkeypatch.setattr(schwab, "_read_creation_timestamp", read_marker)
+    response = Mock(status_code=account_status)
+    response.json.return_value = [{"accountNumber": "123", "hashValue": "HASH"}]
+    candidate = Mock(
+        get_account_numbers=AsyncMock(return_value=response),
+        close_async_session=AsyncMock(),
+    )
+    build_client = Mock(return_value=candidate)
+    monkeypatch.setattr(schwab, "_build_client", build_client)
+    monkeypatch.setattr(
+        "butterfly_guy.scripts.run_live.asyncio.sleep",
+        AsyncMock(side_effect=[None, None, asyncio.CancelledError]),
+    )
+    token_reload_gate = BrokerStateGate()
+    set_readiness(None)
+
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await token_reload_loop(schwab, token_reload_gate, interval=0)
+
+        assert read_marker.call_count == 2
+        build_client.assert_called_once()
+        candidate.get_account_numbers.assert_awaited_once()
+        recovered = account_status == 200
+        assert token_reload_gate.unsafe is not recovered
+        assert readiness_snapshot()[0] is recovered
+        assert schwab.client is (candidate if recovered else old_client)
+        if recovered:
+            old_client.close_async_session.assert_not_called()
+        else:
+            candidate.close_async_session.assert_awaited_once()
+    finally:
+        set_readiness(None)
+
+
+@pytest.mark.asyncio
 async def test_failed_token_reload_blocks_new_entries(monkeypatch):
-    async def reload_if_reauthorized():
+    async def reload_if_reauthorized(*, force_reload=False):
         raise RuntimeError("candidate token rejected")
 
     token_reload_gate = BrokerStateGate()
