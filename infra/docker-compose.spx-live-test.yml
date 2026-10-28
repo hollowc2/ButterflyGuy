@@ -1,0 +1,26 @@
+# Apply LAST, only for the supervised session. No account identifier is stored here.
+# Requires a reviewed release image and an explicit date. Other services stay paper.
+services:
+  app_spx:
+    build: !reset null
+    image: "${SPX_LIVE_TEST_IMAGE:?set reviewed immutable live-test image}"
+    pull_policy: never
+    restart: "no"
+    command:
+      - /bin/sh
+      - -c
+      - export LIVE_EXPECTED_SCHWAB_ACCOUNT_ID="$${SCHWAB_ACCOUNT_ID}"; exec python -m butterfly_guy.scripts.run_live --config configs/config.yaml
+    environment:
+      SCHWAB_ACCESS_MODE: direct
+      SCHWAB_GATEWAY_SHADOW_READS: "false"
+      EXECUTION__PAPER_TRADING: "false"
+      EXECUTION__ALLOW_LIVE_TRADING: "true"
+      ALLOW_LIVE_TRADING: "true"
+      EXECUTION__LIVE_TEST_DATE: "${SPX_LIVE_TEST_DATE:?set supervised session YYYY-MM-DD}"
+      EXECUTION__LIVE_TEST_MAX_DEBIT: "4.0"
+      EXECUTION__RECORD_LIVE_EXECUTION: "true"
+      EXECUTION__LIVE_TEST_QUOTE_MAX_AGE_SECONDS: "10"
+      RISK__MAX_POSITION_SIZE: "1"
+      RISK__MAX_TRADES_PER_DAY: "1"
+      LIVE_ACCOUNT_ALLOCATION: "20000"
+      LIVE_MAX_ACCOUNT_DAILY_LOSS: "500"
