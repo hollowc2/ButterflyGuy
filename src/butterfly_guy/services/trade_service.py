@@ -178,6 +178,12 @@ class TradeService:
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
         """Full entry flow from eligibility checks through entry fill."""
+        if (
+            not self.config.execution.paper_trading
+            and self.config.execution.live_test_date is not None
+            and session_date() != self.config.execution.live_test_date
+        ):
+            return None
         # Time window check first — cheapest guard, avoids unnecessary API calls outside window
         if not time_in_window(
             self.config.entry.start_time,
