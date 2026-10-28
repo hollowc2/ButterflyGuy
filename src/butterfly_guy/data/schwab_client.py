@@ -157,7 +157,7 @@ class SchwabClientWrapper:
         self._account_hash = await self._resolve_account_hash(self._client)
         log.info("schwab_client_initialized")
 
-    async def reload_if_reauthorized(self) -> bool:
+    async def reload_if_reauthorized(self, *, force_reload: bool = False) -> bool:
         """Rebuild the client if the token document has been re-authorized.
 
         schwab-py reads the token exactly once, when the client is constructed
@@ -173,11 +173,19 @@ class SchwabClientWrapper:
         `self.client.<method>` eagerly, so a request already in flight completes
         against the object it started on, and closing that session underneath it
         would abort it. It is closed at the next reload or at `close()`.
+
+        After a reload failure, force a rebuild and account validation even if the
+        marker is unchanged. A successful marker read alone does not prove that
+        credentials are usable, and must not leave a transient failure latched.
         """
         creation = self._read_creation_timestamp()
-        if creation is None or creation == self._creation_timestamp:
+        if creation is None:
+            if force_reload:
+                raise RuntimeError("Schwab token re-authorization marker is missing or invalid")
             return False
-        if self._creation_timestamp is None:
+        if creation == self._creation_timestamp and not force_reload:
+            return False
+        if self._creation_timestamp is None and not force_reload:
             # Marker unreadable at startup. Adopt it now rather than treating the first
             # successful read as a re-authorization and rebuilding a working client.
             self._creation_timestamp = creation
