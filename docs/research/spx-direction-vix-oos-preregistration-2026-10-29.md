@@ -177,3 +177,50 @@ H-VA1 is primary. The others are secondary.
 4. **Bugs.** A bug found after running may be fixed and the run repeated, with a revision
    note here describing the bug and both results. Criteria, thresholds, geometry and
    definitions do not change.
+
+## Results (run 2026-10-29, once; plan commit 4c72a35)
+
+Script `tools/research_studies/direction_oos_test.py`; output
+`reports/research/spx-direction-oos-20261029/results.json`.
+
+- **Test A data:** dataset hash `a5d3b5e7…` (after the three approved exclusions; quality
+  run `d63a3f4a002d` passes Q1–Q6). 308 sessions scored (3 more excluded by the loader),
+  215 E0 entries, 51 of them at VIX < 17.
+- **Test B data:** 4,090 days, after dropping 27 stale-CSV days and 38 early closes. Early
+  closes were detected as days whose last SPX bar is before 13:30 Chicago time; all 38 are
+  holiday eves. The two subsets in a difference use bootstrap seeds 1 and 2.
+
+| Criterion | Result | Pass |
+|---|---|---|
+| A1 A-VA − A0, stressed | −$5,407 (A-VA −$15,500 vs A0 −$10,093), p_better 0.22 | no |
+| A2 mean gap − fade per session, mid | agree −$64, disagree +$21 | no |
+| A3 Σ(gap − fade), mid | −$13,540 | no |
+| A4 A-RG − A0, stressed (51 low-regime entries, scored) | +$6,744, p_better 0.99 | yes |
+| A5 A-CB stressed total | −$9,808, p_better vs A0 0.55 | no |
+| B1 excess, agree − disagree | +0.0133 of max payoff (CI90 +0.0046…+0.0224), p 0.99 | yes |
+| B2 years with agree > disagree | 11 of 16 | yes |
+| B3 mean excess, all days | +0.0074 (CI90 +0.0031…+0.0119), p 0.998 | yes |
+| B4 excess, high − low regime | +0.0159 (CI90 +0.0071…+0.0253), p 0.999 | yes |
+| B5 mean gap payoff, low vs high regime | 0.092 vs 0.129 | yes |
+
+**Verdict.**
+
+| Hypothesis | Result | Failed on |
+|---|---|---|
+| H-VA1 | **FAIL** | A1, A2 |
+| H-GD1 | FAIL | A3 |
+| H-RG1 | **PASS** | — |
+| H-CB1 | FAIL | A5 |
+
+Per the decision rule, VIX agreement is dropped, and no report-only cut is promoted.
+
+**Not covered by the plan.** It names no forward-test path for H-RG1 passing alone. Any
+such test is a new owner decision.
+
+**Notes.**
+
+- On real 2020–21 options the fade beat the gap.
+  - At mid, the fade fly made +$16.2k and the gap fly (A0) +$2.7k.
+  - The reversal was concentrated on VIX-agree days.
+- In the 2003–2019 synthetic payoffs, all three effects appear, at roughly 40% of the
+  in-sample size per day.
