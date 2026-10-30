@@ -8,6 +8,7 @@ from butterfly_guy.reports.realized_vs_implied import (
     atm_straddle,
     format_message,
     summarize,
+    verdict,
 )
 
 D = dt.date(2026, 9, 21)
@@ -45,11 +46,16 @@ def test_atm_straddle_needs_both_sides_at_nearest_strike():
 
 
 def test_format_message_fits_discord_and_marks_pending():
-    week = [move(7040.0, day=D), move(None, day=D + dt.timedelta(days=1))]
+    week = [move(7040.0, day=D + dt.timedelta(days=i)) for i in range(4)]
+    week.append(move(None, day=D + dt.timedelta(days=4)))
     text = format_message(week_start=D, week_end=D + dt.timedelta(days=4), week=week,
                           cohort=week, cohort_start=D, trailing=week[:1])
     assert "pending close" in text
     assert "Diagnostic only" in text
+    assert "10:00-to-close movement vs implied" in text
+    assert "approximate long straddle P&L" in text
+    assert "not intraday path volatility" in text
+    assert "when the strategy" not in text
     assert len(text) < 2000
 
 
@@ -66,3 +72,10 @@ def test_review_week_is_last_completed_week():
     assert review_week(dt.date(2026, 9, 26)) == (dt.date(2026, 9, 21), dt.date(2026, 9, 25))
     assert review_week(dt.date(2026, 9, 25)) == (dt.date(2026, 9, 14), dt.date(2026, 9, 18))
     assert review_week(dt.date(2026, 9, 28)) == (dt.date(2026, 9, 21), dt.date(2026, 9, 25))
+
+
+def test_verdict_describes_movement_without_predicting_strategy_returns():
+    assert verdict(None) == "no completed sessions"
+    assert verdict(1.2) == "10:00-to-close movement at/above implied"
+    assert verdict(0.97) == "10:00-to-close movement approximately matched implied"
+    assert verdict(0.51) == "10:00-to-close movement below implied"
