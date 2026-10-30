@@ -267,3 +267,21 @@ def test_trading_trade_links_preserve_the_selected_strategy_datasource() -> None
 
     assert "var-strategy_datasource=${strategy_datasource:raw}" in serialized
     assert "var-strategy_datasource=timescaledb" not in serialized
+
+
+def test_trade_detail_charts_follow_the_selected_trade_window() -> None:
+    dashboard = _dashboard("butterfly_trade_detail.json")
+    variables = {variable["name"]: variable for variable in dashboard["templating"]["list"]}
+
+    for name in ("trade_window", "trade_shift", "prev_trade_id", "next_trade_id"):
+        assert variables[name]["hide"] == 2
+        assert "$trade_id" in variables[name]["query"]
+    timeseries = [panel for panel in _panels(dashboard) if panel["type"] == "timeseries"]
+    assert timeseries
+    assert all(
+        panel["timeFrom"] == "${trade_window}" and panel["timeShift"] == "${trade_shift}"
+        for panel in timeseries
+    )
+    urls = [link["url"] for link in dashboard["links"]]
+    assert any(url.endswith("var-trade_id=${prev_trade_id}") for url in urls)
+    assert any(url.endswith("var-trade_id=${next_trade_id}") for url in urls)
