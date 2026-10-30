@@ -105,10 +105,9 @@ def test_trading_dashboard_selects_one_strategy_source_without_metric_pollution(
     )
 
     for title in (
-        "Position Value",
         "Peak vs Current Value",
-        "Daily Trade Count",
-        "Active Trades",
+        "All Books This Session",
+        "Last 10 $underlying Trades",
     ):
         assert all("rawSql" in target for target in panels[title]["targets"])
 
@@ -176,26 +175,37 @@ def test_trading_markers_skip_unused_fallbacks_without_losing_history() -> None:
     assert "spot_price IS NOT NULL AND ts <= t.exit_time ORDER BY ts DESC LIMIT 1" in exit_query
 
 
-def test_position_value_checks_eligible_trades_before_monitoring_history() -> None:
-    panel = next(
-        panel
-        for panel in _panels(_dashboard("butterfly_trading.json"))
-        if panel["title"] == "Position Value"
-    )
-    query = panel["targets"][0]["rawSql"]
+def test_live_marks_check_eligible_trades_before_monitoring_history() -> None:
+    panels = list(_panels(_dashboard("butterfly_trading.json")))
+    tiles = next(panel for panel in panels if panel["id"] == 30)["targets"][0]["rawSql"]
+    books = next(
+        panel for panel in panels if panel["title"] == "All Books This Session"
+    )["targets"][0]["rawSql"]
 
     # An ordered global quote scan can read every chunk when no trade is OPEN.
-    # The per-trade LIMIT makes the quote lookup depend on an eligible trade.
-    assert "FROM butterfly_trades t CROSS JOIN LATERAL" in query
-    assert (
-        "SELECT ts, fly_mark FROM monitoring_leg_quotes "
-        "WHERE trade_id = t.id AND underlying = t.underlying "
+    # Each mark lookup is a scalar subquery keyed to one eligible trade.
+    lookup = (
+        "FROM monitoring_leg_quotes WHERE trade_id = t.id AND underlying = t.underlying "
         "ORDER BY ts DESC LIMIT 1"
-    ) in query
-    assert "t.trade_date = CURRENT_DATE" in query
-    assert "t.underlying = '$underlying' AND t.status = 'OPEN'" in query
-    assert "q.fly_mark * 100 * t.quantity" in query
-    assert 'ORDER BY q.ts DESC LIMIT 1), 0)::float AS "Current Value"' in query
+    )
+    assert lookup in tiles
+    assert "FROM t WHERE t.status = 'OPEN'" in tiles
+    assert lookup in books
+    assert "CASE WHEN t.status = 'OPEN' THEN (SELECT fly_mark" in books
+    assert "LEFT JOIN LATERAL (SELECT fly_mark" not in books
+
+
+def test_trading_session_follows_the_time_picker_not_utc_current_date() -> None:
+    dashboard = _dashboard("butterfly_trading.json")
+    variables = {variable["name"]: variable for variable in dashboard["templating"]["list"]}
+    session = variables["session_date"]
+    serialized = json.dumps(dashboard)
+
+    # The database runs in UTC, so CURRENT_DATE rolls to tomorrow at 17:00 PT.
+    assert "CURRENT_DATE" not in serialized
+    assert "$__timeTo() AT TIME ZONE 'America/Los_Angeles'" in session["query"]
+    assert session["refresh"] == 2 and session["hide"] == 2
+    assert "trade_date = '$session_date'::date" in serialized
 
 
 def test_trade_detail_defaults_to_primary_spx_and_selects_strategy_datasource() -> None:
