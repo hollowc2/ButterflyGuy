@@ -1,7 +1,11 @@
 {
   "title": "Butterfly Trading",
   "uid": "butterfly-trading",
-  "tags": ["options", "trading", "index"],
+  "tags": [
+    "options",
+    "trading",
+    "index"
+  ],
   "links": [
     {
       "title": "Performance",
@@ -25,928 +29,278 @@
   "schemaVersion": 38,
   "version": 10,
   "refresh": "30s",
-  "templating": {
+  "time": {
+    "from": "now/d+375m",
+    "to": "now/d-645m"
+  },
+  "timepicker": {
+    "quick_ranges": [
+      {
+        "display": "Market session (06:15–13:15 PT)",
+        "from": "now/d+375m",
+        "to": "now/d-645m"
+      }
+    ]
+  },
+  "timezone": "America/Los_Angeles",
+  "annotations": {
     "list": [
       {
-        "name": "underlying",
-        "label": "Underlying",
-        "type": "custom",
-        "query": "SPX : SPX,NDX : NDX,XSP : XSP",
-        "current": { "text": "SPX", "value": "SPX" },
-        "options": [
-          { "text": "SPX", "value": "SPX", "selected": true },
-          { "text": "NDX", "value": "NDX", "selected": false },
-          { "text": "XSP", "value": "XSP", "selected": false }
-        ],
-        "multi": false,
-        "includeAll": false,
-        "hide": 0,
-        "refresh": 0
+        "name": "Drawdown regimes",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${strategy_datasource}"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "#B877D9",
+        "filter": {
+          "exclude": false,
+          "ids": [
+            3
+          ]
+        },
+        "target": {
+          "refId": "DrawdownRegimes",
+          "rawQuery": true,
+          "rawSql": "WITH regimes(underlying, start_minutes, regime_name, drawdown_pct) AS (\n  VALUES\n    ('SPX', 0, 'Morning', 60),\n    ('SPX', 120, 'Late morning', 90),\n    ('SPX', 240, 'Afternoon', 75),\n    ('NDX', 0, 'Morning', 100),\n    ('NDX', 120, 'Late morning', 95),\n    ('NDX', 240, 'Afternoon', 90),\n    ('XSP', 0, 'Morning', 80),\n    ('XSP', 120, 'Late morning', 90),\n    ('XSP', 240, 'Afternoon', 85)\n), boundaries AS (\n  SELECT ('$session_date'::date + TIME '09:30'\n    + start_minutes * INTERVAL '1 minute') AT TIME ZONE 'America/New_York' AS time,\n    regime_name || ' - ' || drawdown_pct::text || '% drawdown' AS text,\n    'drawdown-regime' AS tags\n  FROM regimes WHERE underlying = '$underlying'\n)\nSELECT time, text, tags FROM boundaries WHERE $__timeFilter(time) ORDER BY time",
+          "format": "table"
+        }
       },
       {
-        "name": "strategy_datasource",
-        "label": "Source",
-        "type": "datasource",
-        "query": "grafana-postgresql-datasource",
-        "regex": "/^TimescaleDB$/",
-        "current": {
-          "selected": true,
-          "text": "TimescaleDB",
-          "value": "timescaledb"
+        "name": "Trade events",
+        "enable": true,
+        "hide": false,
+        "iconColor": "#FF9830",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${strategy_datasource}"
         },
-        "options": [],
-        "multi": false,
-        "includeAll": false,
-        "hide": 0,
-        "refresh": 1
+        "filter": {
+          "exclude": false,
+          "ids": [
+            24,
+            3,
+            11
+          ]
+        },
+        "target": {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT ts AS time, CASE event_type WHEN 'trade_entered' THEN 'Entered' WHEN 'exit_signal_fired' THEN 'Exit signal: ' || COALESCE(data->>'reason', '') WHEN 'trade_exited' THEN 'Exited: ' || COALESCE(data->>'exit_reason', '') ELSE 'Market data unavailable' END AS text, event_type AS tags FROM decision_log WHERE underlying = '$underlying' AND $__timeFilter(ts) AND event_type IN ('trade_entered', 'exit_signal_fired', 'trade_exited', 'position_market_data_unavailable') ORDER BY ts",
+          "refId": "TradeEvents"
+        }
       }
     ]
   },
   "panels": [
     {
-      "id": 1,
-      "title": "Daily P&L",
-      "type": "bargauge",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 0,
-        "y": 0
+      "id": 30,
+      "type": "stat",
+      "title": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${strategy_datasource}"
       },
-      "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
+      "description": "Selected underlying's trade for the session on screen. P&L and value are live from the latest monitoring quote while open.",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "WITH t AS (SELECT * FROM butterfly_trades WHERE underlying = '$underlying' AND trade_date = '$session_date'::date AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1), q AS (SELECT (SELECT fly_mark FROM monitoring_leg_quotes WHERE trade_id = t.id AND underlying = t.underlying ORDER BY ts DESC LIMIT 1) AS mark, (SELECT drawdown_pct FROM monitoring_leg_quotes WHERE trade_id = t.id AND underlying = t.underlying ORDER BY ts DESC LIMIT 1) AS dd FROM t WHERE t.status = 'OPEN'), s AS (SELECT price, ts FROM spot_prices WHERE underlying = '$underlying' AND ts <= $__timeTo() ORDER BY ts DESC LIMIT 1), v AS (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= $__timeTo() ORDER BY ts DESC LIMIT 1), em AS (SELECT (es.price * (ev.price / 100.0) / SQRT(252))::float AS pts FROM t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) es CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) ev) SELECT COALESCE((SELECT CASE WHEN status = 'OPEN' THEN 'OPEN' ELSE COALESCE(exit_reason, status) END FROM t), 'no trade') AS \"Position\", (SELECT (COALESCE(t.pnl, (SELECT mark FROM q) - t.entry_price) * 100 * t.quantity)::float FROM t) AS \"P&L\", (SELECT (COALESCE(CASE WHEN t.status = 'OPEN' THEN (SELECT mark FROM q) END, t.exit_price) * 100 * t.quantity)::float FROM t) AS \"Value\", (SELECT ((t.peak_value - t.entry_price) * 100 * t.quantity)::float FROM t) AS \"Best P&L\", (SELECT dd::float FROM q) AS \"Off peak\", (SELECT (s.price - t.center_strike)::float FROM t, s) AS \"Spot − center\", (SELECT pts FROM em) AS \"1σ move\", (SELECT price::float FROM v) AS \"VIX\", (SELECT EXTRACT(EPOCH FROM ts) * 1000 FROM s) AS \"Spot updated\"",
+          "refId": "A"
+        }
+      ],
       "options": {
-        "displayMode": "basic",
-        "orientation": "horizontal",
-        "showUnfilled": true
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/"
+        },
+        "orientation": "vertical",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 13,
+          "valueSize": 22
+        }
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
           "unit": "currencyUSD",
-          "decimals": 2,
-          "min": 0
+          "noValue": "—"
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Profit" },
+            "matcher": {
+              "id": "byName",
+              "options": "Position"
+            },
             "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "OPEN": {
+                        "text": "OPEN",
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "drawdown_morning": {
+                        "text": "DD AM",
+                        "index": 1
+                      },
+                      "drawdown_late_morning": {
+                        "text": "DD late AM",
+                        "index": 2
+                      },
+                      "drawdown_afternoon": {
+                        "text": "DD PM",
+                        "index": 3
+                      },
+                      "cash_settled": {
+                        "text": "settled",
+                        "index": 4
+                      },
+                      "end_of_day": {
+                        "text": "EOD",
+                        "index": 5
+                      },
+                      "absolute_loss_stop": {
+                        "text": "loss stop",
+                        "index": 6
+                      },
+                      "no trade": {
+                        "text": "no trade",
+                        "color": "#8e8e8e",
+                        "index": 7
+                      }
+                    }
+                  }
+                ]
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Loss" },
+            "matcher": {
+              "id": "byRegexp",
+              "options": "P&L|Best P&L"
+            },
             "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Off peak"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Spot − center|1σ move"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "VIX"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Spot updated"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
             ]
           }
         ]
-      },
-      "transformations": [
-        {
-          "id": "configFromData",
-          "options": {
-            "configRefId": "B",
-            "mappings": [
-              { "fieldName": "Max", "handlerKey": "max" }
-            ],
-            "applyTo": { "id": "byRegexp", "options": "Profit|Loss" }
-          }
-        }
-      ],
-      "targets": [
-        {
-          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
-          "rawQuery": true,
-          "rawSql": "WITH totals AS (SELECT COALESCE(SUM(pnl * 100 * quantity), 0)::float AS pnl_dollars FROM butterfly_trades WHERE status='CLOSED' AND trade_date=CURRENT_DATE AND underlying='$underlying') SELECT NOW() AS time, CASE WHEN pnl_dollars >= 0 THEN 'Profit' ELSE 'Loss' END AS metric, ABS(pnl_dollars) AS value FROM totals",
-          "format": "time_series",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "grafana-postgresql-datasource", "uid": "${strategy_datasource}" },
-          "rawQuery": true,
-          "rawSql": "SELECT COALESCE(SUM((wing_width - entry_price) * 100 * quantity), 1)::float AS \"Max\" FROM butterfly_trades WHERE status='CLOSED' AND trade_date=CURRENT_DATE AND underlying='$underlying'",
-          "format": "table",
-          "refId": "B"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "title": "Position Value",
-      "type": "gauge",
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 0
-      },
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2,
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "green",
-                "value": 100
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COALESCE((SELECT (q.fly_mark * 100 * t.quantity)::float FROM butterfly_trades t CROSS JOIN LATERAL (SELECT ts, fly_mark FROM monitoring_leg_quotes WHERE trade_id = t.id AND underlying = t.underlying ORDER BY ts DESC LIMIT 1) q WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status = 'OPEN' ORDER BY q.ts DESC LIMIT 1), 0)::float AS \"Current Value\"",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "title": "Peak vs Current Value",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 6
-      },
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "decimals": 2
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT q.ts AS time, (MAX(q.peak_value) * 100 * t.quantity)::float AS \"Peak\", (MAX(q.fly_mark) * 100 * t.quantity)::float AS \"Current\" FROM monitoring_leg_quotes q JOIN butterfly_trades t ON t.id = q.trade_id AND t.underlying = q.underlying WHERE q.underlying = '$underlying' AND t.trade_date = CURRENT_DATE AND t.status != 'CANCELLED' AND $__timeFilter(q.ts) GROUP BY q.ts, t.id, t.quantity ORDER BY q.ts",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "title": "Daily Trade Count",
-      "type": "stat",
-      "gridPos": {
-        "h": 6,
-        "w": 4,
-        "x": 16,
-        "y": 0
-      },
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS \"Trades Today\" FROM butterfly_trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED'",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 5,
-      "title": "Active Trades",
-      "type": "stat",
-      "gridPos": {
-        "h": 6,
-        "w": 4,
-        "x": 20,
-        "y": 0
-      },
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COUNT(*)::float AS \"Active\" FROM butterfly_trades WHERE underlying = '$underlying' AND status = 'OPEN'",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 6,
-      "title": "Chain Snapshots (1h rate)",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 0,
-        "y": 30
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "blue"
-          }
-        }
-      },
-      "targets": [
-        {
-          "expr": "rate(butterfly_chain_snapshots_total{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}[1h])",
-          "legendFormat": "Snapshots/hr"
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "title": "Butterfly Candidates Found",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 30
-      },
-      "targets": [
-        {
-          "expr": "butterfly_candidates_found{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}",
-          "legendFormat": "Candidates"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "title": "Order Fill Duration (p95)",
-      "type": "stat",
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 16,
-        "y": 49
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"})",
-          "legendFormat": "p95 fill time (s)"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "title": "Schwab API Errors",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 0,
-        "y": 88
-      },
-      "targets": [
-        {
-          "expr": "rate(butterfly_schwab_api_errors_total{job=~\"butterfly_(spx|ndx|xsp)\"}[5m])",
-          "legendFormat": "{{endpoint}}"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "title": "$underlying Spot Price",
-      "type": "timeseries",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 14,
-        "x": 0,
-        "y": 42
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "blue"
-          },
-          "unit": "currencyUSD",
-          "decimals": 2
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = '$underlying' AND $__timeFilter(ts) ORDER BY time",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "title": "VIX",
-      "type": "timeseries",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 10,
-        "x": 14,
-        "y": 42
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "orange"
-          },
-          "decimals": 2
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = '$VIX' AND $__timeFilter(ts) ORDER BY time",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 12,
-      "title": "Rows in Last Snapshot",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 0,
-        "y": 49
-      },
-      "fieldConfig": {
-        "defaults": {
-          "thresholds": {
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 400
-              },
-              {
-                "color": "green",
-                "value": 460
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "expr": "butterfly_chain_snapshot_rows{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}",
-          "legendFormat": "Rows"
-        }
-      ]
-    },
-    {
-      "id": 13,
-      "title": "DB Snapshots Today",
-      "type": "stat",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 4,
-        "y": 49
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT snapshot_time)::float AS value FROM option_chain_snapshots WHERE snapshot_time >= CURRENT_DATE AND snapshot_time < CURRENT_DATE + INTERVAL '1 day' AND underlying = '$underlying'",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 14,
-      "title": "Snapshot Collect Duration",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 8,
-        "x": 8,
-        "y": 49
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s"
-        }
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}[5m]))",
-          "legendFormat": "p50"
-        },
-        {
-          "expr": "histogram_quantile(0.95, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}[5m]))",
-          "legendFormat": "p95"
-        }
-      ]
-    },
-    {
-      "id": 15,
-      "type": "row",
-      "title": "Today's Trade",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 53,
-        "w": 24,
-        "h": 1
       }
-    },
-    {
-      "id": 16,
-      "type": "stat",
-      "title": "Center Strike",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 54,
-        "w": 6,
-        "h": 3
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, center_strike::float AS value FROM butterfly_trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 17,
-      "type": "stat",
-      "title": "Wing Width",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "x": 6,
-        "y": 54,
-        "w": 6,
-        "h": 3
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "purple",
-                "value": null
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, wing_width::float AS value FROM butterfly_trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 18,
-      "type": "stat",
-      "title": "Entry Cost",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 54,
-        "w": 6,
-        "h": 3
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 2,
-          "unit": "currencyUSD",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "orange",
-                "value": null
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, (entry_price * 100 * quantity)::float AS value FROM butterfly_trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 19,
-      "type": "stat",
-      "title": "Max Profit / Spread",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "x": 18,
-        "y": 54,
-        "w": 6,
-        "h": 3
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 2,
-          "unit": "currencyUSD",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, ((wing_width - entry_price) * 100 * quantity)::float AS value FROM butterfly_trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 20,
-      "type": "stat",
-      "title": "Lower Breakeven",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 57,
-        "w": 6,
-        "h": 3
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 1,
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "yellow",
-                "value": null
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, (lower_strike + entry_price)::float AS value FROM butterfly_trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 21,
-      "type": "stat",
-      "title": "Upper Breakeven",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "x": 6,
-        "y": 57,
-        "w": 6,
-        "h": 3
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 1,
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "yellow",
-                "value": null
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, (upper_strike - entry_price)::float AS value FROM butterfly_trades WHERE trade_date = CURRENT_DATE AND underlying = '$underlying' AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 22,
-      "type": "stat",
-      "title": "VIX at Entry",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 57,
-        "w": 6,
-        "h": 3
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 1,
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 20
-              },
-              {
-                "color": "red",
-                "value": 30
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, sp.price::float AS value FROM butterfly_trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) sp WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 23,
-      "type": "stat",
-      "title": "Expected Move \u00b1pts (1\u03c3)",
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "${strategy_datasource}"
-      },
-      "gridPos": {
-        "x": 18,
-        "y": 57,
-        "w": 6,
-        "h": 3
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ]
-        },
-        "colorMode": "value",
-        "graphMode": "none",
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          }
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "${strategy_datasource}"
-          },
-          "rawQuery": true,
-          "rawSql": "SELECT NOW() AS time, ROUND((spot.price * (vix.price / 100.0) / SQRT(252))::numeric, 0)::float AS value FROM butterfly_trades t CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$VIX' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) vix CROSS JOIN LATERAL (SELECT price FROM spot_prices WHERE underlying = '$underlying' AND ts <= t.entry_time ORDER BY ts DESC LIMIT 1) spot WHERE t.trade_date = CURRENT_DATE AND t.underlying = '$underlying' AND t.status != 'CANCELLED' ORDER BY t.entry_time DESC LIMIT 1",
-          "format": "time_series",
-          "refId": "A"
-        }
-      ]
     },
     {
       "id": 24,
@@ -958,43 +312,45 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 18,
-        "w": 24,
-        "h": 12
+        "y": 4,
+        "w": 15,
+        "h": 13
       },
       "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
         "tooltip": {
-          "mode": "multi"
+          "mode": "multi",
+          "sort": "none"
         }
       },
       "fieldConfig": {
         "defaults": {
+          "unit": "none",
+          "decimals": 2,
           "custom": {
-            "lineWidth": 2
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": true
           }
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "lower_be"
+              "options": "Spot"
             },
             "properties": [
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "dash": [
-                    8,
-                    4
-                  ],
-                  "fill": "dash"
+                  "mode": "fixed",
+                  "fixedColor": "#F2CC0C"
                 }
               }
             ]
@@ -1006,21 +362,50 @@
             },
             "properties": [
               {
+                "id": "displayName",
+                "value": "Upper BE"
+              },
+              {
                 "id": "color",
                 "value": {
-                  "fixedColor": "yellow",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "green"
                 }
               },
               {
-                "id": "custom.lineStyle",
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillBelowTo",
+                "value": "Lower BE"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 12
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lower_be"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Lower BE"
+              },
+              {
+                "id": "color",
                 "value": {
-                  "dash": [
-                    8,
-                    4
-                  ],
-                  "fill": "dash"
+                  "mode": "fixed",
+                  "fixedColor": "green"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
               }
             ]
           },
@@ -1031,20 +416,94 @@
             },
             "properties": [
               {
+                "id": "displayName",
+                "value": "Center"
+              },
+              {
                 "id": "color",
                 "value": {
-                  "fixedColor": "purple",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "#73BF69"
                 }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
               },
               {
                 "id": "custom.lineStyle",
                 "value": {
+                  "fill": "dash",
                   "dash": [
-                    4,
+                    10,
+                    6
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "upper_wing|lower_wing"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8e8e8e"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    3,
+                    5
+                  ]
+                }
+              },
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": false,
+                  "viz": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "lower_tent|upper_tent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B877D9"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dot",
+                  "dash": [
+                    2,
                     4
-                  ],
-                  "fill": "dash"
+                  ]
                 }
               }
             ]
@@ -1052,15 +511,24 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Spot"
+              "options": "lower_tent"
             },
             "properties": [
               {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
+                "id": "displayName",
+                "value": "Tent low"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upper_tent"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Tent high"
               }
             ]
           },
@@ -1073,8 +541,8 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "#5794F2"
                 }
               },
               {
@@ -1083,11 +551,7 @@
               },
               {
                 "id": "custom.pointSize",
-                "value": 10
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
+                "value": 12
               },
               {
                 "id": "custom.showPoints",
@@ -1104,8 +568,8 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
+                  "mode": "fixed",
+                  "fixedColor": "#FF7383"
                 }
               },
               {
@@ -1114,73 +578,11 @@
               },
               {
                 "id": "custom.pointSize",
-                "value": 10
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
+                "value": 12
               },
               {
                 "id": "custom.showPoints",
                 "value": "always"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "lower_tent"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "dash": [
-                    8,
-                    4
-                  ],
-                  "fill": "dash"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "upper_tent"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "dash": [
-                    8,
-                    4
-                  ],
-                  "fill": "dash"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 1
               }
             ]
           }
@@ -1203,7 +605,7 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "WITH samples AS (SELECT ts FROM spot_prices WHERE underlying = '$underlying' AND $__timeFilter(ts) UNION SELECT ts FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND $__timeFilter(ts)), trade AS (SELECT lower_strike, center_strike, upper_strike, entry_price FROM butterfly_trades WHERE underlying = '$underlying' AND status != 'CANCELLED' AND entry_time >= $__timeFrom() AND entry_time <= $__timeTo() ORDER BY entry_time LIMIT 1) SELECT samples.ts AS time, (trade.lower_strike + trade.entry_price)::float AS \"lower_be\", trade.center_strike::float AS \"center\", (trade.upper_strike - trade.entry_price)::float AS \"upper_be\" FROM samples CROSS JOIN trade ORDER BY samples.ts",
+          "rawSql": "WITH samples AS (SELECT ts FROM spot_prices WHERE underlying = '$underlying' AND $__timeFilter(ts) UNION SELECT ts FROM monitoring_leg_quotes WHERE underlying = '$underlying' AND $__timeFilter(ts)), trade AS (SELECT lower_strike, center_strike, upper_strike, entry_price FROM butterfly_trades WHERE underlying = '$underlying' AND status != 'CANCELLED' AND entry_time >= $__timeFrom() AND entry_time <= $__timeTo() ORDER BY entry_time LIMIT 1) SELECT samples.ts AS time, trade.upper_strike::float AS \"upper_wing\", (trade.upper_strike - trade.entry_price)::float AS \"upper_be\", trade.center_strike::float AS \"center\", (trade.lower_strike + trade.entry_price)::float AS \"lower_be\", trade.lower_strike::float AS \"lower_wing\" FROM samples CROSS JOIN trade ORDER BY samples.ts",
           "format": "time_series"
         },
         {
@@ -1233,27 +635,497 @@
           "rawSql": "SELECT ts AS time, lower_tent AS \"lower_tent\", upper_tent AS \"upper_tent\" FROM tent_boundaries WHERE underlying = '$underlying' AND $__timeFilter(ts) ORDER BY ts",
           "format": "time_series"
         }
-      ]
+      ],
+      "description": "Spot against today's fly. The shaded band is the profit zone at expiry; dashed grey lines are the wings."
     },
     {
-      "id": 25,
+      "id": 31,
       "type": "table",
-      "title": "Candidates Scanned Today",
+      "title": "All Books This Session",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${strategy_datasource}"
+      },
+      "description": "Each underlying's trade for the session on screen. Click a book to switch the dashboard to it, or a trade for its detail page.",
+      "gridPos": {
+        "x": 15,
+        "y": 4,
+        "w": 9,
+        "h": 7
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT u.book AS \"Book\", t.id AS \"Trade\", CASE WHEN t.id IS NULL THEN 'no trade' WHEN t.status = 'OPEN' THEN 'OPEN' ELSE COALESCE(t.exit_reason, t.status) END AS \"Status\", left(t.direction, 1) || ' ' || t.center_strike::int || 'w' || t.wing_width AS \"Fly\", (COALESCE(t.pnl, CASE WHEN t.status = 'OPEN' THEN (SELECT fly_mark FROM monitoring_leg_quotes WHERE trade_id = t.id AND underlying = t.underlying ORDER BY ts DESC LIMIT 1) END - t.entry_price) * 100 * t.quantity)::float AS \"P&L\" FROM (VALUES (1, 'SPX'), (2, 'NDX'), (3, 'XSP')) AS u(ord, book) LEFT JOIN LATERAL (SELECT * FROM butterfly_trades WHERE underlying = u.book AND trade_date = '$session_date'::date AND status != 'CANCELLED' ORDER BY entry_time DESC LIMIT 1) t ON TRUE ORDER BY u.ord",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": true,
+          "reducer": [
+            "sum"
+          ],
+          "fields": [
+            "P&L"
+          ],
+          "countRows": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "minWidth": 40,
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Book"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 50
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Switch to ${__value.raw}",
+                    "url": "/d/butterfly-trading/butterfly-trading?var-strategy_datasource=${strategy_datasource:raw}&var-underlying=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Trade"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 50
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open trade detail",
+                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-strategy_datasource=${strategy_datasource:raw}&var-underlying=${__data.fields.Book}&var-trade_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "OPEN": {
+                        "text": "OPEN",
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "no trade": {
+                        "color": "#8e8e8e",
+                        "index": 1
+                      },
+                      "drawdown_morning": {
+                        "text": "DD AM",
+                        "index": 2
+                      },
+                      "drawdown_late_morning": {
+                        "text": "DD late",
+                        "index": 3
+                      },
+                      "drawdown_afternoon": {
+                        "text": "DD PM",
+                        "index": 4
+                      },
+                      "cash_settled": {
+                        "text": "settled",
+                        "index": 5
+                      },
+                      "end_of_day": {
+                        "text": "EOD",
+                        "index": 6
+                      },
+                      "absolute_loss_stop": {
+                        "text": "loss stop",
+                        "index": 7
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P&L"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "custom.width",
+                "value": 75
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": "table",
+      "title": "Last 10 $underlying Trades",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "${strategy_datasource}"
       },
       "gridPos": {
-        "x": 0,
-        "y": 68,
-        "w": 24,
-        "h": 8
+        "x": 15,
+        "y": 11,
+        "w": 9,
+        "h": 6
       },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT to_char(trade_date, 'MM-DD') AS \"Date\", id AS \"Trade\", left(direction, 1) || ' ' || center_strike::int || 'w' || wing_width AS \"Fly\", COALESCE(exit_reason, status) AS \"Exit\", (pnl * 100 * quantity)::float AS \"P&L\" FROM butterfly_trades WHERE underlying = '$underlying' AND status != 'CANCELLED' AND trade_date <= '$session_date'::date AND ('${strategy_datasource:raw}' = 'timescaledb' OR metadata->>'paper_fill_model' = 'mark_v1') ORDER BY entry_time DESC LIMIT 10",
+          "refId": "A"
+        }
+      ],
       "options": {
-        "sortBy": [
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": true,
+          "reducer": [
+            "sum"
+          ],
+          "fields": [
+            "P&L"
+          ],
+          "countRows": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "minWidth": 40,
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
           {
-            "displayName": "rr",
-            "desc": true
+            "matcher": {
+              "id": "byName",
+              "options": "Date"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 50
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Trade"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 50
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open trade detail",
+                    "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-strategy_datasource=${strategy_datasource:raw}&var-underlying=$underlying&var-trade_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exit"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "OPEN": {
+                        "text": "OPEN",
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "no trade": {
+                        "color": "#8e8e8e",
+                        "index": 1
+                      },
+                      "drawdown_morning": {
+                        "text": "DD AM",
+                        "index": 2
+                      },
+                      "drawdown_late_morning": {
+                        "text": "DD late",
+                        "index": 3
+                      },
+                      "drawdown_afternoon": {
+                        "text": "DD PM",
+                        "index": 4
+                      },
+                      "cash_settled": {
+                        "text": "settled",
+                        "index": 5
+                      },
+                      "end_of_day": {
+                        "text": "EOD",
+                        "index": 6
+                      },
+                      "absolute_loss_stop": {
+                        "text": "loss stop",
+                        "index": 7
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "P&L"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "custom.width",
+                "value": 75
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Peak vs Current Value",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 15,
+        "h": 10
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${strategy_datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Peak"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Current"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exit trigger"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              },
+              {
+                "id": "custom.spanNulls",
+                "value": false
+              }
+            ]
           }
         ]
       },
@@ -1264,74 +1136,88 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "SELECT\n  scan_time AS time,\n  direction,\n  wing_width AS width,\n  center_strike AS center,\n  ROUND((cost * 100)::numeric, 2) AS cost,\n  ROUND((max_profit * 100)::numeric, 2) AS max_profit,\n  ROUND(reward_risk::numeric, 1) AS rr,\n  ROUND(lower_be::numeric, 0) AS lower_be,\n  ROUND(upper_be::numeric, 0) AS upper_be,\n  selected\nFROM butterfly_candidates\nWHERE scan_time >= CURRENT_DATE\n  AND scan_time < CURRENT_DATE + INTERVAL '1 day'\n  AND underlying = '$underlying'\nORDER BY scan_time DESC, rr DESC\nLIMIT 50",
-          "format": "table"
+          "rawSql": "WITH policies(underlying, settings) AS (\n  VALUES\n    ('SPX', '{\"strategy\": \"peakvaluetrailer\", \"regimes\": {\"morning\": {\"start_minutes_after_open\": 0, \"end_minutes_after_open\": 120, \"drawdown_threshold\": 0.6, \"confirmation_polls\": 1, \"min_peak_profit_ratio\": 1.0, \"min_hold_minutes\": 0.0}, \"late_morning\": {\"start_minutes_after_open\": 120, \"end_minutes_after_open\": 240, \"drawdown_threshold\": 0.9, \"confirmation_polls\": 1, \"min_peak_profit_ratio\": 1.0, \"min_hold_minutes\": 0.0}, \"afternoon\": {\"start_minutes_after_open\": 240, \"end_minutes_after_open\": 390, \"drawdown_threshold\": 0.75, \"confirmation_polls\": 1, \"min_peak_profit_ratio\": 1.0, \"min_hold_minutes\": 0.0}}, \"max_loss_from_cost\": 0.5, \"use_absolute_loss_stop\": false, \"profitprotector\": {\"breakeven_activation_profit\": 1.0, \"breakeven_floor_profit\": 0.0, \"profit_lock_activation_profit\": 2.0, \"profit_lock_floor_profit\": 0.75, \"large_peak_profit_ratio\": 2.0, \"large_peak_drawdown_threshold\": 0.5}}'::jsonb),\n    ('NDX', '{\"strategy\": \"peakvaluetrailer\", \"regimes\": {\"morning\": {\"start_minutes_after_open\": 0, \"end_minutes_after_open\": 120, \"drawdown_threshold\": 1.0, \"confirmation_polls\": 3, \"min_peak_profit_ratio\": 1.5, \"min_hold_minutes\": 0.0}, \"late_morning\": {\"start_minutes_after_open\": 120, \"end_minutes_after_open\": 240, \"drawdown_threshold\": 0.95, \"confirmation_polls\": 2, \"min_peak_profit_ratio\": 1.5, \"min_hold_minutes\": 0.0}, \"afternoon\": {\"start_minutes_after_open\": 240, \"end_minutes_after_open\": 390, \"drawdown_threshold\": 0.9, \"confirmation_polls\": 2, \"min_peak_profit_ratio\": 1.5, \"min_hold_minutes\": 0.0}}, \"max_loss_from_cost\": 0.5, \"use_absolute_loss_stop\": false, \"profitprotector\": {\"breakeven_activation_profit\": 1.0, \"breakeven_floor_profit\": 0.0, \"profit_lock_activation_profit\": 2.0, \"profit_lock_floor_profit\": 0.75, \"large_peak_profit_ratio\": 2.0, \"large_peak_drawdown_threshold\": 0.5}}'::jsonb),\n    ('XSP', '{\"strategy\": \"profitprotector\", \"regimes\": {\"morning\": {\"start_minutes_after_open\": 0, \"end_minutes_after_open\": 120, \"drawdown_threshold\": 0.8, \"confirmation_polls\": 3, \"min_peak_profit_ratio\": 1.25, \"min_hold_minutes\": 30.0}, \"late_morning\": {\"start_minutes_after_open\": 120, \"end_minutes_after_open\": 240, \"drawdown_threshold\": 0.9, \"confirmation_polls\": 3, \"min_peak_profit_ratio\": 1.25, \"min_hold_minutes\": 45.0}, \"afternoon\": {\"start_minutes_after_open\": 240, \"end_minutes_after_open\": 390, \"drawdown_threshold\": 0.85, \"confirmation_polls\": 3, \"min_peak_profit_ratio\": 1.25, \"min_hold_minutes\": 45.0}}, \"max_loss_from_cost\": 0.5, \"use_absolute_loss_stop\": false, \"profitprotector\": {\"breakeven_activation_profit\": 1.0, \"breakeven_floor_profit\": 0.0, \"profit_lock_activation_profit\": 2.0, \"profit_lock_floor_profit\": 0.75, \"large_peak_profit_ratio\": 2.0, \"large_peak_drawdown_threshold\": 0.5}}'::jsonb)\n), observations AS (\n  SELECT q.ts AS time, t.id AS trade_id, t.entry_price, t.entry_time, t.quantity,\n    MAX(q.peak_value) AS peak, MAX(q.fly_mark) AS current\n  FROM monitoring_leg_quotes q\n  JOIN butterfly_trades t ON t.id = q.trade_id AND t.underlying = q.underlying\n  WHERE q.underlying = '$underlying' AND t.trade_date = '$session_date'::date\n    AND t.status != 'CANCELLED' AND q.ts >= '$session_date'::date\n  GROUP BY q.ts, t.id, t.entry_price, t.entry_time, t.quantity\n), history AS (\n  SELECT *, BOOL_OR(current >= entry_price) OVER (\n    PARTITION BY trade_id ORDER BY time ROWS UNBOUNDED PRECEDING\n  ) OR peak > entry_price AS ever_in_profit,\n    GREATEST(0, EXTRACT(EPOCH FROM (\n      (time AT TIME ZONE 'America/New_York')::time - TIME '09:30'\n    )) / 60) AS minutes_after_open,\n    EXTRACT(EPOCH FROM (time - entry_time)) / 60 AS age_minutes\n  FROM observations\n), regimes AS (\n  SELECT h.*, p.settings, p.settings->'regimes'->(CASE\n    WHEN minutes_after_open < (p.settings #>> '{regimes,morning,end_minutes_after_open}')::float\n      THEN 'morning'\n    WHEN minutes_after_open < (p.settings #>> '{regimes,late_morning,end_minutes_after_open}')::float\n      THEN 'late_morning'\n    ELSE 'afternoon' END) AS regime\n  FROM history h CROSS JOIN policies p WHERE p.underlying = '$underlying'\n), levels AS (\n  SELECT *, ever_in_profit\n    AND peak >= entry_price * (regime->>'min_peak_profit_ratio')::float\n    AND age_minutes >= (regime->>'min_hold_minutes')::float AS armed,\n    peak * (1 - CASE WHEN settings->>'strategy' = 'profitprotector'\n      AND entry_price > 0\n      AND peak >= entry_price * (settings #>> '{profitprotector,large_peak_profit_ratio}')::float\n      THEN LEAST((regime->>'drawdown_threshold')::float,\n        (settings #>> '{profitprotector,large_peak_drawdown_threshold}')::float)\n      ELSE (regime->>'drawdown_threshold')::float END) AS trailing_level\n  FROM regimes\n)\nSELECT time, (peak * 100 * quantity)::float AS \"Peak\",\n  (current * 100 * quantity)::float AS \"Current\",\n  (GREATEST(\n    CASE WHEN (settings->>'use_absolute_loss_stop')::boolean AND entry_price > 0\n      THEN entry_price * (1 - (settings->>'max_loss_from_cost')::float) END,\n    CASE WHEN armed THEN trailing_level END,\n    CASE WHEN armed AND settings->>'strategy' = 'profitprotector' AND entry_price > 0\n      AND peak >= entry_price + (settings #>> '{profitprotector,breakeven_activation_profit}')::float\n      THEN entry_price + (settings #>> '{profitprotector,breakeven_floor_profit}')::float END,\n    CASE WHEN armed AND settings->>'strategy' = 'profitprotector' AND entry_price > 0\n      AND peak >= entry_price + (settings #>> '{profitprotector,profit_lock_activation_profit}')::float\n      THEN entry_price + (settings #>> '{profitprotector,profit_lock_floor_profit}')::float END\n  ) * 100 * quantity)::float AS \"Exit trigger\"\nFROM levels WHERE $__timeFilter(time) ORDER BY time",
+          "format": "time_series",
+          "refId": "A"
         }
       ],
+      "description": "Exit trigger is the armed price-based exit level using the configured profit policy and Eastern time regime: peak × (1 − drawdown), including enabled profit floors and absolute loss stops. Values are total position dollars (×100×quantity). No line means no price-based exit is armed. Confirmation polls and quote-quality gates still apply; this is a trigger, not a guaranteed fill. Time-based exits and cash settlement are separate. Uses a snapshot of current bot settings."
+    },
+    {
+      "id": 11,
+      "title": "VIX",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${strategy_datasource}"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 17,
+        "w": 9,
+        "h": 10
+      },
       "fieldConfig": {
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "cost|max_profit"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#FF9830"
           },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "selected"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-background"
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "transparent",
-                      "value": null
-                    },
-                    {
-                      "color": "green",
-                      "value": 1
-                    }
-                  ]
-                }
-              }
-            ]
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "gradientMode": "opacity",
+            "showPoints": "never"
           }
-        ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "rawQuery": true,
+          "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = '$VIX' AND $__timeFilter(ts) ORDER BY time",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       }
     },
     {
       "id": 26,
       "type": "table",
-      "title": "Decision Log Today ($underlying)",
+      "title": "Decision Log ($underlying)",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "${strategy_datasource}"
       },
       "gridPos": {
         "x": 0,
-        "y": 78,
+        "y": 27,
         "w": 24,
         "h": 10
       },
       "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
         "sortBy": [
           {
             "displayName": "Time",
@@ -1346,14 +1232,18 @@
             "uid": "${strategy_datasource}"
           },
           "rawQuery": true,
-          "rawSql": "WITH rows AS (\n  SELECT d.*, t.quantity\n  FROM decision_log d\n  LEFT JOIN butterfly_trades t\n    ON t.underlying = d.underlying\n   AND t.id = CASE WHEN d.data->>'trade_id' ~ '^[0-9]+$' THEN (d.data->>'trade_id')::int END\n  WHERE d.ts >= CURRENT_DATE\n    AND d.ts < CURRENT_DATE + INTERVAL '1 day'\n    AND d.underlying = '$underlying'\n)\nSELECT\n  ts AT TIME ZONE 'America/Los_Angeles' AS \"Time\",\n  data->>'trade_id' AS trade_id,\n  event_type AS \"Event\",\n  CASE event_type\n    WHEN 'trade_entered' THEN\n      'fill=' || COALESCE(to_char((NULLIF(data->>'cost', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  width=' || (data->>'width') || '  center=' || (data->>'center') || '  dir=' || (data->>'direction') || '  step=' || (data->>'entry_step')\n    WHEN 'entry_step_unfilled' THEN\n      'step=' || (data->>'step') || '  center=' || (data->>'center') || '  width=' || (data->>'width') || '  mark=' || COALESCE(to_char((NULLIF(data->>'mark', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  ask=' || COALESCE(to_char((NULLIF(data->>'ask', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  limit=' || COALESCE(to_char((NULLIF(data->>'limit', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?')\n    WHEN 'entry_exhausted' THEN\n      'direction=' || (data->>'direction') || '  \u2014 no fill after all steps'\n    WHEN 'exit_signal_fired' THEN\n      'reason=' || (data->>'reason') || '  mark=' || COALESCE(to_char((NULLIF(data->>'mark_value', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  peak=' || COALESCE(to_char((NULLIF(data->>'peak_value', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  drawdown=' || (data->>'drawdown_pct') || '%  regime=' || (data->>'regime')\n    WHEN 'trade_exited' THEN\n      'reason=' || (data->>'exit_reason') || '  entry=' || COALESCE(to_char((NULLIF(data->>'entry_price', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  mark_signal=' || COALESCE(to_char((NULLIF(data->>'mark_at_signal', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  bid=' || COALESCE(to_char((NULLIF(data->>'spread_bid', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  mark=' || COALESCE(to_char((NULLIF(data->>'spread_mark', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  fill=' || COALESCE(to_char((NULLIF(data->>'fill_price', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  pnl=' || COALESCE(to_char((NULLIF(data->>'pnl', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || CASE WHEN COALESCE(NULLIF(data->>'forced', '')::boolean, false) THEN '  [FORCED]' ELSE '' END\n    WHEN 'profit_state_transition' THEN\n      (data->>'from') || ' \u2192 ' || (data->>'to') || '  mark=' || COALESCE(to_char((NULLIF(data->>'mark_value', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  peak=' || COALESCE(to_char((NULLIF(data->>'peak_value', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  regime=' || (data->>'regime')\n    WHEN 'entry_failed' THEN\n      'center=' || (data->>'center')\n    ELSE data::text\n  END AS \"Details\"\nFROM rows\nORDER BY ts ASC\nLIMIT 200",
+          "rawSql": "WITH rows AS (\n  SELECT d.*, t.quantity\n  FROM decision_log d\n  LEFT JOIN butterfly_trades t\n    ON t.underlying = d.underlying\n   AND t.id = CASE WHEN d.data->>'trade_id' ~ '^[0-9]+$' THEN (d.data->>'trade_id')::int END\n  WHERE $__timeFilter(d.ts)\n    AND d.event_type != 'position_held_quote_shadow'\n    AND NOT (d.event_type = 'entry_blocked' AND d.data->>'reason' LIKE 'max_trades_reached%')\n    AND d.underlying = '$underlying'\n)\nSELECT\n  ts AS \"Time\",\n  data->>'trade_id' AS trade_id,\n  event_type AS \"Event\",\n  CASE event_type\n    WHEN 'trade_entered' THEN\n      'fill=' || COALESCE(to_char((NULLIF(data->>'cost', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  width=' || (data->>'width') || '  center=' || (data->>'center') || '  dir=' || (data->>'direction') || '  step=' || (data->>'entry_step')\n    WHEN 'entry_step_unfilled' THEN\n      'step=' || (data->>'step') || '  center=' || (data->>'center') || '  width=' || (data->>'width') || '  mark=' || COALESCE(to_char((NULLIF(data->>'mark', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  ask=' || COALESCE(to_char((NULLIF(data->>'ask', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  limit=' || COALESCE(to_char((NULLIF(data->>'limit', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?')\n    WHEN 'entry_exhausted' THEN\n      'direction=' || (data->>'direction') || '  — no fill after all steps'\n    WHEN 'exit_signal_fired' THEN\n      'reason=' || (data->>'reason') || '  mark=' || COALESCE(to_char((NULLIF(data->>'mark_value', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  peak=' || COALESCE(to_char((NULLIF(data->>'peak_value', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  drawdown=' || (data->>'drawdown_pct') || '%  regime=' || (data->>'regime')\n    WHEN 'trade_exited' THEN\n      'reason=' || (data->>'exit_reason') || '  entry=' || COALESCE(to_char((NULLIF(data->>'entry_price', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  mark_signal=' || COALESCE(to_char((NULLIF(data->>'mark_at_signal', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  bid=' || COALESCE(to_char((NULLIF(data->>'spread_bid', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  mark=' || COALESCE(to_char((NULLIF(data->>'spread_mark', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  fill=' || COALESCE(to_char((NULLIF(data->>'fill_price', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  pnl=' || COALESCE(to_char((NULLIF(data->>'pnl', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || CASE WHEN COALESCE(NULLIF(data->>'forced', '')::boolean, false) THEN '  [FORCED]' ELSE '' END\n    WHEN 'profit_state_transition' THEN\n      (data->>'from') || ' → ' || (data->>'to') || '  mark=' || COALESCE(to_char((NULLIF(data->>'mark_value', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  peak=' || COALESCE(to_char((NULLIF(data->>'peak_value', '')::float * 100 * COALESCE(quantity, 1))::numeric, 'FM$999999990.00'), '?') || '  regime=' || (data->>'regime')\n    WHEN 'entry_failed' THEN\n      'center=' || (data->>'center')\n    ELSE data::text\n  END AS \"Details\"\nFROM rows\nORDER BY ts DESC\nLIMIT 200",
           "format": "table"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "width": 0
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": true
           }
         },
         "overrides": [
@@ -1364,8 +1254,12 @@
             },
             "properties": [
               {
+                "id": "unit",
+                "value": "time:HH:mm:ss"
+              },
+              {
                 "id": "custom.width",
-                "value": 160
+                "value": 85
               }
             ]
           },
@@ -1376,6 +1270,14 @@
             },
             "properties": [
               {
+                "id": "displayName",
+                "value": "Trade"
+              },
+              {
+                "id": "custom.width",
+                "value": 60
+              },
+              {
                 "id": "links",
                 "value": [
                   {
@@ -1383,10 +1285,6 @@
                     "url": "/d/butterfly-trade-detail/butterfly-trade-detail?var-strategy_datasource=${strategy_datasource:raw}&var-underlying=$underlying&var-trade_id=${__value.raw}"
                   }
                 ]
-              },
-              {
-                "id": "custom.width",
-                "value": 90
               }
             ]
           },
@@ -1398,18 +1296,470 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 220
+                "value": 210
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "trade_entered": {
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "trade_exited": {
+                        "color": "purple",
+                        "index": 1
+                      },
+                      "exit_signal_fired": {
+                        "color": "orange",
+                        "index": 2
+                      },
+                      "profit_state_transition": {
+                        "color": "text",
+                        "index": 3
+                      },
+                      "entry_blocked": {
+                        "color": "#8e8e8e",
+                        "index": 4
+                      },
+                      "entry_step_unfilled": {
+                        "color": "yellow",
+                        "index": 5
+                      },
+                      "entry_exhausted": {
+                        "color": "red",
+                        "index": 6
+                      },
+                      "entry_failed": {
+                        "color": "red",
+                        "index": 7
+                      },
+                      "exit_order_failed": {
+                        "color": "red",
+                        "index": 8
+                      },
+                      "position_market_data_unavailable": {
+                        "color": "red",
+                        "index": 9
+                      },
+                      "position_market_data_recovered": {
+                        "color": "green",
+                        "index": 10
+                      }
+                    }
+                  }
+                ]
               }
             ]
           }
         ]
       }
+    },
+    {
+      "id": 33,
+      "type": "row",
+      "title": "Entry Candidates",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 25,
+          "type": "table",
+          "title": "Candidates Scanned",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 38,
+            "w": 24,
+            "h": 9
+          },
+          "options": {
+            "sortBy": [
+              {
+                "displayName": "rr",
+                "desc": true
+              }
+            ]
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${strategy_datasource}"
+              },
+              "rawQuery": true,
+              "rawSql": "SELECT\n  scan_time AS time,\n  direction,\n  wing_width AS width,\n  center_strike AS center,\n  ROUND((cost * 100)::numeric, 2) AS cost,\n  ROUND((max_profit * 100)::numeric, 2) AS max_profit,\n  ROUND(reward_risk::numeric, 1) AS rr,\n  ROUND(lower_be::numeric, 0) AS lower_be,\n  ROUND(upper_be::numeric, 0) AS upper_be,\n  selected\nFROM butterfly_candidates\nWHERE $__timeFilter(scan_time)\n  AND underlying = '$underlying'\nORDER BY scan_time DESC, rr DESC\nLIMIT 50",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "cost|max_profit"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "currencyUSD"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 2
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "selected"
+                },
+                "properties": [
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "transparent",
+                          "value": null
+                        },
+                        {
+                          "color": "green",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "row",
+      "title": "Data Pipeline Health",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 6,
+          "title": "Chain Snapshots (1h rate)",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 0,
+            "y": 39,
+            "w": 12,
+            "h": 6
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "rate(butterfly_chain_snapshots_total{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}[1h])",
+              "legendFormat": "Snapshots/hr"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Butterfly Candidates Found",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 12,
+            "y": 39,
+            "w": 12,
+            "h": 6
+          },
+          "targets": [
+            {
+              "expr": "butterfly_candidates_found{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}",
+              "legendFormat": "Candidates"
+            }
+          ]
+        },
+        {
+          "id": 12,
+          "title": "Rows in Last Snapshot",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 45,
+            "w": 4,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 400
+                  },
+                  {
+                    "color": "green",
+                    "value": 460
+                  }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "butterfly_chain_snapshot_rows{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}",
+              "legendFormat": "Rows"
+            }
+          ]
+        },
+        {
+          "id": 13,
+          "title": "DB Snapshots",
+          "type": "stat",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "gridPos": {
+            "x": 4,
+            "y": 45,
+            "w": 4,
+            "h": 4
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${strategy_datasource}"
+              },
+              "rawQuery": true,
+              "rawSql": "SELECT NOW() AS time, COUNT(DISTINCT snapshot_time)::float AS value FROM option_chain_snapshots WHERE $__timeFilter(snapshot_time) AND underlying = '$underlying'",
+              "format": "time_series",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 14,
+          "title": "Snapshot Collect Duration",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 45,
+            "w": 8,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}[5m]))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, rate(butterfly_chain_snapshot_duration_seconds_bucket{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"}[5m]))",
+              "legendFormat": "p95"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "title": "Order Fill Duration (p95)",
+          "type": "stat",
+          "gridPos": {
+            "x": 16,
+            "y": 45,
+            "w": 8,
+            "h": 4
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, butterfly_order_fill_duration_seconds_bucket{underlying=\"$underlying\",job=~\"butterfly_(spx|ndx|xsp)\"})",
+              "legendFormat": "p95 fill time (s)"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "title": "Schwab API Errors",
+          "type": "timeseries",
+          "gridPos": {
+            "x": 0,
+            "y": 49,
+            "w": 12,
+            "h": 6
+          },
+          "targets": [
+            {
+              "expr": "rate(butterfly_schwab_api_errors_total{job=~\"butterfly_(spx|ndx|xsp)\"}[5m])",
+              "legendFormat": "{{endpoint}}"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "title": "$underlying Spot Feed",
+          "type": "timeseries",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${strategy_datasource}"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 49,
+            "w": 12,
+            "h": 6
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              },
+              "unit": "currencyUSD",
+              "decimals": 2
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "grafana-postgresql-datasource",
+                "uid": "${strategy_datasource}"
+              },
+              "rawQuery": true,
+              "rawSql": "SELECT ts AS time, price FROM spot_prices WHERE underlying = '$underlying' AND $__timeFilter(ts) ORDER BY time",
+              "format": "time_series",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
     }
   ],
-  "time": {
-    "from": "now/d",
-    "to": "now"
-  },
-  "timepicker": {},
-  "timezone": "America/Los_Angeles"
+  "templating": {
+    "list": [
+      {
+        "name": "underlying",
+        "label": "Underlying",
+        "type": "custom",
+        "query": "SPX : SPX,NDX : NDX,XSP : XSP",
+        "current": {
+          "text": "SPX",
+          "value": "SPX"
+        },
+        "options": [
+          {
+            "text": "SPX",
+            "value": "SPX",
+            "selected": true
+          },
+          {
+            "text": "NDX",
+            "value": "NDX",
+            "selected": false
+          },
+          {
+            "text": "XSP",
+            "value": "XSP",
+            "selected": false
+          }
+        ],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "refresh": 0
+      },
+      {
+        "name": "strategy_datasource",
+        "label": "Source",
+        "type": "datasource",
+        "query": "grafana-postgresql-datasource",
+        "regex": "/^TimescaleDB$/",
+        "current": {
+          "selected": true,
+          "text": "TimescaleDB",
+          "value": "timescaledb"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0,
+        "refresh": 1
+      },
+      {
+        "name": "session_date",
+        "label": "Session",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${strategy_datasource}"
+        },
+        "query": "SELECT to_char(($__timeTo() AT TIME ZONE 'America/Los_Angeles')::date, 'YYYY-MM-DD')",
+        "definition": "SELECT to_char(($__timeTo() AT TIME ZONE 'America/Los_Angeles')::date, 'YYYY-MM-DD')",
+        "current": {},
+        "options": [],
+        "refresh": 2,
+        "multi": false,
+        "includeAll": false,
+        "hide": 2,
+        "skipUrlSync": true
+      }
+    ]
+  }
 }
