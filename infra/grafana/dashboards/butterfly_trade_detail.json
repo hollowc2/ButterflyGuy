@@ -977,7 +977,7 @@
         "x": 0,
         "y": 26,
         "w": 9,
-        "h": 12
+        "h": 13
       },
       "targets": [
         {
@@ -1106,10 +1106,6 @@
                 "value": "currencyUSD"
               },
               {
-                "id": "decimals",
-                "value": 0
-              },
-              {
                 "id": "custom.width",
                 "value": 65
               },
@@ -1159,7 +1155,7 @@
         "x": 9,
         "y": 26,
         "w": 15,
-        "h": 5
+        "h": 6
       },
       "targets": [
         {
@@ -1279,7 +1275,7 @@
       "description": "Each entry and exit limit step against the quote at that moment; Fill marks the step that executed. An exit with no ladder steps was filled directly (mark fill or settlement).",
       "gridPos": {
         "x": 9,
-        "y": 31,
+        "y": 32,
         "w": 15,
         "h": 7
       },
@@ -1306,7 +1302,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "currencyUSD",
-          "decimals": 0,
           "custom": {
             "align": "auto",
             "cellOptions": {
@@ -1399,7 +1394,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 39,
         "w": 24,
         "h": 1
       },
@@ -1415,7 +1410,7 @@
           "description": "The live per-width best candidates the selector compared; Chosen marks the traded fly.",
           "gridPos": {
             "x": 0,
-            "y": 39,
+            "y": 40,
             "w": 8,
             "h": 8
           },
@@ -1526,7 +1521,7 @@
           },
           "gridPos": {
             "x": 8,
-            "y": 39,
+            "y": 40,
             "w": 16,
             "h": 8
           },
@@ -1620,7 +1615,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 47,
+            "y": 48,
             "w": 24,
             "h": 12
           },
@@ -1678,7 +1673,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 39,
+        "y": 40,
         "w": 24,
         "h": 1
       },
@@ -1694,7 +1689,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 40,
+            "y": 41,
             "w": 14,
             "h": 9
           },
@@ -1767,7 +1762,7 @@
           },
           "gridPos": {
             "x": 14,
-            "y": 40,
+            "y": 41,
             "w": 10,
             "h": 9
           },
@@ -1810,7 +1805,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 49,
+            "y": 50,
             "w": 24,
             "h": 6
           },
