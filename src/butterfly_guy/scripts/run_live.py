@@ -425,6 +425,8 @@ async def _assert_broker_state_matches_db(
     Repair writes trade rows, so it is startup-only (*allow_repair*). At runtime the
     same mismatches raise instead, except a filled exit for the trade whose monitor
     is still running (*monitored_trade_id*): that monitor persists its own close.
+    The operator's Schwab close of that monitored trade, working or filled, is also
+    left to its monitor, which hands the exit over and adopts the fill.
     """
     today = trade_date or session_date()
     account_snapshot = await schwab.get_account_snapshot()
@@ -436,6 +438,15 @@ async def _assert_broker_state_matches_db(
         else []
     )
     known_order_ids = _intent_order_ids(intents)
+    manual_close_symbols: set[str] = set()
+    if monitored_trade_id is not None:
+        manual_close_symbols = {
+            str(row[key])
+            for row in open_rows
+            if row.get("id") == monitored_trade_id
+            for key in ("lower_symbol", "center_symbol", "upper_symbol")
+            if row.get(key)
+        }
 
     todays_orders = await schwab.get_todays_orders()
     if intent_queries is not None:
@@ -469,6 +480,7 @@ async def _assert_broker_state_matches_db(
         | PARTIAL_FILL_STATUSES
         | CANCEL_PENDING_STATUSES
         | TERMINAL_ORDER_STATUSES
+        | {"REPLACED"}  # an order edited in Schwab; its replacement is a new order
     )
     unmapped_statuses = set().union(
         *(order_statuses(order) - known_statuses for order in relevant_orders)
@@ -485,6 +497,17 @@ async def _assert_broker_state_matches_db(
         & (WORKING_ORDER_STATUSES | PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES)
         and order_ids(order).isdisjoint(known_order_ids)
     ]
+    manual_close_orders = [
+        order for order in active_orders
+        if manual_close_symbols and _order_symbols(order) <= manual_close_symbols
+    ]
+    if manual_close_orders:
+        log.info(
+            "manual_close_order_working",
+            trade_id=monitored_trade_id,
+            orders=len(manual_close_orders),
+        )
+        active_orders = [order for order in active_orders if order not in manual_close_orders]
     if active_orders:
         raise RuntimeError(
             f"Broker has {len(active_orders)} unknown active {underlying} order(s); "
@@ -536,6 +559,9 @@ async def _assert_broker_state_matches_db(
             "but DB has no OPEN trade"
         )
     if open_rows and not broker_positions:
+        if manual_close_symbols and len(open_rows) == 1:
+            log.info("manual_close_awaiting_monitor", trade_id=monitored_trade_id)
+            return
         filled_exits = [
             intent for intent in intents
             if intent.get("side") == "EXIT"

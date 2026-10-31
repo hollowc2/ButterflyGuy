@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import math
 import statistics
 from collections import deque
 from collections.abc import Iterator
@@ -103,6 +104,10 @@ class BrokerFillError(RuntimeError):
 
 class AmbiguousOrderError(RuntimeError):
     """A broker write may have succeeded; reconciliation is required."""
+
+
+class OperatorExitTakeoverError(RuntimeError):
+    """The operator acted on this fly in Schwab; the bot must not send exit orders."""
 
 
 class BrokerFill(NamedTuple):
@@ -273,6 +278,7 @@ class OrderManager:
         self.builder = builder
         self.underlying = underlying
         self.intent_queries = intent_queries
+        self._spread_observation: dict[str, Any] | None = None
 
     def _candidate_snapshot(self, candidate: ButterflyCandidate) -> dict[str, object]:
         return {
@@ -290,6 +296,8 @@ class OrderManager:
 
     async def _fetch_live_spread(self, candidate: ButterflyCandidate) -> LiveSpread | None:
         """Fetch current butterfly bid/mark/ask from live chain, or None on failure."""
+        self._spread_observation = None
+        requested_at = now_utc()
         try:
             chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(self.underlying, self.underlying)
             expiration = (
@@ -308,6 +316,7 @@ class OrderManager:
             marks: dict[float, float] = {}
             asks: dict[float, float] = {}
             ois: dict[float, int] = {}
+            legs: list[dict[str, Any]] = []
 
             for strike, _, opt in iter_chain_options(
                 chain_data, expiration, direction=candidate.direction
@@ -316,13 +325,32 @@ class OrderManager:
                     bid = opt.get("bid", 0)
                     mark = opt.get("mark", 0)
                     ask = opt.get("ask", 0)
-                    if min(bid, mark, ask) < 0 or bid > ask:
+                    if (
+                        not all(math.isfinite(v) for v in (bid, mark, ask))
+                        or min(bid, mark, ask) < 0 or bid > ask
+                    ):
                         log.warning("live_spread_invalid_quote", strike=strike)
                         return None
                     bids[strike] = bid
                     marks[strike] = mark
                     asks[strike] = ask
                     ois[strike] = opt.get("openInterest", 0)
+                    quote_time = opt.get("quoteTimeInLong")
+                    if self.settings.live_test_date is not None:
+                        if not isinstance(quote_time, (int, float)) or isinstance(quote_time, bool):
+                            return None
+                        age = now_utc().timestamp() - quote_time / 1000
+                        if (
+                            not math.isfinite(age)
+                            or not 0 <= age <= self.settings.live_test_quote_max_age_seconds
+                        ):
+                            return None
+                    legs.append({
+                        "strike": strike, "symbol": opt.get("symbol"),
+                        "bid": bid, "ask": ask, "mark": mark,
+                        "midpoint": (bid + ask) / 2,
+                        "quote_time_ms": quote_time,
+                    })
 
             if len(marks) < 3:
                 log.warning("live_spread_incomplete", found=len(marks), expected=3)
@@ -341,11 +369,48 @@ class OrderManager:
                 log.warning("live_spread_nonpositive", mark=spread_mark)
                 return None
 
+            self._spread_observation = {
+                "source": type(self.market_data).__name__,
+                "requested_at": requested_at.isoformat(),
+                "received_at": now_utc().isoformat(),
+                "legs": legs,
+                "spread": {"bid": spread_bid, "mark": spread_mark, "ask": spread_ask},
+            }
             return LiveSpread(bid=spread_bid, mark=spread_mark, ask=spread_ask)
 
         except Exception as e:
             log.warning("live_spread_fetch_failed", error=str(e))
             return None
+
+    async def _record_execution_quote(
+        self, candidate: ButterflyCandidate, intent_id: int | None,
+        phase: str, *, refresh: bool = False, limit_price: float | None = None,
+    ) -> None:
+        if not self.settings.record_live_execution or self.settings.paper_trading:
+            return
+        if refresh:
+            try:
+                await asyncio.wait_for(self._fetch_live_spread(candidate), timeout=3)
+            except Exception:
+                self._spread_observation = None
+        observation = {
+            "phase": phase, "observed_at": now_utc().isoformat(),
+            "limit_price": limit_price, "quote": self._spread_observation,
+            "paper_commission_per_contract": self.settings.paper_commission_per_contract,
+            "paper_slippage_per_spread": self.settings.paper_slippage_per_spread,
+            "quote_available": self._spread_observation is not None,
+            "timing_note": "local observation; fill-detected quotes follow broker execution",
+        }
+        try:
+            if intent_id is None or self.intent_queries is None:
+                raise RuntimeError("execution recording requires durable order intents")
+            await self.intent_queries.append_execution_observation(intent_id, observation)
+        except Exception:
+            # Before submission audit persistence is mandatory. After a fill,
+            # never turn a confirmed execution into an ambiguous order outcome.
+            if phase == "before_submit":
+                raise
+            log.error("execution_observation_write_failed", phase=phase)
 
     def _commission(self, quantity: int) -> float:
         """Paper trading commission: 4 legs × quantity × rate."""
@@ -424,6 +489,38 @@ class OrderManager:
             await self.intent_queries.mark_unknown(intent_id, error)
         except Exception as e:
             log.error("intent_mark_unknown_failed", intent_id=intent_id, error=str(e))
+
+    async def _operator_exit_conflict(
+        self, candidate: ButterflyCandidate, quantity: int, own_order_ids: set[str]
+    ) -> str | None:
+        """Why a bot exit would collide with the operator, or None when it is safe."""
+        expected = {
+            candidate.lower_symbol: quantity,
+            candidate.center_symbol: -2 * quantity,
+            candidate.upper_symbol: quantity,
+        }
+        if len(expected) != 3 or not all(expected):
+            return None  # No leg symbols to compare; keep the pre-existing behavior.
+        positions = broker_option_positions(
+            await self.schwab.get_account_snapshot(), self.underlying
+        )
+        held = {symbol: positions.get(symbol, 0) for symbol in expected}
+        if held != expected:
+            return f"held legs no longer match the fly: {held}"
+        active = WORKING_ORDER_STATUSES | PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
+        for order in await self.schwab.get_todays_orders():
+            symbols = {
+                (leg.get("instrument") or {}).get("symbol")
+                for node in walk_orders(order)
+                for leg in node.get("orderLegCollection") or []
+            }
+            if (
+                symbols & set(expected)
+                and order_statuses(order) & active
+                and order_ids(order).isdisjoint(own_order_ids)
+            ):
+                return "an operator order is working on the fly's legs"
+        return None
 
     async def _assert_broker_flat_before_entry(self) -> bool:
         """Return False if broker positions cannot be read; raise if any exist.
@@ -528,20 +625,26 @@ class OrderManager:
             )
             return result
 
+        if self.settings.live_test_date is not None:
+            from butterfly_guy.core.time_utils import session_date
+            if (
+                session_date() != self.settings.live_test_date or quantity != 1
+                or limit_price > self.settings.live_test_max_debit
+            ):
+                return None
         if await self._entry_blocked_by_working_orders(exclude_intent_id=intent_id):
             return None
 
         # A live order may only be submitted after a fresh authoritative chain
         # proves that the butterfly is currently priceable. The caller's
         # candidate cost is selection evidence, not a safe availability fallback.
+        if not await self._assert_broker_flat_before_entry():
+            return None
         if await self._fetch_live_spread(candidate) is None:
             log.error(
                 "live_entry_blocked_market_data_unavailable",
                 center=candidate.center_strike,
             )
-            return None
-
-        if not await self._assert_broker_flat_before_entry():
             return None
 
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
@@ -559,6 +662,9 @@ class OrderManager:
                 order_spec=order_spec,
                 candidate_snapshot=self._candidate_snapshot(candidate),
             )
+        await self._record_execution_quote(
+            candidate, intent_id, "before_submit", limit_price=limit_price
+        )
         orders_placed.labels(underlying=self.underlying, order_type="entry").inc()
         start_time = now_utc()
 
@@ -566,6 +672,7 @@ class OrderManager:
             order_id = await self.schwab.place_order(order_spec)
             if intent_id is not None and self.intent_queries is not None:
                 await self.intent_queries.mark_broker_order_id(intent_id, order_id)
+            await self._record_execution_quote(candidate, intent_id, "broker_acknowledged")
             fill = await self._wait_for_fill(
                 order_id,
                 self.settings.retry_interval_seconds,
@@ -579,6 +686,9 @@ class OrderManager:
                 order_fill_duration.labels(underlying=self.underlying).observe(elapsed)
                 orders_filled.labels(underlying=self.underlying, order_type="entry").inc()
                 log.info("entry_filled", order_id=order_id, price=fill.net_fill_price)
+                await self._record_execution_quote(
+                    candidate, intent_id, "fill_detected", refresh=True
+                )
                 return _fill_result(fill, intent_id)
 
             if intent_id is not None and self.intent_queries is not None:
@@ -594,6 +704,9 @@ class OrderManager:
                 limit_price=limit_price,
             )
             if post_fill:
+                await self._record_execution_quote(
+                    candidate, intent_id, "post_cancel_fill_detected", refresh=True
+                )
                 return post_fill
 
         except (BrokerFillError, PartialFillError, TerminalOrderError):
@@ -645,6 +758,7 @@ class OrderManager:
         # pin every later ladder step lower, while a sustained decline still does.
         recent_bids: deque[float] = deque(maxlen=EXIT_BID_ANCHOR_WINDOW)
         step_trace: list[dict[str, float | int | bool | None]] = []
+        own_order_ids: set[str] = set()
 
         while True:
             if now_utc() >= deadline:
@@ -659,6 +773,11 @@ class OrderManager:
                 spread = await self._fetch_live_spread(candidate)
                 if spread is not None:
                     recent_bids.append(spread.bid)
+                if self.settings.live_test_date is not None and spread is None:
+                    # No closing order based on a stale signal or earlier ladder quote.
+                    raise BrokerFillError(
+                        "live test exit requires fresh leg quotes; supervise broker"
+                    )
                 mid_price = statistics.median(recent_bids) if recent_bids else current_value
 
                 limit_price = round_credit_limit(
@@ -673,6 +792,13 @@ class OrderManager:
                     "ask": spread.ask if spread is not None else None,
                     "filled": False,
                 })
+
+                # Never race a close the operator started in Schwab, or resubmit
+                # after the operator closed the fly.
+                conflict = await self._operator_exit_conflict(candidate, quantity, own_order_ids)
+                if conflict is not None:
+                    log.warning("exit_handed_to_operator", step=i, reason=conflict)
+                    raise OperatorExitTakeoverError(conflict)
 
                 order_spec = self.builder.build_butterfly_close(candidate, limit_price, quantity)
                 intent_id: int | None = None
@@ -693,18 +819,24 @@ class OrderManager:
                         order_spec=order_spec,
                         candidate_snapshot=snapshot,
                     )
+                await self._record_execution_quote(
+                    candidate, intent_id, "before_submit", limit_price=limit_price
+                )
                 orders_placed.labels(underlying=self.underlying, order_type="exit").inc()
                 start_time = now_utc()
 
                 try:
                     order_id = await self.schwab.place_order(order_spec)
+                    own_order_ids.add(str(order_id))
                     if intent_id is not None and self.intent_queries is not None:
                         await self.intent_queries.mark_broker_order_id(intent_id, order_id)
+                    await self._record_execution_quote(candidate, intent_id, "broker_acknowledged")
                     fill = await self._wait_for_fill(
                         order_id,
                         retry_interval,
                         intent_id=intent_id,
                         requested_quantity=quantity,
+                        operator_cancel_is_takeover=True,
                     )
 
                     if fill:
@@ -714,6 +846,9 @@ class OrderManager:
                         log.info(
                             "exit_filled", order_id=order_id,
                             price=fill.net_fill_price, step=i,
+                        )
+                        await self._record_execution_quote(
+                            candidate, intent_id, "fill_detected", refresh=True
                         )
                         return {
                             **_fill_result(fill, intent_id),
@@ -742,6 +877,9 @@ class OrderManager:
                         order_id, quantity, order_type="exit", intent_id=intent_id
                     )
                     if post_fill:
+                        await self._record_execution_quote(
+                            candidate, intent_id, "post_cancel_fill_detected", refresh=True
+                        )
                         return {
                             **post_fill,
                             "spread_bid": spread.bid if spread is not None else None,
@@ -753,7 +891,10 @@ class OrderManager:
                             ],
                         }
 
-                except (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError):
+                except (
+                    AmbiguousOrderError, BrokerFillError, PartialFillError,
+                    TerminalOrderError, OperatorExitTakeoverError,
+                ):
                     raise
                 except OrderRejectedError as e:
                     raise await self._submit_rejected(intent_id, e, "exit") from e
@@ -825,6 +966,7 @@ class OrderManager:
         timeout: int,
         intent_id: int | None = None,
         requested_quantity: int = 1,
+        operator_cancel_is_takeover: bool = False,
     ) -> BrokerFill | None:
         """Poll order status until filled or timeout."""
         # Monotonic deadline so broker request latency counts against the timeout.
@@ -858,12 +1000,23 @@ class OrderManager:
                     raise TerminalOrderError(terminal_failure, order_id)
                 if order_status == "FILLED":
                     return parse_broker_fill(status, requested_quantity, order_id)
+                if operator_cancel_is_takeover and order_status in {"CANCELED", "REPLACED"}:
+                    # The bot cancels only after this wait returns: someone else did.
+                    raise OperatorExitTakeoverError(
+                        f"operator {order_status.lower()} bot exit order"
+                    )
                 if order_status == "CANCELED":
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False
 
             except Exception as e:
-                if isinstance(e, (BrokerFillError, PartialFillError, TerminalOrderError)):
+                if isinstance(
+                    e,
+                    (
+                        BrokerFillError, PartialFillError,
+                        TerminalOrderError, OperatorExitTakeoverError,
+                    ),
+                ):
                     raise
                 log.warning("order_poll_error", error=str(e))
 

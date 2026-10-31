@@ -208,7 +208,9 @@ class DiscordNotifier:
         peak_value: float,
         entry_time: "dt.datetime | None" = None,
         quantity: int = 1,
+        manual_detail: str | None = None,
     ) -> None:
+        """Post an exit; *manual_detail* marks a close the operator made in Schwab."""
         emoji = "✅" if pnl > 0 else "❌"
         pnl_dollars = pnl * 100.0 * quantity
         pnl_str = (
@@ -225,9 +227,12 @@ class DiscordNotifier:
                 duration_str = f" | Held: {mins}m"
             except Exception:
                 pass
+        title = "BUTTERFLY CLOSED MANUALLY" if manual_detail else "BUTTERFLY EXITED"
+        manual_line = f"> 🖐️ {manual_detail}\n" if manual_detail else ""
         msg = (
-            f"{emoji} **{underlying} BUTTERFLY EXITED** #{trade_id}\n"
+            f"{emoji} **{underlying} {title}** #{trade_id}\n"
             f"> **{direction}** | Reason: `{exit_reason}`\n"
+            f"{manual_line}"
             f"> Entry: ${entry_price:.2f} → Exit: ${exit_price:.2f}\n"
             f"> P&L: **{pnl_str}** ({pnl_pct_str}) | Peak: ${peak_value:.2f}\n"
             f"> Time: {now_et.strftime('%H:%M:%S ET')}{duration_str}\n"

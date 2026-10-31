@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -72,6 +73,10 @@ class ExecutionSettings(ConfigModel):
     paper_min_oi_per_leg: int = 0            # 0 = disabled; minimum open interest per leg
     # Must be true, or ALLOW_LIVE_TRADING=true, to place live orders.
     allow_live_trading: bool = False
+    live_test_date: dt.date | None = None  # only this session may open new test trades
+    live_test_max_debit: float = Field(default=4.0, gt=0, le=4.0)
+    record_live_execution: bool = False
+    live_test_quote_max_age_seconds: float = Field(default=10.0, gt=0)
 
 
 # Ordered earliest to latest; the live regime clock depends on these exact names.
@@ -222,6 +227,17 @@ class AppConfig(BaseSettings):
 
     @model_validator(mode="after")
     def validate_trading_safety(self) -> AppConfig:
+        if self.execution.live_test_date is not None:
+            if (
+                self.strategy.underlying != "SPX"
+                or self.execution.paper_trading
+                or not self.execution.record_live_execution
+                or self.risk.max_position_size != 1
+                or self.risk.max_trades_per_day != 1
+            ):
+                raise ValueError(
+                    "dated live test requires recorded SPX live mode and one trade/fly"
+                )
         if self.position_data.recover_held_quotes and (
             self.strategy.underlying != "XSP" or not self.execution.paper_trading
         ):
@@ -299,6 +315,10 @@ def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env")
     yaml_data["database"] = database_data
 
     execution_data = yaml_data.get("execution", {})
+    # Deployment overrides must win over the checked-in paper default. Pass the
+    # string through Pydantic so malformed booleans fail instead of enabling live.
+    if "EXECUTION__PAPER_TRADING" in os.environ:
+        execution_data["paper_trading"] = os.environ["EXECUTION__PAPER_TRADING"]
     allow_live = os.getenv("ALLOW_LIVE_TRADING", "").lower() in {"1", "true", "yes"}
     if allow_live:
         execution_data["allow_live_trading"] = True
