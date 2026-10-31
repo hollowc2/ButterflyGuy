@@ -49,11 +49,20 @@ from butterfly_guy.db.queries import (
     TradeQueries,
 )
 from butterfly_guy.execution.order_manager import (
+    CANCEL_PENDING_STATUSES,
+    PARTIAL_FILL_STATUSES,
+    WORKING_ORDER_STATUSES,
     AmbiguousOrderError,
+    BrokerFill,
     BrokerFillError,
+    OperatorExitTakeoverError,
     OrderManager,
     PartialFillError,
     TerminalOrderError,
+    broker_option_positions,
+    order_statuses,
+    parse_broker_fill,
+    walk_orders,
 )
 from butterfly_guy.notify import send_async as notify_telegram
 from butterfly_guy.position.position_manager import (
@@ -81,6 +90,11 @@ MARKET_DATA_FAILURE_THRESHOLD = 3
 MARKET_DATA_RECOVERY_HOLD_SECONDS = 120.0
 # Consecutive failures of one best-effort DB telemetry write before alerting.
 TELEMETRY_FAILURE_THRESHOLD = 5
+# Live: poll the broker for an operator's Schwab close every N monitor polls.
+MANUAL_CLOSE_CHECK_POLLS = 5
+ACTIVE_ORDER_STATUSES = (
+    WORKING_ORDER_STATUSES | PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
+)
 
 
 class SettlementEvidenceError(RuntimeError):
@@ -379,8 +393,40 @@ class PositionService:
         market_data = getattr(self, "market_data", None) or getattr(
             self, "schwab", None
         )
+        # Live bot exits run normally until the operator acts on the fly in Schwab.
+        # From then on the operator owns the exit: the bot sends no exit orders,
+        # records its first exit signal for comparison and adopts the closing fill.
+        live = self.config.execution.paper_trading is False
+        operator_exit = False
+        manual_exit_signal: dict[str, object] | None = None
+        manual_close_problem: str | None = None
+        manual_close_alerted = False
+        polls = 0
         while is_market_open() and trade.trade_date == session_date() and not exited:
+            manual_close_due = live and polls % MANUAL_CLOSE_CHECK_POLLS == 0
+            polls += 1
             try:
+                if manual_close_due:
+                    manual_fill, problem, operator_active = await self._manual_close_fill(trade)
+                    if operator_active and not operator_exit:
+                        operator_exit = True
+                        await self._announce_operator_exit(trade, "Schwab order or leg change")
+                    if manual_fill is not None:
+                        # A broker fill is irreversible: never resubmit or re-adopt.
+                        exited = True
+                        clear_readiness("manual_close_unresolved")
+                        await self._record_manual_close(trade, manual_fill, manual_exit_signal)
+                        continue
+                    # Positions and orders update separately; alert only on a repeat.
+                    if problem is not None and problem == manual_close_problem:
+                        if not manual_close_alerted:
+                            manual_close_alerted = True
+                            await self._alert_manual_close_unresolved(trade, problem)
+                    elif problem is None and manual_close_alerted:
+                        manual_close_alerted = False
+                        clear_readiness("manual_close_unresolved")
+                    manual_close_problem = problem
+
                 # Fetch latest chain for position valuation
                 expiration = get_0dte_expiration()
                 observation = None
@@ -608,7 +654,38 @@ class PositionService:
                 signal = self.state_machine.evaluate(pos_state)
                 current_profit_state = self.state_machine.state.name
 
-                if signal:
+                if signal and operator_exit:
+                    if manual_exit_signal is None:
+                        manual_exit_signal = {
+                            "reason": signal.reason,
+                            "urgency": signal.urgency,
+                            "signal_time": now_eastern().isoformat(),
+                            "mark_at_signal": pos_state.current_value,
+                            "peak_value": pos_state.peak_value,
+                        }
+                        log.warning(
+                            "manual_exit_signal_suppressed",
+                            trade_id=trade.trade_id,
+                            **manual_exit_signal,
+                        )
+                        await self._best_effort(
+                            "manual_exit_signal_event",
+                            self.decision_queries.log_event(
+                                "manual_exit_signal_suppressed",
+                                {"trade_id": trade.trade_id, **manual_exit_signal},
+                                underlying=self.config.strategy.underlying,
+                            ),
+                        )
+                        if self.notifier:
+                            await self._best_effort(
+                                "manual_exit_signal_notify",
+                                self.notifier.notify_text(
+                                    f"Trade {trade.trade_id}: bot exit signal "
+                                    f"{signal.reason} at mark {pos_state.current_value:.2f}. "
+                                    "You own this exit: no bot order sent."
+                                ),
+                            )
+                elif signal:
                     log.info(
                         "exit_signal",
                         reason=signal.reason,
@@ -637,13 +714,28 @@ class PositionService:
                     self._background_tasks.add(pending_exit_task)
                     pending_exit_task.add_done_callback(self._background_tasks.discard)
 
-                    fill = await self.order_manager.execute_exit(
-                        candidate,
-                        pos_state.current_value,
-                        trade.quantity,
-                        exit_reason=signal.reason,
-                        trade_id=trade.trade_id,
-                    )
+                    try:
+                        fill = await self.order_manager.execute_exit(
+                            candidate,
+                            pos_state.current_value,
+                            trade.quantity,
+                            exit_reason=signal.reason,
+                            trade_id=trade.trade_id,
+                        )
+                    except OperatorExitTakeoverError as takeover:
+                        await pending_exit_task
+                        operator_exit = True
+                        manual_exit_signal = {
+                            "reason": signal.reason,
+                            "urgency": signal.urgency,
+                            "signal_time": now_eastern().isoformat(),
+                            "mark_at_signal": pos_state.current_value,
+                            "peak_value": pos_state.peak_value,
+                        }
+                        await self._announce_operator_exit(trade, str(takeover))
+                        polls = 0  # look for the operator's fill on the next poll
+                        await asyncio.sleep(poll_interval)
+                        continue
                     await pending_exit_task
 
                     parity_ok, exit_mark_parity = await self._best_effort(
@@ -1137,6 +1229,153 @@ class PositionService:
             spot=spot_price,
         )
         return spot_price, "market_data_spot_quote_fallback", None
+
+    async def _manual_close_fill(
+        self, trade: TradeRecord
+    ) -> tuple[BrokerFill | None, str | None, bool]:
+        """Return (closing fill, problem, operator active) for the fly in Schwab.
+
+        Called only between bot exit attempts, so any working order on the legs
+        is the operator's.
+        """
+        expected = {
+            trade.lower_symbol: trade.quantity,
+            trade.center_symbol: -2 * trade.quantity,
+            trade.upper_symbol: trade.quantity,
+        }
+        if len(expected) != 3 or not all(expected):
+            return None, "trade has no broker leg symbols", False
+        snapshot = await self.schwab.get_account_snapshot()
+        positions = broker_option_positions(snapshot, self.config.strategy.underlying)
+        held = {symbol: positions.get(symbol, 0) for symbol in expected}
+        flat = not any(held.values())
+
+        working, closes = False, []
+        for order in await self.schwab.get_todays_orders():
+            legs = [
+                leg for node in walk_orders(order)
+                for leg in node.get("orderLegCollection") or []
+            ]
+            symbols = {(leg.get("instrument") or {}).get("symbol") for leg in legs}
+            if not symbols & set(expected):
+                continue
+            if order_statuses(order) & ACTIVE_ORDER_STATUSES:
+                working = True
+            if (
+                flat
+                and order.get("status") == "FILLED"
+                and symbols == set(expected)
+                and all(str(leg.get("instruction", "")).endswith("_TO_CLOSE") for leg in legs)
+            ):
+                closes.append(order)
+        if held == expected:
+            return None, None, working
+        if not flat:
+            return None, f"held legs no longer match the fly: {held}", True
+        # The bot's own filled exit is adopted by its ladder, never here.
+        if len(closes) != 1:
+            return None, (
+                f"legs are flat but {len(closes)} filled closing fly orders were found"
+            ), True
+        try:
+            return parse_broker_fill(closes[0], trade.quantity), None, True
+        except BrokerFillError as e:
+            return None, f"closing fly order has unusable fill evidence: {e}", True
+
+    async def _record_manual_close(
+        self,
+        trade: TradeRecord,
+        fill: BrokerFill,
+        suppressed_signal: dict[str, object] | None,
+    ) -> None:
+        pnl = fill.net_fill_price - trade.entry_price
+        peak = max(self._last_persisted_peak, trade.peak_value or 0.0)
+        closed = await self.trade_queries.close_trade(
+            trade.trade_id,
+            fill.net_fill_price,
+            fill.execution_time,
+            "manual_close",
+            pnl,
+            peak,
+            metadata={
+                "manual_close_order_id": fill.order_id,
+                "broker_fill_evidence": fill.evidence,
+                "suppressed_exit_signal": suppressed_signal,
+            },
+        )
+        if not closed:
+            raise RuntimeError("manual close fill did not close exactly one OPEN trade")
+        await self._record_exit_metrics(pnl, trade)
+        await self._best_effort(
+            "manual_close_event",
+            self.decision_queries.log_event("trade_exited", {
+                "trade_id": trade.trade_id,
+                "exit_reason": "manual_close",
+                "entry_price": trade.entry_price,
+                "fill_price": fill.net_fill_price,
+                "pnl": pnl,
+                "peak_value": peak,
+                "suppressed_exit_signal": suppressed_signal,
+            }, underlying=self.config.strategy.underlying),
+        )
+        if self.notifier:
+            fill_time = fill.execution_time.astimezone(EASTERN).strftime("%H:%M:%S ET")
+            detail = f"Closed by you in Schwab (filled {fill_time}); no bot exit order."
+            if suppressed_signal is not None:
+                detail += (
+                    f" Bot signal was `{suppressed_signal['reason']}` at mark "
+                    f"${float(suppressed_signal['mark_at_signal']):.2f}."
+                )
+            await self._best_effort(
+                "manual_close_notify",
+                self.notifier.notify_exit(
+                    trade_id=trade.trade_id,
+                    underlying=self.config.strategy.underlying,
+                    direction=trade.direction,
+                    exit_reason="manual_close",
+                    entry_price=trade.entry_price,
+                    exit_price=fill.net_fill_price,
+                    pnl=pnl,
+                    peak_value=peak,
+                    entry_time=trade.entry_time,
+                    quantity=trade.quantity,
+                    manual_detail=detail,
+                ),
+            )
+        log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason="manual_close")
+
+    async def _announce_operator_exit(self, trade: TradeRecord, reason: str) -> None:
+        log.warning("exit_handed_to_operator", trade_id=trade.trade_id, reason=reason)
+        await self._best_effort(
+            "exit_handed_to_operator_event",
+            self.decision_queries.log_event(
+                "exit_handed_to_operator",
+                {"trade_id": trade.trade_id, "reason": reason},
+                underlying=self.config.strategy.underlying,
+            ),
+        )
+        if self.notifier:
+            await self._best_effort(
+                "exit_handed_to_operator_notify",
+                self.notifier.notify_text(
+                    f"Trade {trade.trade_id}: manual action in Schwab ({reason}). "
+                    "The bot sends no more exit orders for this trade; it will record "
+                    "your closing fill."
+                ),
+            )
+
+    async def _alert_manual_close_unresolved(self, trade: TradeRecord, problem: str) -> None:
+        set_readiness("manual_close_unresolved")
+        log.error("manual_close_unresolved", trade_id=trade.trade_id, problem=problem)
+        text = (
+            f"WARNING: trade {trade.trade_id} manual close unresolved: {problem}. "
+            "The bot sends no exit orders; check Schwab and close the DB row by hand."
+        )
+        if self.notifier:
+            await self._best_effort(
+                "manual_close_unresolved_notify", self.notifier.notify_text(text)
+            )
+        await self._best_effort("manual_close_unresolved_telegram", notify_telegram(text))
 
     async def _record_exit_metrics(self, pnl: float, trade: TradeRecord) -> None:
         """Record trade exit metrics and update risk engine."""

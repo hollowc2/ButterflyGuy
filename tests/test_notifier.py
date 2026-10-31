@@ -220,6 +220,27 @@ async def test_notify_exit_formats_contract_pnl_as_dollars():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("detail", [None, "Closed by you in Schwab (filled 11:02:03 ET)."])
+async def test_notify_exit_marks_manual_close(detail):
+    notifier = DiscordNotifier("https://example.com/webhook")
+    posted: list[str] = []
+
+    async def capture(content: str, **kwargs: object) -> None:
+        posted.append(content)
+
+    with patch.object(notifier, "_post", side_effect=capture):
+        await notifier.notify_exit(
+            trade_id=7, underlying="SPX", direction="PUT", exit_reason="manual_close",
+            entry_price=0.3, exit_price=0.5, pnl=0.2, peak_value=0.6, manual_detail=detail,
+        )
+
+    assert ("BUTTERFLY CLOSED MANUALLY" in posted[0]) == (detail is not None)
+    assert ("BUTTERFLY EXITED" in posted[0]) == (detail is None)
+    if detail:
+        assert detail in posted[0]
+
+
+@pytest.mark.asyncio
 async def test_telegram_send_async_runs_blocking_send_off_loop(monkeypatch):
     import threading
 

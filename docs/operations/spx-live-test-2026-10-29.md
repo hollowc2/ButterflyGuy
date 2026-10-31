@@ -18,6 +18,30 @@ The dated entry guard prevents new entries on subsequent dates even if restorati
 It does not stop monitoring a held position. The test overlay disables automatic container restarts;
 a failure requires supervised broker reconciliation before any restart. Do not leave it unattended.
 
+## Manual close override
+
+Bot exit rules run normally. Corey may close the fly in Schwab/ToS at any time; the bot then
+hands that trade's exit to him for good and never fights it.
+
+- Close it as **one butterfly order** (all three legs, closing instructions), e.g. right-click the
+  position, "Create closing order". Legging out leaves the bot unable to price the close; it
+  alerts and the DB row must be closed by hand.
+- If a bot exit order is already working, cancel or edit *that* order in ToS (edit = replace).
+  The bot treats a cancel/replace it did not make as a handoff and does not resubmit. Sending a
+  second, separate closing order while the bot's is working is the one race to avoid.
+- Handoff triggers: any working order on the fly's legs that the bot did not place, a leg change,
+  or a cancel/replace of the bot's exit order. Before every exit-ladder step the bot re-checks
+  holdings and working orders, so it never submits against a close you started.
+- After handoff it keeps valuing the fly, logs/posts its first exit signal
+  (`manual_exit_signal_suppressed`) for comparison, and every ~10 s checks the account. Once all
+  three legs are flat it reads the single FILLED closing fly order and records `manual_close` at
+  the broker fill. Handoff is permanent for that trade, even if you cancel your order; an
+  unclosed fly is then cash-settled.
+- The reconciler leaves a working, edited or filled close of the monitored trade's own legs to
+  the monitor; any other unknown SPX order or leg mismatch still blocks trading and alerts.
+- If it cannot resolve the close (no single matching filled order, legs partly closed), it
+  alerts once and marks `/ready` `manual_close_unresolved`. It still sends no orders.
+
 ## Recording and checks
 
 - Selection context is retained in trade metadata and each order has a durable intent.
