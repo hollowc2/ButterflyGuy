@@ -553,3 +553,51 @@ def test_build_report_messages_format():
     assert "Big Losers" in text
     assert "Watchlist" in text
     assert "AAPL" in text or "SPX" in text
+
+
+def _no_trade_card(*, positions=None, buying_power=50_000.0):
+    account = {
+        "securitiesAccount": {
+            "type": "MARGIN",
+            "initialBalances": {"liquidationValue": 50_000.0},
+            "currentBalances": {
+                "liquidationValue": 50_000.0,
+                "buyingPower": buying_power,
+                "availableFunds": buying_power,
+            },
+            "positions": positions or [],
+        }
+    }
+    return build_daily_report_card(
+        report_date=dt.date(2026, 6, 8),
+        generated_at=dt.datetime(2026, 6, 8, 18, 0, tzinfo=EASTERN),
+        account_data=account,
+        transactions=[],
+        orders=[],
+        settings=DailyReportCardSettings(),
+    )
+
+
+def test_build_report_messages_no_trades_posts_short_message():
+    card = _no_trade_card()
+    assert card.activity.trade_count == 0
+    assert not card.problems
+
+    messages = build_report_messages(card)
+    assert len(messages) == 1
+    text = messages[0]
+    assert "Daily Report Card" in text
+    assert "No trades today." in text
+    assert "Account" not in text
+    assert "Big Winners" not in text
+    assert "Watchlist" not in text
+
+
+def test_build_report_messages_no_trades_keeps_watchlist_issues():
+    card = _no_trade_card(buying_power=10.0)
+    assert card.problems
+
+    text = build_report_messages(card)[0]
+    assert "No trades today." in text
+    assert "Watchlist" in text
+    assert "Low buying power" in text
