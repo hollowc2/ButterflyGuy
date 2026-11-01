@@ -1,6 +1,6 @@
 """Send daily margin-account report card to Discord #daily-report-card.
 
-Cron: weekdays 6:00 PM Eastern / 22:00 UTC
+Cron: weekdays 21:30 UTC (1:30 PM PST / 2:30 PM PDT)
   See infra/cron/daily_report_card.cron.
 """
 
