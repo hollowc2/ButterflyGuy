@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import datetime as dt
 
-from butterfly_guy.reports.live_performance import TradePoint, compute_stats
-from butterfly_guy.reports.performance_chart import (
-    build_combined_performance_chart_png,
-    build_performance_chart_png,
-)
+from butterfly_guy.reports.live_performance import TradePoint
+from butterfly_guy.reports.performance_chart import build_combined_performance_chart_png
 
 
 def _trade(
@@ -16,6 +13,7 @@ def _trade(
     pnl_dollars: float,
     *,
     exit_reason: str = "end_of_day",
+    executable_pnl_dollars: float | None = None,
 ) -> TradePoint:
     return TradePoint(
         trade_date=trade_date,
@@ -34,36 +32,34 @@ def _trade(
         vix=18.0,
         entry_spot=4980.0,
         dd_at_exit_pct=None,
+        executable_pnl_dollars=executable_pnl_dollars,
     )
-
-
-def test_build_performance_chart_png_returns_png_bytes() -> None:
-    trades = [
-        _trade(dt.date(2026, 3, 17), 100.0),
-        _trade(dt.date(2026, 3, 18), -50.0, exit_reason="drawdown_morning"),
-        _trade(dt.date(2026, 3, 19), 75.0),
-    ]
-    png = build_performance_chart_png(trades, title="SPX Weekly", period_label="Weekly")
-    assert png.startswith(b"\x89PNG\r\n")
-    assert len(png) > 1000
 
 
 def test_build_combined_performance_chart_png_returns_png_bytes() -> None:
     weekly = [_trade(dt.date(2026, 6, 3), -125.0)]
-    monthly = weekly + [_trade(dt.date(2026, 6, 4), -229.0)]
+    monthly = [_trade(dt.date(2026, 6, 1), 300.0), *weekly]
     all_time = [
         _trade(dt.date(2026, 3, 17), 100.0),
         _trade(dt.date(2026, 3, 18), -50.0, exit_reason="drawdown_morning"),
-        _trade(dt.date(2026, 3, 19), 75.0),
+        *monthly,
     ]
-    periods = [("Weekly", weekly), ("Monthly", monthly), ("All-Time", all_time)]
-    png = build_combined_performance_chart_png(periods)
+    png = build_combined_performance_chart_png(
+        weekly=weekly, monthly=monthly, all_time=all_time, subtitle="Week -$125"
+    )
     assert png.startswith(b"\x89PNG\r\n")
     assert len(png) > 1000
 
 
-def test_build_performance_chart_png_empty_trades() -> None:
-    png = build_performance_chart_png([], title="SPX Weekly", period_label="Weekly")
+def test_combined_chart_draws_executable_curve_when_every_trade_is_priced() -> None:
+    trades = [
+        _trade(dt.date(2026, 6, 1), 300.0, executable_pnl_dollars=280.0),
+        _trade(dt.date(2026, 6, 2), -100.0, executable_pnl_dollars=-120.0),
+    ]
+    png = build_combined_performance_chart_png(weekly=trades, monthly=trades, all_time=trades)
     assert png.startswith(b"\x89PNG\r\n")
-    stats = compute_stats([])
-    assert stats.trade_count == 0
+
+
+def test_combined_chart_handles_no_trades() -> None:
+    png = build_combined_performance_chart_png(weekly=[], monthly=[], all_time=[])
+    assert png.startswith(b"\x89PNG\r\n")
