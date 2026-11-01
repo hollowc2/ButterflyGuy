@@ -344,3 +344,44 @@ async def test_prolonged_outage_reminders_are_rate_limited_and_reset_on_recovery
     service.order_manager.execute_exit.assert_not_awaited()
     assert service.schwab.mock_calls == []
     assert readiness_snapshot() == (True, None)
+
+
+@pytest.mark.asyncio
+async def test_eod_chart_includes_the_trades_fly_marks() -> None:
+    service = PositionService.__new__(PositionService)
+    service.market_data = AsyncMock()
+    service.market_data.get_intraday_bars.return_value = [{"datetime": 1, "close": 1.0}]
+    service.trade_queries = MagicMock(db=MagicMock())
+    row = {
+        "id": 381,
+        "underlying": "SPX",
+        "direction": "PUT",
+        "lower_strike": 7545,
+        "center_strike": 7575,
+        "upper_strike": 7605,
+        "wing_width": 30,
+        "entry_price": 2.81,
+        "exit_price": 24.05,
+        "entry_time": dt.datetime(2026, 10, 30, 14, 0, tzinfo=dt.timezone.utc),
+        "exit_time": dt.datetime(2026, 10, 30, 20, 0, tzinfo=dt.timezone.utc),
+        "exit_reason": "cash_settled",
+        "metadata": {"entry_spot": 7633.0},
+    }
+    marks = [object()]
+    with (
+        patch(
+            "butterfly_guy.services.position_service.load_fly_marks",
+            new=AsyncMock(return_value=marks),
+        ) as load_marks,
+        patch(
+            "butterfly_guy.services.position_service.summarize_exit_chart",
+            return_value=(b"png", True),
+        ) as summarize,
+    ):
+        result = await service._build_exit_chart_from_row(row, full_session=True)
+
+    assert result == (b"png", True)
+    load_marks.assert_awaited_once_with(service.trade_queries.db, 381)
+    spec = summarize.call_args.args[0]
+    assert (spec.trade_id, spec.exit_price) == (381, 24.05)
+    assert summarize.call_args.kwargs["marks"] is marks

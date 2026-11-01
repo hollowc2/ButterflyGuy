@@ -12,22 +12,26 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+import matplotlib.transforms as mtransforms
 
-from butterfly_guy.core.time_utils import EASTERN, MARKET_OPEN, market_close_time
+from butterfly_guy.core.time_utils import EASTERN, MARKET_OPEN, PACIFIC, market_close_time
 
-# Dark terminal-style palette
+# Dark palette; series steps validated for the dark surface (dataviz skill).
 _BG = "#1a1a2e"
 _GRID = "#2d2d44"
 _TEXT = "#e0e0e0"
-_PRICE = "#4fc3f7"
-_IN_TENT = "#66bb6a"
-_OUT_TENT = "#ef5350"
-_WING = "#ffa726"
-_CENTER = "#ffee58"
-_TENT_FILL = "#66bb6a"
-_TENT_ALPHA = 0.15
-_ENTRY_MARKER = "#ffee58"
-_EXIT_MARKER = "#ab47bc"
+_MUTED = "#8a8aa3"
+_PRICE = "#3987e5"
+_WING = "#c98500"
+_CENTER = "#e0e0e0"
+_TENT_FILL = "#199e70"
+_TENT_ALPHA = 0.14
+_GAIN = "#0ca30c"
+_LOSS = "#d03b3b"
+_ENTRY_MARKER = "#fab219"
+_EXIT_MARKER = "#9085e9"
+# Session math stays in Eastern; EOD chart labels and axis read in Pacific.
+_DISPLAY_TZ = PACIFIC
 
 
 @dataclass(frozen=True)
@@ -45,6 +49,8 @@ class ButterflyChartSpec:
     entry_spot: float | None = None
     exit_time: dt.datetime | None = None
     exit_reason: str | None = None
+    trade_id: int | None = None
+    exit_price: float | None = None
 
     @property
     def lower_be(self) -> float:
@@ -53,6 +59,14 @@ class ButterflyChartSpec:
     @property
     def upper_be(self) -> float:
         return self.upper_strike - self.entry_price
+
+
+@dataclass(frozen=True)
+class FlyMarkPoint:
+    """One monitor poll of the held fly's mark."""
+
+    ts: dt.datetime
+    mark: float
 
 
 def parse_hhmm(value: str) -> dt.time:
@@ -105,33 +119,66 @@ def _filter_series(
     ]
 
 
-def _setup_axes(ax: plt.Axes, title: str, y_label: str = "Price") -> None:
+def _setup_axes(ax: plt.Axes, y_label: str) -> None:
     ax.set_facecolor(_BG)
-    ax.set_title(title, color=_TEXT, fontsize=11, pad=8)
-    ax.set_ylabel(y_label, color=_TEXT, fontsize=9)
-    ax.tick_params(colors=_TEXT, labelsize=8)
-    ax.grid(True, color=_GRID, alpha=0.5, linewidth=0.5)
-    for spine in ax.spines.values():
+    ax.set_ylabel(y_label, color=_MUTED, fontsize=10)
+    ax.tick_params(colors=_MUTED, labelsize=9, length=0)
+    ax.grid(True, axis="y", color=_GRID, alpha=0.6, linewidth=0.6)
+    for side, spine in ax.spines.items():
+        spine.set_visible(side == "bottom")
         spine.set_color(_GRID)
 
 
+def _set_header(fig: plt.Figure, title: str, subtitle: str) -> None:
+    fig.text(0.01, 0.985, title, color=_TEXT, fontsize=13, fontweight="bold",
+             ha="left", va="top")
+    fig.text(0.01, 0.94, subtitle, color=_MUTED, fontsize=10, ha="left", va="top")
+
+
+def _right_label(ax: plt.Axes, y: float, text: str, color: str) -> None:
+    """Label a horizontal level just outside the right edge of the plot."""
+    trans = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
+    ax.text(1.008, y, text, transform=trans, color=color, fontsize=9,
+            ha="left", va="center", clip_on=False)
+
+
 def _draw_strike_overlays(ax: plt.Axes, spec: ButterflyChartSpec) -> None:
-    ax.axhline(spec.lower_strike, color=_WING, linewidth=0.9, linestyle="--", alpha=0.7,
-               label=f"Lower wing {spec.lower_strike:.0f}")
-    ax.axhline(spec.center_strike, color=_CENTER, linewidth=1.2, linestyle="-", alpha=0.9,
-               label=f"Center {spec.center_strike:.0f}")
-    ax.axhline(spec.upper_strike, color=_WING, linewidth=0.9, linestyle="--", alpha=0.7,
-               label=f"Upper wing {spec.upper_strike:.0f}")
-    ax.axhspan(spec.lower_be, spec.upper_be, color=_TENT_FILL, alpha=_TENT_ALPHA,
-               label=f"Profit tent {spec.lower_be:.0f}–{spec.upper_be:.0f}")
+    ax.axhspan(spec.lower_be, spec.upper_be, color=_TENT_FILL, alpha=_TENT_ALPHA, linewidth=0)
+    ax.axhline(spec.lower_strike, color=_WING, linewidth=1.0, linestyle="--", alpha=0.8)
+    ax.axhline(spec.center_strike, color=_CENTER, linewidth=1.2, alpha=0.8)
+    ax.axhline(spec.upper_strike, color=_WING, linewidth=1.0, linestyle="--", alpha=0.8)
+    _right_label(ax, spec.upper_strike, f"{spec.upper_strike:.0f} wing", _WING)
+    _right_label(ax, spec.center_strike, f"{spec.center_strike:.0f} center", _CENTER)
+    _right_label(ax, spec.lower_strike, f"{spec.lower_strike:.0f} wing", _WING)
+
+
+def _marker(
+    ax: plt.Axes, x: dt.datetime, y: float, color: str, label: str, *, left: bool = False
+) -> None:
+    ax.scatter([x], [y], color=color, s=70, zorder=6, edgecolors=_BG, linewidths=2)
+    ax.annotate(label, (x, y), xytext=(-6 if left else 6, 8), textcoords="offset points",
+                ha="right" if left else "left", color=_TEXT, fontsize=9, zorder=7,
+                bbox={"boxstyle": "round,pad=0.2", "facecolor": _BG, "edgecolor": "none",
+                      "alpha": 0.75})
+
+
+def _hhmm(ts: dt.datetime) -> str:
+    return ts.astimezone(_DISPLAY_TZ).strftime("%H:%M")
 
 
 def _fig_to_png(fig: plt.Figure) -> bytes:
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=120, facecolor=_BG, edgecolor=_BG, bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=110, facecolor=_BG, edgecolor=_BG, bbox_inches="tight")
     plt.close(fig)
     buf.seek(0)
     return buf.read()
+
+
+def _strikes_text(spec: ButterflyChartSpec) -> str:
+    return (
+        f"{spec.direction} {spec.wing_width}-wide  "
+        f"{spec.lower_strike:.0f} / {spec.center_strike:.0f} / {spec.upper_strike:.0f}"
+    )
 
 
 def build_entry_chart_png(
@@ -157,28 +204,29 @@ def build_entry_chart_png(
     tz = ZoneInfo(timezone)
     start_label = window_start.astimezone(tz).strftime("%H:%M")
     end_label = window_end.astimezone(tz).strftime("%H:%M %Z")
-    title = (
-        f"{spec.underlying} {spec.direction} {spec.wing_width}-wide  |  "
-        f"{start_label}–{end_label}"
-    )
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    fig, ax = plt.subplots(figsize=(9, 4.8))
     fig.patch.set_facecolor(_BG)
-    _setup_axes(ax, title)
+    _set_header(
+        fig,
+        f"{spec.underlying} entry  ·  {_strikes_text(spec)}",
+        f"Debit ${spec.entry_price:.2f}  ·  expiry tent {spec.lower_be:.0f}–{spec.upper_be:.0f}"
+        f"  ·  spot {start_label}–{end_label}",
+    )
+    _setup_axes(ax, spec.underlying)
 
     times = [t.astimezone(tz) for t, _ in series]
     prices = [p for _, p in series]
-    ax.plot(times, prices, color=_PRICE, linewidth=1.8, label=spec.underlying)
     _draw_strike_overlays(ax, spec)
+    ax.plot(times, prices, color=_PRICE, linewidth=2.0, zorder=4)
 
     entry_local = spec.entry_time.astimezone(tz)
     if window_start <= entry_local <= window_end and spec.entry_spot is not None:
-        ax.scatter([entry_local], [spec.entry_spot], color=_ENTRY_MARKER, s=60, zorder=5,
-                   label="Entry", edgecolors="white", linewidths=0.5)
+        _marker(ax, entry_local, spec.entry_spot, _ENTRY_MARKER,
+                f"fill {entry_local:%H:%M}  {spec.entry_spot:.0f}")
 
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=tz))
-    ax.legend(loc="upper left", fontsize=7, facecolor=_BG, edgecolor=_GRID, labelcolor=_TEXT)
-    fig.autofmt_xdate()
+    fig.subplots_adjust(top=0.86)
     return _fig_to_png(fig)
 
 
@@ -193,10 +241,15 @@ def _session_series(
 
 def _tent_hit_stats(
     series: list[tuple[dt.datetime, float]],
-    lower_be: float,
-    upper_be: float,
+    spec: ButterflyChartSpec,
 ) -> tuple[bool, int]:
-    in_tent_bars = sum(1 for _, price in series if lower_be <= price <= upper_be)
+    """Count bars in the expiry tent from entry onward; pre-entry bars don't count."""
+    entry_et = spec.entry_time.astimezone(EASTERN)
+    in_tent_bars = sum(
+        1
+        for ts, price in series
+        if ts >= entry_et and spec.lower_be <= price <= spec.upper_be
+    )
     return in_tent_bars > 0, in_tent_bars
 
 
@@ -245,14 +298,72 @@ def summarize_exit_chart(
     candles: list[dict],
     *,
     full_session: bool = False,
+    marks: list[FlyMarkPoint] | None = None,
 ) -> tuple[bytes | None, bool | None]:
-    """Return EOD chart PNG and whether spot ever entered the profit tent."""
+    """Return EOD chart PNG and whether spot entered the profit tent after entry."""
     series = _exit_chart_series(spec, candles, full_session=full_session)
     if series is None:
         return None, None
 
-    tent_hit, _ = _tent_hit_stats(series, spec.lower_be, spec.upper_be)
-    return build_exit_chart_png(spec, candles, full_session=full_session), tent_hit
+    tent_hit, _ = _tent_hit_stats(series, spec)
+    png = build_exit_chart_png(spec, candles, full_session=full_session, marks=marks)
+    return png, tent_hit
+
+
+def _draw_spot_panel(
+    ax: plt.Axes,
+    spec: ButterflyChartSpec,
+    series: list[tuple[dt.datetime, float]],
+    held_start: dt.datetime,
+    held_end: dt.datetime,
+) -> None:
+    _setup_axes(ax, spec.underlying)
+    ax.margins(y=0.08)
+    _draw_strike_overlays(ax, spec)
+    times = [t for t, _ in series]
+    prices = [p for _, p in series]
+    # Full session in muted ink; the held stretch on top in the series color.
+    ax.plot(times, prices, color=_MUTED, linewidth=1.3, alpha=0.7, zorder=3)
+    held = [(t, p) for t, p in series if held_start <= t <= held_end]
+    if len(held) >= 2:
+        ax.plot([t for t, _ in held], [p for _, p in held], color=_PRICE, linewidth=2.0, zorder=4)
+
+    if times[0] <= held_start <= times[-1]:
+        # Sit the marker on the plotted bar; the fill-time spot goes in the label.
+        entry_bar = min(series, key=lambda point: abs(point[0] - held_start))
+        entry_spot = spec.entry_spot if spec.entry_spot is not None else entry_bar[1]
+        _marker(ax, entry_bar[0], entry_bar[1], _ENTRY_MARKER,
+                f"entry {_hhmm(held_start)} @ {entry_spot:.0f}")
+    exit_time, exit_spot = _exit_marker_point(spec, series)
+    _marker(ax, exit_time, exit_spot, _EXIT_MARKER, f"exit {_hhmm(exit_time)}")
+
+
+def _draw_mark_panel(
+    ax: plt.Axes,
+    spec: ButterflyChartSpec,
+    marks: list[FlyMarkPoint],
+    exit_time: dt.datetime,
+) -> None:
+    _setup_axes(ax, "Fly value ($)")
+    times = [m.ts.astimezone(EASTERN) for m in marks]
+    values = [m.mark for m in marks]
+    debit = spec.entry_price
+    ax.fill_between(times, values, debit, where=[v >= debit for v in values],
+                    color=_GAIN, alpha=0.25, linewidth=0, interpolate=True)
+    ax.fill_between(times, values, debit, where=[v < debit for v in values],
+                    color=_LOSS, alpha=0.25, linewidth=0, interpolate=True)
+    ax.axhline(debit, color=_MUTED, linewidth=1.0, linestyle="--")
+    _right_label(ax, debit, f"debit {debit:.2f}", _MUTED)
+    ax.plot(times, values, color=_PRICE, linewidth=1.4, zorder=4)
+
+    peak_point = max(marks, key=lambda m: m.mark)
+    peak_time = peak_point.ts.astimezone(EASTERN)
+    late_peak = peak_time > times[0] + (exit_time - times[0]) / 2
+    _marker(ax, peak_time, peak_point.mark, _TEXT,
+            f"peak {peak_point.mark:.2f} @ {_hhmm(peak_time)}", left=late_peak)
+
+    exit_value = spec.exit_price if spec.exit_price is not None else values[-1]
+    _marker(ax, exit_time, exit_value, _EXIT_MARKER, f"exit {exit_value:.2f}")
 
 
 def build_exit_chart_png(
@@ -260,44 +371,47 @@ def build_exit_chart_png(
     candles: list[dict],
     *,
     full_session: bool = False,
+    marks: list[FlyMarkPoint] | None = None,
 ) -> bytes | None:
-    """Build full-session chart with tent hit coloring."""
+    """Session spot with the tent, plus the fly's own value path when marks exist."""
     series = _exit_chart_series(spec, candles, full_session=full_session)
     if series is None:
         return None
 
-    tent_hit, tent_bars = _tent_hit_stats(series, spec.lower_be, spec.upper_be)
-    hit_label = "YES" if tent_hit else "NO"
-    title = (
-        f"{spec.underlying} EOD  |  Tent hit: {hit_label} ({tent_bars} bars in zone)"
+    _, tent_bars = _tent_hit_stats(series, spec)
+    entry_et = spec.entry_time.astimezone(EASTERN)
+    exit_time, _ = _exit_marker_point(spec, series)
+
+    trade_label = f"#{spec.trade_id}  ·  " if spec.trade_id is not None else ""
+    title = f"{spec.underlying} {trade_label}{entry_et:%a %Y-%m-%d}  ·  {_strikes_text(spec)}"
+    subtitle_parts = [f"Exit {spec.exit_reason or 'open'} {_hhmm(exit_time)} PT"]
+    if spec.exit_price is not None:
+        change = spec.exit_price - spec.entry_price
+        subtitle_parts.append(
+            f"fly {spec.entry_price:.2f} → {spec.exit_price:.2f} ({change:+.2f})"
+        )
+    subtitle_parts.append(
+        f"spot in expiry tent {spec.lower_be:.0f}–{spec.upper_be:.0f}: "
+        f"{tent_bars} min after entry"
     )
-    if spec.exit_reason:
-        title += f"  |  {spec.exit_reason}"
 
-    fig, ax = plt.subplots(figsize=(9, 4.5))
+    has_marks = bool(marks) and len(marks) >= 2
+    if has_marks:
+        fig, (ax_spot, ax_mark) = plt.subplots(
+            2, 1, figsize=(10, 6.6), sharex=True, gridspec_kw={"height_ratios": [3, 2]}
+        )
+    else:
+        fig, ax_spot = plt.subplots(figsize=(10, 4.8))
+        ax_mark = None
     fig.patch.set_facecolor(_BG)
-    _setup_axes(ax, title)
+    _set_header(fig, title, "  ·  ".join(subtitle_parts))
 
-    times = [t for t, _ in series]
-    prices = [p for _, p in series]
-    for i in range(len(times) - 1):
-        mid = (prices[i] + prices[i + 1]) / 2
-        color = _IN_TENT if spec.lower_be <= mid <= spec.upper_be else _OUT_TENT
-        ax.plot(times[i : i + 2], prices[i : i + 2], color=color, linewidth=1.6)
+    _draw_spot_panel(ax_spot, spec, series, entry_et, exit_time)
+    if ax_mark is not None:
+        _draw_mark_panel(ax_mark, spec, marks, exit_time)
 
-    _draw_strike_overlays(ax, spec)
-
-    entry_time = spec.entry_time.astimezone(EASTERN)
-    if series and series[0][0] <= entry_time <= series[-1][0] and spec.entry_spot is not None:
-        ax.scatter([entry_time], [spec.entry_spot], color=_ENTRY_MARKER, s=60, zorder=5,
-                   label="Entry", edgecolors="white", linewidths=0.5)
-
-    if series:
-        exit_time, exit_price = _exit_marker_point(spec, series)
-        ax.scatter([exit_time], [exit_price], color=_EXIT_MARKER, s=60, zorder=5,
-                   label="Exit", edgecolors="white", linewidths=0.5)
-
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=EASTERN))
-    ax.legend(loc="upper left", fontsize=7, facecolor=_BG, edgecolor=_GRID, labelcolor=_TEXT)
-    fig.autofmt_xdate()
+    bottom_ax = ax_mark if ax_mark is not None else ax_spot
+    bottom_ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=_DISPLAY_TZ))
+    bottom_ax.set_xlabel("PT", color=_MUTED, fontsize=9, loc="right")
+    fig.subplots_adjust(top=0.88 if has_marks else 0.84, hspace=0.08)
     return _fig_to_png(fig)

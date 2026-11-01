@@ -18,7 +18,7 @@ from butterfly_guy.reports.live_performance import (
     trade_point_from_row,
 )
 from butterfly_guy.reports.performance_chart import build_combined_performance_chart_png
-from butterfly_guy.services.chart_data import load_spot_series
+from butterfly_guy.services.chart_data import load_fly_marks, load_spot_series
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.trade_chart import ButterflyChartSpec, summarize_exit_chart
 
@@ -179,6 +179,19 @@ def format_combined_performance_caption(
     return "\n".join(lines)
 
 
+def format_chart_subtitle(
+    weekly: list[TradePoint],
+    monthly: list[TradePoint],
+    all_time: list[TradePoint],
+) -> str:
+    parts = []
+    for label, trades in (("Week", weekly), ("Month", monthly), ("All-time", all_time)):
+        total = sum(t.pnl_dollars for t in trades)
+        sign = "+" if total >= 0 else "-"
+        parts.append(f"{label} {sign}${abs(total):,.0f} paper ({len(trades)} tr)")
+    return "  ·  ".join(parts)
+
+
 def format_review_header(windows: ReviewWindows, trade_count: int, underlying: str) -> str:
     return (
         f"📋 **{underlying} Weekend Review** "
@@ -249,8 +262,11 @@ async def build_eod_chart_for_row(
         entry_spot=float(entry_spot) if entry_spot is not None else None,
         exit_time=row.get("exit_time"),
         exit_reason=row.get("exit_reason"),
+        trade_id=row["id"],
+        exit_price=float(row["exit_price"]) if row.get("exit_price") is not None else None,
     )
-    return summarize_exit_chart(spec, candles, full_session=True)
+    marks = await load_fly_marks(db, row["id"])
+    return summarize_exit_chart(spec, candles, full_session=True, marks=marks)
 
 
 async def _post_with_delay(
@@ -347,18 +363,17 @@ async def send_weekend_review(
             )
         messages_sent += 1
 
-    performance_periods = [
-        (f"Weekly · {fill_model}", weekly_points),
-        (f"Monthly · {fill_model}", monthly_points),
-        (f"All-Time · {fill_model}", cohort_points),
-    ]
     combined_caption = format_combined_performance_caption(
         weekly_points,
         monthly_points,
         cohort_points,
     )
     combined_png = build_combined_performance_chart_png(
-        performance_periods, title=f"{underlying} Paper Performance Summary"
+        weekly=weekly_points,
+        monthly=monthly_points,
+        all_time=cohort_points,
+        title=f"{underlying} Performance · {fill_model}",
+        subtitle=format_chart_subtitle(weekly_points, monthly_points, cohort_points),
     )
     await _post_with_delay(
         notifier,

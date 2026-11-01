@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from butterfly_guy.services.trade_chart import (
     ButterflyChartSpec,
+    FlyMarkPoint,
     _exit_chart_series,
     _exit_marker_point,
     build_entry_chart_png,
@@ -162,3 +163,54 @@ def test_candles_to_series_sorts_and_converts_timezone() -> None:
     assert series[0][1] == 6000.0
     assert series[1][1] == 6001.0
     assert series[0][0].tzinfo == EASTERN
+
+
+def _spec(entry: dt.datetime, **overrides) -> ButterflyChartSpec:
+    fields = {
+        "underlying": "SPX",
+        "direction": "CALL",
+        "lower_strike": 5990,
+        "center_strike": 6000,
+        "upper_strike": 6010,
+        "wing_width": 10,
+        "entry_price": 1.25,
+        "entry_time": entry,
+        "entry_spot": 6001.0,
+        "exit_time": dt.datetime(2026, 6, 6, 11, 0, tzinfo=EASTERN),
+        "exit_reason": "drawdown_afternoon",
+        "trade_id": 42,
+        "exit_price": 0.80,
+    }
+    fields.update(overrides)
+    return ButterflyChartSpec(**fields)
+
+
+def test_tent_hit_ignores_bars_before_entry() -> None:
+    session = dt.date(2026, 6, 6)
+    entry = dt.datetime(2026, 6, 6, 10, 0, tzinfo=EASTERN)
+    open_dt = dt.datetime.combine(session, dt.time(9, 30), tzinfo=EASTERN)
+    # In the tent (6000) until 09:59, far outside it (6050) from entry on.
+    candles = [
+        {
+            "datetime": int((open_dt + dt.timedelta(minutes=i)).timestamp() * 1000),
+            "close": 6000.0 if i < 30 else 6050.0,
+        }
+        for i in range(120)
+    ]
+    _, tent_hit = summarize_exit_chart(_spec(entry), candles, full_session=True)
+    assert tent_hit is False
+
+
+def test_exit_chart_with_fly_marks_returns_png() -> None:
+    session = dt.date(2026, 6, 6)
+    entry = dt.datetime(2026, 6, 6, 10, 5, tzinfo=EASTERN)
+    marks = [
+        FlyMarkPoint(ts=entry + dt.timedelta(minutes=i), mark=1.25 + (i % 7) * 0.2 - 0.5)
+        for i in range(55)
+    ]
+    png, tent_hit = summarize_exit_chart(
+        _spec(entry), _sample_candles(session, base_price=6001.0), full_session=True, marks=marks
+    )
+    assert png is not None
+    assert png[:4] == b"\x89PNG"
+    assert tent_hit is True

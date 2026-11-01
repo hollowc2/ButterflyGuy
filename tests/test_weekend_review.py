@@ -336,10 +336,10 @@ async def test_historical_review_excludes_later_trades_and_fill_models(tmp_path,
             AsyncMock(), underlying="XSP", reference=dt.date(2026, 10, 3),
             notifier=None, dry_run=True, dry_run_dir=tmp_path, include_trade_recaps=False,
         )
-    periods = chart.call_args.args[0]
-    assert all(len(trades) == 1 for _, trades in periods)
-    assert all(trades[0].paper_fill_model == "mark_v1" for _, trades in periods)
-    assert chart.call_args.kwargs["title"] == "XSP Paper Performance Summary"
+    periods = [chart.call_args.kwargs[key] for key in ("weekly", "monthly", "all_time")]
+    assert all(len(trades) == 1 for trades in periods)
+    assert all(trades[0].paper_fill_model == "mark_v1" for trades in periods)
+    assert chart.call_args.kwargs["title"] == "XSP Performance · mark_v1"
     output = capsys.readouterr().out
     assert "future_model" not in output
     assert "> **All-Time** · Trades: 1" in output

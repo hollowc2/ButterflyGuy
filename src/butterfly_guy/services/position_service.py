@@ -73,6 +73,7 @@ from butterfly_guy.position.position_manager import (
 from butterfly_guy.position.state_machine import ProfitStateMachine
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
+from butterfly_guy.services.chart_data import load_fly_marks
 from butterfly_guy.services.notifier import DiscordNotifier
 from butterfly_guy.services.position_data_diagnostics import (
     PositionQuoteShadow,
@@ -1463,8 +1464,11 @@ class PositionService:
             entry_spot=float(entry_spot) if entry_spot is not None else None,
             exit_time=row.get("exit_time"),
             exit_reason=row.get("exit_reason"),
+            trade_id=row["id"],
+            exit_price=float(row["exit_price"]) if row.get("exit_price") is not None else None,
         )
-        return summarize_exit_chart(spec, candles, full_session=full_session)
+        marks = await load_fly_marks(self.trade_queries.db, row["id"])
+        return summarize_exit_chart(spec, candles, full_session=full_session, marks=marks)
 
     async def _record_held_quote_recovery(self, evidence: dict) -> None:
         """Bounded diagnostics, after the exit action or when no valuation is possible."""
