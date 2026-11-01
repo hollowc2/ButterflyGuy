@@ -94,20 +94,27 @@ def build_report_messages(card: DailyReportCard) -> list[str]:
         f"as of {card.generated_at.strftime('%H:%M')} ET_"
     )
 
+    transfers_section = _format_transfers(card)
+
+    if not card.activity.trade_count:
+        # Quiet day: skip the full card, but still surface transfers and any
+        # watchlist issues (rejected orders, open 0-DTE, low buying power).
+        sections = [header, "💤 **No trades today.**"]
+        if transfers_section:
+            sections.append(transfers_section)
+        if card.problems:
+            sections.append(_format_problems(card.problems))
+        return ["\n\n".join(sections)]
+
     account_section = _format_account_section(card)
 
-    if card.activity.trade_count:
-        activity_section = (
-            "**📊 Today's Activity**\n"
-            f"Trades: {card.activity.trade_count} closed · "
-            f"{card.activity.winners}W / {card.activity.losers}L"
-            + (f" / {card.activity.breakeven}BE" if card.activity.breakeven else "")
-            + f" · Win rate {card.activity.win_rate:.0f}%"
-        )
-    else:
-        activity_section = "**📊 Today's Activity**\n_No closed trades today._"
-
-    transfers_section = _format_transfers(card)
+    activity_section = (
+        "**📊 Today's Activity**\n"
+        f"Trades: {card.activity.trade_count} closed · "
+        f"{card.activity.winners}W / {card.activity.losers}L"
+        + (f" / {card.activity.breakeven}BE" if card.activity.breakeven else "")
+        + f" · Win rate {card.activity.win_rate:.0f}%"
+    )
 
     winners_section = _format_trade_section(
         "🏆 Big Winners",
