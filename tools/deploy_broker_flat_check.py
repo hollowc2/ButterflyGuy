@@ -51,6 +51,10 @@ async def check() -> None:
             | PARTIAL_FILL_STATUSES
             | CANCEL_PENDING_STATUSES
             | TERMINAL_ORDER_STATUSES
+            # Historical replacements are terminal for this read-only audit.
+            # Keep execution status handling unchanged; replacement orders are
+            # independently checked for active/unknown states below.
+            | {"REPLACED"}
         )
         active_statuses = (
             WORKING_ORDER_STATUSES

@@ -271,6 +271,40 @@ async def test_reload_is_a_noop_while_creation_timestamp_is_unchanged(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("known_marker", [1000, None])
+async def test_forced_reload_validates_unchanged_token(monkeypatch, known_marker):
+    old, new = _account_client(), _account_client()
+    schwab, handed_out = _reload_harness(monkeypatch, clients=[old, new])
+    monkeypatch.setattr(SchwabClientWrapper, "_read_creation_timestamp", lambda _self: 1000)
+    await schwab.initialize()
+    schwab._creation_timestamp = known_marker
+
+    assert await schwab.reload_if_reauthorized(force_reload=True) is True
+
+    assert schwab.client is new
+    assert schwab._creation_timestamp == 1000
+    assert len(handed_out) == 2
+    new.get_account_numbers.assert_awaited_once()
+    old.close_async_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_forced_reload_rejects_missing_marker(monkeypatch):
+    old = _account_client()
+    schwab, handed_out = _reload_harness(monkeypatch, clients=[old])
+    stamps = iter([1000, None])
+    monkeypatch.setattr(SchwabClientWrapper, "_read_creation_timestamp", lambda _self: next(stamps))
+    await schwab.initialize()
+
+    with pytest.raises(RuntimeError, match="re-authorization marker is missing or invalid"):
+        await schwab.reload_if_reauthorized(force_reload=True)
+
+    assert schwab.client is old
+    assert schwab._creation_timestamp == 1000
+    assert len(handed_out) == 1
+
+
+@pytest.mark.asyncio
 async def test_reload_swaps_the_client_when_the_token_is_reauthorized(monkeypatch):
     old, new = _account_client("OLD"), _account_client("NEW")
     schwab, _ = _reload_harness(monkeypatch, clients=[old, new])
@@ -287,16 +321,17 @@ async def test_reload_swaps_the_client_when_the_token_is_reauthorized(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_failed_reload_keeps_the_working_client(monkeypatch):
+@pytest.mark.parametrize("force_reload", [False, True])
+async def test_failed_reload_keeps_the_working_client(monkeypatch, force_reload):
     """A bad document must leave the process on the credential that still works."""
     old, broken = _account_client("OLD"), _account_client(status=401)
     schwab, _ = _reload_harness(monkeypatch, clients=[old, broken])
-    stamps = iter([1000, 2000])
+    stamps = iter([1000, 1000 if force_reload else 2000])
     monkeypatch.setattr(SchwabClientWrapper, "_read_creation_timestamp", lambda _self: next(stamps))
     await schwab.initialize()
 
     with pytest.raises(RuntimeError, match="Failed to get account numbers: 401"):
-        await schwab.reload_if_reauthorized()
+        await schwab.reload_if_reauthorized(force_reload=force_reload)
 
     assert schwab.client is old
     assert schwab.account_hash == "OLD"

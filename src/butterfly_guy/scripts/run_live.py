@@ -1007,7 +1007,9 @@ async def token_reload_loop(
     while True:
         await asyncio.sleep(interval)
         try:
-            if await schwab.reload_if_reauthorized():
+            # Recovery must validate the current document even when its marker is
+            # unchanged, or one transient lock timeout blocks entries indefinitely.
+            if await schwab.reload_if_reauthorized(force_reload=token_reload_gate.unsafe):
                 if token_reload_gate.unsafe:
                     token_reload_gate.clear()
                     clear_readiness("schwab_token_reload_unsafe")
