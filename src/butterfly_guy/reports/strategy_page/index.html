@@ -269,6 +269,9 @@ table.chain tr.spot td:last-child { text-align: left; color: var(--muted); white
 #payoff .profit { fill: rgba(106, 170, 120, 0.2); }
 #payoff .loss { fill: rgba(204, 85, 85, 0.16); }
 #payoff .curve { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linejoin: round; }
+#payoff .ghost { fill: none; stroke: var(--text); stroke-width: 1.2; stroke-linejoin: round; }
+#payoff .tent-ghost { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 4 4; opacity: 0.55; }
+#payoff .t-faint { font-size: 10px; opacity: 0.8; }
 #payoff .spot-line { stroke: var(--text); stroke-dasharray: 3 4; opacity: 0.55; }
 #payoff .target-line { stroke: var(--accent); stroke-dasharray: 2 3; opacity: 0.6; }
 #payoff .cross { stroke: var(--text); opacity: 0.8; }
@@ -284,6 +287,35 @@ table.chain tr.spot td:last-child { text-align: left; color: var(--muted); white
   color: var(--muted);
   font-size: 12px;
 }
+.clock {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 10px;
+  color: var(--muted);
+  font: 11px "IBM Plex Mono", ui-monospace, monospace;
+}
+.clock output { color: var(--text); font-size: 12.5px; min-width: 15ch; text-align: right; }
+.play {
+  color: var(--text);
+  background: rgba(200, 146, 42, 0.14);
+  border: 1px solid rgba(200, 146, 42, 0.45);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: 12px "IBM Plex Mono", ui-monospace, monospace;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.play:hover, .play[aria-pressed="true"] { background: rgba(200, 146, 42, 0.26); }
+.decay-note {
+  color: #c0b9ad;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 2px 4px 10px;
+  min-height: 3.1em;
+}
+.decay-note b { color: var(--text); font-weight: 600; }
 .settle output { color: var(--text); font: 12.5px "IBM Plex Mono", ui-monospace, monospace; min-width: 12ch; text-align: right; }
 .ticket {
   display: grid;
@@ -376,6 +408,9 @@ table.chain tr.spot td:last-child { text-align: left; color: var(--muted); white
   .regime-meta { display: none; }
   .settle { grid-template-columns: minmax(0, 1fr) auto; }
   .settle span { grid-column: 1 / -1; }
+  .clock { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .clock .clock-end { display: none; }
+  .clock output { grid-column: 1 / -1; text-align: left; }
   .seg { padding: 8px 9px; font-size: 11.5px; }
   table.chain th:nth-child(2), table.chain th:nth-child(4),
   table.chain tr:not(.spot) td:nth-child(2), table.chain td:nth-child(4) { display: none; }
@@ -444,7 +479,8 @@ table.chain tr.spot td:last-child { text-align: left; color: var(--muted); white
         <div class="eyebrow">Try it</div>
         <h2 id="lab-title" class="lab-title">Build today's butterfly</h2>
         <p class="lab-sub">Pick the opening gap and the VIX. The lab applies the bot's selection rules to a modeled 0-DTE chain
-          and shows what it would buy, or why it would sit out.</p>
+          and shows what it would buy, or why it would sit out. Then run the clock to watch its value curve
+          tighten into the payoff tent by the close.</p>
       </div>
       <div class="controls">
         <div>
@@ -474,13 +510,22 @@ table.chain tr.spot td:last-child { text-align: left; color: var(--muted); white
       </div>
       <div class="payoff-wrap">
         <div class="verdict" id="verdict" aria-live="polite"></div>
-        <svg id="payoff" viewBox="0 0 640 300" role="img" aria-label="Profit and loss at expiry by where the index settles"></svg>
-        <label class="settle"><span>Drag or hover: __UNDERLYING__ at the 4:00 close</span><input type="range" id="settle" step="0.25"><output id="settleOut" for="settle"></output></label>
+        <div class="clock">
+          <button type="button" class="play" id="play" aria-pressed="false">▶ play the day</button>
+          <span class="clock-end">__ENTRY_ET__</span>
+          <input type="range" id="clock" min="0" step="1" aria-label="Time of day">
+          <span class="clock-end">4:00</span>
+          <output id="clockOut" for="clock"></output>
+        </div>
+        <svg id="payoff" viewBox="0 0 640 300" role="img" aria-label="Profit and loss by where the index is, at the chosen time of day; the faint lines are earlier in the day and it becomes the payoff tent at the close"></svg>
+        <p class="decay-note" id="decayNote" aria-live="polite"></p>
+        <label class="settle"><span>Drag or hover: __UNDERLYING__ <span id="settleWhen">at the 4:00 close</span></span><input type="range" id="settle" step="0.25"><output id="settleOut" for="settle"></output></label>
         <dl class="ticket" id="ticket"></dl>
       </div>
     </div>
     <p class="fine">Prices are modeled to show the mechanics (Black-Scholes, time from the entry window to the close, flat vol scaled
-      from the VIX). They are not live quotes, and real skew shifts them. The selection mirrors the bot: center within ±<span id="tolOut"></span> pts of the
+      from the VIX). The curves before 4:00 are the same model with less time left; the bot's trailing exit acts on that
+      intraday value, not on the tent. They are not live quotes, and real skew shifts them. The selection mirrors the bot: center within ±<span id="tolOut"></span> pts of the
       VIX target, cost under the per-width cap, reward:risk of at least __RR_MIN__:1, closest to __RR_TARGET__:1, wider wing on ties.</p>
   </section>
 

@@ -5,14 +5,21 @@
   const P = JSON.parse(document.getElementById('strategy-params').textContent);
   const STEP = 5;                 // SPX strike grid
   const VOL_SCALE = 0.62;         // 0-DTE IV sits well under the 30-day VIX
-  const T = P.hoursLeft / 6.5 / 252;
+  const DAY_MIN = Math.round(P.hoursLeft * 60);   // minutes from entry to the 4:00 close
+  // Snapshot curves, in minutes left: spaced tighter toward the close, where the tent forms.
+  const SNAPSHOTS = [DAY_MIN, 180, 90, 45, 15].filter((m, i) => i === 0 || m < DAY_MIN);
+  const PLAY_MS = 6500;
+  const yearsLeft = (minLeft) => minLeft / 60 / 6.5 / 252;
+  const T = yearsLeft(DAY_MIN);
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const SVG_NS = 'http://www.w3.org/2000/svg';
 
   const $ = (id) => document.getElementById(id);
   const fmt = (n, d = 2) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
   const money = (n) => `${n < 0 ? '−' : '+'}$${Math.abs(Math.round(n)).toLocaleString('en-US')}`;
 
-  const state = { dir: 'CALL', vix: 16, pinned: null, settle: null };
+  // left = minutes to the close on the payoff clock; 0 is the expiry tent.
+  const state = { dir: 'CALL', vix: 16, pinned: null, settle: null, left: 0 };
 
   // ---------- pricing ----------
   function ncdf(x) {
@@ -21,8 +28,8 @@
     const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
     return x > 0 ? 1 - p : p;
   }
-  function bs(S, K, vol, call) {
-    const sd = vol * Math.sqrt(T);
+  function bs(S, K, vol, call, years = T) {
+    const sd = vol * Math.sqrt(years);
     const d1 = (Math.log(S / K) + 0.5 * sd * sd) / sd;
     const d2 = d1 - sd;
     return call ? S * ncdf(d1) - K * ncdf(d2) : K * ncdf(-d2) - S * ncdf(-d1);
@@ -148,8 +155,25 @@
     tbody.innerHTML = out.join('');
   }
 
-  // Payoff at expiry per contract; call and put flies on the same strikes share it.
-  const pnlAt = (f, S) => (Math.max(0, f.width - Math.abs(S - f.center)) - f.cost) * 100;
+  // Model value of the fly with minLeft to the close; 0 is the expiry payoff. Call and put
+  // flies on the same strikes share both (put-call parity, no rates), so calls price either.
+  function flyValue(f, S, minLeft) {
+    if (minLeft <= 0) return Math.max(0, f.width - Math.abs(S - f.center));
+    const vol = state.vix / 100 * VOL_SCALE, years = yearsLeft(minLeft);
+    return bs(S, f.lower, vol, true, years) - 2 * bs(S, f.center, vol, true, years) + bs(S, f.upper, vol, true, years);
+  }
+  // Mark-to-model P&L per contract.
+  const pnlAt = (f, S, minLeft = state.left) => (flyValue(f, S, minLeft) - f.cost) * 100;
+  const clockAt = (minLeft) => {
+    const total = 16 * 60 - minLeft;
+    return `${Math.floor(total / 60) % 12 || 12}:${String(total % 60).padStart(2, '0')}`;
+  };
+  // Expiry is piecewise linear, so its kinks are exact; earlier curves are sampled.
+  function curvePoints(f, minLeft, x0, x1, n) {
+    const xs = minLeft <= 0 ? [x0, f.lower, f.center, f.upper, x1]
+      : Array.from({ length: n + 1 }, (_, i) => x0 + (x1 - x0) * i / n).concat([f.center]).sort((a, b) => a - b);
+    return xs.map((s) => [s, pnlAt(f, s, minLeft)]);
+  }
 
   function renderPayoff(result, f) {
     const svg = $('payoff');
@@ -175,18 +199,41 @@
     // 1σ expected-move band around spot
     const emLo = Math.max(x0, P.spot - result.em), emHi = Math.min(x1, P.spot + result.em);
     kids.push(el('rect', { class: 'em-band', x: sx(emLo), y: Tp, width: sx(emHi) - sx(emLo), height: H - Tp - B }));
-    // profit / loss fills
-    const be1 = f.lower + f.cost, be2 = f.upper - f.cost;
-    kids.push(el('polygon', { class: 'profit', points: `${sx(be1)},${sy(0)} ${sx(f.center)},${sy(yMax)} ${sx(be2)},${sy(0)}` }));
-    kids.push(el('polygon', { class: 'loss', points: `${sx(x0)},${sy(0)} ${sx(x0)},${sy(yMin)} ${sx(f.lower)},${sy(yMin)} ${sx(be1)},${sy(0)}` }));
-    kids.push(el('polygon', { class: 'loss', points: `${sx(be2)},${sy(0)} ${sx(f.upper)},${sy(yMin)} ${sx(x1)},${sy(yMin)} ${sx(x1)},${sy(0)}` }));
+    const n = Math.round((W - L - R) / 3);
+    const path = (pts) => pts.map(([s, v]) => `${sx(s).toFixed(1)},${sy(v).toFixed(1)}`).join(' ');
+    // profit / loss fills under the curve at the current clock, split at $0
+    const now = curvePoints(f, state.left, x0, x1, n);
+    const area = `${sx(x0)},${sy(0)} ${path(now)} ${sx(x1)},${sy(0)}`;
+    const defs = el('defs', {});
+    const clip = (id, y, h) => {
+      const c = el('clipPath', { id });
+      c.appendChild(el('rect', { x: 0, y, width: W, height: Math.max(0, h) }));
+      defs.appendChild(c);
+    };
+    clip('pz-up', 0, sy(0));
+    clip('pz-dn', sy(0), H - sy(0));
+    kids.push(defs);
+    kids.push(el('polygon', { class: 'profit', points: area, 'clip-path': 'url(#pz-up)' }));
+    kids.push(el('polygon', { class: 'loss', points: area, 'clip-path': 'url(#pz-dn)' }));
     kids.push(el('line', { class: 'zero', x1: L, x2: W - R, y1: sy(0), y2: sy(0) }));
     kids.push(el('line', { class: 'axis', x1: L, x2: W - R, y1: H - B, y2: H - B }));
-    kids.push(el('polyline', {
-      class: 'curve',
-      points: [[x0, yMin], [f.lower, yMin], [f.center, yMax], [f.upper, yMin], [x1, yMin]]
-        .map(([s, v]) => `${sx(s)},${sy(v)}`).join(' '),
-    }));
+    // the day's snapshots, faint to firmer toward the close; labels at each peak, skipped if crowded
+    let lastLabelY = -Infinity;
+    const labelX = sx(f.center) + 8;
+    const snaps = SNAPSHOTS.filter((m) => m !== state.left);
+    snaps.forEach((m, i) => {
+      kids.push(el('polyline', { class: 'ghost', 'stroke-opacity': (0.18 + 0.32 * i / Math.max(1, snaps.length - 1)).toFixed(2), points: path(curvePoints(f, m, x0, x1, n)) }));
+    });
+    if (state.left > 0) kids.push(el('polyline', { class: 'tent-ghost', points: path(curvePoints(f, 0, x0, x1, n)) }));
+    [0, ...snaps.slice().reverse()].forEach((m) => {
+      if (m === 0 && state.left === 0) return;
+      const y = sy(pnlAt(f, f.center, m));
+      if (y - lastLabelY < 13 || y > sy(0) - 4) return;
+      kids.push(el('text', { x: labelX, y: y + 4, class: m === 0 ? 't-accent t-faint' : 't-faint' }, m === 0 ? '4:00' : clockAt(m)));
+      lastLabelY = y;
+    });
+    kids.push(el('polyline', { class: 'curve', points: path(now) }));
+    const peakNow = pnlAt(f, f.center, state.left);
     // spot + strike ticks
     kids.push(el('line', { class: 'spot-line', x1: sx(P.spot), x2: sx(P.spot), y1: Tp, y2: H - B }));
     kids.push(el('text', { x: sx(P.spot), y: Tp - 6, 'text-anchor': 'middle', class: 't-strong' }, 'spot'));
@@ -213,7 +260,25 @@
     range.min = x0; range.max = x1; range.value = S;
     $('settleOut').textContent = `${fmt(S)} → ${money(v)}`;
     $('settleOut').style.color = color;
+    $('settleWhen').textContent = state.left > 0 ? `at ${clockAt(state.left)} ET` : 'at the 4:00 close';
     svg._scale = { x0, x1, L, R, W };
+    renderClock(f, yMax, peakNow);
+  }
+
+  function renderClock(f, yMax, peakNow) {
+    const clock = $('clock');
+    clock.max = DAY_MIN;
+    clock.value = DAY_MIN - state.left;
+    const left = state.left;
+    $('clockOut').textContent = left > 0
+      ? `${clockAt(left)} ET · ${left >= 60 ? `${Math.floor(left / 60)}h ` : ''}${left % 60 ? `${left % 60}m ` : ''}left`
+      : '4:00 · expired';
+    const center = fmt(f.center, 0);
+    $('decayNote').innerHTML = left > 0
+      ? `If ${P.underlying} were on ${center} at ${clockAt(left)}, the fly would be up <b>${money(peakNow)}</b> — ${Math.max(0, Math.round(peakNow / yMax * 100))}% of the
+        <b>${money(yMax)}</b> it pays if ${P.underlying} is still there at 4:00. Time left keeps the curve low and wide; it sharpens fastest in the last hour.`
+      : `At 4:00 the curve becomes the tent: the full <b>${money(yMax)}</b> only if ${P.underlying} settles on ${center}, nothing past the wings.
+        The faint lines are the same fly earlier in the day.`;
   }
 
   function renderTicket(f, result) {
@@ -266,6 +331,48 @@
     state.vix = Number(e.target.value); state.pinned = null; state.settle = null; render();
   });
   $('settle').addEventListener('input', (e) => renderSettle(Number(e.target.value)));
+
+  // ---------- the clock ----------
+  let anim = null;
+  function setPlaying(on) {
+    $('play').setAttribute('aria-pressed', String(on));
+    $('play').textContent = on ? '❚❚ pause' : '▶ play the day';
+  }
+  function stop() {
+    if (anim) cancelAnimationFrame(anim.raf);
+    anim = null;
+    setPlaying(false);
+  }
+  function setClock(minLeft) {
+    state.left = Math.max(0, Math.min(DAY_MIN, Math.round(minLeft)));
+    if (current) renderPayoff(current.result, current.active);
+  }
+  function play() {
+    if (anim) { stop(); return; }
+    const startLeft = state.left > 0 ? state.left : DAY_MIN;
+    // Ease the clock so the last hour, where the tent forms, gets screen time.
+    const from = 1 - Math.pow(startLeft / DAY_MIN, 1 / 1.6);
+    const t0 = performance.now() - from * PLAY_MS;
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / PLAY_MS);
+      setClock(DAY_MIN * Math.pow(1 - p, 1.6));
+      if (p < 1) anim.raf = requestAnimationFrame(step);
+      else stop();
+    };
+    anim = { raf: requestAnimationFrame(step) };
+    setPlaying(true);
+  }
+  $('play').addEventListener('click', play);
+  $('clock').addEventListener('input', (e) => { stop(); setClock(DAY_MIN - Number(e.target.value)); });
+  // Play the day once, the first time the chart scrolls into view.
+  if (!reduceMotion && 'IntersectionObserver' in window) {
+    const seen = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      seen.disconnect();
+      if (!anim && state.left === 0) { state.left = DAY_MIN; play(); }
+    }, { threshold: 0.6 });
+    seen.observe($('payoff'));
+  }
   const svg = $('payoff');
   const track = (e) => {
     const s = svg._scale;

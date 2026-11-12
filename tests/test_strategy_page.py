@@ -77,6 +77,8 @@ def test_page_renders_config_values_and_no_leftover_tokens() -> None:
     assert "+$944" in doc
     assert 'href="../"' in doc
     assert _params(doc)["spot"] == 7650.0
+    # The payoff clock runs from the entry time to the close.
+    assert 'id="clock"' in doc and "<span class=\"clock-end\">10:00</span>" in doc
 
 
 def test_page_has_no_inline_executable_script() -> None:
