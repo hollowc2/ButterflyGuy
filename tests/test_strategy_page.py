@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from butterfly_guy.core.config import load_config
-from butterfly_guy.reports.live_performance import TradePoint
+from butterfly_guy.reports.live_performance import TradePoint, performance_script
 from butterfly_guy.reports.strategy_page import (
     DEFAULT_REFERENCE_SPOT,
     STRATEGY_SCRIPT_NAME,
@@ -117,6 +117,7 @@ def test_generate_writes_strategy_page_beside_report(tmp_path, monkeypatch) -> N
     )
 
     assert 'href="strategy/"' in output.read_text()
+    assert (output.parent / "performance.js").read_text() == performance_script()
     page = (output.parent / "strategy" / "index.html").read_text()
     assert _params(page)["spot"] == 7650.0
     assert (output.parent / "strategy" / STRATEGY_SCRIPT_NAME).read_text() == strategy_script()

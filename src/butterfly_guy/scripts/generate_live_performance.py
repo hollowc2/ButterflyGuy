@@ -21,9 +21,11 @@ from butterfly_guy.core.config import load_config
 from butterfly_guy.core.time_utils import now_pacific
 from butterfly_guy.reports.live_performance import (
     NO_TRADE_EVENTS,
+    PERFORMANCE_SCRIPT_NAME,
     NoTradeDay,
     TradePoint,
     no_trade_reason,
+    performance_script,
     render_placeholder_html,
     render_report_html,
     trade_point_from_row,
@@ -151,6 +153,8 @@ async def generate(
             generated_at=generated_at,
         )
 
+    # Script first, so the page never references a file that isn't there.
+    write_html_atomic(output.parent / PERFORMANCE_SCRIPT_NAME, performance_script())
     write_html_atomic(output, html_doc)
 
     # The explainer is static apart from config values and the best trade; the

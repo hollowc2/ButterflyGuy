@@ -14,10 +14,11 @@ from butterfly_guy.reports.live_performance import (
     cumulative_equity,
     drawdown_series,
     is_drawdown_exit,
+    no_trade_payload,
     no_trade_reason,
+    performance_script,
     render_placeholder_html,
     render_report_html,
-    render_trade_table_rows,
     trade_pnl_dollars,
     trade_point_from_row,
 )
@@ -115,6 +116,18 @@ def test_chart_payload_includes_drawdown_fields() -> None:
     assert payload[1]["drawdown_dollars"] == 60.0
     assert payload[1]["is_drawdown_exit"] is True
     assert payload[1]["dd_at_exit_pct"] == 61.1
+    assert (payload[1]["width"], payload[1]["vix"], payload[1]["spot"]) == (30, 18.0, 4980.0)
+
+
+def _page_data(html_doc: str) -> dict:
+    import json
+    import re
+
+    block = re.search(
+        r'<script type="application/json" id="page-data">(.*?)</script>', html_doc, re.DOTALL
+    )
+    assert block is not None
+    return json.loads(block.group(1))
 
 
 def test_render_report_html_contains_sections() -> None:
@@ -129,30 +142,27 @@ def test_render_report_html_contains_sections() -> None:
         underlying="SPX",
         trades=trades,
         no_trade_days=no_trade_days,
-        generated_at=dt.datetime(2026, 6, 6, 13, 15, tzinfo=dt.timezone.utc),
+        generated_at=dt.datetime(2026, 6, 6, 20, 30, tzinfo=dt.timezone.utc),
     )
-    assert "Equity Curve" in html_doc
-    # Equity is cumulative PnL starting at zero, so this is drawdown against peak
-    # profit, not against account capital. The old "Portfolio Drawdown" heading
-    # invited the second reading, which overstates the risk considerably.
-    assert "Drawdown from peak PnL" in html_doc
-    assert "Return Distribution" in html_doc
-    assert "Trade Log" in html_doc
-    assert "Paper Trading" in html_doc
-    assert "drawdownChart" in html_doc
-    assert "returnDistributionChart" in html_doc
-    assert "End of Day exit" in html_doc
-    assert "Drawdown exit" in html_doc
-    assert 'data-bucket="100"' in html_doc
-    assert 'data-bucket="250"' in html_doc
-    assert "Fit curve" in html_doc
-    assert "hideNoTradesToggle" in html_doc
-    assert "<details class=\"panel trade-log-panel\" open>" in html_doc
+    # Summary blocks, then the running total, then the detail sections.
+    order = ['id="netPnl"', 'id="latest"', 'id="equityChart"', 'id="ddChart"',
+             'id="sortedChart"', 'id="bdTable"', 'id="cal"', 'id="logBody"']
+    positions = [html_doc.index(marker) for marker in order]
+    assert positions == sorted(positions)
+    assert "Reading the numbers" not in html_doc
     assert 'href="strategy/"' in html_doc
-    assert "max_trades_reached (1)" in html_doc
+    assert '<script src="/assets/vendor/chart.umd.min.js"></script>' in html_doc
+    assert '<script src="performance.js?v=' in html_doc
+
+    data = _page_data(html_doc)
+    assert [t["pnl"] for t in data["trades"]] == [100.0, -50.0]
+    assert data["noTrade"] == [
+        {"date": "2026-03-19", "status": "No trade", "reason": "max_trades_reached (1)"}
+    ]
+    assert data["builtAt"] == "Jun 6, 1:30 PM PDT"
 
 
-def test_performance_report_shows_entire_history_and_fill_model_cohorts() -> None:
+def test_performance_report_keeps_fill_model_per_trade() -> None:
     legacy = _trade(trade_date=dt.date(2026, 7, 20), pnl_dollars=500.0)
     mark = TradePoint(
         **{
@@ -170,17 +180,23 @@ def test_performance_report_shows_entire_history_and_fill_model_cohorts() -> Non
         generated_at=dt.datetime(2026, 7, 22, tzinfo=dt.timezone.utc),
     )
 
-    # The page is a static snapshot regenerated after each session, so the meta
-    # line deliberately no longer reads as a real-time feed.
-    assert "Entire history · 2 trades · Paper results through 2026-07-21" in html_doc
-    assert "<span class=\"summary-meta\">2 trades</span>" in html_doc
-    assert "const chartData = " in html_doc
-    assert html_doc.count('"paper_fill_model": "legacy"') == 1
-    assert html_doc.count('"paper_fill_model": "mark_v1"') == 1
-    assert "Fill Model Cohorts" in html_doc
-    assert "legacy" in html_doc
-    assert "PnL $+500" in html_doc
-    assert "PnL $-50" in html_doc
+    models = [t["paper_fill_model"] for t in _page_data(html_doc)["trades"]]
+    assert models == ["legacy", "mark_v1"]
+
+
+def test_page_script_reads_every_element_it_renders_into() -> None:
+    import re
+
+    html_doc = render_report_html(
+        underlying="SPX",
+        trades=[_trade(trade_date=dt.date(2026, 3, 17), pnl_dollars=100.0)],
+        no_trade_days=[],
+        generated_at=dt.datetime(2026, 6, 6, tzinfo=dt.timezone.utc),
+    )
+    ids = set(re.findall(r"getElementById\('([A-Za-z]+)'\)", performance_script()))
+    assert ids, "expected the page script to look up elements by id"
+    missing = sorted(i for i in ids if f'id="{i}"' not in html_doc)
+    assert missing == []
 
 
 def test_trade_point_reads_fill_model_from_json_metadata() -> None:
@@ -201,14 +217,15 @@ def test_trade_point_reads_fill_model_from_json_metadata() -> None:
     assert trade_point_from_row(row).paper_fill_model == "mark_v1"
 
 
-def test_render_trade_table_rows_include_no_trade_day() -> None:
-    trades = [_trade(trade_date=dt.date(2026, 3, 17), pnl_dollars=100.0)]
-    no_trade_days = [NoTradeDay(dt.date(2026, 3, 18), "Halted", "Daily loss limit reached")]
-    rows = render_trade_table_rows(trades, no_trade_days)
-    assert "Daily loss limit reached" in rows
-    assert "Halted" in rows
-    assert "data-row-type='trade'" in rows
-    assert "class='muted no-trade-row'" in rows
+def test_no_trade_payload_drops_weekends() -> None:
+    days = [
+        NoTradeDay(dt.date(2026, 3, 20), "Halted", "Daily loss limit reached"),  # Friday
+        NoTradeDay(dt.date(2026, 3, 21), "No trade", "No trade"),  # Saturday
+        NoTradeDay(dt.date(2026, 3, 22), "No trade", "No trade"),  # Sunday
+    ]
+    assert no_trade_payload(days) == [
+        {"date": "2026-03-20", "status": "Halted", "reason": "Daily loss limit reached"}
+    ]
 
 
 def test_render_placeholder_html() -> None:
@@ -234,12 +251,13 @@ def test_render_placeholder_html() -> None:
 def test_regenerated_data_stays_out_of_executable_script() -> None:
     """Per-run data must stay in the non-executable JSON block.
 
-    The published page's CSP allows inline scripts by sha256 hash and does not
-    permit 'unsafe-inline'. CSP script-src does not apply to a
-    <script type="application/json"> block, so data can change freely there. If
-    it is inlined back into the executable script instead, that script's hash
-    changes on every regeneration, the browser silently refuses to run it, and
-    the page renders empty with no visible error. This pins the invariant.
+    The published page's CSP allows inline scripts only by sha256 hash and does
+    not permit 'unsafe-inline'. The page therefore ships no executable inline
+    script at all: its code is the same-origin performance.js, and CSP script-src
+    does not apply to a <script type="application/json"> block, so the numbers
+    can change freely there. If data or code is inlined into an executable
+    script instead, the browser silently refuses to run it and the page renders
+    empty with no visible error. This pins the invariant.
     """
     import re
 
@@ -261,29 +279,24 @@ def test_regenerated_data_stays_out_of_executable_script() -> None:
     pattern = re.compile(
         r"<script(?P<attrs>(?:\s[^>]*)?)>(?P<body>.*?)</script\s*>", re.DOTALL
     )
-
-    def executable_scripts(doc: str) -> list[str]:
-        return [
+    for doc in (first, second):
+        inline = [
             m.group("body")
             for m in pattern.finditer(doc)
             if "src=" not in m.group("attrs")
             and "application/json" not in m.group("attrs")
+            and m.group("body").strip()
         ]
+        assert inline == [], "executable inline script found; it would need a CSP hash"
 
-    first_scripts = executable_scripts(first)
-    assert len(first_scripts) == 1, "expected exactly one executable inline script"
-
-    # Different trades, different count, different dates -- the executable
-    # script must be byte-identical regardless.
-    assert first_scripts[0] == executable_scripts(second)[0], (
-        "the executable inline script changed between runs; per-run data has "
-        "leaked into it and the deployed CSP hash will no longer match"
-    )
+    # The script reference is versioned by the file's content, not the data.
+    tag = re.compile(r'<script src="performance\.js\?v=[0-9a-f]{10}"></script>')
+    assert tag.findall(first) == tag.findall(second) != []
 
     # The data must actually be present, in exactly one data block.
-    assert first.count('id="chart-data"') == 1
+    assert first.count('id="page-data"') == 1
     data_block = re.search(
-        r'<script type="application/json" id="chart-data">(.*?)</script>',
+        r'<script type="application/json" id="page-data">(.*?)</script>',
         first,
         re.DOTALL,
     )
