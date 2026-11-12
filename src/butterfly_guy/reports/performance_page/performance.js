@@ -75,7 +75,7 @@ document.getElementById('kpis').innerHTML = kpis.map(([l, v, h, c]) =>
     <div class="latest-head"><div class="label">Latest session · ${weekday(t.date)} ${niceDate(t.date)}</div>
       <div class="latest-pnl ${cls(t.pnl)}">${money(t.pnl)}</div></div>
     <div class="latest-title">${dir} butterfly ${lo.toLocaleString()} / ${mid.toLocaleString()} / ${hi.toLocaleString()}</div>
-    <div class="latest-sub">${t.width}-point wings · SPX ${t.spot ? t.spot.toLocaleString() : '—'} at entry · VIX ${t.vix ?? '—'} · ${t.entry_time} to ${t.exit_time} ET</div>
+    <div class="latest-sub">${t.width}-point wings · SPX ${t.spot ? Math.round(t.spot).toLocaleString() : '—'} at entry · VIX ${t.vix ?? '—'} · ${t.entry_time} to ${t.exit_time} ET</div>
     <div class="path" aria-hidden="true">
       <div class="path-track">
         <div class="path-fill" style="width:${pos(t.peak_value || t.entry_price)}"></div>
