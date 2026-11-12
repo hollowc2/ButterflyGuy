@@ -3,7 +3,7 @@
 Usage:
     uv run python src/butterfly_guy/scripts/generate_live_performance.py
     uv run python src/butterfly_guy/scripts/generate_live_performance.py \\
-        --output /tmp/butterfly-spx/index.html
+        --output /tmp/butterflyguy/index.html
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from butterfly_guy.reports.strategy_page import (
     strategy_script,
 )
 
-DEFAULT_OUTPUT = Path("/var/www/billybitcoin.cloud/html/butterfly-spx/index.html")
+DEFAULT_OUTPUT = Path("/var/www/billybitcoin.cloud/html/butterflyguy/index.html")
 DEFAULT_STRATEGY_CONFIG = Path("configs/config.yaml")
 
 

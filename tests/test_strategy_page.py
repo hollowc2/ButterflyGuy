@@ -113,7 +113,7 @@ def test_generate_writes_strategy_page_beside_report(tmp_path, monkeypatch) -> N
     monkeypatch.setattr(generate_live_performance.asyncpg, "connect", fake_connect)
     monkeypatch.setattr(generate_live_performance, "build_report", fake_build_report)
 
-    output = tmp_path / "butterfly-spx" / "index.html"
+    output = tmp_path / "butterflyguy" / "index.html"
     generate_live_performance.main(
         ["--output", str(output), "--strategy-config", str(SPX_CONFIG)]
     )

@@ -3,4 +3,4 @@
 # Install:
 #   crontab -l 2>/dev/null | grep -v run_live_performance | grep -v generate_live_performance | cat - infra/cron/live_performance.cron | crontab -
 # cron_guard posts a Discord alert (DISCORD_WEBHOOK_URL) if the job exits non-zero.
-30 20,21 * * 1-5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/cron_guard.py --job live_performance -- tools/run_live_performance_cron.sh >> /var/www/billybitcoin.cloud/html/butterfly-spx/generate.log 2>&1
+30 20,21 * * 1-5 cd /opt/butterflyguy && /opt/butterflyguy/.venv/bin/python tools/cron_guard.py --job live_performance -- tools/run_live_performance_cron.sh >> /var/www/billybitcoin.cloud/html/butterflyguy/generate.log 2>&1
