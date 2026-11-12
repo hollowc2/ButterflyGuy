@@ -212,6 +212,7 @@ def render_strategy_html(
         "__RR_TARGET__": f"{strategy.rr_target:g}",
         "__RR_MAX__": f"{strategy.rr_max:g}",
         "__ENTRY_WINDOW__": f"{_clock(entry_start)}–{_clock(entry_end)} ET",
+        "__ENTRY_ET__": params["entryEt"],
         "__PER_DAY__": per_day,
         "__CONTRACTS__": contracts,
         "__SIGMAS__": sigmas,
