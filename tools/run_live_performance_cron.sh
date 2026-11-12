@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate butterfly-spx site at 1:30 PM America/Los_Angeles on weekdays.
+# Regenerate the butterflyguy site at 1:30 PM America/Los_Angeles on weekdays.
 # Vixie cron ignores CRON_TZ in user crontabs — schedule at 20:30 and 21:30 UTC.
 set -euo pipefail
 
