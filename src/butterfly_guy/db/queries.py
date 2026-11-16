@@ -220,6 +220,36 @@ class MonitoringLegQueries:
             )
         return len(records)
 
+    async def insert_post_exit_quotes(
+        self,
+        *,
+        ts: dt.datetime,
+        trade_id: int,
+        underlying: str,
+        expiration: dt.date,
+        quotes: list[dict[str, Any]],
+        spot_price: float | None,
+        fly_mark: float | None,
+    ) -> int:
+        """Legs of an already-closed fly, polled until the close for exit research."""
+        if not quotes:
+            return 0
+        columns = [
+            "ts", "trade_id", "underlying", "expiration", "strike", "option_type",
+            "bid", "ask", "mark", "symbol", "spot_price", "fly_mark",
+        ]
+        records = [
+            (ts, trade_id, underlying, expiration, quote["strike"], quote["option_type"],
+             quote.get("bid"), quote.get("ask"), quote.get("mark"), quote.get("symbol"),
+             spot_price, fly_mark)
+            for quote in quotes
+        ]
+        async with self.db.pool.acquire() as conn:
+            await conn.copy_records_to_table(
+                "post_exit_leg_quotes", records=records, columns=columns,
+            )
+        return len(records)
+
 
 class SpotQueries:
     """Queries for spot_prices table."""

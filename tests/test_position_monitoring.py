@@ -385,3 +385,68 @@ async def test_eod_chart_includes_the_trades_fly_marks() -> None:
     spec = summarize.call_args.args[0]
     assert (spec.trade_id, spec.exit_price) == (381, 24.05)
     assert summarize.call_args.kwargs["marks"] is marks
+
+
+def _post_exit_service(chains: list) -> PositionService:
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.strategy.underlying = "XSP"
+    service.market_data = AsyncMock()
+    service.market_data.get_option_chain.side_effect = chains
+    service._extract_quotes = MagicMock(return_value=_quotes())
+    service.monitoring_leg_queries = MagicMock(insert_post_exit_quotes=AsyncMock())
+    service.order_manager = MagicMock(execute_exit=AsyncMock())
+    service.schwab = AsyncMock()
+    return service
+
+
+@pytest.mark.asyncio
+async def test_post_exit_recording_stores_closed_fly_legs_without_trading() -> None:
+    service = _post_exit_service([{"underlyingPrice": 750.5}, {"underlyingPrice": 750.0}])
+    trade = TradeRecord(trade_id=415, trade_date=EXPIRATION, entry_price=0.50)
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open",
+        side_effect=[True, True, False],
+    ), patch(
+        "butterfly_guy.services.position_service.session_date", return_value=EXPIRATION,
+    ), patch(
+        "butterfly_guy.services.position_service.get_0dte_expiration", return_value=EXPIRATION,
+    ), patch("butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()):
+        await service._post_exit_recording(trade, _candidate(), 2)
+
+    calls = service.monitoring_leg_queries.insert_post_exit_quotes.await_args_list
+    assert len(calls) == 2
+    first = calls[0].kwargs
+    assert first["trade_id"] == 415
+    assert [q["strike"] for q in first["quotes"]] == [746.0, 751.0, 756.0]
+    assert first["fly_mark"] == pytest.approx(1.10 + 0.40 - 2 * 0.55)
+    assert first["spot_price"] == 750.5
+    service.order_manager.execute_exit.assert_not_awaited()
+    assert not service.schwab.mock_calls
+
+
+@pytest.mark.asyncio
+async def test_post_exit_recording_survives_fetch_errors_and_stops_at_close() -> None:
+    service = _post_exit_service([RuntimeError("chain down"), {"underlyingPrice": 750.0}])
+    trade = TradeRecord(trade_id=415, trade_date=EXPIRATION, entry_price=0.50)
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open",
+        side_effect=[True, True, False],
+    ), patch(
+        "butterfly_guy.services.position_service.session_date", return_value=EXPIRATION,
+    ), patch(
+        "butterfly_guy.services.position_service.get_0dte_expiration", return_value=EXPIRATION,
+    ), patch("butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()):
+        await service._post_exit_recording(trade, _candidate(), 2)
+
+    assert service.monitoring_leg_queries.insert_post_exit_quotes.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_post_exit_recording_is_not_started_without_leg_queries() -> None:
+    service = _post_exit_service([])
+    service.monitoring_leg_queries = None
+    service._start_post_exit_recording(
+        TradeRecord(trade_id=1, trade_date=EXPIRATION, entry_price=0.5), _candidate(), 2,
+    )
+    assert getattr(service, "_post_exit_task", None) is None

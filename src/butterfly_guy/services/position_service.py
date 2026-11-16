@@ -1006,6 +1006,7 @@ class PositionService:
         if recovery_ok_pending is not None:
             await self._send_recovery_ok(trade.trade_id)
         if exited:
+            self._start_post_exit_recording(trade, candidate, poll_interval)
             return
 
         # Market closed — XSP/SPX/NDX are cash-settled; no exit order needed.
@@ -1618,6 +1619,63 @@ class PositionService:
                 trade_id=trade.trade_id,
                 error=str(e),
             )
+
+    def _start_post_exit_recording(
+        self, trade: TradeRecord, candidate: ButterflyCandidate, poll_interval: float,
+    ) -> None:
+        """Keep polling the closed fly's legs until the close, detached from trading."""
+        if self.monitoring_leg_queries is None:
+            return
+        previous = getattr(self, "_post_exit_task", None)
+        if previous is not None:
+            previous.cancel()
+        self._post_exit_task = asyncio.create_task(
+            self._post_exit_recording(trade, candidate, poll_interval)
+        )
+
+    async def _post_exit_recording(
+        self, trade: TradeRecord, candidate: ButterflyCandidate, poll_interval: float,
+    ) -> None:
+        """Recording only: no valuation, peak, exit signal or broker call. Never raises."""
+        chain_symbol = SCHWAB_CHAIN_SYMBOLS.get(
+            self.config.strategy.underlying, self.config.strategy.underlying,
+        )
+        strikes = (candidate.lower_strike, candidate.center_strike, candidate.upper_strike)
+        failures = 0
+        log.info("post_exit_recording_started", trade_id=trade.trade_id)
+        while is_market_open() and trade.trade_date == session_date():
+            try:
+                expiration = get_0dte_expiration()
+                chain_data = await self.market_data.get_option_chain(chain_symbol, expiration)
+                quotes = self._extract_quotes(chain_data, expiration, candidate)
+                fly_mark = (
+                    quotes[strikes[0]].mark + quotes[strikes[2]].mark
+                    - 2 * quotes[strikes[1]].mark
+                    if all(strike in quotes for strike in strikes) else None
+                )
+                await self.monitoring_leg_queries.insert_post_exit_quotes(
+                    ts=now_eastern(),
+                    trade_id=trade.trade_id,
+                    underlying=self.config.strategy.underlying,
+                    expiration=expiration,
+                    quotes=[
+                        {"strike": q.strike, "option_type": q.option_type, "bid": q.bid,
+                         "ask": q.ask, "mark": q.mark, "symbol": q.symbol}
+                        for strike in strikes if (q := quotes.get(strike)) is not None
+                    ],
+                    spot_price=_chain_spot_price(chain_data),
+                    fly_mark=fly_mark,
+                )
+                failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                failures += 1
+                if failures in (1, 30):
+                    log.warning("post_exit_recording_failed", trade_id=trade.trade_id,
+                                failures=failures, error=str(e))
+            await asyncio.sleep(poll_interval)
+        log.info("post_exit_recording_stopped", trade_id=trade.trade_id)
 
     def _extract_quotes(
         self,
