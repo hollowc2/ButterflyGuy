@@ -7,6 +7,40 @@ Tuesday 2026-11-17 probe; its criteria are fixed here. No confirmation-set trade
 Task brief: `docs/research/monitor-cadence-exit-design-prompt.md` (main checkout). Times are
 Pacific unless marked; the DB and crontab are UTC.
 
+## Amendment 1 (owner-approved 2026-11-16, before any post-exit trade existed)
+
+**Why:** the Aug–Nov development set cannot score any arm that changes an exit. Polls end at
+the recorded exit, so every later exit was valued on 1-minute snapshots
+(`monitor-cadence-exit-design-results.md`). No post-exit trade had been recorded or read when
+this amendment was made.
+
+**New split.** Both sets use only qualifying post-exit trades, as defined under "Confirmation
+set" in section 1:
+
+- `trade_date` ≥ 2026-11-17;
+- `direct` access mode;
+- an as-live match;
+- post-exit coverage with no gap over 30 s.
+
+They are taken in trade-date order:
+
+| Set | Trades | Role | Expected (one trade a session) |
+|---|---|---|---|
+| Development | 1–30 | Step 1 selection | about end of December 2026 |
+| Confirmation | 31–60 | Step 2 confirmation, run once | about mid-February 2027 |
+
+Both sets refuse 1-minute data.
+
+**Everything else is unchanged:** the grid (section 2), pricing (section 3), metric, selection
+rule and confirmation rule (section 4). Step 1's "if none qualifies, stop" applies to the new
+development set.
+
+**Former development set:** the Aug–Nov 2026 trades become the exploratory *pilot* set. They
+are reported, never used for a decision.
+
+**Plumbing:** it ships now and does not wait for the study. Every default reproduces today's
+behavior.
+
 ## Phase 0 findings this plan relies on
 
 - **Cadence is set by the data path, not just `poll_interval = 2`.** Polls are sleep 2 s +
@@ -236,6 +270,7 @@ the chain.
 | Step | When | What |
 |---|---|---|
 | Probe | Tue 11-17 ~08:00 PT | Run the probe; fill in section 6 |
-| Phase 2 dev analysis | Right after approval | Extend the replay (time confirmation, quality peak, pricing models, tests); run the dev set |
-| Confirmation run | After 30 qualifying trades (~end Dec) | Run once |
-| Phase 3 PR 1 | Independent of the study | Config plumbing (poll interval into config, defaults unchanged); can proceed after stop point 2 |
+| Phase 2 pilot analysis | Done 2026-11-16 | Replay extended; Aug–Nov pilot run; no arm scorable (results doc) |
+| Phase 3 PR 1 | Now (Amendment 1) | Config plumbing (poll interval into config, defaults unchanged) |
+| Development run | After 30 qualifying post-exit trades (~end Dec) | Select one arm, or stop |
+| Confirmation run | After trades 31–60 (~mid-Feb 2027) | Run once on the selected arm |

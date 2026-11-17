@@ -1,16 +1,17 @@
-# Monitor cadence and exit confirmation: development-set results
+# Monitor cadence and exit confirmation: pilot-set results
 
 Run 2026-11-16 under the pre-registration in `monitor-cadence-exit-design-plan.md`
-(commit 3f2a43e). **Exploratory: every trade here was looked at before registration.** The
-confirmation set has not been read; none of it exists yet.
+(commit 3f2a43e). **Exploratory: every trade here was looked at before registration.** This
+was the registered development set; Amendment 1 (same day) renamed it the *pilot* set and
+moved selection and confirmation onto post-exit trades. No post-exit trade exists yet.
 
 Command:
 
 ```
-uv run python tools/research_studies/monitor_replay_study.py --data <11-16 extraction> --set dev
+uv run python tools/research_studies/monitor_replay_study.py --data <11-16 extraction> --set pilot
 ```
 
-Output: `reports/research/spx-monitor-cadence-exit/dev/` (`summary.json`, `trades.csv`).
+Output: `reports/research/spx-monitor-cadence-exit/pilot/` (`summary.json`, `trades.csv`).
 
 ## Outcome under the registered rule
 
@@ -106,14 +107,13 @@ C4 changed 11 trades, all exiting later on 1-minute data; ladder difference in $
 
 C6 changed 4: 251 (−12), 274 (−58), 315 (−35), 415 (−20).
 
-## What this means for the decision
+## Decision (owner, 2026-11-16)
 
-1. **As registered: ship plumbing only.** Poll interval into config, unchanged defaults.
-   The leg-quote fetch follows the Tuesday probe under its own pre-set criteria.
-2. **The study question is still open, and it is answerable only on post-exit data.** No
-   confirmation trade has been read, so the protocol can still be amended without bias.
-   For example, use the first 30 post-exit trades as the development set and the next 30
-   as the confirmation set: about 12 weeks at one trade a session. That change is the
-   owner's decision; it is not made here.
-3. **Correction to the brief:** "fast polling helps, −$15/trade at the backtest cadence"
-   is not supported. The existing data cannot measure cadence.
+The owner chose to amend the plan rather than stop (plan, Amendment 1):
+
+- **Development set:** qualifying post-exit trades 1–30, about end of December 2026.
+- **Confirmation set:** trades 31–60, about mid-February 2027.
+- **Plumbing ships now** with defaults that reproduce today's behavior.
+
+**Correction to the brief:** "fast polling helps, −$15/trade at the backtest cadence" is not
+supported. The existing data cannot measure cadence.

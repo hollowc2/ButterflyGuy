@@ -4,7 +4,8 @@ docs/research/monitor-cadence-exit-design-plan.md, commit 3f2a43e).
 The live position monitor values the fly from REST polls (about 2.6 s on direct data) and
 stores each poll's three legs in `monitoring_leg_quotes`. This replays the runtime
 `PeakTrailer` (research.exits, the same rule code and config) over the stored polls of
-closed SPX trades, for the current rule (A0) and each pre-registered arm:
+closed SPX trades, for the current rule (A0) and each pre-registered arm (Amendment 1:
+selection on qualifying post-exit trades 1-30, confirmation on 31-60):
 
 - time-based confirmation: exit once the value has stayed beyond the threshold for T s;
 - quality peak: the peak follows the causal median of the last W s of fly marks;
@@ -13,15 +14,17 @@ closed SPX trades, for the current rule (A0) and each pre-registered arm:
 
 Each exit is priced at mid, at the fly's natural credit, and at the live exit ladder's first
 step, min(mid, natural + 0.30) (the primary model). After the recorded exit an arm still
-holding continues on post-exit polls (`post_exit_leg_quotes`); on the development set it
-falls back to 1-minute collector snapshots and says so, on the confirmation set it refuses.
+holding continues on post-exit polls (`post_exit_leg_quotes`). Only the exploratory pilot
+set (Aug-Nov 2026) falls back to 1-minute collector snapshots, and says so; the development
+and confirmation sets refuse them.
 
 Input: a directory with trades.csv.gz, polls.csv.gz, minute.csv.gz and optionally
 post_exit.csv.gz, extracted with the SQL in the plan (section 1). Reads only those files.
 
+    uv run python tools/research_studies/monitor_replay_study.py --data DIR --set pilot
     uv run python tools/research_studies/monitor_replay_study.py --data DIR --set dev
     uv run python tools/research_studies/monitor_replay_study.py --data DIR \
-        --set confirmation --arm C2      # once, after 30 qualifying trades
+        --set confirmation --arm C2      # once, after 60 qualifying trades
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ import argparse
 import dataclasses
 import datetime as dt
 import json
+import sys
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -47,8 +51,8 @@ COMMISSION = 4 * 1.15 / 100  # per fly side, points (paper_commission_per_contra
 LADDER_OFFSET = 0.30  # live execute_exit first step: natural + (steps - 1) x 0.10
 LEG_SPREAD_FLOOR, LEG_SPREAD_MULT, LEG_HISTORY = 0.50, 4.0, 30
 MATCH_SECONDS = 10.0
-DEV_START, DEV_END = dt.date(2026, 8, 1), dt.date(2026, 11, 16)
-CONF_START, CONF_TRADES = dt.date(2026, 11, 17), 30
+PILOT_START, PILOT_END = dt.date(2026, 8, 1), dt.date(2026, 11, 16)
+POST_EXIT_START, SET_TRADES = dt.date(2026, 11, 17), 30
 MAX_POST_EXIT_GAP = 30.0
 BOOT_REPS, BOOT_BLOCK, BOOT_SEED = 5000, 5, 20261117
 NI_MARGIN, WORST_TRADE = -20.0, -300.0  # $ per 1-lot
@@ -331,25 +335,30 @@ def changed_trades(m: pd.DataFrame, name: str) -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--data", type=Path, required=True)
-    ap.add_argument("--set", choices=("dev", "confirmation"), required=True)
+    ap.add_argument("--set", choices=("pilot", "dev", "confirmation"), required=True)
     ap.add_argument("--arm", choices=sorted(PRIMARY),
                     help="the dev-selected arm (required with --set confirmation)")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     a = ap.parse_args()
     conf = a.set == "confirmation"
+    post_exit_only = a.set != "pilot"
+    # Qualifying post-exit trades in date order: 1-30 develop, 31-60 confirm.
+    skip = SET_TRADES if conf else 0
     if conf and not a.arm:
         ap.error("--set confirmation needs --arm (the dev-selected arm)")
     trades = pd.read_csv(a.data / "trades.csv.gz", parse_dates=["entry_time", "exit_time"])
     trades["trade_date"] = pd.to_datetime(trades.trade_date).dt.date
-    lo, hi = (CONF_START, dt.date.max) if conf else (DEV_START, DEV_END)
+    lo, hi = (POST_EXIT_START, dt.date.max) if post_exit_only else (PILOT_START, PILOT_END)
     trades = trades[(trades.trade_date >= lo) & (trades.trade_date <= hi)]
     trades = trades.sort_values(["trade_date", "id"])
+    if trades.empty:
+        sys.exit(f"no {a.set} trades in the extraction yet")
     polls = legs_wide(pd.read_csv(a.data / "polls.csv.gz", parse_dates=["ts"]), trades)
     post_path = a.data / "post_exit.csv.gz"
     post = (legs_wide(pd.read_csv(post_path, parse_dates=["ts"]), trades)
             if post_path.exists() else polls.iloc[0:0])
     # The confirmation set never reads 1-minute data.
-    minute = (polls.iloc[0:0] if conf else
+    minute = (polls.iloc[0:0] if post_exit_only else
               legs_wide(pd.read_csv(a.data / "minute.csv.gz", parse_dates=["ts"]), trades))
     rule = PeakTrailer.from_config(load_spx_config())
     arms = {"A0": ARMS["A0"], a.arm: ARMS[a.arm]} if conf else ARMS
@@ -361,7 +370,7 @@ def main() -> None:
             excluded["few_polls"] += 1
             continue
         pe = post[post.trade_id == tr.id].reset_index(drop=True)
-        if conf and not post_exit_covered(tr, pe):
+        if post_exit_only and not post_exit_covered(tr, pe):
             excluded["post_exit_gap"] += 1
             continue
         if len(pe):
@@ -385,25 +394,28 @@ def main() -> None:
         if not matched:
             excluded["no_match"] += 1
             continue
+        if skip:
+            skip -= 1
+            continue
         rows.append(row)
-        if conf and len(rows) == CONF_TRADES:
+        if post_exit_only and len(rows) == SET_TRADES:
             break
     m = pd.DataFrame(rows)
     out = a.out / a.set
     out.mkdir(parents=True, exist_ok=True)
-    m.to_csv(out / "trades.csv", index=False)
-
-    s: dict = {"set": a.set, "window": [str(lo), str(hi) if not conf else None],
+    s: dict = {"set": a.set, "window": [str(lo), None if post_exit_only else str(hi)],
                "trades_used": len(m), "excluded": excluded,
-               "peak_is_one_poll_spike": int(m.peak_spike.sum()),
                "arms": {k: dataclasses.asdict(v) for k, v in arms.items()},
                "request_load_per_min": {k: round(60 / (v.cadence_seconds or 2.6), 1)
                                         for k, v in arms.items()}}
-    if conf and len(m) < CONF_TRADES:
-        s["status"] = f"NOT RUN: {len(m)} of {CONF_TRADES} qualifying trades"
+    if post_exit_only and len(m) < SET_TRADES:
+        # Counts only: a partial set's results are never written or printed.
+        s["status"] = f"NOT RUN: {len(m)} of {SET_TRADES} qualifying trades in this set"
         (out / "summary.json").write_text(json.dumps(s, indent=2))
         print(json.dumps(s, indent=2))
         return
+    m.to_csv(out / "trades.csv", index=False)
+    s["peak_is_one_poll_spike"] = int(m.peak_spike.sum())
     for name in arms:
         if name != "A0":
             s[name] = arm_summary(m, name)
