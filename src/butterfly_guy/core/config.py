@@ -66,6 +66,8 @@ class ExecutionSettings(ConfigModel):
     price_ladder_steps: int = 4
     retry_interval_seconds: int = 20
     order_timeout_seconds: int = 300
+    # Live exit limit rule (core/exit_pricing.py); bid_ladder is the original ladder.
+    exit_pricing: Literal["bid_ladder", "mid_capped_ladder", "mid_walk"] = "bid_ladder"
     paper_trading: bool = True  # default safe — set False to go live
     paper_fill_buffer: float = 0.05          # extra width beyond synthetic ask/bid required to fill
     paper_slippage_per_spread: float = 0.05  # additional cost/credit lost on fill_price
