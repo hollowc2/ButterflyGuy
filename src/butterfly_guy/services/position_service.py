@@ -360,7 +360,7 @@ class PositionService:
         candidate: ButterflyCandidate,
         recovered_peak: float | None = None,
     ) -> None:
-        """Monitor position every 2s, evaluate state machine, trigger exit if needed."""
+        """Poll the position, evaluate the state machine and exit when it signals."""
         self.position_manager.reset(trade.entry_price, peak_value=recovered_peak)
         self._last_persisted_peak = (
             recovered_peak if (recovered_peak and recovered_peak > 0) else trade.entry_price
@@ -376,7 +376,7 @@ class PositionService:
         self._telemetry_alerted: set[str] = set()
         self._background_tasks: set[asyncio.Task] = set()
         peak_write_pending = False
-        poll_interval = 2
+        poll_interval = self.config.position_data.poll_interval_seconds
 
         log.info("position_monitor_started", trade_id=trade.trade_id)
 

@@ -15,11 +15,13 @@ def test_load_config_defaults():
     assert config.risk.max_trades_per_day == 1
     assert 10 in config.strategy.wing_widths
     assert config.position_data.shadow_held_quotes is False
+    assert config.position_data.poll_interval_seconds == 2.0
 
 
 @pytest.mark.parametrize("settings", [
     {"shadow_interval_seconds": 0}, {"shadow_interval_seconds": 2},
     {"shadow_timeout_seconds": 0}, {"shadow_timeout_seconds": 11},
+    {"poll_interval_seconds": 0.5}, {"poll_interval_seconds": 11},
 ])
 def test_position_shadow_settings_bound_request_rate_and_timeout(settings):
     with pytest.raises(ValidationError):
