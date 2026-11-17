@@ -50,22 +50,32 @@ def send_alertmanager(
     underlying: str,
     *,
     resolved: bool = False,
+    instance_role: str | None = None,
 ) -> bool:
-    """Post one stable, identifier-free alert fingerprint to Alertmanager."""
+    """Post one stable, identifier-free alert fingerprint to Alertmanager.
+
+    instance_role, when set, is part of the alert's identity, so a paper and a live bot
+    on the same underlying never merge or resolve each other's alerts.
+    """
     now = dt.datetime.now(dt.timezone.utc)
     alertname = "ButterflyGuy" + "".join(part.title() for part in condition.split("_"))
+    labels = {
+        "alertname": alertname,
+        "condition": condition,
+        "underlying": underlying.upper(),
+        "project": "butterflyguy",
+        "notify": "discord",
+        "severity": "critical",
+    }
+    subject = underlying.upper()
+    if instance_role:
+        labels["instance_role"] = instance_role
+        subject = f"{subject} {instance_role}"
     payload = [
         {
-            "labels": {
-                "alertname": alertname,
-                "condition": condition,
-                "underlying": underlying.upper(),
-                "project": "butterflyguy",
-                "notify": "discord",
-                "severity": "critical",
-            },
+            "labels": labels,
             "annotations": {
-                "summary": f"ButterflyGuy {underlying.upper()} {condition.replace('_', ' ')}",
+                "summary": f"ButterflyGuy {subject} {condition.replace('_', ' ')}",
                 "description": (
                     "Condition cleared after safe reconciliation or recovery."
                     if resolved

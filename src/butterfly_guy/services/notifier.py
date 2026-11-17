@@ -17,9 +17,11 @@ log = get_logger(__name__)
 class AlertmanagerNotifier:
     """Sends centrally deduplicated critical alerts through Alertmanager."""
 
-    def __init__(self, url: str, underlying: str) -> None:
+    def __init__(self, url: str, underlying: str, instance_role: str | None = None) -> None:
         self.url = url
         self.underlying = underlying.upper()
+        # Passed only when set, so an unset role sends exactly the historical payload.
+        self._role_kwargs = {"instance_role": instance_role} if instance_role else {}
         self._pending_resolutions: set[str] = set()
 
     async def notify_critical(self, condition: str) -> bool:
@@ -31,6 +33,7 @@ class AlertmanagerNotifier:
             self.url,
             condition,
             self.underlying,
+            **self._role_kwargs,
         )
         (log.info if sent else log.error)(
             "critical_alert",
@@ -49,6 +52,7 @@ class AlertmanagerNotifier:
             condition,
             self.underlying,
             resolved=True,
+            **self._role_kwargs,
         )
         if resolved:
             self._pending_resolutions.discard(condition)
@@ -315,6 +319,10 @@ class DiscordNotifier:
 class TelegramNotifier:
     """Sends risk notifications through the existing Telegram notify helper."""
 
+    def __init__(self, instance_role: str | None = None) -> None:
+        # A paper and a live bot share the Telegram chat; the role tells them apart.
+        self.prefix = f"[{instance_role.upper()}] " if instance_role else ""
+
     async def notify_consecutive_loss_warning(
         self,
         underlying: str,
@@ -323,7 +331,7 @@ class TelegramNotifier:
     ) -> None:
         pnl_text = ", ".join(f"${pnl:.2f}" for pnl in recent_pnls[:10])
         msg = (
-            f"⚠️ {underlying} RISK WARNING\n"
+            f"⚠️ {self.prefix}{underlying} RISK WARNING\n"
             f"Recent closed trades show {loss_count} consecutive losses.\n"
             f"Trading is not blocked by this warning.\n"
             f"Recent P&L: {pnl_text}\n"

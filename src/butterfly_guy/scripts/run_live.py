@@ -14,6 +14,7 @@ from dotenv import dotenv_values
 from schwab_gateway_sdk.client import GatewayMarketDataClient
 from schwab_gateway_sdk.config import GatewayClientSettings
 
+from butterfly_guy.core import instance_role as role_guard
 from butterfly_guy.core.config import AppConfig, load_config
 from butterfly_guy.core.logging import get_logger, setup_logging
 from butterfly_guy.core.metrics import (
@@ -1047,6 +1048,15 @@ async def main() -> None:
     config = load_config(args.config)
     setup_logging(config.monitoring.log_level, json_output=True)
 
+    # Opt-in paper/live role guard: refuse a misconfigured container before any DB or
+    # Schwab work. Unset BUTTERFLY_INSTANCE_ROLE leaves startup unchanged.
+    try:
+        instance_role = role_guard.instance_role()
+        role_guard.check_config(config, instance_role)
+    except role_guard.InstanceRoleError as e:
+        log.critical("instance_role_refused", reason=str(e))
+        raise SystemExit(2) from e
+
     # Validate opt-in gateway settings before opening the DB or direct Schwab client.
     gateway_settings = GatewayClientSettings()
     _assert_live_config_supported(config, gateway_settings)
@@ -1075,6 +1085,11 @@ async def main() -> None:
     gateway_client: GatewayMarketDataClient | None = None
     try:
         await db.initialize()
+        try:
+            await role_guard.check_database(db.pool, instance_role)
+        except role_guard.InstanceRoleError as e:
+            log.critical("instance_role_refused", reason=str(e))
+            raise SystemExit(2) from e
         await run_migrations(db)
 
         # Init direct broker client even in gateway market-data mode. It exclusively
@@ -1103,10 +1118,12 @@ async def main() -> None:
             "DISCORD_WEBHOOK_URL",
             "",
         )
-        risk_notifier = TelegramNotifier()
+        risk_notifier = TelegramNotifier(instance_role=instance_role)
         alertmanager_url = os.getenv("ALERTMANAGER_URL", "")
         critical_notifier = (
-            AlertmanagerNotifier(alertmanager_url, config.strategy.underlying)
+            AlertmanagerNotifier(
+                alertmanager_url, config.strategy.underlying, instance_role=instance_role
+            )
             if alertmanager_url
             else None
         )
