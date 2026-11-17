@@ -93,3 +93,19 @@ def test_summary_and_selection():
     assert ep.select({"R1": 5.0, "R3": 4.5}) == "R3"
     assert ep.select({"R1": 5.0, "R3": 3.0}) == "R1"
     assert ep.select({}) is None
+
+
+@pytest.mark.parametrize("name", list(ep.CANDIDATES))
+@pytest.mark.parametrize("p_mid", [0.0, 0.5, 1.0])
+@pytest.mark.parametrize(("bid", "mid"), [(1.00, 1.10), (1.00, 1.85), (1.02, 1.13), (2.30, 2.30)])
+def test_replay_on_a_static_quote_equals_the_paper_live_rule_estimate(name, p_mid, bid, mid):
+    """Research/live parity: the paper exit's live-rule estimate is the replay on one quote."""
+    from butterfly_guy.core.exit_pricing import static_quote_estimate
+
+    cand = ep.CANDIDATES[name]
+    one_pass = ep.LADDER_STEPS * cand.interval
+    replay = ep.simulate(_static(bid, mid, end=one_pass), cand, p_mid, horizon=one_pass)
+    assert replay.expected_credit == pytest.approx(static_quote_estimate(
+        cand.rule, bid, mid, p_mid=p_mid, ladder_step=ep.LADDER_STEP,
+        ladder_steps=ep.LADDER_STEPS, underlying="SPX",
+    ))
