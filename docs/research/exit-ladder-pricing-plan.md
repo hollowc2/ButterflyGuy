@@ -8,6 +8,29 @@ Order pricing is order routing. No live or paper order behavior changes until th
 approves the Phase 2 design. Every new rule ships opt-in, with a default that reproduces
 today's ladder exactly.
 
+## Amendment 1 (owner, 2026-11-16, after Step 1, before any Set B trade existed)
+
+**Why:** Set B re-checks quote paths under the same assumed fill model. It cannot test whether
+a limit at mid fills on a wide spread, which is the open question for R3. Wide spreads are
+about 7% of exits, so 30 trades (about six weeks) would contain about 2. The owner does not
+want to wait that long.
+
+**Change:**
+
+- **Step 2 is no longer a gate.** Set B is still extracted and reported as it accrues, using
+  the same criteria, but it does not block live use. Trades 31–60 stay unread until the
+  cadence confirmation run.
+- **Confirmation is the supervised live pilot (section 5).**
+  - **Setting:** R3 (`mid_walk`) is set only in the pilot's compose override, on sessions
+    the owner approves.
+  - **Stop and revert to R0** on the existing stop rules: an exit still unfilled when its
+    natural step is due (+60 s), or 2 of the first 5 exits filling later than R0 would have
+    under FM-touch.
+  - **Default:** after 10 pilot exits, re-estimate p by spread bucket from the real fills and
+    re-run Step 1 with it. Making R3 the default still needs owner approval.
+
+Everything else is unchanged.
+
 ## Phase 0 findings this plan relies on
 
 Code and pilot:

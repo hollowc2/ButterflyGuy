@@ -26,7 +26,7 @@ Outputs are written to `reports/research/exit-ladder-pricing/`.
 primary mean ($3.31 against R3's $2.84), but the two are within $1. The pre-registered tie
 rule then prefers the smaller change, and R2 was more than $1 behind.
 
-**Next: Step 2 (confirmation on Set B).** It runs on the first 30 SPX paper exits with
+**Next (Amendment 1, 2026-11-16): confirmation is the supervised live pilot; Set B is reported, not a gate.** Originally: Step 2 (confirmation on Set B). It runs on the first 30 SPX paper exits with
 post-exit polls from 2026-11-17, read as they accrue. Set B had **0 trades** at this run.
 Until it passes, R3 is only an opt-in setting. The default stays R0 (today's ladder).
 
