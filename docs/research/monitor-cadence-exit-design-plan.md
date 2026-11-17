@@ -273,6 +273,28 @@ explanations, not a pass; the criteria were fixed in advance and are not reinter
 (both requests fired concurrently, run on a quiet session, compared on the fly mark) would
 need a new pre-registered criterion and owner approval before it runs.
 
+### Probe 2 pre-registration (owner approved a re-test 2026-11-17 ~09:45 PT)
+
+Written and committed before the run. Same session, same three legs chosen from the spot
+at start. 24 pairs, 15 s apart, 48 read-only requests (same load as probe 1). In each pair
+the chain and quotes requests are **fired concurrently**, the quotes request starting 0,
+0.15 or 0.30 s after the chain request (cycled), since the chain takes ~0.25 s longer.
+
+The monitor may switch its default to `quotes` on direct mode only if **all** hold:
+
+1. **Same-moment leg parity:** among leg pairs whose two quote times are within 100 ms,
+   bid and ask both within $0.05 on ≥ 95%. Needs ≥ 15 such leg pairs; fewer means
+   **inconclusive**, and the default stays `chain`.
+2. **No fly bias:** across all pairs, the mean fly-mark difference (chain − quotes) lies
+   within ±$0.03, and |difference| ≤ $0.10 on ≥ 90% of pairs.
+3. **Freshness:** median quote age at receipt (receipt time − quote time) for quotes is
+   ≤ the chain's.
+4. **Completeness:** no missing leg or missing quote time in any quotes response.
+5. Criterion 1 of probe 1 (latency, payload) still holds.
+
+Probe 1's results stand as recorded. Probe 2 is the last chain-vs-quotes test for this
+study. If it fails or is inconclusive, the chain stays and the question is closed.
+
 **Fallback:** if any held leg is missing or has no quote time in a quotes response, that
 poll fetches the chain, as today. Two consecutive fallbacks raise the existing
 market-data-degraded path.
