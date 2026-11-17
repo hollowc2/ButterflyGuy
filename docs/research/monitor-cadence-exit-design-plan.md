@@ -2,7 +2,7 @@
 
 Status: **APPROVED by the owner 2026-11-16 (stop point 1), with the proposed decision rule
 in section 4. This commit is the pre-registration.** Section 6's results are added after the
-Tuesday 2026-11-17 probe; its criteria are fixed here. No confirmation-set trade exists yet.
+Tuesday 2026-11-17 probe; its criteria were fixed here and it failed two of them (section 6). No confirmation-set trade exists yet.
 
 Task brief: `docs/research/monitor-cadence-exit-design-prompt.md` (main checkout). Times are
 Pacific unless marked; the DB and crontab are UTC.
@@ -233,14 +233,45 @@ changes nothing else in the plan.**
 
 ## 6. Fetch design: three leg quotes vs full chain
 
-**Pending the 2026-11-17 08:00 PT probe** (`get_option_chain` vs `get_quotes` for three
-SPXW legs, 20 back-to-back pairs). Pre-set criteria to switch the monitor's default to
-`quotes` on direct mode:
+Probe: `get_option_chain` vs `get_quotes` for three SPXW legs, 20 back-to-back pairs.
+Pre-set criteria to switch the monitor's default to `quotes` on direct mode:
 
 1. median latency ≤ chain median, with payload smaller;
 2. same-moment parity: bid and ask equal or within $0.05 on ≥ 95% of leg pairs;
 3. per-leg quote time no older than the chain's on ≥ 95% of pairs;
 4. no added request load (one request per poll either way).
+
+### Probe result (run 2026-11-17 09:31–09:37 PT): criteria 2 and 3 FAIL, default stays `chain`
+
+The probe ran 1.5 h late; the 08:03 PT trigger did not fire. Conditions: VIX 25.1, SPX
+~7,350, puts 7330/7350/7370, paper trade 417 open (paper exits, no broker order working).
+41 read-only requests, none failed. Raw output and analysis script:
+`reports/research/spx-monitor-cadence-exit/probe/` (gitignored).
+
+| Criterion | Chain | Quotes | Result |
+|---|---|---|---|
+| 1. Latency, median (p90, max) | 0.59 s (0.69, 2.76) | 0.33 s (0.65, 0.66) | PASS |
+| 1. Payload, median | 652 KB (540 contracts) | 4.6 KB | PASS |
+| 2. Bid and ask within $0.05 | n/a | 7 / 60 leg pairs (12%) | FAIL |
+| 3. Quote time no older than chain's | n/a | 30 / 60 (50%) | FAIL |
+| 4. Requests per poll | 1 | 1 | PASS |
+
+Other facts: no missing symbols or quote times (0 / 60). Both sources have the same leg
+spread (median $0.20) and define mark = (bid + ask) / 2 on 60 / 60 legs. Age at receipt
+(receipt time minus quote time) has median 178 ms for quotes vs 438 ms for chain.
+
+**Why 2 and 3 fail: the probe's design, not shown to be the data.** The two requests in
+a pair start 0.3–0.6 s apart, and at VIX 25 these legs moved more than $0.05 between
+consecutive chains in 57 of 60 cases. No pair had quote times within 150 ms of each other,
+so the probe cannot separate source differences from market movement. The fly mark
+difference (chain − quotes) has median $0.00 and mean +$0.015 over 20 pairs, 13 of them
+within $0.05: no sign of bias, which is what timing noise predicts. Criterion 3 is a coin
+flip by construction: whichever request lands second carries the newer quote. These are
+explanations, not a pass; the criteria were fixed in advance and are not reinterpreted here.
+
+**Consequence:** no leg-quote fetch PR. The monitor keeps the chain. A redesigned probe
+(both requests fired concurrently, run on a quiet session, compared on the fly mark) would
+need a new pre-registered criterion and owner approval before it runs.
 
 **Fallback:** if any held leg is missing or has no quote time in a quotes response, that
 poll fetches the chain, as today. Two consecutive fallbacks raise the existing
@@ -269,7 +300,7 @@ the chain.
 
 | Step | When | What |
 |---|---|---|
-| Probe | Tue 11-17 ~08:00 PT | Run the probe; fill in section 6 |
+| Probe | Done 2026-11-17 09:31 PT | Criteria 2–3 failed; monitor keeps the chain (section 6) |
 | Phase 2 pilot analysis | Done 2026-11-16 | Replay extended; Aug–Nov pilot run; no arm scorable (results doc) |
 | Phase 3 PR 1 | Now (Amendment 1) | Config plumbing (poll interval into config, defaults unchanged) |
 | Development run | After 30 qualifying post-exit trades (~end Dec) | Select one arm, or stop |
