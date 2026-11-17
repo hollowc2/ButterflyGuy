@@ -8,15 +8,18 @@ docs/operations/concurrent-paper-live-spx-design.md §4, §5, §9, §10.
         --copy-live-trade 415
     python -m butterfly_guy.scripts.spx_live_db seed-daily-bars --db butterfly_guy_spx_live
     python -m butterfly_guy.scripts.spx_live_db check --db butterfly_guy_spx_live
+    python -m butterfly_guy.scripts.spx_live_db compare --date 2026-11-20 --out-dir /tmp/x
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import datetime as dt
 import hashlib
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 import asyncpg
@@ -25,6 +28,7 @@ from butterfly_guy.core.config import DatabaseSettings, load_config
 from butterfly_guy.core.instance_role import PAPER_DATABASE_NAME
 from butterfly_guy.db.connection import DatabasePool
 from butterfly_guy.db.migrations.run_migrations import MIGRATIONS_DIR, run_migrations
+from butterfly_guy.reports import spx_paired
 
 LIVE_DB_PREFIX = "butterfly_guy_spx_live"
 # Live trade and intent ids start here, so an id names its database on sight.
@@ -285,6 +289,21 @@ async def bootstrap(
     return report
 
 
+async def compare(
+    base: DatabaseSettings, session: dt.date, paper_name: str, live_name: str
+) -> dict[str, Any]:
+    """Paired paper-vs-live report for one session; both databases read-only."""
+    paper = await connect_read_only(base, paper_name)
+    live = await connect_read_only(base, live_name)
+    try:
+        paper_trades, paper_blocks = await spx_paired.fetch_side(paper, session)
+        live_trades, live_blocks = await spx_paired.fetch_side(live, session)
+    finally:
+        await paper.close()
+        await live.close()
+    return spx_paired.pair_report(session, paper_trades, live_trades, paper_blocks, live_blocks)
+
+
 async def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--config", default="configs/config.yaml")
@@ -298,9 +317,27 @@ async def _main(argv: list[str] | None = None) -> int:
             p.add_argument("--copy-live-trade", type=int, action="append", default=[])
         if command == "check":
             p.add_argument("--allow-paper-trades", action="store_true")
+    p = sub.add_parser("compare")
+    p.add_argument("--date", required=True, type=dt.date.fromisoformat)
+    p.add_argument("--paper-db", default=PAPER_DATABASE_NAME)
+    p.add_argument("--live-db", default=LIVE_DB_PREFIX)
+    p.add_argument("--out-dir", type=Path)
     args = parser.parse_args(argv)
 
     base = load_config(args.config).database
+    if args.command == "compare":
+        report = await compare(base, args.date, args.paper_db, args.live_db)
+        markdown = spx_paired.render_markdown(report)
+        if args.out_dir:
+            args.out_dir.mkdir(parents=True, exist_ok=True)
+            stem = f"spx-paired-{args.date.isoformat()}"
+            (args.out_dir / f"{stem}.md").write_text(markdown)
+            (args.out_dir / f"{stem}.json").write_text(
+                json.dumps(report, default=str, indent=2, sort_keys=True)
+            )
+        print(markdown, end="")
+        return 0
+
     try:
         name = target_name(args.db)
         if args.command == "bootstrap":
