@@ -1,0 +1,206 @@
+"""Same-day paired comparison of the paper and live SPX bots (read-only).
+
+Each bot has its own database (docs/operations/concurrent-paper-live-spx-design.md §12).
+Selection marks come from the trade's per_width_bests entry for its chosen width; exit marks
+from exit_mark_at_signal. P&L is the DB's pre-fee figure.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+from typing import Any
+
+from butterfly_guy.core.time_utils import EASTERN, PACIFIC
+
+# Entry decisions worth showing when a bot did not trade.
+NO_TRADE_EVENTS = (
+    "entry_blocked",
+    "entry_exhausted",
+    "gap_regime_skip",
+    "bias_filter_no_signal",
+)
+
+TRADES_SQL = """
+SELECT * FROM butterfly_trades
+WHERE underlying = 'SPX' AND trade_date = $1
+ORDER BY entry_time
+"""
+BLOCKS_SQL = """
+SELECT ts, event_type, data FROM decision_log
+WHERE underlying = 'SPX' AND event_type = ANY($1::text[]) AND ts >= $2 AND ts < $3
+ORDER BY ts DESC
+LIMIT 3
+"""
+
+
+def _metadata(row: dict[str, Any]) -> dict[str, Any]:
+    raw = row.get("metadata") or {}
+    return json.loads(raw) if isinstance(raw, str) else dict(raw)
+
+
+def _num(value: Any) -> float | None:
+    return None if value is None else round(float(value), 4)
+
+
+def _pt(ts: dt.datetime | None) -> str | None:
+    return None if ts is None else ts.astimezone(PACIFIC).strftime("%H:%M:%S")
+
+
+def summarize_trade(row: dict[str, Any]) -> dict[str, Any]:
+    meta = _metadata(row)
+    width = row["wing_width"]
+    best = next(
+        (b for b in meta.get("per_width_bests") or [] if b.get("width") == width), {}
+    )
+    entry_mark = _num(best.get("cost"))
+    exit_mark = _num(meta.get("exit_mark_at_signal"))
+    entry_fill = _num(row["entry_price"])
+    exit_fill = _num(row.get("exit_price"))
+    quantity = int(row.get("quantity") or 1)
+    pnl = row.get("pnl")
+    return {
+        "trade_id": row["id"],
+        "status": row["status"],
+        "entry_time_pt": _pt(row["entry_time"]),
+        "direction": row["direction"],
+        "strikes": [float(row["lower_strike"]), float(row["center_strike"]),
+                    float(row["upper_strike"])],
+        "width": width,
+        "vix": _num(meta.get("vix")),
+        "reward_risk": _num(best.get("reward_risk")),
+        "entry_mark": entry_mark,
+        "entry_fill": entry_fill,
+        "entry_vs_mark": (
+            None if entry_mark is None else round(entry_fill - entry_mark, 4)
+        ),
+        "exit_time_pt": _pt(row.get("exit_time")),
+        "exit_reason": row.get("exit_reason"),
+        "exit_mark": exit_mark,
+        "exit_fill": exit_fill,
+        "exit_vs_mark": (
+            None if exit_mark is None or exit_fill is None else round(exit_fill - exit_mark, 4)
+        ),
+        "pnl_usd": None if pnl is None else round(float(pnl) * 100 * quantity, 2),
+        "paper_fill_model": meta.get("paper_fill_model"),
+        "per_width_bests": meta.get("per_width_bests") or [],
+    }
+
+
+def _blocks(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out = []
+    for row in rows:
+        data = row["data"]
+        data = json.loads(data) if isinstance(data, str) else dict(data or {})
+        out.append({"time_pt": _pt(row["ts"]), "event": row["event_type"],
+                    "reason": data.get("reason")})
+    return out
+
+
+def pair_report(
+    session: dt.date,
+    paper_trades: list[dict[str, Any]],
+    live_trades: list[dict[str, Any]],
+    paper_blocks: list[dict[str, Any]],
+    live_blocks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    paper = [summarize_trade(r) for r in paper_trades]
+    live = [summarize_trade(r) for r in live_trades]
+    report: dict[str, Any] = {
+        "date": session.isoformat(),
+        "paper": paper,
+        "live": live,
+        "flags": [],
+    }
+    flags = report["flags"]
+    if live and any(t["paper_fill_model"] for t in live):
+        flags.append("live DB holds a paper trade (rehearsal or misconfiguration)")
+    if not paper or not live:
+        for name, trades, blocks in (("paper", paper, paper_blocks),
+                                     ("live", live, live_blocks)):
+            if not trades:
+                report[f"{name}_no_trade_reasons"] = _blocks(blocks)
+        if paper or live:
+            flags.append(f"only {'paper' if paper else 'live'} traded")
+        return report
+
+    p, q = paper[0], live[0]
+    same_fly = (p["direction"], p["strikes"]) == (q["direction"], q["strikes"])
+    if not same_fly:
+        flags.append(
+            f"different fly: paper {p['direction']} {p['strikes']} vs "
+            f"live {q['direction']} {q['strikes']}"
+        )
+    if p["exit_reason"] != q["exit_reason"]:
+        flags.append(f"different exit: paper {p['exit_reason']} vs live {q['exit_reason']}")
+    p_exit, q_exit = paper_trades[0].get("exit_time"), live_trades[0].get("exit_time")
+    if p_exit and q_exit:
+        gap = round((q_exit - p_exit).total_seconds() / 60, 1)
+        report["exit_gap_minutes"] = gap
+        if abs(gap) >= 1:
+            flags.append(f"exit time gap {gap:+} min (live minus paper)")
+    if p["pnl_usd"] is not None and q["pnl_usd"] is not None:
+        diff = round(q["pnl_usd"] - p["pnl_usd"], 2)
+        attribution: dict[str, Any] = {"live_minus_paper_usd": diff}
+        if same_fly:
+            entry = -(q["entry_vs_mark"] or 0) * 100
+            exit_ = (q["exit_vs_mark"] or 0) * 100
+            attribution.update(
+                entry_fill_usd=round(entry, 2),
+                exit_fill_usd=round(exit_, 2),
+                path_and_timing_usd=round(diff - entry - exit_, 2),
+            )
+        report["pnl_attribution"] = attribution
+    return report
+
+
+def session_window(session: dt.date) -> tuple[dt.datetime, dt.datetime]:
+    start = dt.datetime.combine(session, dt.time(0), tzinfo=EASTERN)
+    return start, start + dt.timedelta(days=1)
+
+
+async def fetch_side(conn: Any, session: dt.date) -> tuple[list[dict], list[dict]]:
+    trades = [dict(r) for r in await conn.fetch(TRADES_SQL, session)]
+    blocks = [
+        dict(r)
+        for r in await conn.fetch(BLOCKS_SQL, list(NO_TRADE_EVENTS), *session_window(session))
+    ]
+    return trades, blocks
+
+
+def render_markdown(report: dict[str, Any]) -> str:
+    lines = [f"# SPX paper vs live, {report['date']} (times PT, P&L pre-fee)", ""]
+    rows = [
+        ("trade id", "trade_id"), ("entry", "entry_time_pt"), ("direction", "direction"),
+        ("strikes", "strikes"), ("width", "width"), ("VIX", "vix"), ("RR", "reward_risk"),
+        ("entry mark", "entry_mark"), ("entry fill", "entry_fill"),
+        ("entry fill − mark", "entry_vs_mark"), ("exit", "exit_time_pt"),
+        ("exit reason", "exit_reason"), ("exit mark", "exit_mark"), ("exit fill", "exit_fill"),
+        ("exit fill − mark", "exit_vs_mark"), ("P&L $", "pnl_usd"),
+    ]
+    paper = report["paper"][0] if report["paper"] else {}
+    live = report["live"][0] if report["live"] else {}
+    lines += ["| | paper | live |", "|---|---|---|"]
+    for label, key in rows:
+        lines.append(f"| {label} | {paper.get(key, '—')} | {live.get(key, '—')} |")
+    lines.append("")
+    for name in ("paper", "live"):
+        reasons = report.get(f"{name}_no_trade_reasons")
+        if reasons is not None:
+            text = "; ".join(f"{r['time_pt']} {r['event']} {r['reason'] or ''}".strip()
+                             for r in reasons) or "no entry decisions logged"
+            lines.append(f"- **{name} did not trade:** {text}")
+    if "pnl_attribution" in report:
+        lines.append(f"- **P&L attribution:** {report['pnl_attribution']}")
+    if report.get("flags"):
+        lines += ["", "## Flags", *[f"- {flag}" for flag in report["flags"]]]
+    else:
+        lines += ["", "No divergence flags."]
+    if paper and live and paper.get("strikes") != live.get("strikes"):
+        lines += [
+            "",
+            "## Candidates at selection (per_width_bests)",
+            f"- paper: {paper['per_width_bests']}",
+            f"- live: {live['per_width_bests']}",
+        ]
+    return "\n".join(lines) + "\n"
