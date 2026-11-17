@@ -12,7 +12,11 @@ import pytest
 from pydantic import ValidationError
 
 from butterfly_guy.core.config import ExecutionSettings
-from butterfly_guy.core.exit_pricing import EXIT_PRICING_RULES, exit_limit
+from butterfly_guy.core.exit_pricing import (
+    EXIT_PRICING_RULES,
+    exit_limit,
+    static_quote_estimate,
+)
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.data.schwab_client import OrderRejectedError
 from butterfly_guy.execution.order_manager import (
@@ -1281,3 +1285,36 @@ def test_exit_pricing_setting_matches_the_rules_and_rejects_unknown_values():
     assert tuple(allowed) == EXIT_PRICING_RULES
     with pytest.raises(ValidationError):
         ExecutionSettings(exit_pricing="mid")
+
+
+@pytest.mark.asyncio
+async def test_paper_exit_records_the_live_rule_estimate_without_changing_the_fill():
+    settings = make_settings(
+        paper_trading=True, price_ladder_step=0.10, paper_commission_per_contract=1.15,
+        exit_pricing="mid_walk",
+    )
+    om, _ = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=1.00, mark=1.85, ask=2.70)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)):
+        result = await om.execute_exit(candidate, current_value=1.65, quantity=1)
+
+    diag = result["execution_diagnostics"]
+    assert result["fill_price"] == pytest.approx(1.65 - 0.046, abs=0.005)
+    assert diag["live_exit_rule"] == "mid_walk"
+    assert diag["live_rule_first_limit"] == 1.85
+    assert diag["live_rule_exit_estimate"] == round(
+        static_quote_estimate("mid_walk", 1.00, 1.85, ladder_step=0.10, ladder_steps=4,
+                              underlying="SPX") - 0.046, 2)
+
+
+@pytest.mark.asyncio
+async def test_paper_exit_live_rule_fields_are_empty_without_a_quote():
+    settings = make_settings(paper_trading=True)
+    om, _ = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)):
+        result = await om.execute_exit(candidate, current_value=3.30, quantity=1)
+    diag = result["execution_diagnostics"]
+    assert diag["live_exit_rule"] == "bid_ladder"
+    assert diag["live_rule_exit_estimate"] is None

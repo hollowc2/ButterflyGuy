@@ -26,7 +26,8 @@ from butterfly_guy.services.weekend_review import (
 
 
 def _trade_point(
-    trade_date: dt.date, pnl: float = 100.0, executable: float | None = None
+    trade_date: dt.date, pnl: float = 100.0, executable: float | None = None,
+    live_rule: float | None = None,
 ) -> TradePoint:
     return TradePoint(
         trade_date=trade_date,
@@ -46,6 +47,7 @@ def _trade_point(
         entry_spot=4980.0,
         dd_at_exit_pct=None,
         executable_pnl_dollars=executable,
+        live_rule_pnl_dollars=live_rule,
     )
 
 
@@ -343,3 +345,23 @@ async def test_historical_review_excludes_later_trades_and_fill_models(tmp_path,
     output = capsys.readouterr().out
     assert "future_model" not in output
     assert "> **All-Time** · Trades: 1" in output
+
+
+def test_live_rule_pnl_reprices_only_the_exit() -> None:
+    row = _row()
+    row["metadata"]["exit_execution_diagnostics"]["live_rule_exit_estimate"] = 3.00
+    point = trade_point_from_row(row)
+    expected = float(row["pnl"]) - (float(row["exit_price"]) - 3.00)
+    assert point.live_rule_pnl_dollars == pytest.approx(expected * 100)
+    assert trade_point_from_row(_row()).live_rule_pnl_dollars is None
+    settled = _row(exit_reason="cash_settled", exit_price=0.0, pnl=-7.53)
+    assert trade_point_from_row(settled).live_rule_pnl_dollars == pytest.approx(-753.0)
+
+
+def test_caption_and_recap_show_live_rule_exits() -> None:
+    day = dt.date(2026, 11, 17)
+    caption = format_performance_caption(
+        "Weekly", [_trade_point(day, live_rule=80.0), _trade_point(day)]
+    )
+    assert "Live-rule exits: **+$80.00 (1 unpriced)**" in caption
+    assert "Live-rule exit: **n/a**" in format_trade_recap(_row(), tent_hit=None)

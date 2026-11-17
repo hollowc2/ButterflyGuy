@@ -52,3 +52,32 @@ def exit_limit(
         return _credit(mid - frac * (mid - bid_anchor), underlying)
     raise ValueError(f"unknown exit pricing rule {rule!r}")
 
+
+
+def static_quote_estimate(
+    rule: str,
+    bid: float,
+    mid: float,
+    *,
+    ladder_step: float,
+    ladder_steps: int,
+    underlying: str,
+    p_mid: float = 0.5,
+) -> float:
+    """Expected exit credit if the fly quote stays at `bid` / `mid` for the whole ladder.
+
+    The study's primary fill model (mid50) on one quote: a step at or below the bid fills;
+    one at or below the mid rounded to a valid credit fills with probability `p_mid`. Steps
+    run once through the ladder; anything still unfilled crosses at the bid.
+    """
+    rounded_mid = round_credit_limit(max(mid, bid), underlying)
+    unfilled, credit = 1.0, 0.0
+    for step in range(ladder_steps):
+        limit = exit_limit(
+            rule, step, bid, mid,
+            ladder_step=ladder_step, ladder_steps=ladder_steps, underlying=underlying,
+        )
+        q = 1.0 if limit <= bid + 1e-9 else p_mid if limit <= rounded_mid + 1e-9 else 0.0
+        credit += unfilled * q * limit
+        unfilled *= 1.0 - q
+    return credit + unfilled * bid

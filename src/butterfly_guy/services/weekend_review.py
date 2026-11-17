@@ -117,8 +117,11 @@ def format_trade_recap(row: dict[str, Any], *, tent_hit: bool | None) -> str:
     pnl_dollars = trade_pnl_dollars(
         float(row.get("pnl") or 0), int(row.get("quantity") or 1)
     )
-    executable = trade_point_from_row(row).executable_pnl_dollars
+    point = trade_point_from_row(row)
+    executable = point.executable_pnl_dollars
     executable_str = _money(executable) if executable is not None else "n/a"
+    live_rule = point.live_rule_pnl_dollars
+    live_rule_str = _money(live_rule) if live_rule is not None else "n/a"
     tent_label = "HIT" if tent_hit else "MISSED" if tent_hit is not None else "N/A"
     exit_reason = row.get("exit_reason") or "unknown"
     return (
@@ -127,15 +130,25 @@ def format_trade_recap(row: dict[str, Any], *, tent_hit: bool | None) -> str:
         f"{row['lower_strike']:.0f} / **{row['center_strike']:.0f}** / {row['upper_strike']:.0f}\n"
         f"> Entry ${float(row['entry_price']):.2f} → "
         f"Exit ${float(row.get('exit_price') or 0):.2f}\n"
-        f"> Paper P&L: **{_money(pnl_dollars)}** | Executable: **{executable_str}** | "
+        f"> Paper P&L: **{_money(pnl_dollars)}** | Live-rule exit: **{live_rule_str}** | "
+        f"Executable: **{executable_str}** | "
         f"Exit: `{exit_reason}` | Tent: **{tent_label}**"
     )
 
 
 def format_executable_pnl(trades: list[TradePoint]) -> str:
     """Executable P&L total, noting trades that recorded no marketable prices."""
-    priced = [t.executable_pnl_dollars for t in trades if t.executable_pnl_dollars is not None]
-    unpriced = len(trades) - len(priced)
+    return _partial_total([t.executable_pnl_dollars for t in trades])
+
+
+def format_live_rule_pnl(trades: list[TradePoint]) -> str:
+    """Paper P&L with exits at the live exit rule's estimate, noting unrecorded trades."""
+    return _partial_total([t.live_rule_pnl_dollars for t in trades])
+
+
+def _partial_total(values: list[float | None]) -> str:
+    priced = [v for v in values if v is not None]
+    unpriced = len(values) - len(priced)
     if not priced:
         return "n/a"
     text = _money(sum(priced))
@@ -148,6 +161,7 @@ def format_performance_caption(label: str, trades: list[TradePoint]) -> str:
     return (
         f"📊 **{label} Performance**\n"
         f"> Trades: {stats.trade_count} | Paper P&L: **{_money(stats.total_pnl)}** | "
+        f"Live-rule exits: **{format_live_rule_pnl(trades)}** | "
         f"Executable: **{format_executable_pnl(trades)}** | "
         f"Win rate: {stats.win_rate:.0f}% | PF: {stats.profit_factor:.2f} | "
         f"Max DD: ${stats.max_drawdown:.2f}"
@@ -173,6 +187,7 @@ def format_combined_performance_caption(
         lines.append(f"> **{label}** · {stats_line.removeprefix('> ')}")
     lines.append(
         "> _Win rate, PF, drawdown and chart curves use paper P&L. "
+        "Live-rule exits re-price paper exits at the live exit rule's estimate. "
         "Executable P&L is an estimate from recorded marketable prices. "
         "All-Time covers the displayed fill model only._"
     )
