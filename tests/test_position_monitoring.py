@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from butterfly_guy.core.config import ProfitManagementSettings
+from butterfly_guy.core.config import PositionDataSettings, ProfitManagementSettings
 from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
 from butterfly_guy.data.providers import GatewayAuthoritativeMarketDataProvider
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
@@ -450,3 +450,35 @@ async def test_post_exit_recording_is_not_started_without_leg_queries() -> None:
         TradeRecord(trade_id=1, trade_date=EXPIRATION, entry_price=0.5), _candidate(), 2,
     )
     assert getattr(service, "_post_exit_task", None) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("settings", "expected"),
+    [(PositionDataSettings(), 2.0), (PositionDataSettings(poll_interval_seconds=3.5), 3.5)],
+)
+async def test_monitor_sleeps_the_configured_poll_interval(
+    settings: PositionDataSettings, expected: float,
+) -> None:
+    """The default reproduces the former hard-coded 2 s sleep."""
+    service = _service([_quotes(), _quotes()])
+    service.config.position_data = settings
+    service.market_data.get_option_chain.side_effect = (
+        {"underlyingPrice": 756.0}, asyncio.CancelledError,
+    )
+    sleep = AsyncMock()
+    trade = TradeRecord(trade_id=17, trade_date=EXPIRATION, entry_price=0.50)
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open", return_value=True
+    ), patch(
+        "butterfly_guy.services.position_service.session_date", return_value=EXPIRATION
+    ), patch(
+        "butterfly_guy.services.position_service.get_0dte_expiration",
+        return_value=EXPIRATION,
+    ), patch(
+        "butterfly_guy.services.position_service.asyncio.sleep", new=sleep
+    ), pytest.raises(asyncio.CancelledError):
+        await service.monitor_loop(trade, _candidate())
+
+    sleep.assert_awaited_once_with(expected)

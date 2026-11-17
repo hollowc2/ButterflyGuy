@@ -197,6 +197,9 @@ class MonitoringSettings(ConfigModel):
 
 
 class PositionDataSettings(ConfigModel):
+    # Sleep between position-monitor polls, after each poll's work; the post-exit
+    # recorder uses it too. Each poll is one chain request per held position.
+    poll_interval_seconds: float = Field(default=2.0, ge=1.0, le=10.0)
     # Shadow requests collect evidence only; they never feed position valuation.
     shadow_held_quotes: bool = False
     shadow_interval_seconds: float = Field(default=60.0, ge=30.0, le=3600.0)
