@@ -295,6 +295,31 @@ The monitor may switch its default to `quotes` on direct mode only if **all** ho
 Probe 1's results stand as recorded. Probe 2 is the last chain-vs-quotes test for this
 study. If it fails or is inconclusive, the chain stays and the question is closed.
 
+### Probe 2 result (run 2026-11-17 09:43–09:49 PT): criterion 1 FAILS, chain stays, question closed
+
+VIX ~25.8, SPX ~7,340, puts 7320/7340/7360, 24 pairs, 48 requests, none failed.
+
+| Criterion | Result | |
+|---|---|---|
+| 1. Leg parity, quote times within 100 ms | 14 / 22 leg pairs (64%), needed 95% of ≥ 15 | **FAIL** |
+| 2. Fly-mark bias | mean −$0.017; 22 / 24 pairs within $0.10 | pass |
+| 3. Age at receipt, median | quotes 179 ms vs chain 443 ms | pass |
+| 4. Missing legs or quote times | 0 / 72 | pass |
+| 5. Latency / payload, median | quotes 0.31 s, 4.6 KB vs chain 0.63 s, 652 KB | pass |
+
+**What the mismatches look like (descriptive, does not change the verdict):**
+
+- At quote-time gaps of 0–12 ms, all 9 leg pairs matched exactly.
+- All 8 mismatches came at gaps of 50–95 ms. Each was a single $0.10 tick, and the legs
+  moved together within a pair (pairs 4 and 9: all three legs).
+- That pattern fits the market moving between two snapshots rather than the sources
+  disagreeing. The 100 ms window was too wide for a VIX 25 session.
+
+Neither probe found evidence that `get_quotes` serves different prices. But the
+pre-registered test was not passed, and keeping the chain costs only ~0.3 s and ~650 KB per
+poll. **Decision: the monitor keeps the chain; no leg-quote fetch PR.** The fallback design
+above is not built.
+
 **Fallback:** if any held leg is missing or has no quote time in a quotes response, that
 poll fetches the chain, as today. Two consecutive fallbacks raise the existing
 market-data-degraded path.
@@ -322,7 +347,7 @@ the chain.
 
 | Step | When | What |
 |---|---|---|
-| Probe | Done 2026-11-17 09:31 PT | Criteria 2–3 failed; monitor keeps the chain (section 6) |
+| Probes 1–2 | Done 2026-11-17 09:31 and 09:43 PT | Both failed pre-set parity criteria; monitor keeps the chain (section 6) |
 | Phase 2 pilot analysis | Done 2026-11-16 | Replay extended; Aug–Nov pilot run; no arm scorable (results doc) |
 | Phase 3 PR 1 | Now (Amendment 1) | Config plumbing (poll interval into config, defaults unchanged) |
 | Development run | After 30 qualifying post-exit trades (~end Dec) | Select one arm, or stop |
