@@ -3,8 +3,8 @@
 Phase 1 of `docs/operations/concurrent-paper-live-spx-prompt.md`. Written 2026-11-17 (PT), from
 the Phase 0 facts in `concurrent-paper-live-spx-phase0.md` (cited below as "P0 §n").
 
-**Status: proposed.** Decisions marked **OWNER** are open until Corey records them in §13. Nothing
-here has been built or deployed.
+**Status: owner decisions recorded 2026-11-17 (§13). Waiting for design approval before Phase 2.**
+Nothing here has been built or deployed.
 
 ## 1. Summary
 
@@ -431,15 +431,15 @@ It runs from the close-out and on demand. It reads no Schwab data.
 
 ## 13. Decisions for the owner
 
-| # | Decision | Recommendation |
-|---|---|---|
-| D2 | Live DB history | **B**: copy trade 415 (+ intents and child rows); sequences start at 100000 |
-| D2b | Trade 415 inside `butterfly_guy` | **(i) leave it** |
-| D3 | Live snapshot retention | Keep all; compress after 7 days (paper's policies); live JSONL kept; review in 6 months |
-| D4 | `app_spx` env / image | At the next normal off-hours paper deploy, run the **same release** as live and add `BUTTERFLY_INSTANCE_ROLE=paper`; no separate recreate |
-| D5 | Pool size | No change (worst case ≈ 42/50) |
-| D6 | Discord | **A**: separate webhook `DISCORD_WEBHOOK_URL_SPX_LIVE` (Corey creates it and adds it to `.env`) |
-| D6b | Grafana | Add datasource `TimescaleDB SPX Live` (uid `timescaledb-spx-live`, as the candidate precedent) plus a datasource variable on *Trade Detail*; add `job="butterfly_spx"` to SPX Prometheus panels |
+| # | Decision | Recommendation | Owner decision (2026-11-17) |
+|---|---|---|---|
+| D2 | Live DB history | **B**: copy trade 415 (+ intents and child rows); sequences start at 100000 | **Copy trade 415** (+ intents and child rows); sequences at 100000 |
+| D2b | Trade 415 inside `butterfly_guy` | **(i) leave it** | Leave it (default, not separately asked) |
+| D3 | Live snapshot retention | Keep all; compress after 7 days (paper's policies); live JSONL kept; review in 6 months | **Keep all, compress after 7 days** |
+| D4 | `app_spx` env / image | At the next normal off-hours paper deploy, run the **same release** as live and add `BUTTERFLY_INSTANCE_ROLE=paper`; no separate recreate | **Yes**: same-release paper deploy with role=paper, normal off-hours deploy |
+| D5 | Pool size | No change (worst case ≈ 42/50) | No change (default, not separately asked) |
+| D6 | Discord | **A**: separate webhook `DISCORD_WEBHOOK_URL_SPX_LIVE` (Corey creates it and adds it to `.env`) | **Separate webhook** `DISCORD_WEBHOOK_URL_SPX_LIVE` |
+| D6b | Grafana | Add datasource `TimescaleDB SPX Live` (uid `timescaledb-spx-live`, as the candidate precedent) plus a datasource variable on *Trade Detail*; add `job="butterfly_spx"` to SPX Prometheus panels | As recommended (default, not separately asked) |
 
 ## 14. Rollout and rollback
 
