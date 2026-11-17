@@ -56,3 +56,19 @@ def test_crossed_anchors_never_price_below_the_bid():
 def test_unknown_rule_is_refused():
     with pytest.raises(ValueError):
         exit_limit("mid", 0, 1.0, 1.1, **KW)
+
+
+def test_static_quote_estimate_matches_the_mid50_model_by_hand():
+    from butterfly_guy.core.exit_pricing import static_quote_estimate
+
+    # bid ladder, narrow: 1.30 and 1.20 above the mid (no fill), 1.10 at mid (p .5), 1.00
+    assert static_quote_estimate("bid_ladder", 1.00, 1.10, **KW) == pytest.approx(1.05)
+    # mid walk, narrow: 1.10, 1.10, 1.05 at or below mid (p .5 each), then 1.00
+    assert static_quote_estimate("mid_walk", 1.00, 1.10, **KW) == pytest.approx(
+        0.5 * 1.10 + 0.25 * 1.10 + 0.125 * 1.05 + 0.125 * 1.00
+    )
+    # trade 415's quote: today's ladder starts below the 1.85 mid
+    assert static_quote_estimate("bid_ladder", 1.00, 1.85, **KW) == pytest.approx(
+        0.5 * 1.30 + 0.25 * 1.20 + 0.125 * 1.10 + 0.125 * 1.00
+    )
+    assert static_quote_estimate("mid_walk", 1.00, 1.85, p_mid=1.0, **KW) == 1.85

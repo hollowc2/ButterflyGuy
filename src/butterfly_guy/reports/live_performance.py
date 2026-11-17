@@ -53,6 +53,8 @@ class TradePoint:
     paper_fill_model: str = "legacy"
     # P&L at the marketable prices observed at fill time; None when not recorded.
     executable_pnl_dollars: float | None = None
+    # Paper P&L with the exit at the configured live exit rule's estimate; None when not recorded.
+    live_rule_pnl_dollars: float | None = None
 
 
 @dataclass(frozen=True)
@@ -200,12 +202,30 @@ def executable_pnl_points(row: dict[str, Any], metadata: dict[str, Any]) -> floa
     return float(exit_value) - float(entry)
 
 
+def live_rule_pnl_points(row: dict[str, Any], metadata: dict[str, Any]) -> float | None:
+    """Per-contract paper P&L with the exit priced by the live exit rule's estimate.
+
+    Entries stay at the paper fill. A cash-settled trade sent no exit order, so its paper
+    P&L is used as-is; None when the exit recorded no live-rule estimate.
+    """
+    pnl, exit_price = row.get("pnl"), row.get("exit_price")
+    if pnl is None:
+        return None
+    if row.get("exit_reason") == "cash_settled":
+        return float(pnl)
+    estimate = (metadata.get("exit_execution_diagnostics") or {}).get("live_rule_exit_estimate")
+    if estimate is None or exit_price is None:
+        return None
+    return float(pnl) - (float(exit_price) - float(estimate))
+
+
 def trade_point_from_row(row: dict[str, Any]) -> TradePoint:
     metadata = _parse_metadata(row.get("metadata"))
     exit_parity = metadata.get("exit_mark_parity") or {}
     dd_at_exit = exit_parity.get("live_drawdown_pct")
     pnl = row.get("pnl")
     executable = executable_pnl_points(row, metadata)
+    live_rule = live_rule_pnl_points(row, metadata)
     return TradePoint(
         trade_date=row["trade_date"],
         direction=str(row["direction"]),
@@ -231,6 +251,11 @@ def trade_point_from_row(row: dict[str, Any]) -> TradePoint:
         executable_pnl_dollars=(
             trade_pnl_dollars(executable, int(row.get("quantity") or 1))
             if executable is not None
+            else None
+        ),
+        live_rule_pnl_dollars=(
+            trade_pnl_dollars(live_rule, int(row.get("quantity") or 1))
+            if live_rule is not None
             else None
         ),
     )

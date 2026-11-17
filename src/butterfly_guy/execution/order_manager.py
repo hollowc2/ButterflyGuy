@@ -13,7 +13,7 @@ from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.core.entry_pricing import entry_fill_within_limit
-from butterfly_guy.core.exit_pricing import exit_limit
+from butterfly_guy.core.exit_pricing import exit_limit, static_quote_estimate
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import (
     order_fill_duration,
@@ -446,20 +446,48 @@ class OrderManager:
             )
             drag = fill_price - marketable
 
+        diagnostics: dict[str, object] = {
+            "observed_bid": spread.bid if spread is not None else None,
+            "observed_mark": spread.mark if spread is not None else mark,
+            "observed_ask": spread.ask if spread is not None else None,
+            f"marketable_{side}_estimate": marketable,
+            "estimated_execution_drag": round(max(0.0, drag), 2),
+            "configured_slippage": self.settings.paper_slippage_per_spread,
+            "configured_fill_buffer": self.settings.paper_fill_buffer,
+        }
+        if side == "exit":
+            diagnostics.update(self._live_rule_exit_diagnostics(spread, commission))
         return {
             "order_id": "PAPER",
             "fill_price": fill_price,
             "fill_time": now_utc(),
             "paper_fill_model": "mark_v1",
-            "execution_diagnostics": {
-                "observed_bid": spread.bid if spread is not None else None,
-                "observed_mark": spread.mark if spread is not None else mark,
-                "observed_ask": spread.ask if spread is not None else None,
-                f"marketable_{side}_estimate": marketable,
-                "estimated_execution_drag": round(max(0.0, drag), 2),
-                "configured_slippage": self.settings.paper_slippage_per_spread,
-                "configured_fill_buffer": self.settings.paper_fill_buffer,
-            },
+            "execution_diagnostics": diagnostics,
+        }
+
+    def _live_rule_exit_diagnostics(
+        self, spread: LiveSpread | None, commission: float
+    ) -> dict[str, object]:
+        """What the configured live exit rule would submit and expect on this quote.
+
+        Metadata only: paper P&L stays at the signal mark. The estimate is the exit-ladder
+        study's primary fill model on a quote that does not move.
+        """
+        rule = self.settings.exit_pricing
+        if spread is None:
+            return {"live_exit_rule": rule, "live_rule_first_limit": None,
+                    "live_rule_exit_estimate": None}
+        mid = (spread.bid + spread.ask) / 2
+        kwargs = dict(
+            ladder_step=self.settings.price_ladder_step,
+            ladder_steps=self.settings.price_ladder_steps,
+            underlying=self.underlying,
+        )
+        estimate = static_quote_estimate(rule, spread.bid, mid, **kwargs)
+        return {
+            "live_exit_rule": rule,
+            "live_rule_first_limit": exit_limit(rule, 0, spread.bid, mid, **kwargs),
+            "live_rule_exit_estimate": round(estimate - commission, 2),
         }
 
     async def _submit_rejected(
