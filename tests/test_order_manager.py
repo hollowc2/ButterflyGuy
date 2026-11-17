@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import statistics
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from butterfly_guy.core.config import ExecutionSettings
+from butterfly_guy.core.exit_pricing import EXIT_PRICING_RULES, exit_limit
 from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote
 from butterfly_guy.data.schwab_client import OrderRejectedError
 from butterfly_guy.execution.order_manager import (
@@ -1204,3 +1207,77 @@ async def test_paper_exit_falls_back_to_fresh_signal_mark():
     assert result["fill_price"] == pytest.approx(3.27)
     assert result["execution_diagnostics"]["observed_mark"] == 3.30
     assert result["execution_diagnostics"]["observed_bid"] is None
+
+
+# ---------------------------------------------------------------------------
+# execute_exit pricing rules (core/exit_pricing.py)
+# ---------------------------------------------------------------------------
+
+async def _exit_limits_for_rule(rule: str, spreads: list[LiveSpread]) -> list[float]:
+    settings = make_settings(price_ladder_step=0.10, price_ladder_steps=4, exit_pricing=rule)
+    om, _ = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    fills = [False] * (len(spreads) - 1) + [broker_fill()]
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(side_effect=spreads)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=fills)):
+        await om.execute_exit(candidate, current_value=2.50, quantity=1)
+    return [c[0][1] for c in om.builder.build_butterfly_close.call_args_list]
+
+
+_PATH = [  # 415-like wide spread, a bad tick, then a restart of the 4-step cycle
+    LiveSpread(bid=1.00, mark=1.85, ask=2.70),
+    LiveSpread(bid=0.80, mark=1.80, ask=2.80),
+    LiveSpread(bid=0.10, mark=0.60, ask=1.10),
+    LiveSpread(bid=1.30, mark=1.70, ask=2.10),
+    LiveSpread(bid=1.20, mark=1.60, ask=2.00),
+    LiveSpread(bid=1.25, mark=1.55, ask=1.85),
+]
+
+
+@pytest.mark.parametrize("rule", EXIT_PRICING_RULES)
+@pytest.mark.asyncio
+async def test_exit_submits_exactly_the_shared_rule_limits(rule):
+    """Live/research parity: execute_exit prices every step with exit_limit."""
+    limits = await _exit_limits_for_rule(rule, _PATH)
+    bids, mids, expected = [], [], []
+    for n, s in enumerate(_PATH):
+        bids = (bids + [s.bid])[-3:]
+        mids = (mids + [(s.bid + s.ask) / 2])[-3:]
+        expected.append(exit_limit(
+            rule, n, statistics.median(bids), statistics.median(mids),
+            ladder_step=0.10, ladder_steps=4, underlying="SPX",
+        ))
+    assert limits == pytest.approx(expected)
+
+
+@pytest.mark.asyncio
+async def test_default_exit_pricing_is_the_original_bid_ladder_with_restart():
+    assert ExecutionSettings().exit_pricing == "bid_ladder"
+    limits = await _exit_limits_for_rule("bid_ladder", _PATH)
+    # median bid + (3 - i mod 4) x 0.10, rounded up to $0.05
+    assert limits == pytest.approx([1.30, 1.10, 0.90, 0.80, 1.50, 1.45])
+
+
+@pytest.mark.asyncio
+async def test_mid_walk_starts_at_mid_and_holds_at_the_bid():
+    limits = await _exit_limits_for_rule("mid_walk", _PATH)
+    assert limits[0] == pytest.approx(1.85)
+    assert limits[3:] == pytest.approx([0.80, 1.20, 1.25])  # bid anchor, no restart
+
+
+@pytest.mark.asyncio
+async def test_mid_walk_falls_back_to_the_signal_mark_without_quotes():
+    settings = make_settings(price_ladder_step=0.10, exit_pricing="mid_walk")
+    om, _ = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
+        await om.execute_exit(candidate, current_value=3.72, quantity=1)
+    assert om.builder.build_butterfly_close.call_args[0][1] == pytest.approx(3.75)
+
+
+def test_exit_pricing_setting_matches_the_rules_and_rejects_unknown_values():
+    allowed = ExecutionSettings.model_fields["exit_pricing"].annotation.__args__
+    assert tuple(allowed) == EXIT_PRICING_RULES
+    with pytest.raises(ValidationError):
+        ExecutionSettings(exit_pricing="mid")

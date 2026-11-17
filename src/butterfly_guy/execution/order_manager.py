@@ -12,7 +12,8 @@ from time import monotonic
 from typing import Any, NamedTuple
 
 from butterfly_guy.core.config import ExecutionSettings
-from butterfly_guy.core.entry_pricing import entry_fill_within_limit, round_credit_limit
+from butterfly_guy.core.entry_pricing import entry_fill_within_limit
+from butterfly_guy.core.exit_pricing import exit_limit
 from butterfly_guy.core.logging import get_logger
 from butterfly_guy.core.metrics import (
     order_fill_duration,
@@ -754,9 +755,11 @@ class OrderManager:
             }
 
         deadline = now_utc() + dt.timedelta(seconds=timeout)
-        # Anchor on the median of the last few bids: a single bad low tick must not
-        # pin every later ladder step lower, while a sustained decline still does.
+        # Anchor on the median of the last few bids (and mids): a single bad low tick must
+        # not pin every later ladder step lower, while a sustained decline still does.
         recent_bids: deque[float] = deque(maxlen=EXIT_BID_ANCHOR_WINDOW)
+        recent_mids: deque[float] = deque(maxlen=EXIT_BID_ANCHOR_WINDOW)
+        submissions = 0  # counts across ladder cycles; the pricing rule decides restarts
         step_trace: list[dict[str, float | int | bool | None]] = []
         own_order_ids: set[str] = set()
 
@@ -773,17 +776,24 @@ class OrderManager:
                 spread = await self._fetch_live_spread(candidate)
                 if spread is not None:
                     recent_bids.append(spread.bid)
+                    recent_mids.append((spread.bid + spread.ask) / 2)
                 if self.settings.live_test_date is not None and spread is None:
                     # No closing order based on a stale signal or earlier ladder quote.
                     raise BrokerFillError(
                         "live test exit requires fresh leg quotes; supervise broker"
                     )
-                mid_price = statistics.median(recent_bids) if recent_bids else current_value
+                bid_anchor = statistics.median(recent_bids) if recent_bids else current_value
+                mid_anchor = statistics.median(recent_mids) if recent_mids else current_value
 
-                limit_price = round_credit_limit(
-                    max(0.05, mid_price + (max_steps - 1 - i) * step), self.underlying
+                limit_price = exit_limit(
+                    self.settings.exit_pricing, submissions, bid_anchor, mid_anchor,
+                    ladder_step=step, ladder_steps=max_steps, underlying=self.underlying,
                 )
-                log.debug("exit_ladder_step", step=i, price=limit_price, mid_price=mid_price)
+                submissions += 1
+                log.debug(
+                    "exit_ladder_step", step=i, price=limit_price, rule=self.settings.exit_pricing,
+                    bid_anchor=bid_anchor, mid_anchor=mid_anchor,
+                )
                 step_trace.append({
                     "step": i,
                     "limit": limit_price,
