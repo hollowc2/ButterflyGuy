@@ -26,6 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-      - run: uv run pytest -q tests/integration/test_database_smoke.py tests/integration/test_instance_role_db.py
+      - run: uv run pytest -q tests/integration/test_database_smoke.py tests/integration/test_instance_role_db.py tests/integration/test_spx_live_db.py
         env:
           CI_DATABASE_URL: postgresql://butterfly:butterfly@127.0.0.1:5432/butterfly_guy
