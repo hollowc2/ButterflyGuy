@@ -76,7 +76,7 @@ def test_trading_dashboard_selects_one_strategy_source_without_metric_pollution(
     assert strategy["label"] == "Source"
     assert strategy["type"] == "datasource"
     assert strategy["query"] == "grafana-postgresql-datasource"
-    assert strategy["regex"] == "/^TimescaleDB$/"
+    assert strategy["regex"] == "/^TimescaleDB( SPX Live)?$/"
     assert strategy["current"] == {
         "selected": True,
         "text": "TimescaleDB",
@@ -215,7 +215,7 @@ def test_trade_detail_defaults_to_primary_spx_and_selects_strategy_datasource() 
 
     assert strategy["type"] == "datasource"
     assert strategy["query"] == "grafana-postgresql-datasource"
-    assert strategy["regex"] == "/^TimescaleDB$/"
+    assert strategy["regex"] == "/^TimescaleDB( SPX Live)?$/"
     assert strategy["current"] == {
         "selected": True,
         "text": "TimescaleDB",

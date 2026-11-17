@@ -207,8 +207,15 @@ metrics server writes nothing).
 - Reload: edit with a timestamped backup (existing practice), then `docker kill -s HUP
   butterfly_prometheus`. Prometheus holds no token.
 
-**Grafana Prometheus panels** select `{underlying="SPX"}` without a job (P0 §7), so they would
-merge the two bots. Add `job="butterfly_spx"` to those SPX panels (PR 4).
+**Grafana Prometheus panels** already filter `job=~"butterfly_(spx|ndx|xsp)"`. PromQL regexes
+are fully anchored, so they exclude `butterfly_spx_live` with no change. (P0 §7 said otherwise
+from a truncated grep; corrected during Phase 2.)
+
+**Grafana SQL panels** follow the existing `strategy_datasource` variable on *Trading* and
+*Trade Detail*. PR 4 widens its regex from `/^TimescaleDB$/` to `/^TimescaleDB( SPX Live)?$/`,
+and the default stays `TimescaleDB` (paper). The dashboards are provisioned from the Helios
+checkout, so this ships with a checkout fast-forward. The live option appears once the
+`TimescaleDB SPX Live` data source exists (§14 step 8).
 
 **Alertmanager (closes P0 §1 new 3).**
 - `send_alertmanager` gains an optional `instance_role` label, sent only when the role is set.
@@ -440,7 +447,7 @@ It runs from the close-out and on demand. It reads no Schwab data.
 | D4 | `app_spx` env / image | At the next normal off-hours paper deploy, run the **same release** as live and add `BUTTERFLY_INSTANCE_ROLE=paper`; no separate recreate | **Yes**: same-release paper deploy with role=paper, normal off-hours deploy |
 | D5 | Pool size | No change (worst case ≈ 42/50) | No change (default, not separately asked) |
 | D6 | Discord | **A**: separate webhook `DISCORD_WEBHOOK_URL_SPX_LIVE` (Corey creates it and adds it to `.env`) | **Separate webhook** `DISCORD_WEBHOOK_URL_SPX_LIVE` |
-| D6b | Grafana | Add datasource `TimescaleDB SPX Live` (uid `timescaledb-spx-live`, as the candidate precedent) plus a datasource variable on *Trade Detail*; add `job="butterfly_spx"` to SPX Prometheus panels | As recommended (default, not separately asked) |
+| D6b | Grafana | Add datasource `TimescaleDB SPX Live` (uid `timescaledb-spx-live`, as the candidate precedent); let the existing `strategy_datasource` selector pick it; Prometheus panels need no change (§8) | As recommended (default, not separately asked) |
 
 ## 14. Rollout and rollback
 
@@ -471,7 +478,21 @@ recreated except in D4's normal deploy.
    compose-config validation, and the local two-instance rehearsal.
 3. **Pilot scripts v2 + paired report.** `deploy/spx-live/*.sh` with `DRY_RUN`,
    `notify.py`, `spx_live_db.py compare`; tests.
-4. **Grafana** (if D6b): job filters; Trade Detail datasource variable; provisioning snippet.
+4. **Grafana** (D6b): the `strategy_datasource` regex on *Trading* and *Trade Detail*. The
+   data source itself is a Helios-only provisioning edit (§14 step 8), mirroring
+   `TimescaleDB SPX Candidate`:
+
+   ```yaml
+     - name: TimescaleDB SPX Live
+       <<: *timescale_base
+       uid: timescaledb-spx-live
+       database: butterfly_guy_spx_live
+       jsonData:
+         sslmode: disable
+         postgresVersion: 1600
+         timescaledb: true
+         database: butterfly_guy_spx_live
+   ```
 
 ## 16. Downstream notes
 

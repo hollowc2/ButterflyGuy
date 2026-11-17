@@ -1730,7 +1730,7 @@
         "label": "Source",
         "type": "datasource",
         "query": "grafana-postgresql-datasource",
-        "regex": "/^TimescaleDB$/",
+        "regex": "/^TimescaleDB( SPX Live)?$/",
         "current": {
           "selected": true,
           "text": "TimescaleDB",
