@@ -1,0 +1,98 @@
+# Real-money SPX pilot that runs BESIDE paper SPX (docs/operations/concurrent-paper-live-spx-design.md).
+#
+# Its own compose project, so no `-p infra` command (including --remove-orphans) can touch it,
+# and infra/docker-compose.yml stays unchanged. Started only by the pilot scripts in
+# deploy/spx-live/, for one owner-approved session date:
+#
+#   SPX_LIVE_IMAGE=sha256:... SPX_LIVE_TEST_DATE=YYYY-MM-DD \
+#     docker compose --project-directory /opt/butterflyguy/infra \
+#       -f infra/docker-compose.spx-live.yml up -d --no-build --pull never app_spx_live
+#
+# Paper keeps app_spx / butterfly_spx_app / DB butterfly_guy / port 8000 / data/chains.
+# The live limits below are the same values as the replace-paper pilot override.
+name: butterfly-spx-live
+
+networks:
+  monitoring_net:
+    external: true
+
+services:
+  app_spx_live:
+    image: "${SPX_LIVE_IMAGE:?set reviewed immutable live image}"
+    pull_policy: never
+    container_name: butterfly_spx_live_app
+    restart: "no"
+    env_file:
+      - ../.env
+    command:
+      - /bin/sh
+      - -c
+      # The live webhook comes from ../.env inside the container, so compose never renders
+      # it; an unset value stops the shell before the bot starts (fail closed). Live trade
+      # posts therefore never go to paper's DISCORD_WEBHOOK_URL.
+      - >-
+        export LIVE_EXPECTED_SCHWAB_ACCOUNT_ID="$${SCHWAB_ACCOUNT_ID}"
+        DISCORD_WEBHOOK_URL="$${DISCORD_WEBHOOK_URL_SPX_LIVE:?set DISCORD_WEBHOOK_URL_SPX_LIVE in .env}"
+        && exec python -m butterfly_guy.scripts.run_live --config configs/config.yaml
+    volumes:
+      # Same token *directory* bind as app_spx (see infra/docker-compose.yml).
+      - "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}:${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}"
+      - ../configs/config.yaml:/app/configs/config.yaml
+      # Never paper's data/chains: both collectors would append to one SPX journal.
+      - ../data/chains-live:/app/data/chains
+    environment:
+      BUTTERFLY_INSTANCE_ROLE: live
+      SCHWAB_TOKEN_PATH: "${SCHWAB_GATEWAY_TOKEN_DIR:?set the host token directory}/tokens.json"
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__NAME: butterfly_guy_spx_live
+      DATABASE__USER: butterfly
+      ALERTMANAGER_URL: http://alertmanager:9093
+      SCHWAB_ACCESS_MODE: direct
+      SCHWAB_GATEWAY_SHADOW_READS: "false"
+      EXECUTION__PAPER_TRADING: "false"
+      EXECUTION__ALLOW_LIVE_TRADING: "true"
+      ALLOW_LIVE_TRADING: "true"
+      EXECUTION__LIVE_TEST_DATE: "${SPX_LIVE_TEST_DATE:?set supervised session YYYY-MM-DD}"
+      EXECUTION__LIVE_TEST_MAX_DEBIT: "4.0"
+      EXECUTION__RECORD_LIVE_EXECUTION: "true"
+      EXECUTION__LIVE_TEST_QUOTE_MAX_AGE_SECONDS: "10"
+      RISK__MAX_POSITION_SIZE: "1"
+      RISK__MAX_TRADES_PER_DAY: "1"
+      LIVE_ACCOUNT_ALLOCATION: "20000"
+      LIVE_MAX_ACCOUNT_DAILY_LOSS: "500"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - monitoring_net
+    ports:
+      - "127.0.0.1:8002:8000"  # Prometheus job butterfly_spx_live
+
+  # One-off DB gate/bootstrap runner for the pilot scripts (spx_live_db). Same image and DB
+  # host, but no token mount, no port, and never started by `up`:
+  #   docker compose ... run --rm spx_live_db_tool python -m butterfly_guy.scripts.spx_live_db check --db ...
+  spx_live_db_tool:
+    image: "${SPX_LIVE_IMAGE:?set reviewed immutable live image}"
+    pull_policy: never
+    profiles: [tools]
+    restart: "no"
+    env_file:
+      - ../.env
+    environment:
+      DATABASE__HOST: timescaledb
+      DATABASE__PORT: 5432
+      DATABASE__USER: butterfly
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - monitoring_net

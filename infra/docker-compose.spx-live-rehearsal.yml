@@ -1,0 +1,22 @@
+# Apply LAST over docker-compose.spx-live.yml, for the paper-only Helios rehearsal (Phase 3).
+# Same container, network, port and token bind as the live service, but paper mode,
+# role live_rehearsal, and its own DB and chain journal, so the live DB never holds a
+# paper row. No live limit or live-test date reaches the process.
+services:
+  app_spx_live:
+    environment:
+      BUTTERFLY_INSTANCE_ROLE: live_rehearsal
+      DATABASE__NAME: butterfly_guy_spx_live_rehearsal
+      EXECUTION__PAPER_TRADING: "true"
+      EXECUTION__ALLOW_LIVE_TRADING: "false"
+      ALLOW_LIVE_TRADING: "false"
+      EXECUTION__LIVE_TEST_DATE: !reset null
+      EXECUTION__LIVE_TEST_MAX_DEBIT: !reset null
+      EXECUTION__RECORD_LIVE_EXECUTION: !reset null
+      EXECUTION__LIVE_TEST_QUOTE_MAX_AGE_SECONDS: !reset null
+      RISK__MAX_POSITION_SIZE: !reset null
+      RISK__MAX_TRADES_PER_DAY: !reset null
+      LIVE_ACCOUNT_ALLOCATION: !reset null
+      LIVE_MAX_ACCOUNT_DAILY_LOSS: !reset null
+    volumes:
+      - ../data/chains-live-rehearsal:/app/data/chains
