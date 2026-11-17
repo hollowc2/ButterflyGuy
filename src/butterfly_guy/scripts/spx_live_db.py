@@ -194,7 +194,8 @@ async def copy_live_trade(
             """
             SELECT ts, event_type, data, underlying FROM decision_log
             WHERE underlying = $1
-              AND ts BETWEEN $2 - INTERVAL '1 hour' AND $3 + INTERVAL '1 hour'
+              AND ts BETWEEN $2::timestamptz - INTERVAL '1 hour'
+                         AND $3::timestamptz + INTERVAL '1 hour'
             ORDER BY ts, id
             """,
             trade["underlying"],
