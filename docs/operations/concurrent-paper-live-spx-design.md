@@ -164,8 +164,9 @@ bot's own DB (`trade_service.py:778-815`). There is no setting to turn the colle
 5. `run_migrations()`;
 6. `SchwabClientWrapper(...)`.
 
-A refusal logs `instance_role_refused` with the reason and exits non-zero. The metrics server
-starts after the checks.
+A refusal logs `instance_role_refused` with the reason and exits with code 2. The
+config-only checks run before the metrics server starts; the DB check runs after it (the
+metrics server writes nothing).
 
 **Tests:**
 - every refusal case;
