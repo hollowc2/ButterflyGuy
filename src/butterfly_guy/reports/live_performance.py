@@ -563,16 +563,11 @@ main { max-width: 1320px; margin: 0 auto; padding: 28px 24px 48px; }
   border-color: rgba(200, 146, 42, 0.45);
 }
 .site-link span { color: var(--accent); }
-.site-link-feature {
+.site-link-feature:hover,
+.site-link-feature:focus-visible {
   color: var(--accent);
   background: rgba(200, 146, 42, 0.1);
   border-color: rgba(200, 146, 42, 0.4);
-}
-.site-link-feature:hover,
-.site-link-feature:focus-visible {
-  color: var(--text);
-  background: rgba(200, 146, 42, 0.18);
-  border-color: var(--accent);
 }
 h1 { font-size: 28px; margin: 0 0 8px; font-weight: 600; }
 h2 { font-size: 15px; margin: 28px 0 10px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -813,7 +808,7 @@ main { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 2
 }
 .site-link span { color: var(--accent); }
 .site-link:hover { color: var(--text); border-color: rgba(200,146,42,.45); }
-.site-link-feature { color: var(--accent); background: rgba(200,146,42,.1); border-color: rgba(200,146,42,.4); }
+.site-link-feature:hover, .site-link-feature:focus-visible { color: var(--accent); background: rgba(200,146,42,.1); border-color: rgba(200,146,42,.4); }
 
 .eyebrow { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
 h1 { font-size: clamp(26px, 4vw, 34px); font-weight: 600; margin: 8px 0 10px; text-wrap: balance; letter-spacing: -.01em; }
