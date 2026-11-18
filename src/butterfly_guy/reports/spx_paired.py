@@ -2,7 +2,18 @@
 
 Each bot has its own database (docs/operations/concurrent-paper-live-spx-design.md §12).
 Selection marks come from the trade's per_width_bests entry for its chosen width; exit marks
-from exit_mark_at_signal. P&L is the DB's pre-fee figure.
+from exit_mark_at_signal. P&L is before fees on both sides: live's DB P&L already is, and a
+paper fill books the fee model (4 legs x paper_commission_per_contract per side, no exit
+side when cash-settled) into its price, so the report backs it out of paper's fills and P&L.
+
+The two bots often pick different flies from near-tied candidates, so live minus paper P&L
+mixes selection, path and fills. The live fill check prices live's own fly at its order-time
+marks (paper's mark model, before fees) and isolates the fill cost on every live trade.
+
+Order-time marks are the fly quote seen just before each order: the FILLED intent's
+before_submit observation for live, the execution diagnostics for paper. On a wide fly they
+can sit well away from the selection mark (paper's 2026-11-18 entry: 3.45 at selection, 3.63
+at the order), so that gap is reported as drift and never counted as fill cost.
 
 Each bot reads its own market data, so the report also shows when each read its entry inputs
 (chain, spot, VIX) and how often its monitor polled: two bots on the same day can pick different
@@ -45,6 +56,12 @@ FROM (
     FROM (SELECT DISTINCT ts FROM monitoring_leg_quotes WHERE trade_id = $1) p
 ) g
 """
+INTENT_MARKS_SQL = """
+SELECT side, candidate_snapshot->'execution_observations' AS observations
+FROM broker_order_intents
+WHERE trade_id = $1 AND status = 'FILLED'
+ORDER BY id
+"""
 # Entry inputs read this far apart are flagged: the market can move a strike in a few seconds.
 ENTRY_INPUT_GAP_FLAG_SECONDS = 2.0
 
@@ -62,6 +79,23 @@ def _pt(ts: dt.datetime | None) -> str | None:
     return None if ts is None else ts.astimezone(PACIFIC).strftime("%H:%M:%S")
 
 
+def _diff(a: float | None, b: float | None) -> float | None:
+    return None if a is None or b is None else round(a - b, 4)
+
+
+def intent_order_marks(rows: list[dict[str, Any]]) -> dict[str, float | None]:
+    """Each side's before_submit fly mark from its last FILLED intent."""
+    marks: dict[str, float | None] = {}
+    for row in rows:
+        observations = row.get("observations") or []
+        if isinstance(observations, str):
+            observations = json.loads(observations)
+        before = next((o for o in observations if o.get("phase") == "before_submit"), {})
+        spread = (before.get("quote") or {}).get("spread") or {}
+        marks[row["side"]] = _num(spread.get("mark"))
+    return marks
+
+
 def _iso(value: Any) -> dt.datetime | None:
     return dt.datetime.fromisoformat(value) if isinstance(value, str) else None
 
@@ -70,7 +104,9 @@ def _pt_tenths(ts: dt.datetime | None) -> str | None:
     return None if ts is None else ts.astimezone(PACIFIC).strftime("%H:%M:%S.%f")[:10]
 
 
-def summarize_trade(row: dict[str, Any]) -> dict[str, Any]:
+def summarize_trade(
+    row: dict[str, Any], paper_commission_per_contract: float | None = None
+) -> dict[str, Any]:
     meta = _metadata(row)
     width = row["wing_width"]
     best = next(
@@ -78,10 +114,35 @@ def summarize_trade(row: dict[str, Any]) -> dict[str, Any]:
     )
     entry_mark = _num(best.get("cost"))
     exit_mark = _num(meta.get("exit_mark_at_signal"))
-    entry_fill = _num(row["entry_price"])
-    exit_fill = _num(row.get("exit_price"))
     quantity = int(row.get("quantity") or 1)
+    # Mirrors OrderManager._commission: the per-side fee booked into a paper fill price.
+    side_fee = (
+        4 * quantity * paper_commission_per_contract / 100
+        if meta.get("paper_fill_model") and paper_commission_per_contract is not None
+        else 0.0
+    )
+    exit_fee = side_fee if row.get("exit_price") is not None and (
+        row.get("exit_reason") != "cash_settled"
+    ) else 0.0
+    entry_fill = _num(float(row["entry_price"]) - side_fee)
+    exit_fill = _num(None if row.get("exit_price") is None else float(row["exit_price"]) + exit_fee)
     pnl = row.get("pnl")
+    if pnl is not None:
+        pnl = float(pnl) + side_fee + exit_fee
+    intent_marks = row.get("intent_order_marks") or {}
+    entry_order_mark = _num(
+        (meta.get("entry_execution_diagnostics") or {}).get("observed_mark")
+    )
+    if entry_order_mark is None:
+        entry_order_mark = intent_marks.get("ENTRY")
+    if row.get("exit_reason") == "cash_settled":
+        exit_order_mark = exit_mark  # no order: the settlement value
+    else:
+        exit_order_mark = _num(
+            (meta.get("exit_execution_diagnostics") or {}).get("observed_mark")
+        )
+        if exit_order_mark is None:
+            exit_order_mark = intent_marks.get("EXIT")
     return {
         "trade_id": row["id"],
         "status": row["status"],
@@ -98,21 +159,39 @@ def summarize_trade(row: dict[str, Any]) -> dict[str, Any]:
         "reward_risk": _num(best.get("reward_risk")),
         "entry_mark": entry_mark,
         "entry_fill": entry_fill,
-        "entry_vs_mark": (
-            None if entry_mark is None else round(entry_fill - entry_mark, 4)
-        ),
+        "entry_vs_mark": _diff(entry_fill, entry_mark),
+        "entry_order_mark": entry_order_mark,
+        "entry_drift": _diff(entry_order_mark, entry_mark),
+        "entry_vs_order_mark": _diff(entry_fill, entry_order_mark),
         "exit_time_pt": _pt(row.get("exit_time")),
         "exit_reason": row.get("exit_reason"),
         "exit_mark": exit_mark,
         "exit_fill": exit_fill,
-        "exit_vs_mark": (
-            None if exit_mark is None or exit_fill is None else round(exit_fill - exit_mark, 4)
-        ),
-        "pnl_usd": None if pnl is None else round(float(pnl) * 100 * quantity, 2),
+        "exit_vs_mark": _diff(exit_fill, exit_mark),
+        "exit_order_mark": exit_order_mark,
+        "exit_drift": _diff(exit_order_mark, exit_mark),
+        "exit_vs_order_mark": _diff(exit_fill, exit_order_mark),
+        "pnl_usd": None if pnl is None else round(pnl * 100 * quantity, 2),
+        "paper_fees_backed_out_usd": round((side_fee + exit_fee) * 100 * quantity, 2),
         "paper_fill_model": meta.get("paper_fill_model"),
         "per_width_bests": meta.get("per_width_bests") or [],
         "monitor_polls": row.get("monitor_polls"),
         "monitor_median_gap_s": _num(row.get("monitor_median_gap_s")),
+    }
+
+
+def live_fill_check(trade: dict[str, Any], quantity: int = 1) -> dict[str, Any] | None:
+    """Live's actual P&L against its own fly at the order-time marks, before fees."""
+    marks = (trade["entry_order_mark"], trade["exit_order_mark"])
+    if None in marks or trade["pnl_usd"] is None:
+        return None
+    mark_pnl = round((marks[1] - marks[0]) * 100 * quantity, 2)
+    return {
+        "order_mark_pnl_usd": mark_pnl,
+        "actual_pnl_usd": trade["pnl_usd"],
+        "fill_cost_usd": round(trade["pnl_usd"] - mark_pnl, 2),
+        "entry_fill_usd": round(-trade["entry_vs_order_mark"] * 100 * quantity, 2),
+        "exit_fill_usd": round(trade["exit_vs_order_mark"] * 100 * quantity, 2),
     }
 
 
@@ -133,10 +212,11 @@ def pair_report(
     paper_blocks: list[dict[str, Any]],
     live_blocks: list[dict[str, Any]],
     rate_limited: dict[str, int] | None = None,
+    paper_commission_per_contract: float | None = None,
 ) -> dict[str, Any]:
     """``rate_limited`` is each bot's Schwab 429 count for the session, when the caller has it."""
-    paper = [summarize_trade(r) for r in paper_trades]
-    live = [summarize_trade(r) for r in live_trades]
+    paper = [summarize_trade(r, paper_commission_per_contract) for r in paper_trades]
+    live = [summarize_trade(r, paper_commission_per_contract) for r in live_trades]
     report: dict[str, Any] = {
         "date": session.isoformat(),
         "paper": paper,
@@ -148,6 +228,10 @@ def pair_report(
     flags = report["flags"]
     if live and any(t["paper_fill_model"] for t in live):
         flags.append("live DB holds a paper trade (rehearsal or misconfiguration)")
+    if live:
+        check = live_fill_check(live[0], int(live_trades[0].get("quantity") or 1))
+        if check is not None:
+            report["live_fill_check"] = check
     if not paper or not live:
         for name, trades, blocks in (("paper", paper, paper_blocks),
                                      ("live", live, live_blocks)):
@@ -191,8 +275,11 @@ def pair_report(
         diff = round(q["pnl_usd"] - p["pnl_usd"], 2)
         attribution: dict[str, Any] = {"live_minus_paper_usd": diff}
         if same_fly:
-            entry = -(q["entry_vs_mark"] or 0) * 100
-            exit_ = (q["exit_vs_mark"] or 0) * 100
+            # Against the order-time mark where recorded, else the selection/signal mark.
+            entry_gap = q["entry_vs_order_mark"]
+            exit_gap = q["exit_vs_order_mark"]
+            entry = -((q["entry_vs_mark"] if entry_gap is None else entry_gap) or 0) * 100
+            exit_ = ((q["exit_vs_mark"] if exit_gap is None else exit_gap) or 0) * 100
             attribution.update(
                 entry_fill_usd=round(entry, 2),
                 exit_fill_usd=round(exit_, 2),
@@ -213,6 +300,8 @@ async def fetch_side(conn: Any, session: dt.date) -> tuple[list[dict], list[dict
         polls = await conn.fetchrow(POLLS_SQL, trade["id"])
         trade["monitor_polls"] = polls["polls"] if polls else None
         trade["monitor_median_gap_s"] = polls["median_gap_s"] if polls else None
+        intents = [dict(r) for r in await conn.fetch(INTENT_MARKS_SQL, trade["id"])]
+        trade["intent_order_marks"] = intent_order_marks(intents)
     blocks = [
         dict(r)
         for r in await conn.fetch(BLOCKS_SQL, list(NO_TRADE_EVENTS), *session_window(session))
@@ -221,16 +310,19 @@ async def fetch_side(conn: Any, session: dt.date) -> tuple[list[dict], list[dict
 
 
 def render_markdown(report: dict[str, Any]) -> str:
-    lines = [f"# SPX paper vs live, {report['date']} (times PT, P&L pre-fee)", ""]
+    lines = [f"# SPX paper vs live, {report['date']} (times PT; fills and P&L before fees)", ""]
     rows = [
         ("trade id", "trade_id"), ("entry", "entry_time_pt"), ("direction", "direction"),
         ("strikes", "strikes"), ("width", "width"), ("VIX", "vix"), ("VIX read", "vix_time_pt"),
         ("entry chain read", "chain_fetched_pt"), ("entry spot", "entry_spot"),
         ("RR", "reward_risk"),
-        ("entry mark", "entry_mark"), ("entry fill", "entry_fill"),
-        ("entry fill − mark", "entry_vs_mark"), ("exit", "exit_time_pt"),
-        ("exit reason", "exit_reason"), ("exit mark", "exit_mark"), ("exit fill", "exit_fill"),
-        ("exit fill − mark", "exit_vs_mark"), ("P&L $", "pnl_usd"),
+        ("entry mark (selection)", "entry_mark"), ("entry mark (order)", "entry_order_mark"),
+        ("entry drift (order − selection)", "entry_drift"), ("entry fill", "entry_fill"),
+        ("entry fill − order mark", "entry_vs_order_mark"), ("exit", "exit_time_pt"),
+        ("exit reason", "exit_reason"), ("exit mark (signal)", "exit_mark"),
+        ("exit mark (order)", "exit_order_mark"), ("exit fill", "exit_fill"),
+        ("exit fill − order mark", "exit_vs_order_mark"), ("P&L $", "pnl_usd"),
+        ("paper fees backed out $", "paper_fees_backed_out_usd"),
         ("monitor polls", "monitor_polls"), ("median poll gap s", "monitor_median_gap_s"),
     ]
     paper = report["paper"][0] if report["paper"] else {}
@@ -253,6 +345,15 @@ def render_markdown(report: dict[str, Any]) -> str:
     if "entry_inputs_live_minus_paper" in report:
         lines.append(f"- **Entry inputs, live minus paper:** "
                      f"{report['entry_inputs_live_minus_paper']}")
+    if "live_fill_check" in report:
+        c = report["live_fill_check"]
+        lines.append(
+            f"- **Live fill check** (live's own fly at its order-time marks, before fees; "
+            f"holds whether or not the bots picked the same fly): marks "
+            f"${c['order_mark_pnl_usd']}, actual "
+            f"${c['actual_pnl_usd']}, fill cost ${c['fill_cost_usd']} "
+            f"(entry ${c['entry_fill_usd']}, exit ${c['exit_fill_usd']})"
+        )
     if "pnl_attribution" in report:
         lines.append(f"- **P&L attribution:** {report['pnl_attribution']}")
     if report.get("flags"):

@@ -64,6 +64,8 @@ elif cmd == "inspect":
         print(state["fingerprint"][name])
     elif fmt == "{{.Image}}":
         print(state["image"][name])
+    elif "ExitCode" in fmt:
+        print("exit 137 at 2026-11-20T17:02:00Z")
     elif "RestartCount" in fmt:
         print("true 0" if state["running"].get(name) else "false 0")
     elif "Mounts" in fmt:
@@ -255,7 +257,9 @@ def test_activation_starts_live_and_proves_paper_untouched(session):
     assert session.state["running"]["butterfly_spx_live_app"] is True
     assert (session.dir / "ACTIVATED").exists()
     assert (session.dir / "paper.fingerprint").read_text().strip() == PAPER_FINGERPRINT
+    assert (session.dir / "VERIFIED").exists()
     assert "RUNNING beside paper" in session.notifications()
+    assert "Close-out 13:45 PT" in session.notifications()
     assert_paper_never_changed(session)
 
 
@@ -319,6 +323,8 @@ def test_failed_verification_stops_only_the_live_container(session, change, reas
     assert session.state["running"]["butterfly_spx_app"] is True
     assert any("stop" in call for call in session.calls() if call[0] == "compose")
     assert "Live container stopped; paper untouched" in session.notifications()
+    assert (session.dir / "STOPPED").exists()
+    assert not (session.dir / "VERIFIED").exists()
     assert_paper_never_changed(session)
 
 
@@ -336,6 +342,7 @@ def test_closeout_when_flat_exports_reports_and_stops_live(session):
                             "--paper-rate-limited", "0", "--live-rate-limited", "0"]
     assert session.state["running"]["butterfly_spx_live_app"] is False
     assert "live container stopped, paper untouched" in session.notifications()
+    assert (session.dir / "STOPPED").exists()
     assert_paper_never_changed(session)
 
 
@@ -396,3 +403,87 @@ def test_notify_posts_only_to_the_live_webhook():
     assert 'get("DISCORD_WEBHOOK_URL_SPX_LIVE")' in source
     assert 'get("DISCORD_WEBHOOK_URL")' not in source
     assert textwrap.dedent(source).count("urlopen(") == 1
+
+
+def test_activation_message_quotes_the_session_closeout_time(session):
+    session.env_file(CLOSEOUT_PT="13:15")
+    result, out = session.run("activate.sh")
+    assert result.returncode == 0, out
+    assert "Close-out 13:15 PT" in session.notifications()
+
+
+def test_health_is_silent_before_activation_is_verified(session):
+    result, _ = session.run("health.sh")
+    assert result.returncode == 0
+    assert session.calls() == []
+    assert session.notifications() == ""
+
+
+def test_health_is_silent_on_a_healthy_session(session):
+    session.run("activate.sh")
+    before = session.notifications()
+
+    result, out = session.run("health.sh")
+
+    assert result.returncode == 0, out
+    assert "health fail=none" in out
+    assert session.notifications() == before
+    assert_paper_never_changed(session)
+
+
+def test_health_alerts_once_when_live_dies_holding_a_fly_then_on_recovery(session):
+    session.run("activate.sh")
+    activation_calls = len(session.calls())
+    session.state["running"]["butterfly_spx_live_app"] = False
+    session.state["check_rc"] = 1
+
+    first, out = session.run("health.sh")
+    assert first.returncode == 1
+    alert = session.notifications().splitlines()[-1]
+    assert "🚨" in alert and "NOT running (exit 137" in alert
+    assert "may hold an OPEN live fly" in alert
+
+    again, _ = session.run("health.sh")
+    assert again.returncode == 1
+    assert session.notifications().count("🚨") == 1  # no repeat for the same problem
+
+    session.state["running"]["butterfly_spx_live_app"] = True
+    session.run("health.sh")
+    assert "health recovered" in session.notifications().splitlines()[-1]
+    health_calls = session.calls()[activation_calls:]
+    assert not any(c[0] == "compose" and {"up", "stop"} & set(c) for c in health_calls)
+    assert_paper_never_changed(session)
+
+
+def test_health_says_when_the_dead_live_bot_was_flat(session):
+    session.run("activate.sh")
+    session.state["running"]["butterfly_spx_live_app"] = False
+
+    session.run("health.sh")
+
+    assert "butterfly_guy_spx_live is flat" in session.notifications().splitlines()[-1]
+
+
+def test_health_flags_a_changed_paper_container(session):
+    session.run("activate.sh")
+    session.state["fingerprint"]["butterfly_spx_app"] = "changed"
+
+    result, _ = session.run("health.sh")
+
+    assert result.returncode == 1
+    assert "⚠️" in session.notifications() and "PAPER CONTAINER CHANGED" in (
+        session.notifications()
+    )
+
+
+def test_health_is_silent_after_a_deliberate_stop(session):
+    session.run("activate.sh")
+    session.run("closeout.sh")
+    calls_before = len(session.calls())
+    notes_before = session.notifications()
+
+    result, _ = session.run("health.sh")
+
+    assert result.returncode == 0
+    assert len(session.calls()) == calls_before
+    assert session.notifications() == notes_before

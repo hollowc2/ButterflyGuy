@@ -3,7 +3,12 @@ from __future__ import annotations
 import datetime as dt
 import json
 
-from butterfly_guy.reports.spx_paired import pair_report, render_markdown, session_window
+from butterfly_guy.reports.spx_paired import (
+    intent_order_marks,
+    pair_report,
+    render_markdown,
+    session_window,
+)
 
 DAY = dt.date(2026, 11, 20)
 UTC = dt.timezone.utc
@@ -11,7 +16,11 @@ UTC = dt.timezone.utc
 
 def _trade(trade_id, *, center=7440.0, width=20, entry=2.0, mark=1.85, exit_price=1.3,
            exit_mark=1.65, exit_minute=23, reason="drawdown_afternoon", paper=False,
-           chain_read="2026-11-20T10:00:12.30-05:00", spot=7420.5, vix=21.07):
+           chain_read="2026-11-20T10:00:12.30-05:00", spot=7420.5, vix=21.07,
+           order_mark=None, exit_order_mark=None):
+    # Order-time marks default to the selection/signal marks (no drift).
+    order_mark = mark if order_mark is None else order_mark
+    exit_order_mark = exit_mark if exit_order_mark is None else exit_order_mark
     meta = {
         "per_width_bests": [
             {"cost": mark, "width": width, "center": center, "reward_risk": 9.81},
@@ -23,8 +32,14 @@ def _trade(trade_id, *, center=7440.0, width=20, entry=2.0, mark=1.85, exit_pric
         "selected_chain_snapshot_time": chain_read,
         "entry_spot": spot,
     }
+    intent_marks = {}
     if paper:
         meta["paper_fill_model"] = "mark_v1"
+        meta["entry_execution_diagnostics"] = {"observed_mark": order_mark}
+        if reason != "cash_settled":
+            meta["exit_execution_diagnostics"] = {"observed_mark": exit_order_mark}
+    else:
+        intent_marks = {"ENTRY": order_mark, "EXIT": exit_order_mark}
     return {
         "id": trade_id,
         "status": "CLOSED",
@@ -41,6 +56,7 @@ def _trade(trade_id, *, center=7440.0, width=20, entry=2.0, mark=1.85, exit_pric
         "pnl": exit_price - entry,
         "quantity": 1,
         "metadata": json.dumps(meta),
+        "intent_order_marks": intent_marks,
     }
 
 
@@ -63,6 +79,107 @@ def test_same_fly_attributes_pnl_to_fills_and_path():
     assert report["flags"] == []
 
 
+def test_live_fill_check_prices_lives_own_fly_at_its_marks():
+    live = _trade(100_000)  # entry 2.00 vs mark 1.85; exit 1.30 vs mark 1.65
+
+    report = pair_report(DAY, [], [live], [], [])
+
+    assert report["live_fill_check"] == {
+        "order_mark_pnl_usd": -20.0,
+        "actual_pnl_usd": -70.0,
+        "fill_cost_usd": -50.0,
+        "entry_fill_usd": -15.0,
+        "exit_fill_usd": -35.0,
+    }
+    assert "Live fill check" in render_markdown(report)
+
+
+def test_live_fill_check_needs_both_order_marks():
+    live = _trade(100_000)
+    live["intent_order_marks"] = {"ENTRY": 1.85}  # no recorded exit quote
+
+    assert "live_fill_check" not in pair_report(DAY, [], [live], [], [])
+
+
+def test_paper_fees_are_backed_out_so_both_sides_are_pre_fee():
+    # Paper books 4 x $1.15 = $0.046 per side into its fills: 1.85 + 0.046 -> 1.90 entry,
+    # 1.65 - 0.046 -> 1.60 exit.
+    paper = _trade(418, entry=1.90, exit_price=1.60, paper=True)
+    live = _trade(100_000)
+
+    report = pair_report(DAY, [paper], [live], [], [], paper_commission_per_contract=1.15)
+    p = report["paper"][0]
+
+    assert p["entry_fill"] == 1.854 and p["exit_fill"] == 1.646
+    assert p["pnl_usd"] == -20.8
+    assert p["paper_fees_backed_out_usd"] == 9.2
+    assert report["live"][0]["pnl_usd"] == -70.0  # live rows are never adjusted
+    assert report["live"][0]["paper_fees_backed_out_usd"] == 0.0
+    assert report["pnl_attribution"]["live_minus_paper_usd"] == -49.2
+
+
+def test_cash_settled_paper_trade_backs_out_only_the_entry_fee():
+    paper = _trade(418, entry=1.90, exit_price=0.0, exit_mark=0.0, reason="cash_settled",
+                   paper=True)
+
+    p = pair_report(DAY, [paper], [], [], [], paper_commission_per_contract=1.15)["paper"][0]
+
+    assert p["exit_fill"] == 0.0
+    assert p["paper_fees_backed_out_usd"] == 4.6
+    assert p["pnl_usd"] == -185.4
+
+
+def test_fill_check_uses_order_time_marks_and_reports_drift_apart():
+    # Selection mark 1.85 but 1.95 at the order: 0.10 is drift, only 0.05 is fill cost.
+    # Exit signal mark 1.65, 1.60 at the order, filled 1.30.
+    live = _trade(100_000, order_mark=1.95, exit_order_mark=1.60)
+
+    report = pair_report(DAY, [], [live], [], [])
+    q = report["live"][0]
+
+    assert q["entry_drift"] == 0.1 and q["entry_vs_order_mark"] == 0.05
+    assert q["exit_drift"] == -0.05 and q["exit_vs_order_mark"] == -0.3
+    assert report["live_fill_check"] == {
+        "order_mark_pnl_usd": -35.0,
+        "actual_pnl_usd": -70.0,
+        "fill_cost_usd": -35.0,
+        "entry_fill_usd": -5.0,
+        "exit_fill_usd": -30.0,
+    }
+
+
+def test_paper_order_marks_come_from_its_execution_diagnostics():
+    # 2026-11-18 trade 420: selection 3.45, order-time mark 3.63, booked 3.68 with fees.
+    paper = _trade(420, entry=3.68, mark=3.45, order_mark=3.63, paper=True)
+
+    p = pair_report(DAY, [paper], [], [], [], paper_commission_per_contract=1.15)["paper"][0]
+
+    assert p["entry_drift"] == 0.18
+    assert abs(p["entry_vs_order_mark"]) < 0.005  # only cent rounding of the booked fee
+
+
+def test_cash_settled_exit_uses_the_settlement_value_as_its_order_mark():
+    live = _trade(100_000, exit_price=0.0, exit_mark=0.0, reason="cash_settled")
+    live["intent_order_marks"] = {"ENTRY": 1.85}
+
+    report = pair_report(DAY, [], [live], [], [])
+
+    assert report["live"][0]["exit_order_mark"] == 0.0
+    assert report["live_fill_check"]["exit_fill_usd"] == 0.0
+
+
+def test_intent_order_marks_reads_before_submit_quotes():
+    rows = [
+        {"side": "ENTRY", "observations": json.dumps([
+            {"phase": "before_submit", "quote": {"spread": {"mark": 2.1000000000000014}}},
+            {"phase": "fill_detected", "quote": {"spread": {"mark": 1.95}}},
+        ])},
+        {"side": "EXIT", "observations": [{"phase": "before_submit", "quote": None}]},
+    ]
+
+    assert intent_order_marks(rows) == {"ENTRY": 2.1, "EXIT": None}
+
+
 def test_different_fly_exit_and_timing_are_flagged():
     paper = _trade(418, center=7400.0, width=40, mark=3.9, entry=3.9, exit_price=3.0,
                    exit_mark=3.0, exit_minute=0, reason="cash_settled", paper=True)
@@ -75,6 +192,7 @@ def test_different_fly_exit_and_timing_are_flagged():
     assert "different exit: paper cash_settled vs live drawdown_afternoon" in flags
     assert "exit time gap +23.0 min" in flags
     assert set(report["pnl_attribution"]) == {"live_minus_paper_usd"}  # no fill split
+    assert report["live_fill_check"]["fill_cost_usd"] == -50.0  # still isolated
     assert "Candidates at selection" in render_markdown(report)
 
 

@@ -20,6 +20,8 @@ INFRA=${INFRA:-$ROOT/infra}
 DATA=${DATA:-$ROOT/data}
 PY=${PY:-$ROOT/.venv/bin/python}
 WAIT_SECONDS=${WAIT_SECONDS:-120}
+# The close-out timer's time, for messages only.
+CLOSEOUT_PT=${CLOSEOUT_PT:-13:45}
 LIVE_PORT=8002
 PAPER_C=butterfly_spx_app
 PAPER_DB=butterfly_guy
@@ -191,7 +193,9 @@ paired_report() {
 
 stop_live() {
   # The v2 rollback: stop (never rm) the live container so its logs survive; never paper.
+  # STOPPED tells health.sh the stop was deliberate.
   echo "$(ts) stopping $LIVE_C"
+  act touch "$D/STOPPED"
   act compose stop app_spx_live
   [ "$DRY_RUN" = 1 ] || [ "$(running "$LIVE_C")" = 0 ]
 }

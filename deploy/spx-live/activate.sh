@@ -51,5 +51,6 @@ if [ -n "$fail" ]; then
   fi
   exit 1
 fi
-notify "✅ $LABEL $DATE RUNNING beside paper: 1 fly max, ≤4.00 debit, entries 07:00–07:45 PT, DB $LIVE_DB. Close-out 13:45 PT."
+notify "✅ $LABEL $DATE RUNNING beside paper: 1 fly max, ≤4.00 debit, entries 07:00–07:45 PT, DB $LIVE_DB. Close-out $CLOSEOUT_PT PT."
+act touch "$D/VERIFIED"
 echo "=== $(ts) activation done"

@@ -295,6 +295,7 @@ async def compare(
     paper_name: str,
     live_name: str,
     rate_limited: dict[str, int] | None = None,
+    paper_commission_per_contract: float | None = None,
 ) -> dict[str, Any]:
     """Paired paper-vs-live report for one session; both databases read-only."""
     paper = await connect_read_only(base, paper_name)
@@ -306,7 +307,9 @@ async def compare(
         await paper.close()
         await live.close()
     return spx_paired.pair_report(
-        session, paper_trades, live_trades, paper_blocks, live_blocks, rate_limited
+        session, paper_trades, live_trades, paper_blocks, live_blocks,
+        rate_limited=rate_limited,
+        paper_commission_per_contract=paper_commission_per_contract,
     )
 
 
@@ -333,11 +336,15 @@ async def _main(argv: list[str] | None = None) -> int:
     p.add_argument("--live-rate-limited", type=int)
     args = parser.parse_args(argv)
 
-    base = load_config(args.config).database
+    config = load_config(args.config)
+    base = config.database
     if args.command == "compare":
         counts = {"paper": args.paper_rate_limited, "live": args.live_rate_limited}
-        rate_limited = None if None in counts.values() else counts
-        report = await compare(base, args.date, args.paper_db, args.live_db, rate_limited)
+        report = await compare(
+            base, args.date, args.paper_db, args.live_db,
+            rate_limited=None if None in counts.values() else counts,
+            paper_commission_per_contract=config.execution.paper_commission_per_contract,
+        )
         markdown = spx_paired.render_markdown(report)
         if args.out_dir:
             args.out_dir.mkdir(parents=True, exist_ok=True)
