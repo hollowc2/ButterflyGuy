@@ -332,10 +332,29 @@ def test_closeout_when_flat_exports_reports_and_stops_live(session):
     assert (evidence / "paired-report.md").read_text() == "# paired report\n"
     assert (evidence / "container.log").exists()
     compare = next(c for c in session.calls() if "compare" in c)
-    assert compare[-4:] == ["--date", TODAY, "--live-db", "butterfly_guy_spx_live"]
+    assert compare[-8:] == ["--date", TODAY, "--live-db", "butterfly_guy_spx_live",
+                            "--paper-rate-limited", "0", "--live-rate-limited", "0"]
     assert session.state["running"]["butterfly_spx_live_app"] is False
     assert "live container stopped, paper untouched" in session.notifications()
     assert_paper_never_changed(session)
+
+
+def test_closeout_passes_each_containers_429_count_to_the_paired_report(session):
+    session.run("activate.sh")
+    session.state["logs"] = "\n".join([
+        '{"event": "live_trading_starting", "level": "info"}',
+        '{"endpoint": "get_option_chain", "wait": 1, "event": "rate_limited"}',
+        '{"endpoint": "get_option_chain", "wait": 1, "event": "rate_limited"}',
+    ])
+
+    result, out = session.run("closeout.sh")
+
+    assert result.returncode == 0, out
+    compare = next(c for c in session.calls() if "compare" in c)
+    assert compare[-4:] == ["--paper-rate-limited", "2", "--live-rate-limited", "2"]
+    since = [c for c in session.calls() if c[0] == "logs" and "--since" in c]
+    assert {c[-1] for c in since} == {"butterfly_spx_app", "butterfly_spx_live_app"}
+    assert all(c[c.index("--since") + 1] == f"{TODAY}T00:00:00Z" for c in since)
 
 
 def test_closeout_when_not_flat_leaves_live_running(session):

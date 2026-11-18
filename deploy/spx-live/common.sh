@@ -175,10 +175,17 @@ export_evidence() {
 
 save_logs() { docker logs "$LIVE_C" >"$1/container.log" 2>&1; }
 
+rate_limited_count() {
+  # Schwab 429s logged by a container since the session date's UTC midnight (logs are UTC).
+  docker logs --since "${DATE}T00:00:00Z" "$1" 2>&1 | grep -c '"rate_limited"' || true
+}
+
 paired_report() {
   # Read-only on both databases; see butterfly_guy.reports.spx_paired.
   compose --profile tools run --rm -T spx_live_db_tool \
     python -m butterfly_guy.scripts.spx_live_db compare --date "$DATE" --live-db "$LIVE_DB" \
+    --paper-rate-limited "$(rate_limited_count "$PAPER_C")" \
+    --live-rate-limited "$(rate_limited_count "$LIVE_C")" \
     >"$1/paired-report.md"
 }
 

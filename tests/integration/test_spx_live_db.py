@@ -11,6 +11,7 @@ import pytest
 from butterfly_guy.core.config import DatabaseSettings
 from butterfly_guy.db.connection import DatabasePool
 from butterfly_guy.db.migrations.run_migrations import run_migrations
+from butterfly_guy.reports import spx_paired
 from butterfly_guy.scripts import spx_live_db
 
 DAY = dt.date(2026, 11, 16)
@@ -140,6 +141,11 @@ async def test_bootstrap_seed_and_check_on_real_scratch_databases():
                 "SELECT SUM(pnl * 100 * quantity) FROM butterfly_trades WHERE status = 'CLOSED'"
             )
             assert weekly == -70
+
+            # The paired report counts the trade's distinct monitor polls and their spacing.
+            trades, _ = await spx_paired.fetch_side(conn, DAY)
+            assert [(t["id"], t["monitor_polls"], float(t["monitor_median_gap_s"]))
+                    for t in trades] == [(415, 3, 60.0)]
 
             # seed-daily-bars is incremental.
             source_conn = await spx_live_db.connect_read_only(base, source)

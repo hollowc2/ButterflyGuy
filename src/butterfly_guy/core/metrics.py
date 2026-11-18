@@ -99,6 +99,10 @@ schwab_api_calls = Counter(
 schwab_api_errors = Counter(
     "butterfly_schwab_api_errors_total", "Total Schwab API errors", ["endpoint"]
 )
+# 429s are retried without raising, so they never reach schwab_api_errors.
+schwab_rate_limited = Counter(
+    "butterfly_schwab_rate_limited_total", "Schwab HTTP 429 responses", ["endpoint"]
+)
 
 # Gateway shadow reads — observation only; the direct read is always what callers get.
 # ``result`` is agree | discrepancy | direct_unavailable, so agreements are visible and
