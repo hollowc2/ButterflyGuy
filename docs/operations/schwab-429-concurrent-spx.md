@@ -417,8 +417,17 @@ of the hottest window. Prefer H first.
    - **Owner decision:** whether to cap the wasted 4 s sleep after the final attempt. If yes, it ships as
      opt-in like everything else.
 
-Per the brief, no code is written until the owner picks. Any chosen option will be implemented opt-in
-behind an env var, with tests, as a PR.
+### Owner decisions, 2026-11-18
+
+| Decision | Choice |
+|---|---|
+| Phase B (paper SPX → gateway) | **Dropped.** Both SPX bots stay `direct` |
+| 429 action now | **Add the counter only.** `butterfly_schwab_rate_limited_total{endpoint}`, incremented in `_retry`'s 429 branch. Metrics only, no behavior change, so no env gate. No offset (C), no retry tuning (E), and no reprioritized leg quotes (G) for now |
+| Paired report | **Add input timing (H).** Each bot's entry chain-read time, spot and VIX read time; the live-minus-paper gap, flagged at ≥ 2 s; monitor poll count and median poll gap; each bot's 429 count, taken from its container logs at close-out (`deploy/spx-live/common.sh` `rate_limited_count`) |
+| Ask Schwab Trader API Support | No |
+
+Both changes ship in the same PR as this report. Neither changes trading behavior. The counter starts
+counting on each bot's next deploy: D4 for paper, the next live release for live.
 
 ### What was resolved on 11-18, and what remains
 

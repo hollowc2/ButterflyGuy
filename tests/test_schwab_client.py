@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from butterfly_guy.core.config import SchwabSettings
+from butterfly_guy.core.metrics import schwab_api_errors, schwab_rate_limited
 from butterfly_guy.data.schwab_client import OrderRejectedError, SchwabClientWrapper
 
 
@@ -411,6 +412,18 @@ async def test_retry_retries_5xx_and_429_then_succeeds(no_sleep, first):
 
     assert await schwab._retry(func, endpoint="get_quote") is ok
     assert func.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_retry_counts_each_429_without_counting_an_error(no_sleep):
+    schwab = SchwabClientWrapper(SchwabSettings(account_id="123"))
+    endpoint = "get_option_chain_429_count"
+    func = AsyncMock(side_effect=[_http_response(429), _http_response(429), _http_response(200)])
+
+    await schwab._retry(func, endpoint=endpoint)
+
+    assert schwab_rate_limited.labels(endpoint=endpoint)._value.get() == 2
+    assert schwab_api_errors.labels(endpoint=endpoint)._value.get() == 0
 
 
 @pytest.mark.asyncio

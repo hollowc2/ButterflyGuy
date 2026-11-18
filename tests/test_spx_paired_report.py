@@ -10,14 +10,18 @@ UTC = dt.timezone.utc
 
 
 def _trade(trade_id, *, center=7440.0, width=20, entry=2.0, mark=1.85, exit_price=1.3,
-           exit_mark=1.65, exit_minute=23, reason="drawdown_afternoon", paper=False):
+           exit_mark=1.65, exit_minute=23, reason="drawdown_afternoon", paper=False,
+           chain_read="2026-11-20T10:00:12.30-05:00", spot=7420.5, vix=21.07):
     meta = {
         "per_width_bests": [
             {"cost": mark, "width": width, "center": center, "reward_risk": 9.81},
             {"cost": 3.9, "width": 40, "center": 7400.0, "reward_risk": 9.26},
         ],
         "exit_mark_at_signal": exit_mark,
-        "vix": 21.07,
+        "vix": vix,
+        "vix_timestamp": "2026-11-20T15:00:00.013267+00:00",
+        "selected_chain_snapshot_time": chain_read,
+        "entry_spot": spot,
     }
     if paper:
         meta["paper_fill_model"] = "mark_v1"
@@ -101,3 +105,46 @@ def test_session_window_is_the_eastern_calendar_day():
     start, end = session_window(DAY)
     assert start.isoformat() == "2026-11-20T00:00:00-05:00"
     assert end - start == dt.timedelta(days=1)
+
+
+def test_entry_inputs_read_seconds_apart_are_flagged_as_timing():
+    # 2026-11-18 rehearsal: the 15 s entry loops ran 4.9 s apart and picked 7455 vs 7450.
+    paper = _trade(420, center=7455.0, paper=True, chain_read="2026-11-18T10:00:07.426487-05:00",
+                   spot=7360.16, vix=24.49)
+    live = _trade(100_000, center=7450.0, chain_read="2026-11-18T10:00:12.316712-05:00",
+                  spot=7358.14, vix=24.33)
+
+    report = pair_report(DAY, [paper], [live], [], [])
+
+    assert report["entry_inputs_live_minus_paper"] == {
+        "chain_read_gap_s": 4.9, "spot_diff": -2.02, "vix_diff": -0.16,
+    }
+    assert any(f.startswith("entry inputs read +4.9 s apart") for f in report["flags"])
+    markdown = render_markdown(report)
+    assert "| entry chain read | 07:00:07.4 | 07:00:12.3 |" in markdown
+    assert "| VIX read | 07:00:00.0 | 07:00:00.0 |" in markdown
+
+
+def test_entry_inputs_read_together_are_not_flagged():
+    report = pair_report(DAY, [_trade(418, paper=True)], [_trade(100_000)], [], [])
+
+    assert report["entry_inputs_live_minus_paper"]["chain_read_gap_s"] == 0.0
+    assert report["flags"] == []
+
+
+def test_monitor_polls_and_rate_limits_are_shown_per_bot():
+    paper, live = _trade(418, paper=True), _trade(100_000)
+    paper.update(monitor_polls=215, monitor_median_gap_s=2.64)
+    live.update(monitor_polls=224, monitor_median_gap_s=2.61)
+
+    report = pair_report(DAY, [paper], [live], [], [], rate_limited={"paper": 6, "live": 8})
+    markdown = render_markdown(report)
+
+    assert "| monitor polls | 215 | 224 |" in markdown
+    assert "| median poll gap s | 2.64 | 2.61 |" in markdown
+    assert "| Schwab 429s | 6 | 8 |" in markdown
+
+
+def test_rate_limit_row_is_omitted_when_counts_are_unknown():
+    report = pair_report(DAY, [_trade(418, paper=True)], [_trade(100_000)], [], [])
+    assert "Schwab 429s" not in render_markdown(report)

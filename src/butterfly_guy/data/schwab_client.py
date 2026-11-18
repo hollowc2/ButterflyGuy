@@ -12,7 +12,11 @@ import httpx
 
 from butterfly_guy.core.config import SchwabSettings
 from butterfly_guy.core.logging import get_logger
-from butterfly_guy.core.metrics import schwab_api_calls, schwab_api_errors
+from butterfly_guy.core.metrics import (
+    schwab_api_calls,
+    schwab_api_errors,
+    schwab_rate_limited,
+)
 from butterfly_guy.core.time_utils import EASTERN, market_close_time, now_eastern, session_date
 
 log = get_logger(__name__)
@@ -243,6 +247,7 @@ class SchwabClientWrapper:
                 schwab_api_calls.labels(endpoint=endpoint).inc()
                 resp = await func(*args, **kwargs)
                 if resp.status_code == 429:
+                    schwab_rate_limited.labels(endpoint=endpoint).inc()
                     wait = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
                     log.warning("rate_limited", endpoint=endpoint, wait=wait)
                     last_err = RuntimeError(f"HTTP 429 rate limited on {endpoint}")
