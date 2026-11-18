@@ -2,7 +2,9 @@
 
 Each bot has its own database (docs/operations/concurrent-paper-live-spx-design.md §12).
 Selection marks come from the trade's per_width_bests entry for its chosen width; exit marks
-from exit_mark_at_signal. P&L is the DB's pre-fee figure.
+from exit_mark_at_signal. P&L is before fees on both sides: live's DB P&L already is, and a
+paper fill books the fee model (4 legs x paper_commission_per_contract per side, no exit
+side when cash-settled) into its price, so the report backs it out of paper's fills and P&L.
 
 The two bots often pick different flies from near-tied candidates, so live minus paper P&L
 mixes selection, path and fills. The live fill check prices live's own fly at its marks
@@ -74,7 +76,9 @@ def _pt_tenths(ts: dt.datetime | None) -> str | None:
     return None if ts is None else ts.astimezone(PACIFIC).strftime("%H:%M:%S.%f")[:10]
 
 
-def summarize_trade(row: dict[str, Any]) -> dict[str, Any]:
+def summarize_trade(
+    row: dict[str, Any], paper_commission_per_contract: float | None = None
+) -> dict[str, Any]:
     meta = _metadata(row)
     width = row["wing_width"]
     best = next(
@@ -82,10 +86,21 @@ def summarize_trade(row: dict[str, Any]) -> dict[str, Any]:
     )
     entry_mark = _num(best.get("cost"))
     exit_mark = _num(meta.get("exit_mark_at_signal"))
-    entry_fill = _num(row["entry_price"])
-    exit_fill = _num(row.get("exit_price"))
     quantity = int(row.get("quantity") or 1)
+    # Mirrors OrderManager._commission: the per-side fee booked into a paper fill price.
+    side_fee = (
+        4 * quantity * paper_commission_per_contract / 100
+        if meta.get("paper_fill_model") and paper_commission_per_contract is not None
+        else 0.0
+    )
+    exit_fee = side_fee if row.get("exit_price") is not None and (
+        row.get("exit_reason") != "cash_settled"
+    ) else 0.0
+    entry_fill = _num(float(row["entry_price"]) - side_fee)
+    exit_fill = _num(None if row.get("exit_price") is None else float(row["exit_price"]) + exit_fee)
     pnl = row.get("pnl")
+    if pnl is not None:
+        pnl = float(pnl) + side_fee + exit_fee
     return {
         "trade_id": row["id"],
         "status": row["status"],
@@ -112,7 +127,8 @@ def summarize_trade(row: dict[str, Any]) -> dict[str, Any]:
         "exit_vs_mark": (
             None if exit_mark is None or exit_fill is None else round(exit_fill - exit_mark, 4)
         ),
-        "pnl_usd": None if pnl is None else round(float(pnl) * 100 * quantity, 2),
+        "pnl_usd": None if pnl is None else round(pnl * 100 * quantity, 2),
+        "paper_fees_backed_out_usd": round((side_fee + exit_fee) * 100 * quantity, 2),
         "paper_fill_model": meta.get("paper_fill_model"),
         "per_width_bests": meta.get("per_width_bests") or [],
         "monitor_polls": row.get("monitor_polls"),
@@ -152,10 +168,11 @@ def pair_report(
     paper_blocks: list[dict[str, Any]],
     live_blocks: list[dict[str, Any]],
     rate_limited: dict[str, int] | None = None,
+    paper_commission_per_contract: float | None = None,
 ) -> dict[str, Any]:
     """``rate_limited`` is each bot's Schwab 429 count for the session, when the caller has it."""
-    paper = [summarize_trade(r) for r in paper_trades]
-    live = [summarize_trade(r) for r in live_trades]
+    paper = [summarize_trade(r, paper_commission_per_contract) for r in paper_trades]
+    live = [summarize_trade(r, paper_commission_per_contract) for r in live_trades]
     report: dict[str, Any] = {
         "date": session.isoformat(),
         "paper": paper,
@@ -244,7 +261,7 @@ async def fetch_side(conn: Any, session: dt.date) -> tuple[list[dict], list[dict
 
 
 def render_markdown(report: dict[str, Any]) -> str:
-    lines = [f"# SPX paper vs live, {report['date']} (times PT, P&L pre-fee)", ""]
+    lines = [f"# SPX paper vs live, {report['date']} (times PT; fills and P&L before fees)", ""]
     rows = [
         ("trade id", "trade_id"), ("entry", "entry_time_pt"), ("direction", "direction"),
         ("strikes", "strikes"), ("width", "width"), ("VIX", "vix"), ("VIX read", "vix_time_pt"),
@@ -254,6 +271,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         ("entry fill − mark", "entry_vs_mark"), ("exit", "exit_time_pt"),
         ("exit reason", "exit_reason"), ("exit mark", "exit_mark"), ("exit fill", "exit_fill"),
         ("exit fill − mark", "exit_vs_mark"), ("P&L $", "pnl_usd"),
+        ("paper fees backed out $", "paper_fees_backed_out_usd"),
         ("monitor polls", "monitor_polls"), ("median poll gap s", "monitor_median_gap_s"),
     ]
     paper = report["paper"][0] if report["paper"] else {}

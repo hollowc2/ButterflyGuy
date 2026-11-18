@@ -87,6 +87,34 @@ def test_live_fill_check_needs_both_marks():
     assert "live_fill_check" not in pair_report(DAY, [], [live], [], [])
 
 
+def test_paper_fees_are_backed_out_so_both_sides_are_pre_fee():
+    # Paper books 4 x $1.15 = $0.046 per side into its fills: 1.85 + 0.046 -> 1.90 entry,
+    # 1.65 - 0.046 -> 1.60 exit.
+    paper = _trade(418, entry=1.90, exit_price=1.60, paper=True)
+    live = _trade(100_000)
+
+    report = pair_report(DAY, [paper], [live], [], [], paper_commission_per_contract=1.15)
+    p = report["paper"][0]
+
+    assert p["entry_fill"] == 1.854 and p["exit_fill"] == 1.646
+    assert p["pnl_usd"] == -20.8
+    assert p["paper_fees_backed_out_usd"] == 9.2
+    assert report["live"][0]["pnl_usd"] == -70.0  # live rows are never adjusted
+    assert report["live"][0]["paper_fees_backed_out_usd"] == 0.0
+    assert report["pnl_attribution"]["live_minus_paper_usd"] == -49.2
+
+
+def test_cash_settled_paper_trade_backs_out_only_the_entry_fee():
+    paper = _trade(418, entry=1.90, exit_price=0.0, exit_mark=0.0, reason="cash_settled",
+                   paper=True)
+
+    p = pair_report(DAY, [paper], [], [], [], paper_commission_per_contract=1.15)["paper"][0]
+
+    assert p["exit_fill"] == 0.0
+    assert p["paper_fees_backed_out_usd"] == 4.6
+    assert p["pnl_usd"] == -185.4
+
+
 def test_different_fly_exit_and_timing_are_flagged():
     paper = _trade(418, center=7400.0, width=40, mark=3.9, entry=3.9, exit_price=3.0,
                    exit_mark=3.0, exit_minute=0, reason="cash_settled", paper=True)
