@@ -240,7 +240,7 @@ def test_entry_inputs_read_seconds_apart_are_flagged_as_timing():
     assert any(f.startswith("entry inputs read +4.9 s apart") for f in report["flags"])
     markdown = render_markdown(report)
     assert "| entry chain read | 07:00:07.4 | 07:00:12.3 |" in markdown
-    assert "| VIX read | 07:00:00.0 | 07:00:00.0 |" in markdown
+    assert "| VIX as of | 07:00:00.0 | 07:00:00.0 |" in markdown
 
 
 def test_entry_inputs_read_together_are_not_flagged():
