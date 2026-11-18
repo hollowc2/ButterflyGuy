@@ -423,7 +423,7 @@ of the hottest window. Prefer H first.
 |---|---|
 | Phase B (paper SPX → gateway) | **Dropped.** Both SPX bots stay `direct` |
 | 429 action now | **Add the counter only.** `butterfly_schwab_rate_limited_total{endpoint}`, incremented in `_retry`'s 429 branch. Metrics only, no behavior change, so no env gate. No offset (C), no retry tuning (E), and no reprioritized leg quotes (G) for now |
-| Paired report | **Add input timing (H).** Each bot's entry chain-read time, spot and VIX read time; the live-minus-paper gap, flagged at ≥ 2 s; monitor poll count and median poll gap; each bot's 429 count, taken from its container logs at close-out (`deploy/spx-live/common.sh` `rate_limited_count`) |
+| Paired report | **Add input timing (H).** Each bot's entry chain-read time, spot, and the time of the collector's VIX row it used; the live-minus-paper gap, flagged at ≥ 2 s; monitor poll count and median poll gap; each bot's 429 count, taken from its container logs at close-out (`deploy/spx-live/common.sh` `rate_limited_count`) |
 | Ask Schwab Trader API Support | No |
 
 Both changes ship in the same PR as this report. Neither changes trading behavior. The counter starts

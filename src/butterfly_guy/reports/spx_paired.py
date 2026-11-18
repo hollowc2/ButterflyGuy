@@ -152,7 +152,8 @@ def summarize_trade(
                     float(row["upper_strike"])],
         "width": width,
         "vix": _num(meta.get("vix")),
-        "vix_time_pt": _pt_tenths(_iso(meta.get("vix_timestamp"))),
+        # The collector's minute row the bot used, not when the bot read it.
+        "vix_as_of_pt": _pt_tenths(_iso(meta.get("vix_timestamp"))),
         "chain_fetched_at": meta.get("selected_chain_snapshot_time"),
         "chain_fetched_pt": _pt_tenths(_iso(meta.get("selected_chain_snapshot_time"))),
         "entry_spot": _num(meta.get("entry_spot")),
@@ -313,7 +314,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines = [f"# SPX paper vs live, {report['date']} (times PT; fills and P&L before fees)", ""]
     rows = [
         ("trade id", "trade_id"), ("entry", "entry_time_pt"), ("direction", "direction"),
-        ("strikes", "strikes"), ("width", "width"), ("VIX", "vix"), ("VIX read", "vix_time_pt"),
+        ("strikes", "strikes"), ("width", "width"), ("VIX", "vix"), ("VIX as of", "vix_as_of_pt"),
         ("entry chain read", "chain_fetched_pt"), ("entry spot", "entry_spot"),
         ("RR", "reward_risk"),
         ("entry mark (selection)", "entry_mark"), ("entry mark (order)", "entry_order_mark"),
