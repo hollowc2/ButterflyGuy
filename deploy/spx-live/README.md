@@ -7,6 +7,7 @@ Run the real-money SPX pilot **beside** paper, not instead of it. Design and rol
 |---|---|---|
 | `activate.sh` | 06:35 PT, or by hand with Corey present | Gates, tops up `daily_bars`, starts `butterfly_spx_live_app`, verifies it, and checks that paper is unchanged |
 | `closeout.sh` | 13:45 PT | Exports evidence and the paired paper/live report; stops live only when the broker and live DB are flat |
+| `health.sh` | every 5 min while live runs | Read-only. Alerts the live channel if the live container is down, its metrics port or token is wrong, or paper changed; says whether the live DB still holds an open fly. Silent before activation is verified and after a deliberate stop |
 | `stop-live.sh` | manual rollback | Stops live once flat. `FORCE=1` stops it anyway, which leaves any open position **unmanaged** |
 
 None of them creates, recreates, restarts or stops `butterfly_spx_app`.
@@ -19,7 +20,18 @@ None of them creates, recreates, restarts or stops `butterfly_spx_app`.
    run on `butterfly_guy_spx_live_rehearsal`.
 3. Preview without changing anything: `DRY_RUN=1 ./activate.sh`. All reads and gates run;
    commands that would change anything are printed, compose ones in full.
-4. Schedule timers only with the owner's approval for that session.
+4. Schedule timers only with the owner's approval for that session. The live container has
+   `restart: "no"`, so a session needs the health check even when it is run by hand.
+   It is silent outside the session, so a wide window is safe across PST and PDT:
+
+   ```sh
+   systemd-run --user --unit "spx-live-health-$DATE" \
+     --on-calendar '*-*-* 13..21:00/5:00 UTC' "$PWD/health.sh"
+   ```
+
+   Stop it after the session with `systemctl --user stop "spx-live-health-$DATE.timer"`.
+5. Set `CLOSEOUT_PT` in `session.env` to the close-out timer's time; the activation message
+   quotes it.
 
 ## Prerequisites on Helios (one-time, each needs approval)
 

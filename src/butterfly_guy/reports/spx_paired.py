@@ -4,6 +4,10 @@ Each bot has its own database (docs/operations/concurrent-paper-live-spx-design.
 Selection marks come from the trade's per_width_bests entry for its chosen width; exit marks
 from exit_mark_at_signal. P&L is the DB's pre-fee figure.
 
+The two bots often pick different flies from near-tied candidates, so live minus paper P&L
+mixes selection, path and fills. The live fill check prices live's own fly at its marks
+(paper's mark model, before fees) and isolates the fill cost on every live trade.
+
 Each bot reads its own market data, so the report also shows when each read its entry inputs
 (chain, spot, VIX) and how often its monitor polled: two bots on the same day can pick different
 flies or exit at different times because they read the market seconds apart, not because of
@@ -116,6 +120,21 @@ def summarize_trade(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def live_fill_check(trade: dict[str, Any], quantity: int = 1) -> dict[str, Any] | None:
+    """Live's actual P&L against its own fly at the entry and exit marks, before fees."""
+    marks = (trade["entry_mark"], trade["exit_mark"])
+    if None in marks or trade["pnl_usd"] is None:
+        return None
+    mark_pnl = round((marks[1] - marks[0]) * 100 * quantity, 2)
+    return {
+        "mark_pnl_usd": mark_pnl,
+        "actual_pnl_usd": trade["pnl_usd"],
+        "fill_cost_usd": round(trade["pnl_usd"] - mark_pnl, 2),
+        "entry_fill_usd": round(-trade["entry_vs_mark"] * 100 * quantity, 2),
+        "exit_fill_usd": round(trade["exit_vs_mark"] * 100 * quantity, 2),
+    }
+
+
 def _blocks(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for row in rows:
@@ -148,6 +167,10 @@ def pair_report(
     flags = report["flags"]
     if live and any(t["paper_fill_model"] for t in live):
         flags.append("live DB holds a paper trade (rehearsal or misconfiguration)")
+    if live:
+        check = live_fill_check(live[0], int(live_trades[0].get("quantity") or 1))
+        if check is not None:
+            report["live_fill_check"] = check
     if not paper or not live:
         for name, trades, blocks in (("paper", paper, paper_blocks),
                                      ("live", live, live_blocks)):
@@ -253,6 +276,14 @@ def render_markdown(report: dict[str, Any]) -> str:
     if "entry_inputs_live_minus_paper" in report:
         lines.append(f"- **Entry inputs, live minus paper:** "
                      f"{report['entry_inputs_live_minus_paper']}")
+    if "live_fill_check" in report:
+        c = report["live_fill_check"]
+        lines.append(
+            f"- **Live fill check** (live's own fly at its marks, before fees; holds whether "
+            f"or not the bots picked the same fly): marks ${c['mark_pnl_usd']}, actual "
+            f"${c['actual_pnl_usd']}, fill cost ${c['fill_cost_usd']} "
+            f"(entry ${c['entry_fill_usd']}, exit ${c['exit_fill_usd']})"
+        )
     if "pnl_attribution" in report:
         lines.append(f"- **P&L attribution:** {report['pnl_attribution']}")
     if report.get("flags"):

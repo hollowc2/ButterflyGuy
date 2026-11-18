@@ -63,6 +63,30 @@ def test_same_fly_attributes_pnl_to_fills_and_path():
     assert report["flags"] == []
 
 
+def test_live_fill_check_prices_lives_own_fly_at_its_marks():
+    live = _trade(100_000)  # entry 2.00 vs mark 1.85; exit 1.30 vs mark 1.65
+
+    report = pair_report(DAY, [], [live], [], [])
+
+    assert report["live_fill_check"] == {
+        "mark_pnl_usd": -20.0,
+        "actual_pnl_usd": -70.0,
+        "fill_cost_usd": -50.0,
+        "entry_fill_usd": -15.0,
+        "exit_fill_usd": -35.0,
+    }
+    assert "Live fill check" in render_markdown(report)
+
+
+def test_live_fill_check_needs_both_marks():
+    live = _trade(100_000)
+    meta = json.loads(live["metadata"])
+    del meta["exit_mark_at_signal"]
+    live["metadata"] = json.dumps(meta)
+
+    assert "live_fill_check" not in pair_report(DAY, [], [live], [], [])
+
+
 def test_different_fly_exit_and_timing_are_flagged():
     paper = _trade(418, center=7400.0, width=40, mark=3.9, entry=3.9, exit_price=3.0,
                    exit_mark=3.0, exit_minute=0, reason="cash_settled", paper=True)
@@ -75,6 +99,7 @@ def test_different_fly_exit_and_timing_are_flagged():
     assert "different exit: paper cash_settled vs live drawdown_afternoon" in flags
     assert "exit time gap +23.0 min" in flags
     assert set(report["pnl_attribution"]) == {"live_minus_paper_usd"}  # no fill split
+    assert report["live_fill_check"]["fill_cost_usd"] == -50.0  # still isolated
     assert "Candidates at selection" in render_markdown(report)
 
 
