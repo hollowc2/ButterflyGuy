@@ -30,9 +30,15 @@ The analysis scripts were throwaway session scratch files and were not committed
     | Second 15 or later | 7,826 | 1 | 0.013 % |
 
   - Our own load is the same at 5-minute marks as in other minutes: 20.6 vs 20.9 requests in seconds 0–15.
-    The app-wide peak was 74 requests in any 60 s, against the commonly cited 120/min (§2.5). The likely
-    cause is congestion on Schwab's chain service at round clock times. That is an inference: Schwab
-    publishes nothing that confirms it.
+    The app-wide peak was 74 requests in any 60 s. Schwab Trader API Support's own written limit is
+    "120 requests per minute for non-order endpoints … per account, each restful endpoint request counts
+    as 1" (§2.5).
+  - The same pattern holds on the gateway over 12 sessions (§2.4a): 0.93 % hot-zone vs 0.003 % late.
+    That includes 11-03 to 11-09, when nothing called Schwab directly.
+  - It does not rise with our concurrent load. Adding the direct SPX bots on 11-16/17 left the gateway's
+    rate unchanged.
+  - The likely cause is load-based throttling of Schwab's chain service at round clock times. That is an
+    inference: Schwab documents only the 120/min quota, and we are under it.
 - **The "both collectors fetch at :00" hypothesis is only a small part of it.** Only 3 of the 16 SPX 429s
   had the other bot's chain request in flight at the same moment. Two of those were the two collectors
   both fetching at HH:MM:00.0. The rest were monitor or post-exit polls that happened to land in the
@@ -42,13 +48,16 @@ The analysis scripts were throwaway session scratch files and were not committed
   - On 11-18 there were 20 by 10:00 PT: paper 6, rehearsal 8, gateway 6.
   - The gateway's own load *fell* that day, yet four of its 429s came between 06:35 and 06:50. Total app
     load then was about 12–15 requests/min.
-  - Whether the rehearsal's extra load contributed cannot be separated from a bad day at Schwab with one
-    session of data.
+  - The gateway's hot-zone rate was 2.76 % (4 of 145) against its 12-day mean of 0.93 %. That points to a
+    Schwab-side day effect. Within the hot zone, the 429 rate does not rise with the number of app
+    requests in the prior 3 s (§2.4a), so there is no evidence the rehearsal's load caused it.
 - **Paper SPX → gateway (Phase B): no-go.**
   - It does not remove the cause, since the gateway's upstream chain calls hit the same throttle.
   - It turns a 429 that today recovers in 1 s into a read that fails at the client. The failed read also
     starts a cooldown of at least 1 s that blocks NDX and XSP reads too.
   - It brings back the 8 s chain cache that made 76 % of paper's monitor polls stale repeats in Oct–Nov.
+    What that does to exits is unknown: the study's 5 s and 10 s arms read −$2.9 and −$7.7 per trade,
+    with CIs spanning 0, and cadence can't be measured until post-exit trades accumulate.
   - It breaks the monitor-cadence study's qualifying set, which is "paper SPX ≥ 11-17, direct, as-live".
   - Paper SPX went direct on 11-16 for exactly these reasons.
 - **The 7455 vs 7450 fly split at 07:00 was not caused by a 429 or by chain timing at Schwab.**
@@ -170,27 +179,81 @@ Per request, 11-18's chain 429 rate was about 4× that of earlier days. This is 
 explanations remain open: the extra direct load counts against a shared per-app bucket, or 11-18 was a
 congested day at Schwab. The evidence for the second is the gateway's four 429s at 06:35–06:50, which
 came before the 07:00 entry when total load was about 12–15/min. Telling them apart needs more paired
-days, or a paper-alone day measured over the same hours.
+days, or a paper-alone day measured over the same hours. §2.4a settles most of this.
 
-### 2.5 Schwab's published limits
+### 2.4a Gateway alone over 12 sessions, and load dependence
 
-Schwab's developer portal was not reachable for this review, so everything here is secondhand:
-- **Non-order requests:** 120 per minute per app. This includes market data and account reads.
-- **Orders:** a per-account throttle of 0–120 per minute, chosen at app registration. Excess orders are
-  rejected.
-- **Exceeding the limit:** returns HTTP 429.
+Every gateway upstream call since 11-03 (`gateway_scheduler_execution_finished`, 125 k lines) was
+matched against its 429s. Session hours are 06:30–13:00. "Hot" means the first 15 s of a minute
+divisible by 5; "early" the first 15 s of other minutes; "late" second 15 or later.
 
-**Unknown:**
-- any per-second or burst limit;
-- any per-endpoint limit for chains;
-- whether limits tighten under load;
-- whether OAuth refresh calls count.
+| Session | Gateway chain requests (hot / early / late) | Gateway 429s (hot / early / late) | Hot rate | Direct SPX bots |
+|---|---|---|---|---|
+| 11-03 | 304 / 1258 / 3111 | 2 / 0 / 0 | 0.66 % | none |
+| 11-04 | 322 / 1308 / 3698 | 3 / 0 / 0 | 0.93 % | none |
+| 11-05 | 305 / 1216 / 3030 | 5 / 0 / 0 | 1.64 % | none |
+| 11-06 | 310 / 1312 / 3752 | 1 / 2 / 0 | 0.32 % | none |
+| 11-09 | 254 / 1016 / 1043 | 2 / 0 / 0 | 0.79 % | none |
+| 11-10 | 344 / 1312 / 4028 | 4 / 0 / 0 | 1.16 % | none |
+| 11-11 | 340 / 1412 / 4648 | 3 / 0 / 0 | 0.88 % | none |
+| 11-12 | 323 / 1325 / 3815 | 0 / 0 / 0 | 0.00 % | none |
+| 11-13 | 270 / 1119 / 1899 | 3 / 1 / 0 | 1.11 % | none |
+| 11-16 | 234 / 990 / 3541 | 2 / 0 / 0 | 0.85 % | live pilot |
+| 11-17 | 202 / 815 / 1956 | 2 / 0 / 0 | 0.99 % | paper |
+| 11-18 (to 10:00) | 145 / 565 / 2001 | 4 / 1 / 1 | 2.76 % | paper + rehearsal |
+| **All** | 3,353 / 13,648 / 36,522 | 31 / 4 / 1 | **0.93 %** (early 0.029 %, late 0.003 %) | |
 
-The evidence in §1 points to a chain-specific throttle tied to time of day, which the published number
-does not describe. Sources: [schwab-py getting started](https://schwab-py.readthedocs.io/en/stable/getting-started.html),
-[TDA API forum on the Schwab migration](https://apiforums.tdameritrade.com/node/116),
-[Unofficial guide to Schwab's Trader APIs](https://medium.com/@carstensavage/the-unofficial-guide-to-charles-schwabs-trader-apis-14c1f5bc1d57),
-[schwab-api client README](https://unpkg.com/@sudowealth/schwab-api@2.1.1/README.md).
+The table shows three things:
+- **The time-of-minute effect is about 300×, and it is stable.** It was present on days when the gateway
+  was the only Schwab caller.
+- **Adding direct SPX bots did not raise the gateway's rate.** 11-16 and 11-17 sit at the mean. 11-18 is
+  high (4 of 145; about 1.4 expected), which looks like a day effect.
+- **Concurrent load does not predict a 429.** Pooling every chain request (gateway and direct), the
+  429 rate does not rise with the number of app requests in the prior 3 s:
+
+| App requests started in the prior 3 s | 0 | 1 | 2 | 3 | 4 | 5 | 6+ |
+|---|---|---|---|---|---|---|---|
+| Hot zone | 0.43 % | 0.16 % | 1.03 % | 1.54 % | 0.34 % | 1.27 % | 1.14 % |
+| Early zone | 0.04 % | 0.06 % | 0.04 % | 0.04 % | 0.15 % | 0.18 % | 0.05 % |
+
+At our scale, our own load is not what trips the throttle.
+
+### 2.5 Schwab's limits
+
+**Schwab's own words.** Schwab Trader API Support's emails of 2026-10-06 were saved verbatim by another
+developer in
+[evargas963/Ed-s-Console-App `docs/schwab/schwab_support_emails_2026_10_06.txt`](https://github.com/evargas963/Ed-s-Console-App/blob/main/docs/schwab/schwab_support_emails_2026_10_06.txt).
+The question each reply answers is not included.
+- "120 requests per minute for non-order endpoints."
+- "It is per account, each restful endpoint request counts as 1. The 800 is the total across all accounts
+  per minute."
+- On large chains: "You would need to break up the request by adding additional filters for symbol with
+  large option chains." and "You can filter by expiration, call / put, number of strikes."
+
+**What other developers measured.** In
+[l3a0/marketlake PR #791](https://github.com/l3a0/marketlake/pull/791), 24 real 429s from 10-01 to 10-07
+were inspected:
+- 23 were on chain requests.
+- Every one had a body of only whitespace.
+- None had a `Retry-After` header, a rate-limit header or a `429-NNN` sub-code.
+
+That contradicts the 429-001/429-005 sub-codes claimed in
+[a secondhand article](https://mylinedchart.com/resources/articles/schwab-api-rate-limits-and-token-expiry).
+
+**Order throttle.** It is set per account at app registration, anywhere from 0 to 120 per minute
+([schwab-py](https://schwab-py.readthedocs.io/en/stable/getting-started.html),
+[TDA forum](https://apiforums.tdameritrade.com/node/116)). This app's value can be read on its page in the
+Schwab developer portal.
+
+**What that leaves.** The documented quota is 120 per minute per account, and every request counts as 1.
+Our peak is 74, and a live day is estimated at about 83. Our 429s therefore come from an **undocumented,
+load-based chain throttle**, consistent with §2.4a and with the other developer's chains-only 429s.
+Nothing public documents:
+- a per-second or burst limit;
+- a chain-endpoint limit;
+- `Retry-After` semantics.
+
+The only way to get an authoritative answer is to ask Trader API Support directly, as that developer did.
 
 ### 2.6 The gateway
 
@@ -239,7 +302,9 @@ VIX reads also differ by 0.16, because each reads its own value about 1 s apart.
   `SCHWAB_ACCESS_MODE_SPX=direct`; backup `.rollbacks/infra.env.pre-spx-direct-20261117`).
 - The trigger was the monitor replay study: under the gateway's chain cache, 76 % of paper's monitor polls
   were stale repeats, against 4 % on direct data.
-- Then 1-minute decision cadence came out **−$15/trade** (CI −21 to −9) worse than 2.6 s.
+- The brief quoted 1-minute cadence as −$15/trade against 2.6 s. The study's 11-16 results withdrew that
+  as an artifact. Its 5 s and 10 s arms read −$2.9 [−14.4, 5.5] and −$7.7 [−17.1, 1.8], and it concluded
+  that the existing data cannot measure cadence.
 - The monitor-cadence study's qualifying set was then defined as "paper SPX trades ≥ 2026-11-17, **direct,
   as-live**".
 
@@ -251,8 +316,14 @@ The change itself is env-only:
 | Question | Answer |
 |---|---|
 | 1. Fixes or moves the 429s? | **It moves and reduces them.** The gateway uses the same token, and so presumably the same app. Its cache would cut paper's upstream SPX chain calls from about 22/min to about 7/min (8 s TTL), so expect roughly a third fewer chain requests in the hot window app-wide. Live's 429 exposure is unchanged, because it depends on time of minute, not on paper. Each remaining paper 429 becomes a failed read (§2.6), and the cooldown of at least 1 s also blocks NDX/XSP reads. The gateway has no budget of its own against Schwab: it serializes and caches, it does not pace to a quota |
-| 2. Capacity | It returns the gateway to its 11-03…11-13 state (about 19/min upstream, 21 % busy, queue p99.9 3.8 s), which it carried. The alerts (`SchwabGatewayProtectedQueueWaitHigh`, `…OptionChainEndToEndLatencyHigh`, `…TimeoutDrainHigh`) exist in `/opt/monitoring/prometheus-alerts/schwab-gateway.yml`; their firing history was not checked. SPX chain fetches (p50 about 0.65 s) queue ahead of NDX/XSP in the single slot. A p99.9 queue wait of 3.8 s exceeds the 3 s budget, so expect more NDX/XSP `scheduler_timeout`s |
-| 3. Paper fidelity | Paper's chains would be up to 8 s old (mean about 4 s). Paper's 07:00 entry would most likely be served the collector's :00 chain from cache. Mark fills come from cached marks. Drawdown exits would effectively decide on about 8 s data, against live's 2.6 s; the effect between the measured 2.6 s and 60 s points was not quantified. `chain_snapshot_meta` stays the same shape (`chain_source` becomes `gateway`, and `chain_age_s`/`chain_event_ts` are filled), but paper history gains a third segment (gateway → direct 11-17 → gateway) |
+| 2. Capacity | It returns the gateway to its 11-03…11-13 state (about 19/min upstream, 21 % busy, queue p99.9 3.8 s), which it carried. The alerts (`SchwabGatewayProtectedQueueWaitHigh`, `…OptionChainEndToEndLatencyHigh`, `…TimeoutDrainHigh`) exist in `/opt/monitoring/prometheus-alerts/schwab-gateway.yml`. Minutes firing per session, 11-03 → 11-18:
+- `ProtectedRequestFailure`: 20–40 on every gateway-era day (paper SPX on the gateway), 10–35 since. This is the client-visible 429 and timeout pass-through.
+- `ProtectedSchedulerFailure`: 5–25 before, 10 since.
+- `ProtectedQueueWaitHigh`: 5–15 on 5 days.
+- `TimeoutDrainHigh`: 5 on 3 days.
+
+Expect a return to roughly gateway-era levels. SPX chain fetches (p50 about 0.65 s) queue ahead of NDX/XSP in the single slot. A p99.9 queue wait of 3.8 s exceeds the 3 s budget, so expect more NDX/XSP `scheduler_timeout`s |
+| 3. Paper fidelity | Paper's chains would be up to 8 s old (mean about 4 s). Paper's 07:00 entry would most likely be served the collector's :00 chain from cache. Mark fills come from cached marks. Drawdown exits would effectively decide on about 8 s data, against live's 2.6 s. That effect cannot be measured yet: the study's cad5/cad10 arms span 0, and scoring needs post-exit trades, expected around end of December. `chain_snapshot_meta` stays the same shape (`chain_source` becomes `gateway`, and `chain_age_s`/`chain_event_ts` are filled), but paper history gains a third segment (gateway → direct 11-17 → gateway) |
 | 4. Paper vs live comparison | Input timing and staleness would differ by design, so trade-by-trade differences could no longer be blamed on fills. **This breaks the monitor-cadence qualifying set.** |
 | 5. Failure modes | A gateway outage leaves paper SPX blind; live is unaffected (it is direct by override and builds no gateway client in direct mode). Paper still builds `SchwabClientWrapper` (`run_live.py:1097`), so it stays a token consumer: inode/digest checks and hot reload are unchanged. Gateway mode routes only market data; account and order calls stay direct, and paper makes no account calls (the manual-close checks are `live`-only) |
 | 6. Rollout | Possible on D4 (§3.1), but **not recommended** |
@@ -349,10 +420,19 @@ of the hottest window. Prefer H first.
 Per the brief, no code is written until the owner picks. Any chosen option will be implemented opt-in
 behind an env var, with tests, as a PR.
 
-### Still unproven
+### What was resolved on 11-18, and what remains
 
-- Schwab's actual chain throttle: its window, per-app or per-account scope, and whether it is load-based.
-- Whether the rehearsal's added load raised 11-18's rate.
-- The effect on exits of deciding at 8 s cadence (the replay tool could test it by decimating the 2.6 s
-  polls).
-- The firing history of the gateway alerts during the gateway era.
+Resolved:
+- **Documented quota:** 120 non-order requests per minute per account; each request counts as 1 (Schwab
+  support, §2.5). We peak at 74.
+- **Our load as a cause:** none detected. The gateway's 12-day data and the request-level dose test
+  (§2.4a) show no dependence on our own load.
+- **Rehearsal effect on 11-18:** no evidence it caused the rise. The gateway alone was also high that day.
+- **Gateway alert history:** see §3, question 2.
+- **Effect of an 8 s exit cadence:** not measurable with today's data, per the cadence study (§3).
+
+Remaining, answerable only by Schwab or by time:
+- The undocumented chain throttle (window, trigger, scope). Ask Trader API Support (§5).
+- This app's configured order throttle. It is visible on the app's page in the developer portal.
+- The exit effect of cadence. The cadence study's post-exit trades 1–30 (about end of December) will
+  answer it.
