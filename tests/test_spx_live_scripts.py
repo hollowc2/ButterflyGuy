@@ -512,9 +512,12 @@ def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
     # Live 2026-11-19: the bot stayed up but stopped monitoring an open fly for six hours.
     session.run("activate.sh")
     session.state["check_rc"] = 1
+    # A real day's log is ~1 MB; the halt sits early in it, so an early-exiting grep would
+    # SIGPIPE docker logs and pipefail would hide the halt.
     session.state["logs"] = "\n".join([
         '{"event": "live_trading_starting", "level": "info"}',
         '{"trade_id": 100000, "event": "monitor_stopped_unknown_broker_state"}',
+        *['{"event": "HTTP Request: GET https://api.schwabapi.com/x"}'] * 20000,
     ])
 
     result, out = session.run("health.sh")

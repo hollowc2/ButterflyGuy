@@ -32,8 +32,10 @@ p0=$(cat "$D/paper.fingerprint" 2>/dev/null)
 halted() {
   local started
   started=$(docker inspect -f '{{.State.StartedAt}}' "$LIVE_C" 2>/dev/null)
+  # grep reads to the end: an early `grep -q` exit SIGPIPEs docker logs, and pipefail then
+  # reports "not halted" (it did on 2026-11-19's 1 MB log).
   docker logs --since "${started:-${DATE}T00:00:00Z}" "$LIVE_C" 2>&1 \
-    | grep -qE '"event": "(monitor|entry_loop)_stopped_unknown_broker_state"'
+    | grep -E '"event": "(monitor|entry_loop)_stopped_unknown_broker_state"' >/dev/null
 }
 
 fail=""
