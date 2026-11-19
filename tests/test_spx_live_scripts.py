@@ -534,6 +534,40 @@ def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
     assert_paper_never_changed(session)
 
 
+def test_health_repeats_the_unmanaged_fly_alert_until_flat(session):
+    session.run("activate.sh")
+    session.state["check_rc"] = 1
+    session.state["logs"] = '{"trade_id": 100000, "event": "monitor_stopped_unknown_broker_state"}'
+    alerted = session.dir / "health.alerted"
+
+    session.run("health.sh")
+    session.run("health.sh")  # within the repeat window: silent
+    assert session.notifications().count("HALTED") == 1
+
+    alerted.write_text("0\n")  # the last post was long ago
+    session.run("health.sh")
+    last = session.notifications().splitlines()[-1]
+    assert "HALTED" in last and "STILL UNRESOLVED" in last
+    assert session.notifications().count("HALTED") == 2
+
+    session.state["check_rc"] = 0  # settled: nothing left to manage
+    alerted.write_text("0\n")
+    session.run("health.sh")
+    assert session.notifications().count("HALTED") == 2
+    assert_paper_never_changed(session)
+
+
+def test_health_does_not_repeat_other_problems(session):
+    session.run("activate.sh")
+    session.state["fingerprint"]["butterfly_spx_app"] = "changed"
+
+    session.run("health.sh")
+    (session.dir / "health.alerted").write_text("0\n")
+    session.run("health.sh")
+
+    assert session.notifications().count("PAPER CONTAINER CHANGED") == 1
+
+
 def _up_files(session):
     up = next(c for c in session.calls() if c[0] == "compose" and "up" in c)
     return [Path(up[i + 1]).name for i, a in enumerate(up) if a == "-f"]
