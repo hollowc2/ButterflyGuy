@@ -18,6 +18,17 @@ None of them creates, recreates, restarts or stops `butterfly_spx_app`.
 1. Copy this directory to `/opt/butterflyguy-releases/spx-live-<DATE>-<sha7>/`.
 2. Fill in `session.env` from `session.env.example`. `REHEARSAL=1` is the Phase 3 paper-mode
    run on `butterfly_guy_spx_live_rehearsal`.
+   `EXIT_PRICING` picks the live exit rule. Leave it empty on the first concurrent live day
+   (default bid ladder). From the second live day on, set `EXIT_PRICING=mid_walk` to pilot
+   the exit-ladder study's R3 rule (owner, 2026-11-18). That adds
+   `infra/docker-compose.spx-live-mid-walk.yml`, and verification then requires
+   `EXECUTION__EXIT_PRICING=mid_walk` instead of forbidding it. Any other value, or
+   mid_walk on a rehearsal, aborts activation. Pilot rules
+   (`docs/research/exit-ladder-pricing-plan.md`, Amendment 1 and §5, on
+   `research/exit-ladder-pricing`): go back to the bid ladder if an exit is still unfilled
+   when its natural step is due (+60 s), or if 2 of the first 5 exits fill later than the bid
+   ladder would have. After 10 pilot exits, refit the fill model and re-run Step 1. Making
+   mid_walk the default needs owner approval.
 3. Preview without changing anything: `DRY_RUN=1 ./activate.sh`. All reads and gates run;
    commands that would change anything are printed, compose ones in full.
 4. Schedule timers only with the owner's approval for that session. The live container has
