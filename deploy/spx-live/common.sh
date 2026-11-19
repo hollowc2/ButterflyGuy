@@ -69,6 +69,27 @@ else
   FORBID_ENV=(EXECUTION__EXIT_PRICING)
 fi
 
+# Live exit rule for this session: empty is the image default (bid ladder); mid_walk is the
+# exit-ladder study's R3 pilot (infra/docker-compose.spx-live-mid-walk.yml). Anything else,
+# or mid_walk on a rehearsal, sets EXIT_PRICING_ERROR and activation aborts.
+EXIT_PRICING=${EXIT_PRICING:-}
+EXIT_PRICING_ERROR=""
+EXITS="bid-ladder exits"
+case "$EXIT_PRICING" in
+  "") ;;
+  mid_walk)
+    if [ "$REHEARSAL" = 1 ]; then
+      EXIT_PRICING_ERROR="EXIT_PRICING=mid_walk is for live sessions, not a rehearsal"
+    else
+      COMPOSE_FILES+=(-f "$REL/infra/docker-compose.spx-live-mid-walk.yml")
+      EXPECT_ENV+=(EXECUTION__EXIT_PRICING=mid_walk)
+      FORBID_ENV=()
+      EXITS="mid_walk exits (pilot)"
+    fi
+    ;;
+  *) EXIT_PRICING_ERROR="unknown EXIT_PRICING '$EXIT_PRICING' (empty or mid_walk)" ;;
+esac
+
 ts() { date -u +%FT%TZ; }
 
 open_log() {

@@ -506,3 +506,62 @@ def test_health_posts_each_docker_restart_once(session):
     session.run("health.sh")
     assert "restart 2 of at most 3" in session.notifications().splitlines()[-1]
     assert_paper_never_changed(session)
+
+
+def _up_files(session):
+    up = next(c for c in session.calls() if c[0] == "compose" and "up" in c)
+    return [Path(up[i + 1]).name for i, a in enumerate(up) if a == "-f"]
+
+
+def test_default_session_runs_bid_ladder_exits(session):
+    result, out = session.run("activate.sh")
+    assert result.returncode == 0, out
+    assert _up_files(session) == ["docker-compose.spx-live.yml"]
+    assert "bid-ladder exits" in session.notifications()
+
+
+def test_default_session_fails_verification_if_live_runs_mid_walk(session):
+    session.state["env"]["butterfly_spx_live_app"] = [*LIVE_LIMITS,
+                                                      "EXECUTION__EXIT_PRICING=mid_walk"]
+    result, out = session.run("activate.sh")
+    assert result.returncode == 1
+    assert "live env must not set EXECUTION__EXIT_PRICING" in out
+    assert session.state["running"]["butterfly_spx_live_app"] is False
+    assert_paper_never_changed(session)
+
+
+def test_mid_walk_session_adds_the_overlay_and_requires_the_rule(session):
+    session.env_file(REHEARSAL=0, EXIT_PRICING="mid_walk")
+    session.state["env"]["butterfly_spx_live_app"] = [*LIVE_LIMITS,
+                                                      "EXECUTION__EXIT_PRICING=mid_walk"]
+    result, out = session.run("activate.sh")
+    assert result.returncode == 0, out
+    assert "verify fail=none" in out
+    assert _up_files(session) == ["docker-compose.spx-live.yml",
+                                  "docker-compose.spx-live-mid-walk.yml"]
+    assert "mid_walk exits (pilot)" in session.notifications().splitlines()[-1]
+    assert_paper_never_changed(session)
+
+
+def test_mid_walk_session_stops_live_if_the_rule_did_not_reach_it(session):
+    session.env_file(REHEARSAL=0, EXIT_PRICING="mid_walk")
+    result, out = session.run("activate.sh")
+    assert result.returncode == 1
+    assert "live env lacks EXECUTION__EXIT_PRICING=mid_walk" in out
+    assert session.state["running"]["butterfly_spx_live_app"] is False
+
+
+@pytest.mark.parametrize(
+    "values, reason",
+    [
+        ({"REHEARSAL": 0, "EXIT_PRICING": "mid_capped_ladder"}, "unknown EXIT_PRICING"),
+        ({"REHEARSAL": 1, "EXIT_PRICING": "mid_walk"}, "not a rehearsal"),
+    ],
+)
+def test_bad_exit_pricing_aborts_before_anything_starts(session, values, reason):
+    session.env_file(**values)
+    result, out = session.run("activate.sh")
+    assert result.returncode == 1
+    assert reason in out and "NOT started" in session.notifications()
+    assert not any(c[0] == "compose" for c in session.calls())
+    assert not (session.dir / "ACTIVATED").exists()

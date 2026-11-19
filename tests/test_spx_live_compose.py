@@ -108,3 +108,12 @@ def test_rehearsal_is_paper_on_its_own_database_with_no_live_settings():
     }
     assert {key for key, value in env.items() if value == "!reset"} == live_only
     assert override["volumes"] == ["../data/chains-live-rehearsal:/app/data/chains"]
+
+
+def test_mid_walk_overlay_sets_only_the_exit_rule():
+    overlay = yaml.safe_load(Path("infra/docker-compose.spx-live-mid-walk.yml").read_text())
+    assert overlay == {
+        "services": {"app_spx_live": {"environment": {"EXECUTION__EXIT_PRICING": "mid_walk"}}}
+    }
+    # The base live service never sets an exit rule: an unset EXIT_PRICING runs the default.
+    assert "EXECUTION__EXIT_PRICING" not in SERVICE["environment"]

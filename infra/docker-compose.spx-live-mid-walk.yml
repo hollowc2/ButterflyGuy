@@ -1,0 +1,8 @@
+# Apply LAST over docker-compose.spx-live.yml, only when session.env sets EXIT_PRICING=mid_walk
+# on a live (not rehearsal) session. Owner opt-in 2026-11-16, scheduled 2026-11-18 for the
+# second concurrent live day on: live exits use the exit-ladder study's R3 rule (PR #83,
+# core/exit_pricing.py). The image default stays bid_ladder.
+services:
+  app_spx_live:
+    environment:
+      EXECUTION__EXIT_PRICING: "mid_walk"
