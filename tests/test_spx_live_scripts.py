@@ -508,6 +508,29 @@ def test_health_posts_each_docker_restart_once(session):
     assert_paper_never_changed(session)
 
 
+def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
+    # Live 2026-11-19: the bot stayed up but stopped monitoring an open fly for six hours.
+    session.run("activate.sh")
+    session.state["check_rc"] = 1
+    session.state["logs"] = "\n".join([
+        '{"event": "live_trading_starting", "level": "info"}',
+        '{"trade_id": 100000, "event": "monitor_stopped_unknown_broker_state"}',
+    ])
+
+    result, out = session.run("health.sh")
+
+    assert result.returncode == 1, out
+    alert = session.notifications().splitlines()[-1]
+    assert "🚨" in alert and "HALTED on unknown broker state" in alert
+    assert "may hold an OPEN live fly" in alert
+    since = [c for c in session.calls() if c[0] == "logs" and "--since" in c]
+    assert since and since[-1][-1] == "butterfly_spx_live_app"
+
+    session.run("health.sh")
+    assert session.notifications().count("HALTED") == 1
+    assert_paper_never_changed(session)
+
+
 def _up_files(session):
     up = next(c for c in session.calls() if c[0] == "compose" and "up" in c)
     return [Path(up[i + 1]).name for i, a in enumerate(up) if a == "-f"]

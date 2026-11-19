@@ -42,6 +42,11 @@ PARTIAL_FILL_STATUSES = {"PARTIAL", "PARTIAL_FILL", "PARTIALLY_FILLED"}
 CANCEL_PENDING_STATUSES = {"CANCEL_PENDING", "PENDING_CANCEL", "CANCEL_REQUESTED"}
 TERMINAL_ORDER_STATUSES = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
 TERMINAL_FAILURE_STATUSES = {"REJECTED", "EXPIRED"}
+# Schwab acknowledges a cancel before it closes the order, so the first read after it can
+# still say PENDING_CANCEL or WORKING (live 2026-11-19: PENDING_CANCEL 0.3 s after the
+# DELETE, CANCELED by the next second). Wait this long for the order to settle.
+POST_CANCEL_SETTLE_SECONDS = 15.0
+POST_CANCEL_POLL_SECONDS = 1.0
 
 
 def walk_orders(order: dict) -> Iterator[dict]:
@@ -953,21 +958,42 @@ class OrderManager:
     ) -> dict | None:
         """After a cancel, confirm the order didn't sneak through as filled."""
         try:
-            status = await self.schwab.get_order_status(order_id)
-            order_status = status.get("status")
-            statuses = order_statuses(status)
-            terminal_failure = next(
-                (value for value in ("REJECTED", "EXPIRED") if value in statuses),
-                None,
-            )
-            if intent_id is not None and self.intent_queries is not None and order_status:
-                await self.intent_queries.update_broker_status(
-                    intent_id, terminal_failure or order_status, status
+            deadline = monotonic() + POST_CANCEL_SETTLE_SECONDS
+            while True:
+                status = await self.schwab.get_order_status(order_id)
+                order_status = status.get("status")
+                statuses = order_statuses(status)
+                terminal_failure = next(
+                    (value for value in ("REJECTED", "EXPIRED") if value in statuses),
+                    None,
                 )
-            if statuses & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES):
-                raise PartialFillError(
-                    f"Order {order_id} is partially filled after cancel; reconcile broker state"
+                if (
+                    intent_id is not None
+                    and self.intent_queries is not None
+                    and order_status
+                ):
+                    await self.intent_queries.update_broker_status(
+                        intent_id, terminal_failure or order_status, status
+                    )
+                if statuses & PARTIAL_FILL_STATUSES:
+                    raise PartialFillError(
+                        f"Order {order_id} is partially filled after cancel; "
+                        "reconcile broker state"
+                    )
+                unsettled = statuses & (CANCEL_PENDING_STATUSES | WORKING_ORDER_STATUSES)
+                if not unsettled:
+                    break
+                if monotonic() >= deadline:
+                    raise PartialFillError(
+                        f"Order {order_id} is still {', '.join(sorted(unsettled))} "
+                        f"{POST_CANCEL_SETTLE_SECONDS:g}s after cancel; reconcile broker state"
+                    )
+                log.info(
+                    "post_cancel_awaiting_settle",
+                    order_id=order_id,
+                    statuses=sorted(unsettled),
                 )
+                await asyncio.sleep(POST_CANCEL_POLL_SECONDS)
             if terminal_failure:
                 raise TerminalOrderError(terminal_failure, order_id)
             if order_status == "FILLED":

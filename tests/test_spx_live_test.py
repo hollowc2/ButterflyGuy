@@ -369,7 +369,7 @@ async def test_operator_cancel_or_edit_of_bot_exit_is_a_takeover(status):
     from butterfly_guy.execution.order_manager import OperatorExitTakeoverError
 
     om, schwab = make_order_manager(make_settings())
-    schwab.get_order_status.return_value = {"status": status}
+    schwab.get_order_status = AsyncMock(return_value={"status": status})
     with pytest.raises(OperatorExitTakeoverError):
         await om._wait_for_fill("ORD1", 5, operator_cancel_is_takeover=True)
     if status == "CANCELED":
