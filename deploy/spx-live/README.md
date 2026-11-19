@@ -21,7 +21,10 @@ None of them creates, recreates, restarts or stops `butterfly_spx_app`.
 3. Preview without changing anything: `DRY_RUN=1 ./activate.sh`. All reads and gates run;
    commands that would change anything are printed, compose ones in full.
 4. Schedule timers only with the owner's approval for that session. The live container has
-   `restart: "no"`, so a session needs the health check even when it is run by hand.
+   `restart: "on-failure:3"`: a crash restarts it (reconcile, then re-adopt any open fly), a
+   `docker stop` never does, and after three failed starts it stays down. A session needs the
+   health check even when it is run by hand: it reports each restart and a container that
+   stays down.
    It is silent outside the session, so a wide window is safe across PST and PDT:
 
    ```sh
