@@ -66,6 +66,8 @@ elif cmd == "inspect":
         print(state["image"][name])
     elif "ExitCode" in fmt:
         print("exit 137 at 2026-11-20T17:02:00Z")
+    elif fmt == "{{.RestartCount}}":
+        print(state.get("restarts", {}).get(name, 0))
     elif "RestartCount" in fmt:
         print("true 0" if state["running"].get(name) else "false 0")
     elif "Mounts" in fmt:
@@ -487,3 +489,20 @@ def test_health_is_silent_after_a_deliberate_stop(session):
     assert result.returncode == 0
     assert len(session.calls()) == calls_before
     assert session.notifications() == notes_before
+
+
+def test_health_posts_each_docker_restart_once(session):
+    session.run("activate.sh")
+    session.state["restarts"] = {"butterfly_spx_live_app": 1}
+
+    result, out = session.run("health.sh")
+    assert result.returncode == 0, out  # running again after the restart
+    assert "restart 1 of at most 3" in session.notifications().splitlines()[-1]
+
+    session.run("health.sh")
+    assert session.notifications().count("Docker restarted it") == 1
+
+    session.state["restarts"] = {"butterfly_spx_live_app": 2}
+    session.run("health.sh")
+    assert "restart 2 of at most 3" in session.notifications().splitlines()[-1]
+    assert_paper_never_changed(session)

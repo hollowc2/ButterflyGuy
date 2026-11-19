@@ -21,7 +21,11 @@ services:
     image: "${SPX_LIVE_IMAGE:?set reviewed immutable live image}"
     pull_policy: never
     container_name: butterfly_spx_live_app
-    restart: "no"
+    # A crash restarts the bot, which reconciles with the broker and re-adopts an open fly
+    # before it does anything else; it refuses to start on any broker/DB disagreement, so
+    # three failed starts leave it down for health.sh to report. `docker stop` (close-out)
+    # is never restarted.
+    restart: "on-failure:3"
     env_file:
       - ../.env
     command:

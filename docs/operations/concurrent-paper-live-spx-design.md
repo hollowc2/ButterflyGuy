@@ -12,7 +12,8 @@ Nothing here has been built or deployed.
   8000, `data/chains`, Prometheus job `butterfly_spx`. Its compose definition does not change.
 - **Live becomes a new, separate thing**, used only on pilot days:
   - compose project `butterfly-spx-live`, file `infra/docker-compose.spx-live.yml`;
-  - service `app_spx_live`, container `butterfly_spx_live_app`, `restart: "no"`;
+  - service `app_spx_live`, container `butterfly_spx_live_app`, `restart: "on-failure:3"` (was `"no"`
+    until 2026-11-18; see `deploy/spx-live/README.md`);
   - DB `butterfly_guy_spx_live`, metrics on `127.0.0.1:8002`, chain journal in `data/chains-live`.
 - **Isolation by database, not by a mode column.** No runtime query can see the other bot's
   rows, so no missed filter can become a live-safety bug.
@@ -50,7 +51,7 @@ Live gets the new identity:
 |---|---|---|
 | Compose | project `infra`, `infra/docker-compose.yml` | project `butterfly-spx-live`, `infra/docker-compose.spx-live.yml` |
 | Service / container | `app_spx` / `butterfly_spx_app` | `app_spx_live` / `butterfly_spx_live_app` |
-| Restart | `unless-stopped` | `"no"` |
+| Restart | `unless-stopped` | `"on-failure:3"` (was `"no"` until 2026-11-18) |
 | DB | `butterfly_guy` | `butterfly_guy_spx_live` |
 | Metrics | `127.0.0.1:8000` | `127.0.0.1:8002` (free on Helios; 8000/8001/8003-8005/8011 are taken) |
 | Chain journal | `/opt/butterflyguy/data/chains` | `/opt/butterflyguy/data/chains-live` |
@@ -347,7 +348,7 @@ services:
     image: "${SPX_LIVE_IMAGE:?set reviewed immutable live image}"
     pull_policy: never
     container_name: butterfly_spx_live_app
-    restart: "no"
+    restart: "on-failure:3"
     env_file: [../.env]
     command: [/bin/sh, -c, 'export LIVE_EXPECTED_SCHWAB_ACCOUNT_ID="$${SCHWAB_ACCOUNT_ID}"; exec python -m butterfly_guy.scripts.run_live --config configs/config.yaml']
     volumes:

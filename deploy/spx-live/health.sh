@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Read-only liveness check for a running live session; run every few minutes from a timer.
-# The live container has restart "no", so if it dies holding a fly nothing manages the exit
-# until someone looks. This posts to the live channel when it is down or unhealthy, again
-# when the problem changes, and once on recovery. It never starts, stops or execs into
+# The live container restarts on a crash at most three times; after that, if it dies holding
+# a fly, nothing manages the exit until someone looks. This posts to the live channel when it
+# is down or unhealthy, again when the problem changes, and once on recovery. Each Docker
+# restart is posted once, because a restarted bot otherwise looks healthy. It never starts, stops or execs into
 # anything that writes. It stays silent until activation has verified the container
 # (VERIFIED) and after a deliberate stop (STOPPED).
 set -uo pipefail
@@ -12,6 +13,14 @@ source "$(dirname "$0")/common.sh"
 [ -e "$D/VERIFIED" ] || exit 0
 [ -e "$D/STOPPED" ] && exit 0
 open_log health
+
+restarts=$(docker inspect -f '{{.RestartCount}}' "$LIVE_C" 2>/dev/null || echo 0)
+seen=$(cat "$D/restarts.seen" 2>/dev/null || echo 0)
+if [ "${restarts:-0}" -gt "${seen:-0}" ]; then
+  echo "$restarts" >"$D/restarts.seen"
+  echo "$(ts) health live restarts=$restarts"
+  notify "⚠️ $LABEL $DATE: the live bot crashed and Docker restarted it (restart $restarts of at most 3). On startup it reconciles with the broker and re-adopts any open fly. Check its log and ToS. Log: $D/health.log"
+fi
 
 state="$D/health.state"
 last=$(cat "$state" 2>/dev/null)

@@ -44,7 +44,7 @@ PILOT_LIMITS = {
 def test_live_service_is_its_own_project_and_identity():
     assert LIVE["name"] == "butterfly-spx-live"
     assert SERVICE["container_name"] == "butterfly_spx_live_app"
-    assert SERVICE["restart"] == "no"
+    assert SERVICE["restart"] == "on-failure:3"
     assert SERVICE["ports"] == ["127.0.0.1:8002:8000"]
     assert SERVICE["pull_policy"] == "never" and "build" not in SERVICE
     assert "app_spx_live" not in BASE["services"]
