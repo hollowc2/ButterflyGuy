@@ -3,9 +3,10 @@
 # The live container restarts on a crash at most three times; after that, if it dies holding
 # a fly, nothing manages the exit until someone looks. This posts to the live channel when it
 # is down or unhealthy, again when the problem changes, and once on recovery. Each Docker
-# restart is posted once, because a restarted bot otherwise looks healthy. It never starts, stops or execs into
-# anything that writes. It stays silent until activation has verified the container
-# (VERIFIED) and after a deliberate stop (STOPPED).
+# restart is posted once, because a restarted bot otherwise looks healthy. A bot that is up but
+# has halted on unknown broker state counts as down: it leaves an open fly unmanaged (live
+# 2026-11-19). It never starts, stops or execs into anything that writes. It stays silent
+# until activation has verified the container (VERIFIED) and after a deliberate stop (STOPPED).
 set -uo pipefail
 source "$(dirname "$0")/common.sh"
 
@@ -26,11 +27,24 @@ state="$D/health.state"
 last=$(cat "$state" 2>/dev/null)
 p0=$(cat "$D/paper.fingerprint" 2>/dev/null)
 
+# The bot's own halt: it stays up but no longer monitors or exits. Only this run counts;
+# a restart reconciles with the broker before it trades again.
+halted() {
+  local started
+  started=$(docker inspect -f '{{.State.StartedAt}}' "$LIVE_C" 2>/dev/null)
+  # grep reads to the end: an early `grep -q` exit SIGPIPEs docker logs, and pipefail then
+  # reports "not halted" (it did on 2026-11-19's 1 MB log).
+  docker logs --since "${started:-${DATE}T00:00:00Z}" "$LIVE_C" 2>&1 \
+    | grep -E '"event": "(monitor|entry_loop)_stopped_unknown_broker_state"' >/dev/null
+}
+
 fail=""
 if [ "$(running "$LIVE_C")" != 1 ]; then
   fail="live container is NOT running ($(docker inspect -f 'exit {{.State.ExitCode}} at {{.State.FinishedAt}}' "$LIVE_C" 2>/dev/null || echo 'missing'))"
 elif [ "$(docker inspect -f '{{.Image}}' "$LIVE_C")" != "$CAND" ]; then
   fail="live image is not $CAND"
+elif halted; then
+  fail="live bot HALTED on unknown broker state; it is up but not managing exits"
 elif ! curl -sf --max-time 5 "http://127.0.0.1:$LIVE_PORT/health" >/dev/null; then
   fail="metrics port $LIVE_PORT not answering"
 elif ! token_match "$LIVE_C"; then
@@ -52,7 +66,7 @@ fi
 
 [ "$fail" = "$last" ] && exit 1
 echo "$fail" >"$state"
-if [ "$(running "$LIVE_C")" != 1 ]; then
+if [ "$(running "$LIVE_C")" != 1 ] || [[ "$fail" == "live bot HALTED"* ]]; then
   if db_tool check "${CHECK_ARGS[@]}" >/dev/null; then
     held="$LIVE_DB is flat"
   else

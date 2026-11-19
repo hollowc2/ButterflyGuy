@@ -102,9 +102,15 @@ def make_order_manager(settings: ExecutionSettings, underlying: str = "SPX"):
             2.4,
         )
     )
-    schwab.place_order = AsyncMock(return_value="ORD1")
-    schwab.cancel_order = AsyncMock()
-    schwab.get_order_status = AsyncMock(return_value={"status": "WORKING"})
+    # A resting order works until the bot cancels it, then reads CANCELED like Schwab's.
+    cancelled: set[str] = set()
+    schwab.place_order = AsyncMock(side_effect=lambda _spec: (cancelled.clear(), "ORD1")[1])
+    schwab.cancel_order = AsyncMock(side_effect=cancelled.add)
+    schwab.get_order_status = AsyncMock(
+        side_effect=lambda order_id: {
+            "status": "CANCELED" if order_id in cancelled else "WORKING"
+        }
+    )
     schwab.get_todays_orders = AsyncMock(return_value=[])
     schwab.get_account_snapshot = AsyncMock(
         return_value={"securitiesAccount": {"positions": []}}
@@ -703,6 +709,78 @@ async def test_post_cancel_raises_ambiguous_when_mark_unknown_also_fails():
 
     with pytest.raises(AmbiguousOrderError, match="post-cancel"):
         await om._check_post_cancel_fill("ORD1", 1, intent_id=42)
+
+
+PENDING_CANCEL = {"status": "PENDING_CANCEL"}
+NO_SLEEP = patch("butterfly_guy.execution.order_manager.asyncio.sleep", new=AsyncMock())
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_waits_out_pending_cancel():
+    # Live 2026-11-19: the read 0.3 s after the DELETE said PENDING_CANCEL; Schwab closed
+    # the order as CANCELED, 0 filled, a second later. That is not a partial fill.
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(
+        side_effect=[PENDING_CANCEL, PENDING_CANCEL, {"status": "CANCELED"}]
+    )
+
+    with NO_SLEEP:
+        assert await om._check_post_cancel_fill("ORD1", 1, order_type="exit") is None
+
+    assert schwab.get_order_status.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_waits_out_working_then_reports_the_fill():
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(side_effect=[{"status": "WORKING"}, filled_order()])
+
+    with NO_SLEEP:
+        result = await om._check_post_cancel_fill("ORD1", 1, order_type="exit")
+
+    assert result["post_cancel"] is True
+    assert result["fill_price"] == pytest.approx(0.41)
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_that_never_settles_stops_the_bot():
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(return_value=PENDING_CANCEL)
+
+    with NO_SLEEP, patch(
+        "butterfly_guy.execution.order_manager.POST_CANCEL_SETTLE_SECONDS", 0.0
+    ), pytest.raises(PartialFillError, match="still PENDING_CANCEL"):
+        await om._check_post_cancel_fill("ORD1", 1, order_type="exit")
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_partial_fill_stops_the_bot_without_waiting():
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(return_value={"status": "PARTIALLY_FILLED"})
+
+    with NO_SLEEP, pytest.raises(PartialFillError, match="partially filled"):
+        await om._check_post_cancel_fill("ORD1", 1, order_type="exit")
+
+    schwab.get_order_status.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_exit_ladder_moves_on_after_a_pending_cancel_settles():
+    settings = make_settings(price_ladder_steps=2, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.20, mark=3.40, ask=3.60)
+    schwab.get_order_status = AsyncMock(
+        side_effect=[PENDING_CANCEL, {"status": "CANCELED"}, filled_order()]
+    )
+
+    with NO_SLEEP, \
+         patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)):
+        result = await om.execute_exit(candidate, current_value=2.50, quantity=1)
+
+    assert schwab.place_order.await_count == 2
+    assert result["post_cancel"] is True
 
 
 @pytest.mark.asyncio
