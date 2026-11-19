@@ -64,15 +64,29 @@ if [ -z "$fail" ]; then
   exit 0
 fi
 
-[ "$fail" = "$last" ] && exit 1
+# A dead or halted bot with an open fly leaves it unmanaged, so that alert repeats every
+# ALERT_REPEAT_MIN minutes until the fly is flat or the bot recovers; one post was missed for
+# six hours on 2026-11-19. Everything else posts once per problem.
+unmanaged=0
+{ [ "$(running "$LIVE_C")" != 1 ] || [[ "$fail" == "live bot HALTED"* ]]; } && unmanaged=1
+alerted="$D/health.alerted"
+repeat=""
+if [ "$fail" = "$last" ]; then
+  [ "$unmanaged" = 1 ] || exit 1
+  since=$(( $(date +%s) - $(cat "$alerted" 2>/dev/null || echo 0) ))
+  [ "$since" -ge $(( ${ALERT_REPEAT_MIN:-15} * 60 )) ] || exit 1
+  repeat=" STILL UNRESOLVED after $(( since / 60 )) min."
+fi
 echo "$fail" >"$state"
-if [ "$(running "$LIVE_C")" != 1 ] || [[ "$fail" == "live bot HALTED"* ]]; then
+if [ "$unmanaged" = 1 ]; then
   if db_tool check "${CHECK_ARGS[@]}" >/dev/null; then
     held="$LIVE_DB is flat"
+    [ -n "$repeat" ] && exit 1  # nothing left to manage; the first post said so
   else
     held="$LIVE_DB may hold an OPEN live fly that nothing is managing"
   fi
-  notify "🚨 $LABEL $DATE: $fail; $held. Check ToS and Helios now. Log: $D/health.log"
+  notify "🚨 $LABEL $DATE: $fail; $held.$repeat Check ToS and Helios now. Log: $D/health.log"
+  date +%s >"$alerted"
 else
   notify "⚠️ $LABEL $DATE health: $fail. Log: $D/health.log"
 fi
