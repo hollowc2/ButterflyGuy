@@ -2067,3 +2067,71 @@ async def test_entry_intent_created_event_proves_insert_succeeded_before_submit(
             schwab.place_order.assert_not_awaited()
         else:
             schwab.place_order.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("read", [
+    {}, {"status": None}, {"status": ""}, {"status": " \t"},
+    {"status": "WORKING", "childOrderStrategies": [{}]},
+    {**filled_order(), "childOrderStrategies": [{}]},
+], ids=["absent", "null", "empty", "whitespace", "missing-child", "filled-missing-child"])
+async def test_fill_poll_missing_status_preserves_last_real_intent_status(read):
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    persisted = {
+        "status": "WORKING", "last_broker_status": "WORKING", "payload": {"status": "WORKING"},
+    }
+
+    async def update(_id, status, payload):
+        persisted.update(status=status, last_broker_status=status, payload=payload)
+    om.intent_queries.update_broker_status.side_effect = update
+    schwab.get_order_status = AsyncMock(return_value=read)
+    clock, mono, sleep = fake_clock()
+    with mono, sleep:
+        assert await om._wait_for_fill("ORD1", 6, intent_id=42) is False
+
+    assert persisted == {
+        "status": "WORKING", "last_broker_status": "WORKING", "payload": {"status": "WORKING"},
+    }
+    om.intent_queries.update_broker_status.assert_not_awaited()
+    assert clock[0] == 6
+    assert schwab.get_order_status.await_count == 3
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final", ["FILLED", "CANCELED"])
+async def test_fill_poll_recovers_from_missing_status_without_recording_it(final):
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    payload = filled_order() if final == "FILLED" else {"status": "CANCELED"}
+    schwab.get_order_status = AsyncMock(side_effect=[{}, payload])
+    clock, mono, sleep = fake_clock()
+    with mono, sleep:
+        result = await om._wait_for_fill("ORD1", 6, intent_id=42)
+    assert bool(result) == (final == "FILLED")
+    assert clock[0] == 2
+    om.intent_queries.update_broker_status.assert_awaited_once_with(42, final, payload)
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("side", ["entry", "exit"])
+async def test_missing_fill_poll_status_times_out_then_post_cancel_halts_without_resubmit(side):
+    om, schwab = make_order_manager(make_settings(retry_interval_seconds=4))
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    schwab.get_order_status = AsyncMock(return_value={})
+    candidate = make_candidate(5900, 5950, 6000, 2.5)
+    clock, mono, sleep = fake_clock()
+    with mono, sleep, pytest.raises(PartialFillError, match="missing its status 15s after cancel"):
+        if side == "entry":
+            await om.execute_single_attempt(candidate, 2.5)
+        else:
+            await om.execute_exit(candidate, 2.5, trade_id=7)
+    assert clock[0] == 19  # original 4s fill budget, then the existing 15s cancel budget
+    om.intent_queries.update_broker_status.assert_awaited_once_with(42, "CANCEL_REQUESTED")
+    om.intent_queries.mark_unknown.assert_not_awaited()
+    om.intent_queries.create_intent.assert_awaited_once()
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_awaited_once_with("ORD1")

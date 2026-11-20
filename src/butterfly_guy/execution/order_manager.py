@@ -1196,6 +1196,12 @@ class OrderManager:
         while monotonic() < deadline:
             try:
                 status = await self.schwab.get_order_status(order_id)
+                if _has_missing_status(status):
+                    # No authoritative status for the whole tree, even with a FILLED
+                    # parent. Preserve the last real intent status and the same deadline.
+                    log.warning("order_poll_missing_status", order_id=order_id)
+                    await asyncio.sleep(poll_interval)
+                    continue
                 order_status = status.get("status", "")
                 statuses = order_statuses(status)
                 terminal_failure = next(
