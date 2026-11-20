@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import math
 from collections.abc import Awaitable
 from time import monotonic
 from typing import Any, NamedTuple
@@ -1214,6 +1215,17 @@ class PositionService:
         entry_net = broker_opening_net_from_transactions(transactions, trade)
         if entry_net is None:
             log.warning("provisional_settlement_no_opening_evidence", trade_id=trade.trade_id)
+            return None
+        # Only the session's final 1-minute bar is the close; a quote fallback or an
+        # earlier bar is not, so wait for Schwab's posting instead.
+        close_at = dt.datetime.combine(
+            trade.trade_date, market_close_time(trade.trade_date), tzinfo=EASTERN,
+        )
+        if (
+            spot_ts is None or not math.isfinite(spot) or spot <= 0
+            or not close_at - dt.timedelta(minutes=1) <= spot_ts <= close_at
+        ):
+            log.warning("provisional_settlement_missing_final_bar", trade_id=trade.trade_id)
             return None
         value = fly_settlement_value(candidate, spot)
         settlement_net = round(value * 100 * trade.quantity, 2)

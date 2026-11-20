@@ -1162,3 +1162,23 @@ async def test_exit_rejected_after_the_close_settles_instead_of_halting() -> Non
     service.order_manager.execute_exit.assert_awaited_once()
     assert service.trade_queries.close_trade.await_args.args[3] == "cash_settled"
     assert readiness_snapshot() == (True, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("minute", "books"), [(None, False), (58, False), (59, True)],
+                         ids=["no-bars-quote-fallback", "last-bar-1558", "final-bar-1559"])
+async def test_provisional_settlement_requires_the_final_session_bar(minute, books):
+    # A quote, or a regular-session bar that is not the last minute, is not the close.
+    # Without it, the fly waits for Schwab's posting instead.
+    service = _settling_service([OPENING_100000], 7465.0)
+    service.market_data.get_intraday_bars_for_day.return_value = (
+        [] if minute is None
+        else [_candle(dt.datetime(2026, 11, 19, 15, minute, tzinfo=EASTERN), 7465.0)]
+    )
+    service.market_data.get_spot_price.return_value = 7465.0
+
+    settlement = await service._provisional_cash_settlement(
+        _live_fly_trade(), _live_fly_candidate(),
+    )
+
+    assert (settlement is not None) == books
