@@ -119,6 +119,17 @@ failures log `notify failed` and retain the last successfully delivered state,
 repeat timestamp and restart count, so the next health run retries. A failed
 recovery post is also retried before its old warning state is cleared.
 
+Optionally set `CHECK_READY=1` in the session environment to check `/ready`. The
+warning `live bot NOT READY: <reason> (same reason on two consecutive health checks)`
+posts only after the same reason is observed in two consecutive health runs for
+the same container start time. Reasons containing `starting` or `shutting_down`
+are ignored. Ready, unreadable, unreachable or skipped checks, reason changes,
+disabling the check, and container restarts break the streak. This check follows
+the paper-container fingerprint check and precedes the blocked-entry check, so
+halts and the earlier health problems retain priority. It does not change trading
+readiness, resolve intents or restart anything. `health.ready` stores observations;
+`health.state` still records only successfully posted warnings.
+
 1. **Read state (read-only).** `docker logs butterfly_spx_live_app 2>&1 | grep -E
    'stopped_unknown|monitor_task_error|post_cancel|order_'` names the order and the
    reason. In ToS, record the fly's legs and any working order on them.

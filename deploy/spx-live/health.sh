@@ -40,6 +40,39 @@ broker_state_events() {
     | grep -E '"event": "((monitor|entry_loop)_stopped_unknown_broker_state|entry_blocked_active_intent|entry_intent_created)"'
 }
 
+# Optional readiness confirmation. This file records observations, not alert delivery.
+# Clear it on every run so skipped/failed checks break the consecutive-read streak.
+ready_state="$D/health.ready"
+previous_ready=$(cat "$ready_state" 2>/dev/null)
+: >"$ready_state"
+ready_reason=""
+ready_problem() {
+  [ "${CHECK_READY:-0}" = 1 ] || return 1
+  # /ready returns its reason with HTTP 503, so do not use curl -f here.
+  ready_reason=$(curl -sS --max-time 5 "http://127.0.0.1:$LIVE_PORT/ready" \
+    | "$PY" -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+if not isinstance(data, dict) or data.get("status") != "not_ready":
+    sys.exit(0)
+reason = data.get("reason")
+if isinstance(reason, str):
+    reasons = {part.strip() for part in reason.split(",") if part.strip()}
+    if not reasons.intersection({"starting", "shutting_down"}):
+        print(",".join(sorted(reasons)))
+') || return 1
+  [ -n "$ready_reason" ] || return 1
+  local started current
+  started=$(docker inspect -f '{{.State.StartedAt}}' "$LIVE_C" 2>/dev/null) || return 1
+  [ -n "$started" ] || return 1
+  current="$started $ready_reason"
+  printf '%s\n' "$current" >"$ready_state"
+  [ "$current" = "$previous_ready" ]
+}
+
 fail=""
 if [ "$(running "$LIVE_C")" != 1 ]; then
   fail="live container is NOT running ($(docker inspect -f 'exit {{.State.ExitCode}} at {{.State.FinishedAt}}' "$LIVE_C" 2>/dev/null || echo 'missing'))"
@@ -56,6 +89,8 @@ elif [ "$(running "$PAPER_C")" != 1 ]; then
   fail="paper container is not running"
 elif [ -n "$p0" ] && [ "$(paper_fingerprint)" != "$p0" ]; then
   fail="PAPER CONTAINER CHANGED since activation"
+elif ready_problem; then
+  fail="live bot NOT READY: $ready_reason (same reason on two consecutive health checks)"
 elif [[ "$(printf '%s\n' "${broker_events:-}" \
     | grep -E '"event": "entry_(blocked_active_intent|intent_created)"' \
     | tail -n 1)" == *'"entry_blocked_active_intent"'* ]]; then
