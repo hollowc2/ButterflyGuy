@@ -23,6 +23,7 @@ from butterfly_guy.data.schwab_client import OrderRejectedError
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
+    EntryOrderReplacedError,
     LiveSpread,
     OperatorExitTakeoverError,
     OrderManager,
@@ -1579,7 +1580,7 @@ async def test_post_cancel_terminal_failure_stops_the_ladder(status):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("order_type", ["entry", "exit"])
-async def test_post_cancel_replaced_hands_over_only_exits(order_type):
+async def test_post_cancel_replaced_hands_over_exits_and_stops_entries(order_type):
     om, schwab = make_order_manager(make_settings())
     schwab.get_order_status = AsyncMock(return_value=live_1119_status("REPLACED"))
 
@@ -1588,7 +1589,8 @@ async def test_post_cancel_replaced_hands_over_only_exits(order_type):
             with pytest.raises(OperatorExitTakeoverError, match="operator replaced"):
                 await om._check_post_cancel_fill("ORD1", 1, order_type=order_type)
         else:
-            assert await om._check_post_cancel_fill("ORD1", 1, order_type=order_type) is None
+            with pytest.raises(EntryOrderReplacedError, match="operator replaced"):
+                await om._check_post_cancel_fill("ORD1", 1, order_type=order_type)
 
 
 @pytest.mark.asyncio
@@ -1624,6 +1626,79 @@ async def test_exit_post_cancel_replaced_stops_before_another_intent_or_order():
     schwab.cancel_order.assert_awaited_once_with("ORD1")
     om.intent_queries.update_broker_status.assert_any_await(42, "REPLACED", payload)
     om.intent_queries.mark_unknown.assert_not_awaited()
+
+
+def _working_replacement() -> dict:
+    """The operator's order that replaced the bot's: a new id, still working."""
+    return {**live_1119_status("WORKING"), "orderId": "OPERATOR-2"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replacement_listed", [False, True], ids=["none-listed", "working"])
+async def test_entry_poll_replaced_stops_without_cancel_or_another_order(replacement_listed):
+    # An operator edit of the resting entry: stop now, not at the fill timeout, and
+    # leave both the REPLACED original and any replacement alone.
+    om, schwab = make_order_manager(make_settings(retry_interval_seconds=20))
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    # Listed only after the bot submitted: the pre-submit working-order check saw none.
+    listed = [_working_replacement()] if replacement_listed else []
+    schwab.get_todays_orders = AsyncMock(side_effect=[[], *[listed] * 5])
+    payload = live_1119_status("REPLACED")
+    reads = iter([live_1119_status("WORKING")])
+    schwab.get_order_status = AsyncMock(side_effect=lambda _order_id: next(reads, payload))
+    clock, mono, sleep = fake_clock()
+
+    with mono, sleep, pytest.raises(EntryOrderReplacedError, match="operator replaced"):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+
+    assert clock[0] == pytest.approx(2.0)  # one poll interval, not the 20 s fill wait
+    om.intent_queries.create_intent.assert_awaited_once()
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_not_called()
+    assert om.intent_queries.update_broker_status.await_args_list[-1].args == (
+        42, "REPLACED", payload
+    )
+    om.intent_queries.mark_unknown.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replacement_listed", [False, True], ids=["none-listed", "working"])
+async def test_entry_post_cancel_replaced_stops_before_another_order(replacement_listed):
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    # Listed only after the bot submitted: the pre-submit working-order check saw none.
+    listed = [_working_replacement()] if replacement_listed else []
+    schwab.get_todays_orders = AsyncMock(side_effect=[[], *[listed] * 5])
+    payload = live_1119_status("REPLACED")
+    schwab.get_order_status = AsyncMock(return_value=payload)
+
+    with NO_SLEEP, patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)), \
+         pytest.raises(EntryOrderReplacedError, match="operator replaced"):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_awaited_once_with("ORD1")  # the bot's own, never the operator's
+    assert om.intent_queries.update_broker_status.await_args_list[-1].args == (
+        42, "REPLACED", payload
+    )
+    om.intent_queries.mark_unknown.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["CANCELED", "REJECTED", "EXPIRED"])
+async def test_entry_poll_final_statuses_keep_their_handling(status):
+    om, schwab = make_order_manager(make_settings(retry_interval_seconds=20))
+    schwab.get_order_status = AsyncMock(return_value=live_1119_status(status))
+    _, mono, sleep = fake_clock()
+
+    with mono, sleep:
+        if status == "CANCELED":
+            assert await om._wait_for_fill("ORD1", 20) is False
+        else:
+            with pytest.raises(TerminalOrderError, match=status):
+                await om._wait_for_fill("ORD1", 20)
 
 
 @pytest.mark.asyncio

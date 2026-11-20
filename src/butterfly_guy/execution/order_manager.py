@@ -136,6 +136,10 @@ class OperatorExitTakeoverError(RuntimeError):
     """The operator acted on this fly in Schwab; the bot must not send exit orders."""
 
 
+class EntryOrderReplacedError(RuntimeError):
+    """The operator replaced the bot's entry order in Schwab; automated entries stop."""
+
+
 class BrokerFill(NamedTuple):
     order_id: str
     net_fill_price: float
@@ -767,7 +771,7 @@ class OrderManager:
                 )
                 return post_fill
 
-        except (BrokerFillError, PartialFillError, TerminalOrderError):
+        except (BrokerFillError, PartialFillError, TerminalOrderError, EntryOrderReplacedError):
             raise
         except OrderRejectedError as e:
             raise await self._submit_rejected(intent_id, e, "entry") from e
@@ -1071,6 +1075,8 @@ class OrderManager:
                 raise TerminalOrderError(terminal_failure, order_id)
             if order_type == "exit" and order_status == "REPLACED":
                 raise OperatorExitTakeoverError("operator replaced bot exit order")
+            if order_status == "REPLACED":
+                raise EntryOrderReplacedError("operator replaced bot entry order")
             if order_status == "FILLED":
                 fill = parse_broker_fill(status, requested_quantity, order_id)
                 if order_type == "entry" and limit_price is not None:
@@ -1093,7 +1099,7 @@ class OrderManager:
                 e,
                 (
                     AmbiguousOrderError, BrokerFillError, PartialFillError,
-                    TerminalOrderError, OperatorExitTakeoverError,
+                    TerminalOrderError, OperatorExitTakeoverError, EntryOrderReplacedError,
                 ),
             ):
                 raise
@@ -1147,6 +1153,10 @@ class OrderManager:
                     raise OperatorExitTakeoverError(
                         f"operator {order_status.lower()} bot exit order"
                     )
+                if order_status == "REPLACED":
+                    # An entry edited in Schwab: the replacement is the operator's order.
+                    # Stop now; never cancel it or send another entry beside it.
+                    raise EntryOrderReplacedError("operator replaced bot entry order")
                 if order_status == "CANCELED":
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False
@@ -1155,8 +1165,8 @@ class OrderManager:
                 if isinstance(
                     e,
                     (
-                        BrokerFillError, PartialFillError,
-                        TerminalOrderError, OperatorExitTakeoverError,
+                        BrokerFillError, PartialFillError, TerminalOrderError,
+                        OperatorExitTakeoverError, EntryOrderReplacedError,
                     ),
                 ):
                     raise

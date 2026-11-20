@@ -124,6 +124,10 @@ Either way, health.sh's 🚨 in the live channel repeats every 15 min. Alertmana
      `UPDATE broker_order_intents SET status = 'CANCELED', raw_broker_payload = '{"operator_resolved": "<reason>", "previous_status": "<old>"}'::jsonb, updated_at = NOW() WHERE id = <id> AND broker_order_id = '<order id>' AND status NOT IN ('FILLED','CANCELED','REJECTED','EXPIRED');`
      Then `docker start butterfly_spx_live_app`. This is the only sanctioned manual DB
      edit, and only after the ToS check.
+   - **Refusal "entry intent that cannot be matched to a broker order" or "unresolved entry intent":**
+     today's entry, e.g. one you replaced in ToS (the bot halts on that). It blocks
+     every entry today. Check ToS the same way for today's SPX orders and positions,
+     then use the same UPDATE with its id.
 4. **After you close in ToS:** a restarted bot adopts nothing that it did not send.
    Close the DB row from Schwab's fill (Manual Flatten, step 6).
 5. **If it expires:** after 16:02 ET, run the settle tool. Do the dry run first:

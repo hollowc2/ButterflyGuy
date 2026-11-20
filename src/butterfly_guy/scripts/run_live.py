@@ -70,6 +70,7 @@ from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFill,
     BrokerFillError,
+    EntryOrderReplacedError,
     OrderManager,
     PartialFillError,
     TerminalOrderError,
@@ -657,27 +658,29 @@ async def _assert_broker_state_matches_db(
             f"Broker/DB OPEN {underlying} leg mismatch; {'; '.join(details)}"
         )
 
-    # Any active EXIT intent from the previous process holds the trade's active-exit
-    # index, including REPLACED after an operator edit. Runtime skips this: every
-    # submit briefly has an active intent without an order id.
+    # Any active intent from the previous process holds its unique index, including
+    # REPLACED after an operator edit: an EXIT one its OPEN trade's exits, an ENTRY one
+    # today's entries. Runtime skips this: every submit briefly has an active intent
+    # without an order id.
     if allow_repair:
         broker_order_ids = set().union(*(order_ids(order) for order in todays_orders))
         open_ids = {row.get("id") for row in open_rows}
         for intent in intents:
-            if (
-                intent.get("side") != "EXIT"
-                or intent.get("trade_id") not in open_ids
-                or intent.get("status") in TERMINAL_ORDER_STATUSES
+            side = intent.get("side")
+            if intent.get("status") in TERMINAL_ORDER_STATUSES or not (
+                side == "ENTRY" or (side == "EXIT" and intent.get("trade_id") in open_ids)
             ):
                 continue
+            owner = f"OPEN {underlying} trade" if side == "EXIT" else underlying
+            kind = str(side).lower()
             order_id = intent.get("broker_order_id")
             if order_id and str(order_id) in broker_order_ids:
                 raise RuntimeError(
-                    f"OPEN {underlying} trade has an unresolved exit intent "
+                    f"{owner} has an unresolved {kind} intent "
                     f"(order {intent.get('status')}); manual reconciliation required"
                 )
             raise RuntimeError(
-                f"OPEN {underlying} trade has an exit intent that cannot be matched to a "
+                f"{owner} has an {kind} intent that cannot be matched to a "
                 f"broker order ({intent.get('status')}, "
                 f"{'order not found' if order_id else 'no order id'}); "
                 "manual reconciliation required"
@@ -928,6 +931,7 @@ async def entry_loop(
                     (
                         AmbiguousOrderError,
                         BrokerFillError,
+                        EntryOrderReplacedError,
                         PartialFillError,
                         TerminalOrderError,
                     ),
