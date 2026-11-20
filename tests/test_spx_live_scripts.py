@@ -548,6 +548,29 @@ def test_health_alerts_when_the_live_bot_halts_or_entries_are_blocked(session, e
     assert_paper_never_changed(session)
 
 
+@pytest.mark.parametrize(
+    ("problem", "expected"),
+    [
+        ({"fingerprint": {"butterfly_spx_app": "changed"}}, "PAPER CONTAINER CHANGED"),
+        ({"token_override": {"butterfly_spx_live_app": "1 deadbeef"}}, "token file differs"),
+    ],
+    ids=["paper-changed", "token-mismatch"],
+)
+def test_health_reports_a_later_problem_over_an_earlier_blocked_entry(session, problem, expected):
+    # The blocked-entry event stays in this run's log; it must not hide what breaks next.
+    session.run("activate.sh")
+    session.state["logs"] = '{"event": "entry_blocked_active_intent"}'
+    session.run("health.sh")
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+
+    for key, value in problem.items():
+        session.state[key] = {**session.state.get(key, {}), **value}
+    result, out = session.run("health.sh")
+
+    assert result.returncode == 1, out
+    assert expected in session.notifications().splitlines()[-1]
+
+
 def test_health_repeats_the_unmanaged_fly_alert_until_flat(session):
     session.run("activate.sh")
     session.state["check_rc"] = 1

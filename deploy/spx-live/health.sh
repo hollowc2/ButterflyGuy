@@ -44,12 +44,9 @@ if [ "$(running "$LIVE_C")" != 1 ]; then
   fail="live container is NOT running ($(docker inspect -f 'exit {{.State.ExitCode}} at {{.State.FinishedAt}}' "$LIVE_C" 2>/dev/null || echo 'missing'))"
 elif [ "$(docker inspect -f '{{.Image}}' "$LIVE_C")" != "$CAND" ]; then
   fail="live image is not $CAND"
-elif broker_events=$(broker_state_events); then
-  if [[ "$broker_events" == *"_stopped_unknown_broker_state"* ]]; then
-    fail="live bot HALTED on unknown broker state; it is up but not managing exits"
-  else
-    fail="live entries BLOCKED by an active intent; manual reconciliation required"
-  fi
+elif broker_events=$(broker_state_events) \
+    && [[ "$broker_events" == *"_stopped_unknown_broker_state"* ]]; then
+  fail="live bot HALTED on unknown broker state; it is up but not managing exits"
 elif ! curl -sf --max-time 5 "http://127.0.0.1:$LIVE_PORT/health" >/dev/null; then
   fail="metrics port $LIVE_PORT not answering"
 elif ! token_match "$LIVE_C"; then
@@ -58,6 +55,9 @@ elif [ "$(running "$PAPER_C")" != 1 ]; then
   fail="paper container is not running"
 elif [ -n "$p0" ] && [ "$(paper_fingerprint)" != "$p0" ]; then
   fail="PAPER CONTAINER CHANGED since activation"
+elif [[ "${broker_events:-}" == *"entry_blocked_active_intent"* ]]; then
+  # Last: the event stays in this run's log, so it must not hide a later problem.
+  fail="live entries BLOCKED by an active intent; manual reconciliation required"
 fi
 echo "$(ts) health fail=${fail:-none}"
 
