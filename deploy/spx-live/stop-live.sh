@@ -12,7 +12,7 @@ if [ "$(running "$LIVE_C")" = 0 ]; then
   exit 0
 fi
 if [ "${FORCE:-0}" != 1 ]; then
-  broker_flat || { echo "$(ts) REFUSED: broker not flat (FORCE=1 to override)"; exit 1; }
+  broker_flat --ignore-expired || { echo "$(ts) REFUSED: broker not flat (FORCE=1 to override)"; exit 1; }
   db_tool check "${CHECK_ARGS[@]}" || { echo "$(ts) REFUSED: $LIVE_DB not flat (FORCE=1 to override)"; exit 1; }
 fi
 act save_logs "$D" || echo "$(ts) saving container logs FAILED"

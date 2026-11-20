@@ -1719,3 +1719,38 @@ async def test_bid_ladder_never_overlaps_orders_across_a_restart_cycle():
     limits = [c[0][1] for c in om.builder.build_butterfly_close.call_args_list]
     assert limits == pytest.approx([2.15, 2.05, 1.95, 1.85, 2.15, 2.05, 1.95])
     _assert_one_order_at_a_time(events)
+
+
+@pytest.mark.asyncio
+async def test_live_test_exit_refetches_a_stale_quote_instead_of_halting():
+    # One stale leg (> live_test_quote_max_age_seconds) or a 429 burst returns None.
+    settings = make_settings(price_ladder_steps=1, live_test_date=dt.date(2026, 11, 20))
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=1.85, mark=1.97, ask=2.10)
+    fetch = AsyncMock(side_effect=[None, None, None, spread])
+    _, mono, sleep = fake_clock()
+
+    with mono, sleep, patch.object(om, "_fetch_live_spread", new=fetch), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
+        result = await om.execute_exit(candidate, current_value=1.97, quantity=1)
+
+    assert result is not None
+    schwab.place_order.assert_awaited_once()
+    assert om.builder.build_butterfly_close.call_args[0][1] == pytest.approx(1.85)
+
+
+@pytest.mark.asyncio
+async def test_live_test_exit_halts_without_an_order_when_quotes_stay_stale():
+    settings = make_settings(live_test_date=dt.date(2026, 11, 20))
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    fetch = AsyncMock(return_value=None)
+    clock, mono, sleep = fake_clock()
+
+    with mono, sleep, patch.object(om, "_fetch_live_spread", new=fetch), \
+         pytest.raises(BrokerFillError, match="fresh leg quotes"):
+        await om.execute_exit(candidate, current_value=1.97, quantity=1)
+
+    assert clock[0] == pytest.approx(20.0)
+    schwab.place_order.assert_not_awaited()

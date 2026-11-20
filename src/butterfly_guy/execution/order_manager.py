@@ -47,6 +47,9 @@ TERMINAL_FAILURE_STATUSES = {"REJECTED", "EXPIRED"}
 # DELETE, CANCELED by the next second). Wait this long for the order to settle.
 POST_CANCEL_SETTLE_SECONDS = 15.0
 POST_CANCEL_POLL_SECONDS = 1.0
+# Live test exits never submit on a stale quote; re-fetch this long before halting.
+EXIT_QUOTE_WAIT_SECONDS = 20.0
+EXIT_QUOTE_RETRY_SECONDS = 1.0
 # An order edited in Schwab ends as REPLACED; its replacement is a new (operator) order.
 POST_CANCEL_SETTLED_STATUSES = TERMINAL_ORDER_STATUSES | {"REPLACED"}
 
@@ -822,14 +825,17 @@ class OrderManager:
                     return None
 
                 spread = await self._fetch_live_spread(candidate)
+                if self.settings.live_test_date is not None and spread is None:
+                    # No closing order based on a stale signal or earlier ladder quote, but
+                    # one stale leg or a 429 burst is not a reason to stop managing the fly.
+                    spread = await self._refetch_live_spread(candidate)
+                    if spread is None:
+                        raise BrokerFillError(
+                            "live test exit requires fresh leg quotes; supervise broker"
+                        )
                 if spread is not None:
                     recent_bids.append(spread.bid)
                     recent_mids.append((spread.bid + spread.ask) / 2)
-                if self.settings.live_test_date is not None and spread is None:
-                    # No closing order based on a stale signal or earlier ladder quote.
-                    raise BrokerFillError(
-                        "live test exit requires fresh leg quotes; supervise broker"
-                    )
                 bid_anchor = statistics.median(recent_bids) if recent_bids else current_value
                 mid_anchor = statistics.median(recent_mids) if recent_mids else current_value
 
@@ -962,6 +968,17 @@ class OrderManager:
                     raise AmbiguousOrderError("exit order outcome is unknown") from e
 
             log.warning("exit_ladder_exhausted")
+
+    async def _refetch_live_spread(self, candidate: ButterflyCandidate) -> LiveSpread | None:
+        """Re-fetch a fresh exit quote for up to EXIT_QUOTE_WAIT_SECONDS; no order meanwhile."""
+        deadline = monotonic() + EXIT_QUOTE_WAIT_SECONDS
+        while monotonic() < deadline:
+            log.warning("exit_waiting_for_fresh_quote", center=candidate.center_strike)
+            await asyncio.sleep(EXIT_QUOTE_RETRY_SECONDS)
+            spread = await self._fetch_live_spread(candidate)
+            if spread is not None:
+                return spread
+        return None
 
     async def _cancel_then_settle(self, order_id: str) -> None:
         """Send the cancel; a failed DELETE is left to the post-cancel status check.

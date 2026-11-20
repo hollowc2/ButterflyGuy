@@ -34,6 +34,7 @@ from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.scripts.run_live import (
     ActiveMonitor,
     BrokerStateGate,
+    LiveTradingHaltedError,
     _assert_broker_state_matches_db,
     _assert_live_config_supported,
     _broker_option_positions,
@@ -587,6 +588,46 @@ async def test_entry_loop_stops_after_unsafe_order_error(monkeypatch, error):
 
 
 @pytest.mark.asyncio
+async def test_live_entry_loop_halt_raises_so_the_process_restarts(monkeypatch):
+    trade_service = Mock()
+    trade_service.attempt_entry = AsyncMock(side_effect=AmbiguousOrderError("unknown"))
+    position_service = Mock()
+    position_service.config.execution.paper_trading = False
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    with pytest.raises(LiveTradingHaltedError, match="entry stopped"):
+        await entry_loop(trade_service, position_service, critical_notifier=critical_notifier)
+
+    critical_notifier.notify_critical.assert_awaited_once_with("broker_ambiguity")
+    assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_startup_refuses_a_working_bot_owned_order_but_runtime_allows_it():
+    # After a restart, nothing waits on the previous process's resting exit, and the
+    # monitor would hand it to the operator as if it were theirs.
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = _synthetic_butterfly_snapshot()
+    schwab.get_todays_orders.return_value = [{
+        "orderId": 55, "status": "WORKING",
+        "orderLegCollection": [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)],
+    }]
+    intents = AsyncMock()
+    intents.intents_for_day.return_value = [
+        {"id": 2, "side": "EXIT", "status": "WORKING", "broker_order_id": "55", "trade_id": 7}
+    ]
+    open_rows = [{**OPEN_TRADE, "id": 7}]
+
+    with pytest.raises(RuntimeError, match="working bot-owned"):
+        await _assert_broker_state_matches_db(schwab, "SPX", open_rows, intents)
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", open_rows, intents, allow_repair=False, monitored_trade_id=7
+    )
+
+
+@pytest.mark.asyncio
 async def test_entry_loop_repeated_errors_degrade_and_recover(
     monkeypatch,
 ):
@@ -751,10 +792,12 @@ async def test_live_entry_loop_halts_when_its_monitor_dies_of_any_error(
     critical_notifier = Mock(notify_critical=AsyncMock())
     set_readiness(None)
     if halts:
-        await entry_loop(
-            trade_service, position_service, recovered_trade=Mock(trade_id=7),
-            recovered_candidate=Mock(), critical_notifier=critical_notifier,
-        )
+        # Live exits non-zero so on-failure restarts into the startup reconcile.
+        with pytest.raises(LiveTradingHaltedError, match="unexpected monitor crash"):
+            await entry_loop(
+                trade_service, position_service, recovered_trade=Mock(trade_id=7),
+                recovered_candidate=Mock(), critical_notifier=critical_notifier,
+            )
         critical_notifier.notify_critical.assert_awaited_once_with("broker_ambiguity")
         assert readiness_snapshot() == (False, "broker_order_state_unsafe")
         trade_service.attempt_entry.assert_not_awaited()

@@ -26,7 +26,7 @@ p0=$(cat "$D/paper.fingerprint" 2>/dev/null)
 paper_note="paper untouched"
 [ -n "$p0" ] && [ "$(paper_fingerprint)" != "$p0" ] && paper_note="⚠️ PAPER CONTAINER CHANGED since activation"
 
-if broker_flat && db_tool check "${CHECK_ARGS[@]}"; then
+if broker_flat --ignore-expired && db_tool check "${CHECK_ARGS[@]}"; then
   if stop_live; then
     notify "🏁 $LABEL $DATE closed: broker & $LIVE_DB flat, $ev, live container stopped, $paper_note."
   else

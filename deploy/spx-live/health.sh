@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Read-only liveness check for a running live session; run every few minutes from a timer.
-# The live container restarts on a crash at most three times; after that, if it dies holding
-# a fly, nothing manages the exit until someone looks. This posts to the live channel when it
+# The live container restarts on a crash or a safety halt (the bot then exits 1) at most
+# three times; after that, if it dies holding a fly, nothing manages the exit until someone
+# looks. This posts to the live channel when it
 # is down or unhealthy, again when the problem changes, and once on recovery. Each Docker
 # restart is posted once, because a restarted bot otherwise looks healthy. A bot that is up but
 # has halted on unknown broker state counts as down: it leaves an open fly unmanaged (live
@@ -20,7 +21,7 @@ seen=$(cat "$D/restarts.seen" 2>/dev/null || echo 0)
 if [ "${restarts:-0}" -gt "${seen:-0}" ]; then
   echo "$restarts" >"$D/restarts.seen"
   echo "$(ts) health live restarts=$restarts"
-  notify "⚠️ $LABEL $DATE: the live bot crashed and Docker restarted it (restart $restarts of at most 3). On startup it reconciles with the broker and re-adopts any open fly. Check its log and ToS. Log: $D/health.log"
+  notify "⚠️ $LABEL $DATE: the live bot stopped (a crash, or a safety halt on unknown broker state) and Docker restarted it (restart $restarts of at most 3). On startup it reconciles with the broker and re-adopts any open fly, or refuses and stops again. Check its log and ToS. Log: $D/health.log"
 fi
 
 state="$D/health.state"

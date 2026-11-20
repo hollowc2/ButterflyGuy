@@ -330,6 +330,33 @@ class TradeQueries:
         )
         return result == "UPDATE 1"
 
+    async def get_provisional_settlements(self, underlying: str) -> list[dict[str, Any]]:
+        """CLOSED cash settlements booked at the close before Schwab posted them."""
+        rows = await self.db.pool.fetch(
+            """
+            SELECT * FROM butterfly_trades
+            WHERE underlying = $1 AND status = 'CLOSED'
+              AND metadata->>'settlement_provisional' = 'true'
+            ORDER BY trade_date
+            """,
+            underlying,
+        )
+        return [dict(r) for r in rows]
+
+    async def finalize_provisional_settlement(
+        self, trade_id: int, exit_price: float, pnl: float, metadata: dict[str, Any],
+    ) -> bool:
+        result = await self.db.pool.execute(
+            """
+            UPDATE butterfly_trades SET
+                exit_price = $2, pnl = $3, metadata = metadata || $4::jsonb
+            WHERE id = $1 AND status = 'CLOSED'
+              AND metadata->>'settlement_provisional' = 'true'
+            """,
+            trade_id, exit_price, pnl, json.dumps(metadata),
+        )
+        return result == "UPDATE 1"
+
     async def update_peak_value(self, trade_id: int, peak_value: float) -> None:
         await self.db.pool.execute(
             """

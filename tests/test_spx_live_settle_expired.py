@@ -5,7 +5,7 @@ import runpy
 import pytest
 
 TOOL = runpy.run_path("tools/spx_live_settle_expired.py", run_name="spx_live_settle_expired")
-plan_settlement, Refused = TOOL["plan_settlement"], TOOL["Refused"]
+plan_settlement, SettleRefusedError = TOOL["plan_settlement"], TOOL["SettleRefusedError"]
 
 LOWER, CENTER, UPPER = (f"SPXW  261119C0{k}000" for k in (7435, 7475, 7515))
 
@@ -44,7 +44,7 @@ def test_worthless_fly_before_schwab_posts_settles_at_zero_with_fees():
 
 @pytest.mark.parametrize("spx_close", [7420.0, 7450.0, 7600.0])
 def test_close_near_or_inside_the_strikes_waits_for_schwab(spx_close):
-    with pytest.raises(Refused, match="wait for Schwab"):
+    with pytest.raises(SettleRefusedError, match="wait for Schwab"):
         plan_settlement(trade_100000(), [OPENING], spx_close=spx_close)
 
 
@@ -61,14 +61,14 @@ def test_posted_expiration_transactions_settle_like_the_bot():
 
 
 def test_refuses_a_closed_row_and_a_partly_closed_fly():
-    with pytest.raises(Refused, match="not OPEN"):
+    with pytest.raises(SettleRefusedError, match="not OPEN"):
         plan_settlement(trade_100000(status="CLOSED"), [OPENING], spx_close=7176.0)
     part_close = tx("CLOSING", [(LOWER, -1.0, 1.0)], 100.0)
-    with pytest.raises(Refused, match="non-opening"):
+    with pytest.raises(SettleRefusedError, match="non-opening"):
         plan_settlement(trade_100000(), [OPENING, part_close], spx_close=7176.0)
 
 
 def test_refuses_opening_legs_that_are_not_the_fly():
     wrong = tx("OPENING", [(LOWER, 1.0, 8.0), (CENTER, -1.0, 3.5), (UPPER, 1.0, 2.75)], -100.0)
-    with pytest.raises(Refused, match="do not match"):
+    with pytest.raises(SettleRefusedError, match="do not match"):
         plan_settlement(trade_100000(), [wrong], spx_close=7176.0)

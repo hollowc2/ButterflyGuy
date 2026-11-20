@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
 from collections.abc import Awaitable
 from time import monotonic
 from typing import Any, NamedTuple
@@ -28,6 +29,7 @@ from butterfly_guy.core.time_utils import (
     is_trading_day,
     market_close_time,
     now_eastern,
+    now_utc,
     session_date,
 )
 from butterfly_guy.data.chain_utils import iter_chain_options
@@ -240,6 +242,40 @@ def broker_cash_settlement_from_transactions(
         net_pnl_dollars=round(net_pnl_dollars, 2),
         evidence={"status": "SETTLED", "transactions": evidence_transactions},
     )
+
+
+def broker_opening_net_from_transactions(
+    transactions: list[dict[str, Any]], trade: TradeRecord,
+) -> float | None:
+    """Net cash (fees included) of the fly's opening transactions, or None.
+
+    None unless the opening legs are exactly the fly and nothing has closed any leg.
+    """
+    quantity = float(trade.quantity)
+    symbols = (trade.lower_symbol, trade.center_symbol, trade.upper_symbol)
+    if quantity <= 0 or not all(symbols) or len(set(symbols)) != 3:
+        return None
+    expected = dict(zip(symbols, (quantity, -2 * quantity, quantity), strict=True))
+    opening = dict.fromkeys(symbols, 0.0)
+    net = 0.0
+    for transaction in transactions:
+        items = [
+            item for item in transaction.get("transferItems") or []
+            if str((item.get("instrument") or {}).get("symbol") or "") in expected
+        ]
+        if not items:
+            continue
+        try:
+            if {str(item["positionEffect"]) for item in items} != {"OPENING"}:
+                return None
+            net += float(transaction["netAmount"])
+            for item in items:
+                opening[str(item["instrument"]["symbol"])] += float(item["amount"])
+        except (KeyError, TypeError, ValueError):
+            return None
+    if any(abs(opening[s] - expected[s]) > 1e-9 for s in symbols) or net >= 0:
+        return None
+    return round(net, 2)
 
 
 def _settlement_pending_alert_time(trade_date: dt.date) -> dt.datetime:
@@ -737,6 +773,17 @@ class PositionService:
                         polls = 0  # look for the operator's fill on the next poll
                         await asyncio.sleep(poll_interval)
                         continue
+                    except TerminalOrderError as terminal:
+                        # Schwab refuses or expires exit orders once 0DTE trading ends; no
+                        # order is working, and the fly now cash-settles. Only after close.
+                        if is_market_open():
+                            raise
+                        await pending_exit_task
+                        log.warning(
+                            "exit_rejected_after_close_settling",
+                            trade_id=trade.trade_id, status=terminal.status,
+                        )
+                        continue
                     await pending_exit_task
 
                     parity_ok, exit_mark_parity = await self._best_effort(
@@ -1021,13 +1068,19 @@ class PositionService:
         peak = max(self._last_persisted_peak, trade.peak_value or 0.0)
         if not self.config.execution.paper_trading:
             try:
-                settlement = await self._wait_for_broker_cash_settlement(trade)
+                settlement = await self._provisional_cash_settlement(trade, candidate)
+                if settlement is None:
+                    settlement = await self._wait_for_broker_cash_settlement(trade)
             except Exception:
                 set_readiness("settlement_evidence_unavailable")
                 raise
+            provisional = settlement.evidence.get("status") == "PROVISIONAL"
             settlement_value = settlement.settlement_value
             settlement_spot = settlement.settlement_spot
-            settlement_source = "schwab_expiration_transactions"
+            settlement_source = (
+                "provisional_final_1m_close" if provisional
+                else "schwab_expiration_transactions"
+            )
             settlement_ts = dt.datetime.combine(
                 trade.trade_date,
                 market_close_time(trade.trade_date),
@@ -1045,6 +1098,8 @@ class PositionService:
                 "settlement_net_amount": settlement.settlement_net_amount,
                 "settlement_processing_time": settlement.processing_time.isoformat(),
                 "broker_cash_settlement_evidence": settlement.evidence,
+                # The next live startup replaces it with Schwab's posting.
+                "settlement_provisional": provisional,
             }
         else:
             try:
@@ -1132,6 +1187,122 @@ class PositionService:
             settlement_value=settlement_value,
             pnl=pnl,
         )
+
+    async def _provisional_cash_settlement(
+        self, trade: TradeRecord, candidate: ButterflyCandidate,
+    ) -> BrokerCashSettlement | None:
+        """Book a live fly at the close the way paper does, or None to wait for Schwab.
+
+        Schwab posts expiration transactions overnight, while the session closes out at
+        13:15 PT. The fly is valued at the index's final regular-session 1-minute close (as
+        paper is), and the net uses Schwab's opening transactions, fees included. The row is
+        marked provisional; the next live startup replaces it with Schwab's posting.
+        """
+        try:
+            spot, spot_source, spot_ts = await self._settlement_spot_price(
+                self.config.strategy.underlying, trade.trade_date,
+            )
+            transactions = await self.schwab.get_transactions_for_day(trade.trade_date)
+        except Exception as e:
+            log.warning("provisional_settlement_unavailable", trade_id=trade.trade_id, error=str(e))
+            return None
+        posted = broker_cash_settlement_from_transactions(transactions, trade)
+        if posted is not None:
+            return posted
+        entry_net = broker_opening_net_from_transactions(transactions, trade)
+        if entry_net is None:
+            log.warning("provisional_settlement_no_opening_evidence", trade_id=trade.trade_id)
+            return None
+        value = fly_settlement_value(candidate, spot)
+        settlement_net = round(value * 100 * trade.quantity, 2)
+        log.info(
+            "provisional_cash_settlement", trade_id=trade.trade_id, spot=spot,
+            settlement_value=value, net_pnl_dollars=round(entry_net + settlement_net, 2),
+        )
+        return BrokerCashSettlement(
+            settlement_value=round(value, 4),
+            settlement_spot=spot,
+            processing_time=now_utc(),
+            entry_net_amount=entry_net,
+            settlement_net_amount=settlement_net,
+            net_pnl_dollars=round(entry_net + settlement_net, 2),
+            evidence={
+                "status": "PROVISIONAL",
+                "spot_source": spot_source,
+                "spot_time": spot_ts.isoformat() if spot_ts else None,
+            },
+        )
+
+    async def true_up_provisional_settlements(self) -> int:
+        """Replace provisional live settlements with Schwab's posted ones; returns the count.
+
+        Corrects the row and the day's realized P&L by the difference, and posts it.
+        """
+        today = session_date()
+        rows = await self.trade_queries.get_provisional_settlements(
+            self.config.strategy.underlying
+        )
+        done = 0
+        for row in rows:
+            trade = TradeRecord(
+                trade_id=row["id"], trade_date=row["trade_date"], direction=row["direction"],
+                lower_strike=float(row["lower_strike"]),
+                center_strike=float(row["center_strike"]),
+                upper_strike=float(row["upper_strike"]),
+                entry_price=float(row["entry_price"]),
+                lower_symbol=row.get("lower_symbol") or "",
+                center_symbol=row.get("center_symbol") or "",
+                upper_symbol=row.get("upper_symbol") or "",
+                quantity=int(row.get("quantity") or 1),
+            )
+            transactions: list[dict[str, Any]] = []
+            day = trade.trade_date
+            while day <= today:
+                transactions.extend(await self.schwab.get_transactions_for_day(day))
+                day += dt.timedelta(days=1)
+            settlement = broker_cash_settlement_from_transactions(transactions, trade)
+            if settlement is None:
+                log.info("provisional_settlement_still_pending", trade_id=trade.trade_id)
+                continue
+            metadata = row.get("metadata") or {}
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
+            provisional_net = float(metadata.get("net_pnl_dollars") or 0.0)
+            delta = round(settlement.net_pnl_dollars - provisional_net, 2)
+            updated = await self.trade_queries.finalize_provisional_settlement(
+                trade.trade_id,
+                settlement.settlement_value,
+                settlement.net_pnl_dollars / (100 * trade.quantity),
+                {
+                    "settlement_provisional": False,
+                    "settlement_source": "schwab_expiration_transactions",
+                    "provisional_settlement_value": row.get("exit_price"),
+                    "provisional_net_pnl_dollars": provisional_net,
+                    "settlement_value": settlement.settlement_value,
+                    "settlement_spot": settlement.settlement_spot,
+                    "net_pnl_dollars": settlement.net_pnl_dollars,
+                    "entry_net_amount": settlement.entry_net_amount,
+                    "settlement_net_amount": settlement.settlement_net_amount,
+                    "settlement_processing_time": settlement.processing_time.isoformat(),
+                    "broker_cash_settlement_evidence": settlement.evidence,
+                },
+            )
+            if not updated:
+                continue
+            done += 1
+            if delta:
+                await self.risk_engine.record_pnl(delta, trade.trade_date)
+            log.info("provisional_settlement_finalized", trade_id=trade.trade_id, delta=delta)
+            if self.notifier and abs(delta) >= 1.0:
+                try:
+                    await self.notifier.notify_text(
+                        f"Trade {trade.trade_id} ({trade.trade_date}): Schwab's settlement "
+                        f"posted ${settlement.net_pnl_dollars:.2f}; the close-time estimate "
+                        f"was ${provisional_net:.2f} (corrected by ${delta:+.2f})."
+                    )
+                except Exception as e:
+                    log.warning("settlement_true_up_notify_failed", error=str(e))
+        return done
 
     async def _wait_for_broker_cash_settlement(
         self,

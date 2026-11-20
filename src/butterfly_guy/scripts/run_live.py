@@ -374,6 +374,14 @@ async def _expired_trade_has_broker_settlement(
     return broker_cash_settlement_from_transactions(transactions, trade) is not None
 
 
+class LiveTradingHaltedError(RuntimeError):
+    """A live bot stopped on unsafe broker state; the process exits non-zero.
+
+    Docker's on-failure restart then runs the startup reconcile, which re-adopts the fly
+    once every bot order is final and the broker matches the DB, and refuses otherwise.
+    """
+
+
 class BrokerStateGate:
     def __init__(self) -> None:
         self.reason: str | None = None
@@ -515,14 +523,20 @@ async def _assert_broker_state_matches_db(
             "refusing live startup"
         )
 
+    # At startup a bot-owned order that is still working belongs to the previous process:
+    # nothing in this one waits on it, and the monitor would take it for the operator's.
+    unsafe_statuses = PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
+    if allow_repair:
+        unsafe_statuses = unsafe_statuses | WORKING_ORDER_STATUSES
     unsafe_known = [
         order for order in todays_orders
         if not order_ids(order).isdisjoint(known_order_ids)
-        and order_statuses(order) & (PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES)
+        and order_statuses(order) & unsafe_statuses
     ]
     if unsafe_known:
         raise RuntimeError(
-            f"Broker has {len(unsafe_known)} partial/cancel-pending bot-owned "
+            f"Broker has {len(unsafe_known)} partial/cancel-pending"
+            f"{'/working' if allow_repair else ''} bot-owned "
             f"{underlying} order(s); manual reconciliation required"
         )
 
@@ -835,6 +849,8 @@ async def entry_loop(
                             else "broker_ambiguity"
                         )
                         await critical_notifier.notify_critical(condition)
+                    if live:
+                        raise LiveTradingHaltedError(f"monitor stopped: {exc}") from exc
                     return
             active_trade = None
             monitor_task = None
@@ -883,6 +899,8 @@ async def entry_loop(
                     log.error("entry_loop_stopped_unknown_broker_state")
                     if critical_notifier:
                         await critical_notifier.notify_critical("broker_ambiguity")
+                    if position_service.config.execution.paper_trading is False:
+                        raise LiveTradingHaltedError(f"entry stopped: {e}") from e
                     return
                 consecutive_errors += 1
                 underlying = trade_service.config.strategy.underlying
@@ -1086,6 +1104,7 @@ async def main() -> None:
     schwab: SchwabClientWrapper | None = None
     shadow_market_data: ShadowComparingMarketDataProvider | None = None
     gateway_client: GatewayMarketDataClient | None = None
+    task_group_failed = False
     try:
         await db.initialize()
         try:
@@ -1232,6 +1251,13 @@ async def main() -> None:
                 ):
                     await critical_notifier.resolve_critical(condition)
             open_rows = await trade_q.get_open_trades(underlying)
+            try:
+                finalized = await position_service.true_up_provisional_settlements()
+                if finalized:
+                    log.info("provisional_settlements_finalized", count=finalized)
+            except Exception as e:
+                # The provisional row stays; the next startup tries again.
+                log.error("provisional_settlement_true_up_failed", error=str(e))
 
         if open_rows:
             row = open_rows[0]
@@ -1392,6 +1418,7 @@ async def main() -> None:
                     )
                 install_shutdown_handler(supervised)
         except* Exception as eg:
+            task_group_failed = True
             for exc in eg.exceptions:
                 log.error("task_group_error", error=str(exc))
                 if notifier:
@@ -1404,6 +1431,9 @@ async def main() -> None:
             schwab,
             db,
         )
+    if task_group_failed:
+        # Non-zero so a restart policy (live: on-failure:3) sees a failure, not a clean stop.
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

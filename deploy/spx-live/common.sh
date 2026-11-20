@@ -160,7 +160,8 @@ token_match() {
 
 broker_flat() {
   # Read-only and account-wide (SPX, NDX, XSP), so the paper container is a valid host.
-  docker exec -i "$PAPER_C" python - <"$REL/tools/deploy_broker_flat_check.py"
+  # Close-out and stop pass --ignore-expired: Schwab lists expired 0DTE legs until overnight.
+  docker exec -i "$PAPER_C" python - "$@" <"$REL/tools/deploy_broker_flat_check.py"
 }
 
 verify_live() {

@@ -79,7 +79,7 @@ elif cmd == "exec":
     name = rest[0]
     if rest[1:3] == ["sh", "-c"]:
         print(state.get("token_override", {}).get(name) or token())
-    elif rest[1:] == ["python", "-"]:
+    elif rest[1:] in (["python", "-"], ["python", "-", "--ignore-expired"]):
         sys.stdin.read()
         sys.exit(state["broker_rc"])
     elif rest[1] == "python":
@@ -217,7 +217,11 @@ def assert_paper_never_changed(session):
                     assert call[-1] == "app_spx_live", joined
             assert not {"rm", "restart", "kill", "down"} & set(call), joined
         if call[0] == "exec" and "butterfly_spx_app" in call:
-            assert call[-2:] == ["python", "-"] or call[-2] == "-c", joined
+            assert (
+                call[-2:] == ["python", "-"]
+                or call[-3:] == ["python", "-", "--ignore-expired"]  # read-only flat check
+                or call[-2] == "-c"
+            ), joined
     assert session.state["fingerprint"]["butterfly_spx_app"] in {PAPER_FINGERPRINT, "changed"}
 
 

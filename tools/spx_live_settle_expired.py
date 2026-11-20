@@ -34,7 +34,7 @@ ET = ZoneInfo("America/New_York")
 OTM_MARGIN = 20.0  # SPX points between the close and the nearest strike
 
 
-class Refused(RuntimeError):
+class SettleRefusedError(RuntimeError):
     pass
 
 
@@ -49,7 +49,7 @@ def _opening_net(row: dict[str, Any], transactions: list[dict[str, Any]]) -> tup
         if not items:
             continue
         if {i.get("positionEffect") for i in items} != {"OPENING"}:
-            raise Refused(
+            raise SettleRefusedError(
                 f"a non-opening transaction touches the legs ({t.get('activityId')}); "
                 "the fly was (partly) closed: settle from Schwab's records by hand"
             )
@@ -60,9 +60,9 @@ def _opening_net(row: dict[str, Any], transactions: list[dict[str, Any]]) -> tup
                          "items": [(i["instrument"]["symbol"], i["amount"], i["price"])
                                    for i in items]})
     if any(abs(opening[s] - q) > 1e-9 for s, q in legs.items()):
-        raise Refused(f"opening transactions do not match the three legs: {opening}")
+        raise SettleRefusedError(f"opening transactions do not match the three legs: {opening}")
     if net >= 0:
-        raise Refused("opening transactions are not a debit")
+        raise SettleRefusedError("opening transactions are not a debit")
     return round(net, 2), evidence
 
 
@@ -74,7 +74,7 @@ def plan_settlement(
     from butterfly_guy.services.position_service import broker_cash_settlement_from_transactions
 
     if row["status"] != "OPEN":
-        raise Refused(f"trade {row['id']} is {row['status']}, not OPEN")
+        raise SettleRefusedError(f"trade {row['id']} is {row['status']}, not OPEN")
     qty = int(row["quantity"])
     trade = TradeRecord(
         trade_id=row["id"], trade_date=row["trade_date"], direction=row["direction"],
@@ -98,15 +98,15 @@ def plan_settlement(
         }
 
     if spx_close is None:
-        raise Refused("no SPX close and no posted settlement; wait for Schwab's posting")
+        raise SettleRefusedError("no SPX close and no posted settlement; wait for Schwab's posting")
     if trade.direction == "CALL":
         worthless = spx_close <= trade.lower_strike - OTM_MARGIN
     elif trade.direction == "PUT":
         worthless = spx_close >= trade.upper_strike + OTM_MARGIN
     else:
-        raise Refused(f"unknown direction {trade.direction!r}")
+        raise SettleRefusedError(f"unknown direction {trade.direction!r}")
     if not worthless:
-        raise Refused(
+        raise SettleRefusedError(
             f"SPX {spx_close} is within {OTM_MARGIN:g} points of (or inside) the strikes; "
             "wait for Schwab's settlement posting"
         )
@@ -142,12 +142,12 @@ async def main() -> None:
     try:
         record = await db.pool.fetchrow("SELECT * FROM butterfly_trades WHERE id = $1", args.trade_id)
         if record is None:
-            raise Refused(f"no trade {args.trade_id}")
+            raise SettleRefusedError(f"no trade {args.trade_id}")
         row = dict(record)
         day = row["trade_date"]
         close_et = dt.datetime.combine(day, market_close_time(day), tzinfo=ET)
         if dt.datetime.now(ET) < close_et + dt.timedelta(minutes=2):
-            raise Refused(f"the {day} session has not closed (+2 min)")
+            raise SettleRefusedError(f"the {day} session has not closed (+2 min)")
         transactions: list[dict[str, Any]] = []
         d = day
         while d <= dt.datetime.now(ET).date():
@@ -173,7 +173,7 @@ async def main() -> None:
             print("dry run; pass --apply to write")
             return
         if not await TradeQueries(db).close_trade(*close_args, metadata=meta):
-            raise Refused("NOT APPLIED: the row is no longer OPEN")
+            raise SettleRefusedError("NOT APPLIED: the row is no longer OPEN")
         risk = RiskQueries(db)
         await risk.get_or_create(day, row["underlying"])
         await risk.update_pnl(day, meta["net_pnl_dollars"], row["underlying"])
@@ -186,5 +186,5 @@ async def main() -> None:
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    except Refused as e:
+    except SettleRefusedError as e:
         sys.exit(f"REFUSED: {e}")

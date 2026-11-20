@@ -84,11 +84,21 @@ rebuilt paper-only with flat `/ready` proof. Evidence is in
 
 ## SPX Live: Bot Halted With An Open Fly
 
-A halt stops the live bot's monitor and entries but leaves the container up. It sends
-no more orders, so the fly is unmanaged until a human acts. You see it as health.sh's
-🚨 in the live channel ("live bot HALTED ... may hold an OPEN live fly"), repeated
-every 15 min, and as Alertmanager's `ButterflyGuyBrokerAmbiguity` (instance_role
-live). On 2026-11-19 the halt came at 07:20 PT and the first human action at 13:03 PT.
+A halt stops the live bot's monitor and entries; it sends no more orders.
+
+- **Releases from `audit/spx-live-halt-20261119` on:** a live halt exits the process
+  with code 1. Docker (`on-failure:3`) restarts it, and the startup reconcile decides.
+  - If every bot order is final and the broker matches the DB, it re-adopts the fly
+    and carries on.
+  - If not, it refuses and stops again. After three restarts it stays down.
+  - You see `⚠️ … stopped … and Docker restarted it` for each restart. If it stays
+    down, you see the 🚨 "live container is NOT running".
+- **bd870ae and earlier:** the container stays up but halted, and the fly is unmanaged
+  until a human acts.
+
+Either way, health.sh's 🚨 in the live channel repeats every 15 min. Alertmanager's
+`ButterflyGuyBrokerAmbiguity` (instance_role live) also posts to the live channel since
+2026-11-19. On 2026-11-19 the halt came at 07:20 PT and the first human action at 13:03 PT.
 
 1. **Read state (read-only).** `docker logs butterfly_spx_live_app 2>&1 | grep -E
    'stopped_unknown|monitor_task_error|post_cancel|order_'` names the order and the
@@ -98,9 +108,10 @@ live). On 2026-11-19 the halt came at 07:20 PT and the first human action at 13:
    yourself or decide to hold to settlement. Holding to settlement is fine for a
    cash-settled 0DTE fly when its remaining value is small.
 3. **Do not restart the bot to "resume" while an order on the legs is working.**
-   Startup refuses on a bot-owned PENDING_CANCEL/partial order. It also hands the
-   exit to you on any working order it does not own in this process (including its
-   own order from before the restart).
+   Startup refuses on any bot-owned order that is not final (working, PENDING_CANCEL,
+   partial). On bd870ae it accepts a bot-owned working order, then hands the exit to
+   you as if that order were yours. After you cancel it in ToS, a stopped container
+   needs `docker start butterfly_spx_live_app`.
 4. **After you close in ToS:** a restarted bot adopts nothing that it did not send.
    Close the DB row from Schwab's fill (Manual Flatten, step 6).
 5. **If it expires:** after 16:02 ET, run the settle tool. Do the dry run first:
@@ -113,10 +124,12 @@ live). On 2026-11-19 the halt came at 07:20 PT and the first human action at 13:
    It settles from Schwab's posted expiration transactions when they exist. The
    same day, it settles only a fly that expired at least 20 SPX points out of the
    money. It also updates `daily_risk_state`.
-6. **Stop the container.** Schwab lists expired legs until overnight, so
-   `stop-live.sh` refuses on broker flatness. Stop it with `FORCE=1` only after
-   step 5 shows the row CLOSED and ToS shows no working orders. Record why in the
-   session dir.
+6. **Stop the container.** A running live bot books the settlement at the close,
+   marked provisional; the next startup replaces it with Schwab's posting. Close-out
+   and `stop-live.sh` ignore legs whose expiry has passed (`--ignore-expired`). On
+   bd870ae they don't: Schwab lists expired legs until overnight, so stop with
+   `FORCE=1`, and only after step 5 shows the row CLOSED and ToS shows no working
+   orders. Record why in the session dir.
 7. **Before the next live day,** the activation gates (broker flat, live DB flat)
    must pass on their own. Never edit the gates.
 

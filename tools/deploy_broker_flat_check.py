@@ -6,12 +6,18 @@ Run inside the SPX app container, which has the Schwab config and token mounted:
 
 Read-only: it lists the last 59 days of orders and the account snapshot. Moved
 verbatim from the retired deploy.yml "Check runtime is flat" step.
+
+`python - --ignore-expired` (SPX live close-out and stop only) skips option positions that
+have already expired: Schwab lists a cash-settled 0DTE leg until its overnight posting.
+Active orders still fail, and so does any unexpired or unparseable position.
 """
 import asyncio
 import datetime as dt
+import re
+import sys
 
 from butterfly_guy.core.config import load_config
-from butterfly_guy.core.time_utils import session_date
+from butterfly_guy.core.time_utils import market_close_time, now_eastern, session_date
 from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.execution.order_manager import (
     CANCEL_PENDING_STATUSES,
@@ -27,8 +33,23 @@ from butterfly_guy.scripts.run_live import (
     _order_symbols,
 )
 
+OCC_EXPIRY = re.compile(r"(\d{2})(\d{2})(\d{2})[CP]\d{8}$")
+
+
+def expired(symbol: str, now: dt.datetime) -> bool:
+    """True once an option's expiration session has closed (OCC symbol, Eastern time)."""
+    match = OCC_EXPIRY.search(symbol.replace(" ", ""))
+    if match is None:
+        return False
+    yy, mm, dd = (int(part) for part in match.groups())
+    expiry = dt.date(2000 + yy, mm, dd)
+    return expiry < now.date() or (
+        expiry == now.date() and now.time() >= market_close_time(expiry)
+    )
+
 
 async def check() -> None:
+    ignore_expired = "--ignore-expired" in sys.argv[1:]
     schwab = SchwabClientWrapper(load_config("configs/config.yaml").schwab)
     await schwab.initialize()
     try:
@@ -63,6 +84,12 @@ async def check() -> None:
         )
         for underlying in ("SPX", "NDX", "XSP"):
             positions = _broker_option_positions(snapshot, underlying)
+            if ignore_expired:
+                now = now_eastern()
+                skipped = sorted(symbol for symbol in positions if expired(symbol, now))
+                if skipped:
+                    print(f"ignoring {len(skipped)} expired {underlying} leg(s): {skipped}")
+                positions = {s: q for s, q in positions.items() if s not in skipped}
             if positions:
                 raise RuntimeError(
                     f"Broker has {len(positions)} {underlying} option "
