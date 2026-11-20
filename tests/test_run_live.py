@@ -983,8 +983,10 @@ async def test_runtime_leaves_an_in_flight_entry_intent_to_its_attempt():
     [
         EntryOrderReplacedError("operator replaced bot entry order"),
         IntentPersistenceError("entry order was rejected at submit (HTTP 400), but ..."),
+        IntentPersistenceError("entry intent creation outcome is unknown; "
+                               "no broker order submitted; manual reconciliation required"),
     ],
-    ids=["replaced", "unrecorded-rejection"],
+    ids=["replaced", "unrecorded-rejection", "uncertain-create"],
 )
 async def test_live_entry_loop_halts_on_entry_intent_safety_errors(monkeypatch, error):
     trade_service = Mock(

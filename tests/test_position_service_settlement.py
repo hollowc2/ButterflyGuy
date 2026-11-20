@@ -1071,15 +1071,18 @@ async def test_true_up_leaves_a_row_provisional_until_schwab_posts():
 
 
 @pytest.mark.asyncio
-async def test_unrecorded_exit_rejection_after_the_close_halts_instead_of_settling() -> None:
+@pytest.mark.parametrize("message", [
+    "exit order was rejected at submit (HTTP 400), but its intent could not be recorded",
+    "exit intent creation outcome is unknown; "
+    "no broker order submitted; manual reconciliation required",
+], ids=["unrecorded-rejection", "uncertain-create"])
+async def test_unsafe_exit_intent_after_the_close_halts_instead_of_settling(message) -> None:
     # Unlike a recorded rejection, its intent still holds the exit index: reconcile first.
     set_readiness(None)
     service = _settling_service([OPENING_100000], 7176.0)
     service.schwab.get_option_chain.return_value = {}
     service.order_manager = AsyncMock()
-    error = order_manager_module.IntentPersistenceError(
-        "exit order was rejected at submit (HTTP 400), but its intent could not be recorded"
-    )
+    error = order_manager_module.IntentPersistenceError(message)
     service.order_manager.execute_exit.side_effect = error
     service.trade_queries.merge_metadata = AsyncMock()
     service.monitoring_leg_queries = None

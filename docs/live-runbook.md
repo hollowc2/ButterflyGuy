@@ -100,6 +100,15 @@ Either way, health.sh's 🚨 in the live channel repeats every 15 min. Alertmana
 `ButterflyGuyBrokerAmbiguity` (instance_role live) also posts to the live channel since
 2026-11-19. On 2026-11-19 the halt came at 07:20 PT and the first human action at 13:03 PT.
 
+An `IntentPersistenceError` with `entry intent creation outcome is unknown; no broker
+order submitted; manual reconciliation required` (or `exit intent creation outcome
+is unknown; no broker order submitted; manual reconciliation required`) halts on the
+first failed INSERT reply, even if the database is still unreachable. This attempt
+sent no broker order, but the intent may have committed. Do not retry it manually
+until the database is reachable and its intents and broker state have been checked.
+A surviving SUBMITTING row is refused at startup; resolve it only through the guarded
+operator procedure below. If no row survived, startup can reconcile normally.
+
 1. **Read state (read-only).** `docker logs butterfly_spx_live_app 2>&1 | grep -E
    'stopped_unknown|monitor_task_error|post_cancel|order_'` names the order and the
    reason. In ToS, record the fly's legs and any working order on them.

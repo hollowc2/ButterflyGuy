@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from asyncpg.exceptions import UniqueViolationError
+from asyncpg.exceptions import CheckViolationError, UniqueViolationError
 from pydantic import ValidationError
 
 from butterfly_guy.core.config import ExecutionSettings
@@ -566,9 +566,9 @@ async def test_entry_intent_db_failure_prevents_broker_write():
         make_settings(paper_trading=False, retry_interval_seconds=0)
     )
     om.intent_queries = AsyncMock()
-    om.intent_queries.create_intent.side_effect = RuntimeError("db unavailable")
+    om.intent_queries.create_intent.side_effect = CheckViolationError("db unavailable")
 
-    with pytest.raises(RuntimeError, match="db unavailable"):
+    with pytest.raises(CheckViolationError, match="db unavailable"):
         await om.execute_single_attempt(
             make_candidate(5900, 5950, 6000, 2.50), limit_price=2.50
         )
@@ -582,11 +582,11 @@ async def test_exit_intent_db_failure_prevents_broker_write():
         make_settings(paper_trading=False, retry_interval_seconds=0)
     )
     om.intent_queries = AsyncMock()
-    om.intent_queries.create_intent.side_effect = RuntimeError("db unavailable")
+    om.intent_queries.create_intent.side_effect = CheckViolationError("db unavailable")
 
     with patch.object(
         om, "_fetch_live_spread", new=AsyncMock(return_value=None)
-    ), pytest.raises(RuntimeError, match="db unavailable"):
+    ), pytest.raises(CheckViolationError, match="db unavailable"):
         await om.execute_exit(
             make_candidate(5900, 5950, 6000, 2.50),
             current_value=3.00,
@@ -601,10 +601,10 @@ async def test_exit_intent_db_failure_prevents_broker_write():
     "db_error,expected_error",
     [
         (UniqueViolationError("private DB detail"), AmbiguousOrderError),
-        (ConnectionError("db unavailable"), ConnectionError),
+        (CheckViolationError("db unavailable"), CheckViolationError),
     ],
 )
-async def test_exit_intent_conflict_halts_but_connection_failure_remains_retryable(
+async def test_exit_intent_conflict_halts_but_definitive_failure_remains_retryable(
     db_error, expected_error,
 ):
     om, schwab = make_order_manager(make_settings())

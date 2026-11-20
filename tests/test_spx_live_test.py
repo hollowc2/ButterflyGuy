@@ -1,15 +1,26 @@
 """Dated live pilot cannot open outside its session or lose audit evidence silently."""
 
+import asyncio
 import datetime as dt
 import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from asyncpg.exceptions import UniqueViolationError
+from asyncpg.exceptions import (
+    AdminShutdownError,
+    CheckViolationError,
+    ConnectionDoesNotExistError,
+    InterfaceError,
+    PostgresSyntaxError,
+    QueryCanceledError,
+    SerializationError,
+    StatementCompletionUnknownError,
+    UniqueViolationError,
+)
 
 from butterfly_guy.core.config import AppConfig, ExecutionSettings
 from butterfly_guy.db.queries import OrderIntentQueries
-from butterfly_guy.execution.order_manager import AmbiguousOrderError, LiveSpread
+from butterfly_guy.execution.order_manager import IntentPersistenceError, LiveSpread
 from butterfly_guy.services.trade_service import TradeService
 from tests.test_order_manager import (
     broker_fill,
@@ -104,10 +115,12 @@ class _IntentStore:
     intent row and then raises, as a connection lost before the INSERT's reply would.
     """
 
-    def __init__(self, fail_phases=(), lose_ack=False):
+    def __init__(self, fail_phases=(), lose_ack=False, create_error=None):
         self.rows: dict[int, dict] = {}
         self.fail_phases = set(fail_phases)
         self.lose_ack = lose_ack
+        self.create_error = create_error
+        self.read_back = AsyncMock(side_effect=ConnectionError("DB still unreachable"))
         self.snapshot_at_submit = None
 
     def active(self):
@@ -117,19 +130,21 @@ class _IntentStore:
     async def create_intent(self, *, side, candidate_snapshot, trade_id=None, **_):
         phases = {o["phase"] for o in candidate_snapshot.get("execution_observations", [])}
         if phases & self.fail_phases:
-            raise ConnectionError("db unavailable")  # one statement: nothing committed
+            raise CheckViolationError("before_submit rejected")  # definitive statement rollback
         if any(
             row["side"] == side and (side == "ENTRY" or row["trade_id"] == trade_id)
             for row in self.active()
         ):
             raise UniqueViolationError("duplicate key value violates unique constraint")
+        if self.create_error is not None and not self.lose_ack:
+            raise self.create_error
         intent_id = len(self.rows) + 1
         self.rows[intent_id] = {
             "side": side, "trade_id": trade_id, "status": "SUBMITTING",
             "snapshot": json.loads(json.dumps(candidate_snapshot)),
         }
         if self.lose_ack:
-            raise ConnectionError("connection lost")
+            raise self.create_error or ConnectionError("connection lost")
         return intent_id
 
     async def active_broker_order_ids(self, underlying, trade_date, *, exclude_intent_id=None):
@@ -176,7 +191,7 @@ async def test_failed_before_submit_evidence_leaves_no_intent_and_sends_no_order
     om, schwab = _recording_manager(store)
 
     for _ in range(2):  # the retry is a fresh attempt, not a conflict with an orphan
-        with pytest.raises(ConnectionError, match="db unavailable"):
+        with pytest.raises(CheckViolationError, match="before_submit rejected"):
             await _submit(om, side)
 
     schwab.place_order.assert_not_awaited()
@@ -209,18 +224,44 @@ async def test_before_submit_evidence_is_durable_before_the_order_is_sent(side):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("side", ["entry", "exit"])
-async def test_a_lost_intent_insert_reply_never_reaches_the_broker(side):
-    # The INSERT may have committed: no order now, and the next attempt meets the index.
-    store = _IntentStore(lose_ack=True)
+@pytest.mark.parametrize("committed", [True, False], ids=["committed", "no-row"])
+@pytest.mark.parametrize("error_type", [
+    ConnectionError, ConnectionDoesNotExistError, InterfaceError, TimeoutError,
+    asyncio.CancelledError, StatementCompletionUnknownError, AdminShutdownError, RuntimeError,
+])
+async def test_uncertain_intent_create_halts_on_the_first_failure(side, committed, error_type):
+    error = error_type("lost INSERT reply")
+    store = _IntentStore(lose_ack=committed, create_error=error)
     om, schwab = _recording_manager(store)
 
-    with pytest.raises(ConnectionError, match="connection lost"):
-        await _submit(om, side)
-    with pytest.raises(UniqueViolationError if side == "entry" else AmbiguousOrderError):
+    with pytest.raises(
+        IntentPersistenceError, match=f"{side} intent creation outcome is unknown"
+    ) as caught:
         await _submit(om, side)
 
+    assert caught.value.__cause__ is error
+    assert [row["status"] for row in store.active()] == (["SUBMITTING"] if committed else [])
+    # Even an unreachable read-back cannot delay or suppress this halt. No adoption,
+    # terminalization or broker request, including when the fake knows no row exists.
+    store.read_back.assert_not_awaited()
     schwab.place_order.assert_not_awaited()
-    assert [row["status"] for row in store.active()] == ["SUBMITTING"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("side", ["entry", "exit"])
+@pytest.mark.parametrize("error_type", [
+    CheckViolationError, PostgresSyntaxError, QueryCanceledError, SerializationError,
+])
+async def test_definitive_intent_create_error_preserves_retry_and_exception(side, error_type):
+    error = error_type("server rejected statement")
+    store = _IntentStore(create_error=error)
+    om, schwab = _recording_manager(store)
+    for _ in range(2):
+        with pytest.raises(error_type) as caught:
+            await _submit(om, side)
+        assert caught.value is error
+    assert store.rows == {}
+    schwab.place_order.assert_not_awaited()
 
 
 @pytest.mark.asyncio

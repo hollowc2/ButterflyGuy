@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from time import monotonic
 from typing import Any, NamedTuple
 
-from asyncpg.exceptions import UniqueViolationError
+from asyncpg.exceptions import PostgresError, UniqueViolationError
 
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.core.entry_pricing import entry_fill_within_limit
@@ -149,7 +149,7 @@ class EntryOrderReplacedError(RuntimeError):
 
 
 class IntentPersistenceError(RuntimeError):
-    """A known broker outcome could not be recorded; its intent stays active."""
+    """Intent persistence is unsafe; automated submission must stop for reconciliation."""
 
 
 class BrokerFill(NamedTuple):
@@ -678,6 +678,30 @@ class OrderManager:
         )
         return True
 
+    async def _create_intent(self, *, side: str, **kwargs: Any) -> int:
+        """A missing INSERT reply is unsafe persistent state, before any broker write."""
+        assert self.intent_queries is not None
+        try:
+            return await self.intent_queries.create_intent(side=side, **kwargs)
+        except (Exception, asyncio.CancelledError) as exc:
+            # A single autocommit statement rolls back on a definitive server error.
+            # Connection errors can be synthesized by asyncpg (with a SQLSTATE), and
+            # completion-unknown / shutdown errors do not prove that rollback.
+            if (
+                isinstance(exc, PostgresError)
+                and exc.sqlstate
+                and not exc.sqlstate.startswith("08")
+                and exc.sqlstate not in {"40003", "57P01", "57P02", "57P03"}
+            ):
+                raise
+            # Do not retry, adopt or terminalize a possibly committed row. Even an
+            # empty read-back can race a still-finishing INSERT; a down DB proves
+            # nothing. Cancellation here must also reach the safety-halt handlers.
+            raise IntentPersistenceError(
+                f"{side.lower()} intent creation outcome is unknown; "
+                "no broker order submitted; manual reconciliation required"
+            ) from exc
+
     async def execute_single_attempt(
         self,
         candidate: ButterflyCandidate,
@@ -745,7 +769,7 @@ class OrderManager:
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
         if intent_id is None and self.intent_queries is not None:
             try:
-                intent_id = await self.intent_queries.create_intent(
+                intent_id = await self._create_intent(
                     underlying=self.underlying,
                     trade_date=(
                         candidate.lower_quote.expiration
@@ -920,7 +944,7 @@ class OrderManager:
                     snapshot = self._candidate_snapshot(candidate)
                     snapshot["exit_reason"] = exit_reason
                     try:
-                        intent_id = await self.intent_queries.create_intent(
+                        intent_id = await self._create_intent(
                             underlying=self.underlying,
                             trade_date=(
                                 candidate.lower_quote.expiration
