@@ -1290,12 +1290,11 @@ class PositionService:
                     "settlement_processing_time": settlement.processing_time.isoformat(),
                     "broker_cash_settlement_evidence": settlement.evidence,
                 },
+                max_daily_loss=self.config.risk.max_daily_loss,
             )
             if not updated:
                 continue
             done += 1
-            if delta:
-                await self.risk_engine.record_pnl(delta, trade.trade_date)
             log.info("provisional_settlement_finalized", trade_id=trade.trade_id, delta=delta)
             if self.notifier and abs(delta) >= 1.0:
                 try:

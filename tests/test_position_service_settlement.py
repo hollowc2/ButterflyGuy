@@ -1040,7 +1040,12 @@ async def test_next_startup_trues_up_a_provisional_settlement_from_schwab():
     assert args[3]["settlement_provisional"] is False
     assert args[3]["provisional_net_pnl_dollars"] == pytest.approx(2620.21)
     json.dumps(args[3])  # the metadata must serialize (finalize writes it as jsonb)
-    service.risk_engine.record_pnl.assert_awaited_once_with(50.0, dt.date(2026, 11, 19))
+    # The day's risk P&L is corrected in the same statement as the row, not afterwards.
+    service.risk_engine.record_pnl.assert_not_awaited()
+    assert (
+        service.trade_queries.finalize_provisional_settlement.await_args.kwargs["max_daily_loss"]
+        == service.config.risk.max_daily_loss
+    )
     service.notifier.notify_text.assert_awaited_once()
 
 

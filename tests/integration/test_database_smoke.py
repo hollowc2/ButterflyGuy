@@ -10,7 +10,7 @@ import pytest
 
 from butterfly_guy.db.connection import DatabasePool
 from butterfly_guy.db.migrations.run_migrations import MIGRATIONS_DIR, run_migrations
-from butterfly_guy.db.queries import OrderIntentQueries, RiskQueries
+from butterfly_guy.db.queries import OrderIntentQueries, RiskQueries, TradeQueries
 from butterfly_guy.scripts import spx_live_db
 from tests.integration.test_spx_live_db import _settings
 
@@ -148,6 +148,101 @@ async def test_intent_insert_carries_its_before_submit_evidence_atomically():
         with pytest.raises(asyncpg.exceptions.ForeignKeyViolationError):
             await queries.create_intent(**{**intent, "side": "EXIT", "trade_id": 999_999})
         assert await db.pool.fetchval("SELECT count(*) FROM broker_order_intents") == 1
+    finally:
+        await db.close()
+        await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await admin.close()
+
+
+PROVISIONAL_TRADE = """
+INSERT INTO butterfly_trades (
+    trade_date, direction, wing_width, center_strike, lower_strike, upper_strike,
+    entry_price, entry_time, exit_price, exit_time, pnl, quantity, status, underlying, metadata
+) VALUES ($1, 'CALL', 40, 7475, 7435, 7515, 3.75, NOW(), 0, NOW(), $2, 1, 'CLOSED', 'SPX',
+          $3::jsonb) RETURNING id
+"""
+
+
+@pytest.mark.asyncio
+async def test_provisional_true_up_corrects_the_trade_and_its_risk_day_atomically():
+    dsn = os.getenv("CI_DATABASE_URL")
+    if not dsn:
+        pytest.skip("CI_DATABASE_URL is only set by the real-DB workflow")
+
+    name = f"trueup_{uuid.uuid4().hex[:8]}"
+    admin = await asyncpg.connect(dsn)
+    await admin.execute(f'CREATE DATABASE "{name}"')
+    db = DatabasePool(spx_live_db.dsn_for(_settings(dsn), name), min_size=1, max_size=2)
+    try:
+        await db.initialize()
+        await run_migrations(db)
+        pool, trades = db.pool, TradeQueries(db)
+
+        async def provisional(day, net):
+            meta = json.dumps({"settlement_provisional": True, "net_pnl_dollars": net})
+            return await pool.fetchval(PROVISIONAL_TRADE, day, net / 100, meta)
+
+        async def risk(day):
+            return await pool.fetchrow(
+                "SELECT realized_pnl, halted, max_loss_hit FROM daily_risk_state"
+                " WHERE trade_date = $1 AND underlying = 'SPX'", day,
+            )
+
+        async def finalize(trade_id, posted, provisional_net):
+            return await trades.finalize_provisional_settlement(
+                trade_id, 0.0, posted / 100,
+                {"settlement_provisional": False, "net_pnl_dollars": posted,
+                 "provisional_net_pnl_dollars": provisional_net},
+                max_daily_loss=500.0,
+            )
+
+        # The day already holds the provisional P&L; Schwab posts 21 cents worse.
+        day = dt.date(2026, 11, 19)
+        trade = await provisional(day, -379.79)
+        await pool.execute(
+            "INSERT INTO daily_risk_state (trade_date, underlying, realized_pnl)"
+            " VALUES ($1, 'SPX', -379.79)", day,
+        )
+        assert await finalize(trade, -380.0, -379.79) is True
+        assert (float((await risk(day))["realized_pnl"]), (await risk(day))["halted"]) == (
+            -380.0, False,
+        )
+        pnl = await pool.fetchval("SELECT pnl FROM butterfly_trades WHERE id = $1", trade)
+        assert float(pnl) == pytest.approx(-3.80)
+        # A second true-up corrects nothing twice.
+        assert await finalize(trade, -380.0, -379.79) is False
+        assert float((await risk(day))["realized_pnl"]) == -380.0
+
+        # Crossing the daily loss limit halts that day, as record_pnl did.
+        day2 = dt.date(2026, 11, 18)
+        trade2 = await provisional(day2, -300.0)
+        await pool.execute(
+            "INSERT INTO daily_risk_state (trade_date, underlying, realized_pnl)"
+            " VALUES ($1, 'SPX', -300.0)", day2,
+        )
+        assert await finalize(trade2, -550.0, -300.0) is True
+        row = await risk(day2)
+        assert (float(row["realized_pnl"]), row["halted"], row["max_loss_hit"]) == (
+            -550.0, True, True,
+        )
+
+        # No risk row for the day yet: the delta creates it.
+        day3 = dt.date(2026, 11, 17)
+        trade3 = await provisional(day3, 100.0)
+        assert await finalize(trade3, 150.0, 100.0) is True
+        row = await risk(day3)
+        assert (float(row["realized_pnl"]), row["halted"]) == (50.0, False)
+
+        # If the risk write fails, the trade correction rolls back with it.
+        day4 = dt.date(2026, 11, 16)
+        trade4 = await provisional(day4, 0.0)
+        with pytest.raises(asyncpg.exceptions.NumericValueOutOfRangeError):
+            await finalize(trade4, 10_000_000.0, 0.0)  # past NUMERIC(10,4)
+        assert await pool.fetchval(
+            "SELECT metadata->>'settlement_provisional' FROM butterfly_trades WHERE id = $1",
+            trade4,
+        ) == "true"
+        assert await risk(day4) is None
     finally:
         await db.close()
         await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
