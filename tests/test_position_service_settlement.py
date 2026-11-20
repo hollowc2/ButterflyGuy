@@ -2,6 +2,8 @@
 
 import asyncio
 import datetime as dt
+import json
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1012,7 +1014,8 @@ async def test_next_startup_trues_up_a_provisional_settlement_from_schwab():
     row = {
         "id": 100000, "trade_date": dt.date(2026, 11, 19), "direction": "CALL",
         "lower_strike": 7435.0, "center_strike": 7475.0, "upper_strike": 7515.0,
-        "entry_price": 3.75, "quantity": 1, "exit_price": 30.0,
+        # asyncpg returns NUMERIC columns as Decimal.
+        "entry_price": Decimal("3.75"), "quantity": 1, "exit_price": Decimal("30.0000"),
         "lower_symbol": LIVE_LEGS[0], "center_symbol": LIVE_LEGS[1],
         "upper_symbol": LIVE_LEGS[2],
         "metadata": {"settlement_provisional": True, "net_pnl_dollars": 2620.21},
@@ -1036,6 +1039,7 @@ async def test_next_startup_trues_up_a_provisional_settlement_from_schwab():
     assert args[2] == pytest.approx((3050.0 - 379.79) / 100)
     assert args[3]["settlement_provisional"] is False
     assert args[3]["provisional_net_pnl_dollars"] == pytest.approx(2620.21)
+    json.dumps(args[3])  # the metadata must serialize (finalize writes it as jsonb)
     service.risk_engine.record_pnl.assert_awaited_once_with(50.0, dt.date(2026, 11, 19))
     service.notifier.notify_text.assert_awaited_once()
 

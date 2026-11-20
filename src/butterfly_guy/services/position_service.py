@@ -1276,7 +1276,9 @@ class PositionService:
                 {
                     "settlement_provisional": False,
                     "settlement_source": "schwab_expiration_transactions",
-                    "provisional_settlement_value": row.get("exit_price"),
+                    "provisional_settlement_value": (
+                        float(row["exit_price"]) if row.get("exit_price") is not None else None
+                    ),
                     "provisional_net_pnl_dollars": provisional_net,
                     "settlement_value": settlement.settlement_value,
                     "settlement_spot": settlement.settlement_spot,
