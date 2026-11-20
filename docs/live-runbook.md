@@ -109,6 +109,13 @@ until the database is reachable and its intents and broker state have been check
 A surviving SUBMITTING row is refused at startup; resolve it only through the guarded
 operator procedure below. If no row survived, startup can reconcile normally.
 
+The health warning `live entries BLOCKED by an active intent; manual reconciliation
+required` clears after a later `entry_intent_created` log event proves that the
+active-entry index allowed a new intent. Health then posts `✅ … health recovered
+(was: …)` once. A no-op `entry_loop_recovered` is insufficient proof. A later block
+warns again. Any `*_stopped_unknown_broker_state` event stays sticky for that container
+run and keeps its repeating 🚨 alert; only a restart scopes it out.
+
 1. **Read state (read-only).** `docker logs butterfly_spx_live_app 2>&1 | grep -E
    'stopped_unknown|monitor_task_error|post_cancel|order_'` names the order and the
    reason. In ToS, record the fly's legs and any working order on them.

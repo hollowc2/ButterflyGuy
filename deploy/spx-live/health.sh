@@ -36,7 +36,7 @@ broker_state_events() {
   # grep reads to the end: an early `grep -q` exit SIGPIPEs docker logs, and pipefail then
   # reports "not halted" (it did on 2026-11-19's 1 MB log).
   docker logs --since "${started:-${DATE}T00:00:00Z}" "$LIVE_C" 2>&1 \
-    | grep -E '"event": "((monitor|entry_loop)_stopped_unknown_broker_state|entry_blocked_active_intent)"'
+    | grep -E '"event": "((monitor|entry_loop)_stopped_unknown_broker_state|entry_blocked_active_intent|entry_intent_created)"'
 }
 
 fail=""
@@ -55,8 +55,10 @@ elif [ "$(running "$PAPER_C")" != 1 ]; then
   fail="paper container is not running"
 elif [ -n "$p0" ] && [ "$(paper_fingerprint)" != "$p0" ]; then
   fail="PAPER CONTAINER CHANGED since activation"
-elif [[ "${broker_events:-}" == *"entry_blocked_active_intent"* ]]; then
-  # Last: the event stays in this run's log, so it must not hide a later problem.
+elif [[ "$(printf '%s\n' "${broker_events:-}" \
+    | grep -E '"event": "entry_(blocked_active_intent|intent_created)"' \
+    | tail -n 1)" == *'"entry_blocked_active_intent"'* ]]; then
+  # Last: only the latest block/create event decides; other health problems win.
   fail="live entries BLOCKED by an active intent; manual reconciliation required"
 fi
 echo "$(ts) health fail=${fail:-none}"

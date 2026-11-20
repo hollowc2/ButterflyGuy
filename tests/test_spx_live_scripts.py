@@ -662,3 +662,47 @@ def test_bad_exit_pricing_aborts_before_anything_starts(session, values, reason)
     assert reason in out and "NOT started" in session.notifications()
     assert not any(c[0] == "compose" for c in session.calls())
     assert not (session.dir / "ACTIVATED").exists()
+
+
+def test_health_clears_blocked_entry_after_a_created_intent_and_warns_on_reblock(session):
+    session.run("activate.sh")
+    session.state["logs"] = json.dumps({"event": "entry_blocked_active_intent"})
+    assert session.run("health.sh")[0].returncode == 1
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+
+    session.state["logs"] += "\n" + json.dumps({"event": "entry_intent_created"})
+    result, out = session.run("health.sh")
+    assert result.returncode == 0, out
+    assert "health fail=none" in out
+    assert session.notifications().count("health recovered") == 1
+    session.run("health.sh")
+    assert session.notifications().count("health recovered") == 1
+
+    session.state["logs"] += "\n" + json.dumps({"event": "entry_blocked_active_intent"})
+    assert session.run("health.sh")[0].returncode == 1
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+    assert session.notifications().count("entries BLOCKED") == 3  # includes recovered's 'was'
+    assert_paper_never_changed(session)
+
+
+@pytest.mark.parametrize("halt_first", [True, False])
+def test_health_halt_stays_sticky_despite_entry_intent_recovery(session, halt_first):
+    session.run("activate.sh")
+    session.state["check_rc"] = 1
+    events = ["entry_blocked_active_intent", "entry_intent_created"]
+    events.insert(0 if halt_first else len(events), "monitor_stopped_unknown_broker_state")
+    session.state["logs"] = "\n".join(json.dumps({"event": event}) for event in events)
+    result, out = session.run("health.sh")
+    assert result.returncode == 1, out
+    assert "🚨" in session.notifications().splitlines()[-1]
+    assert "HALTED on unknown broker state" in session.notifications().splitlines()[-1]
+    assert "health recovered" not in session.notifications()
+
+
+def test_health_noop_entry_loop_recovery_does_not_prove_the_intent_cleared(session):
+    session.run("activate.sh")
+    session.state["logs"] = "\n".join(json.dumps({"event": event}) for event in [
+        "entry_blocked_active_intent", "entry_loop_recovered",
+    ])
+    assert session.run("health.sh")[0].returncode == 1
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]

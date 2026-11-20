@@ -2039,3 +2039,31 @@ async def test_live_test_exit_halts_without_an_order_when_quotes_stay_stale():
 
     assert clock[0] == pytest.approx(20.0)
     schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("conflict", [False, True], ids=["created", "blocked"])
+async def test_entry_intent_created_event_proves_insert_succeeded_before_submit(conflict):
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    if conflict:
+        om.intent_queries.create_intent.side_effect = UniqueViolationError("active intent")
+    with patch("butterfly_guy.execution.order_manager.log") as logger:
+        async def place(_):
+            logger.info.assert_any_call("entry_intent_created", underlying="SPX")
+            return "ORD1"
+        schwab.place_order.side_effect = place
+        with patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
+            if conflict:
+                with pytest.raises(UniqueViolationError):
+                    await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.5), 2.5)
+            else:
+                assert await om.execute_single_attempt(
+                    make_candidate(5900, 5950, 6000, 2.5), 2.5
+                ) is not None
+        if conflict:
+            assert not any(c.args[0] == "entry_intent_created" for c in logger.info.call_args_list)
+            schwab.place_order.assert_not_awaited()
+        else:
+            schwab.place_order.assert_awaited_once()

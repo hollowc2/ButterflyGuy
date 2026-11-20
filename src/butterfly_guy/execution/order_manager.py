@@ -787,6 +787,8 @@ class OrderManager:
             except UniqueViolationError:
                 log.error("entry_blocked_active_intent", underlying=self.underlying)
                 raise
+            # The INSERT passed the active-entry index: any earlier block has cleared.
+            log.info("entry_intent_created", underlying=self.underlying)
         else:
             await self._record_execution_quote(
                 candidate, intent_id, "before_submit", limit_price=limit_price
