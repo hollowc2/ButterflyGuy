@@ -700,6 +700,12 @@ async def test_exit_raises_ambiguous_when_mark_unknown_also_fails():
     schwab.place_order.assert_awaited_once()
 
 
+# A status read that keeps failing is ambiguous once the settle budget is spent.
+ZERO_SETTLE_BUDGET = patch(
+    "butterfly_guy.execution.order_manager.POST_CANCEL_SETTLE_SECONDS", 0.0
+)
+
+
 @pytest.mark.asyncio
 async def test_post_cancel_raises_ambiguous_when_mark_unknown_also_fails():
     om, schwab = make_order_manager(make_settings())
@@ -707,7 +713,7 @@ async def test_post_cancel_raises_ambiguous_when_mark_unknown_also_fails():
     om.intent_queries.mark_unknown.side_effect = RuntimeError("db down")
     schwab.get_order_status.side_effect = RuntimeError("status unavailable")
 
-    with pytest.raises(AmbiguousOrderError, match="post-cancel"):
+    with ZERO_SETTLE_BUDGET, pytest.raises(AmbiguousOrderError, match="post-cancel"):
         await om._check_post_cancel_fill("ORD1", 1, intent_id=42)
 
 
@@ -885,7 +891,7 @@ async def test_post_cancel_status_failure_is_ambiguous():
     om.intent_queries = AsyncMock()
     schwab.get_order_status.side_effect = RuntimeError("status unavailable")
 
-    with pytest.raises(AmbiguousOrderError, match="post-cancel"):
+    with ZERO_SETTLE_BUDGET, pytest.raises(AmbiguousOrderError, match="post-cancel"):
         await om._check_post_cancel_fill("ORD1", 1, intent_id=42)
 
     om.intent_queries.mark_unknown.assert_awaited_once_with(42, "status unavailable")
@@ -1396,3 +1402,320 @@ async def test_paper_exit_live_rule_fields_are_empty_without_a_quote():
     diag = result["execution_diagnostics"]
     assert diag["live_exit_rule"] == "bid_ladder"
     assert diag["live_rule_exit_estimate"] is None
+
+
+# ---------------------------------------------------------------------------
+# Post-cancel settle: 2026-11-19 halt audit (reports/execution_audits/
+# spx-live-halt-audit-20261119). Payload shapes are Schwab's from live exit 100001.
+# ---------------------------------------------------------------------------
+
+def live_1119_canceled_exit() -> dict:
+    """Schwab's final read of live exit 100001: CANCELED, 0 filled, plus an
+    EXECUTION activity of executionType CANCELED at price 0 (not a fill)."""
+    return json.loads(
+        (Path(__file__).parent / "fixtures/live_20261119_exit_cancel_redacted.json").read_text()
+    )
+
+
+def live_1119_status(status: str, **fields) -> dict:
+    order = live_1119_canceled_exit()
+    order.pop("orderActivityCollection")
+    order.pop("closeTime")
+    order.update(status=status, remainingQuantity=1.0, cancelable=True, **fields)
+    return order
+
+
+def fake_clock():
+    """A monotonic clock that only advances when the code sleeps."""
+    clock = [0.0]
+
+    async def sleep(seconds):
+        clock[0] += seconds
+
+    return clock, patch(
+        "butterfly_guy.execution.order_manager.monotonic", new=lambda: clock[0]
+    ), patch("butterfly_guy.execution.order_manager.asyncio.sleep", new=sleep)
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_1119_payloads_settle_as_unfilled():
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    schwab.get_order_status = AsyncMock(
+        side_effect=[live_1119_status("PENDING_CANCEL"), live_1119_canceled_exit()]
+    )
+
+    with NO_SLEEP:
+        assert await om._check_post_cancel_fill("ORD1", 1, "exit", intent_id=100001) is None
+
+    final = om.intent_queries.update_broker_status.await_args_list[-1].args
+    assert final[:2] == (100001, "CANCELED")
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_pending_for_the_whole_budget_halts_before_a_late_cancel():
+    om, schwab = make_order_manager(make_settings())
+    reads = [live_1119_status("PENDING_CANCEL")] * 8 + [live_1119_status("WORKING")] * 8
+    schwab.get_order_status = AsyncMock(side_effect=[*reads, live_1119_canceled_exit()])
+    clock, mono, sleep = fake_clock()
+
+    with mono, sleep, pytest.raises(PartialFillError, match="still WORKING 15s after cancel"):
+        await om._check_post_cancel_fill("ORD1", 1, order_type="exit")
+
+    assert clock[0] == pytest.approx(15.0)
+    assert schwab.get_order_status.await_count == 16  # the CANCELED at 16 s is never read
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_canceled_with_a_filled_quantity_is_a_partial_fill():
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(
+        return_value={**live_1119_canceled_exit(), "filledQuantity": 1.0}
+    )
+
+    with NO_SLEEP, pytest.raises(PartialFillError, match="filled quantity"):
+        await om._check_post_cancel_fill("ORD1", 1, order_type="exit")
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_filled_child_under_a_canceled_parent_is_a_partial_fill():
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(return_value={
+        "status": "CANCELED",
+        "filledQuantity": 0.0,
+        "childOrderStrategies": [{"status": "FILLED", "orderId": "C1"}],
+    })
+
+    with NO_SLEEP, pytest.raises(PartialFillError):
+        await om._check_post_cancel_fill("ORD1", 1, order_type="exit")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status", ["PENDING_REPLACE", "AWAITING_MANUAL_REVIEW", "NEW", "UNKNOWN", "SOMETHING_NEW"]
+)
+async def test_post_cancel_waits_on_any_non_final_status(status):
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(
+        side_effect=[live_1119_status(status), live_1119_canceled_exit()]
+    )
+
+    with NO_SLEEP:
+        assert await om._check_post_cancel_fill("ORD1", 1, order_type="exit") is None
+
+    assert schwab.get_order_status.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_never_final_status_halts():
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(return_value=live_1119_status("PENDING_REPLACE"))
+    _, mono, sleep = fake_clock()
+
+    with mono, sleep, pytest.raises(PartialFillError, match="still PENDING_REPLACE"):
+        await om._check_post_cancel_fill("ORD1", 1, order_type="exit")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["REJECTED", "EXPIRED"])
+async def test_post_cancel_terminal_failure_stops_the_ladder(status):
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(return_value=live_1119_status(status))
+
+    with NO_SLEEP, pytest.raises(TerminalOrderError):
+        await om._check_post_cancel_fill("ORD1", 1, order_type="exit")
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_replaced_is_final_and_unfilled():
+    # The replacement is a new, operator-owned order: the next ladder step's
+    # operator-conflict check sees it working and hands the exit over.
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(return_value=live_1119_status("REPLACED"))
+
+    with NO_SLEEP:
+        assert await om._check_post_cancel_fill("ORD1", 1, order_type="exit") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        "API call failed after 3 retries: HTTP 429 rate limited on get_order",
+        "API call failed after 3 retries: Server error '502 Bad Gateway'",
+        "API call failed after 3 retries: ReadTimeout",
+        "API call failed after 3 retries: [Errno 104] Connection reset by peer",
+        "API call failed with non-retryable HTTP 401: Unauthorized",
+    ],
+)
+async def test_post_cancel_one_failed_status_read_does_not_halt(error):
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    schwab.get_order_status = AsyncMock(
+        side_effect=[RuntimeError(error), live_1119_canceled_exit()]
+    )
+
+    with NO_SLEEP:
+        assert await om._check_post_cancel_fill("ORD1", 1, "exit", intent_id=7) is None
+
+    om.intent_queries.mark_unknown.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_post_cancel_status_reads_failing_for_the_whole_budget_are_ambiguous():
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    schwab.get_order_status = AsyncMock(side_effect=RuntimeError("status unavailable"))
+    _, mono, sleep = fake_clock()
+
+    with mono, sleep, pytest.raises(AmbiguousOrderError, match="post-cancel"):
+        await om._check_post_cancel_fill("ORD1", 1, "exit", intent_id=7)
+
+    om.intent_queries.mark_unknown.assert_awaited_once_with(7, "status unavailable")
+
+
+@pytest.mark.asyncio
+async def test_exit_cancel_that_lost_the_race_books_the_fill_and_sends_no_more_steps():
+    settings = make_settings(price_ladder_steps=4, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.20, mark=3.40, ask=3.60)
+    schwab.get_order_status = AsyncMock(side_effect=[PENDING_CANCEL, filled_order()])
+
+    with NO_SLEEP, \
+         patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)):
+        result = await om.execute_exit(candidate, current_value=2.50, quantity=1)
+
+    assert result["post_cancel"] is True
+    schwab.place_order.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_exit_cancel_refused_because_the_order_filled_books_the_fill():
+    # Schwab refuses to DELETE a filled order; that refusal is not an unknown outcome.
+    settings = make_settings(price_ladder_steps=4, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.20, mark=3.40, ask=3.60)
+    schwab.cancel_order = AsyncMock(side_effect=RuntimeError(
+        "API call failed with non-retryable HTTP 400: order is not cancelable"
+    ))
+    schwab.get_order_status = AsyncMock(return_value=filled_order())
+
+    with NO_SLEEP, \
+         patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)):
+        result = await om.execute_exit(candidate, current_value=2.50, quantity=1)
+
+    assert result["post_cancel"] is True
+    schwab.place_order.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_exit_cancel_refused_with_the_order_still_working_halts_without_a_new_step():
+    settings = make_settings(price_ladder_steps=4, retry_interval_seconds=0)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    spread = LiveSpread(bid=3.20, mark=3.40, ask=3.60)
+    schwab.cancel_order = AsyncMock(side_effect=RuntimeError("API call failed after 3 retries"))
+    schwab.get_order_status = AsyncMock(return_value=live_1119_status("WORKING"))
+    _, mono, sleep = fake_clock()
+
+    with mono, sleep, \
+         patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)), \
+         pytest.raises(PartialFillError, match="still WORKING"):
+        await om.execute_exit(candidate, current_value=2.50, quantity=1)
+
+    schwab.place_order.assert_awaited_once()
+
+
+def _broker_event_log(om, schwab, cancel_reads: list[list[dict]], final: dict):
+    """Record place/cancel/status calls; each cancel settles through its own reads."""
+    events: list[tuple[str, str]] = []
+    orders = iter(f"ORD{n}" for n in range(1, 100))
+    pending: dict[str, list[dict]] = {}
+    reads = iter(cancel_reads)
+
+    async def place(_spec):
+        order_id = next(orders)
+        events.append(("place", order_id))
+        return order_id
+
+    async def cancel(order_id):
+        events.append(("cancel", order_id))
+        pending[order_id] = list(next(reads))
+
+    async def status(order_id):
+        queue = pending.get(order_id)
+        read = queue.pop(0) if queue else final
+        events.append(("status:" + read["status"], order_id))
+        return read
+
+    schwab.place_order = AsyncMock(side_effect=place)
+    schwab.cancel_order = AsyncMock(side_effect=cancel)
+    schwab.get_order_status = AsyncMock(side_effect=status)
+    return events
+
+
+def _assert_one_order_at_a_time(events):
+    """Every new order follows a final read of the one before it: no double exit."""
+    live: str | None = None
+    for event, order_id in events:
+        if event == "place":
+            assert live is None, f"{order_id} placed while {live} was not final: {events}"
+            live = order_id
+        elif event in {"status:CANCELED", "status:FILLED"} and order_id == live:
+            live = None
+
+
+@pytest.mark.asyncio
+async def test_mid_walk_full_exit_with_pending_cancel_on_every_cancel():
+    # Day-2 config: mid_walk, 4 steps, 0.10, 20 s. Every cancel reads PENDING_CANCEL
+    # twice before CANCELED; the fifth order (held at the bid) fills.
+    settings = make_settings(
+        exit_pricing="mid_walk", price_ladder_steps=4, price_ladder_step=0.10,
+        retry_interval_seconds=20,
+    )
+    om, schwab = make_order_manager(settings)
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent = AsyncMock(side_effect=range(1, 100))
+    candidate = make_candidate(5900, 5950, 6000, 3.75)
+    spread = LiveSpread(bid=1.85, mark=1.97, ask=2.10)  # live 100001's quote at signal
+    cancel_reads = [[PENDING_CANCEL, PENDING_CANCEL, {"status": "CANCELED"}]] * 4
+    events = _broker_event_log(om, schwab, cancel_reads, final={"status": "CANCELED"})
+    fills = [False, False, False, False, broker_fill()]
+
+    with NO_SLEEP, \
+         patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=fills)):
+        result = await om.execute_exit(candidate, current_value=1.97, quantity=1)
+
+    assert result is not None and result["ladder_steps"][-1]["filled"] is True
+    limits = [c[0][1] for c in om.builder.build_butterfly_close.call_args_list]
+    assert limits == pytest.approx([2.00, 1.95, 1.90, 1.85, 1.85])  # mid -> bid, hold
+    assert [e for e, _ in events].count("cancel") == 4
+    _assert_one_order_at_a_time(events)
+    statuses = [c.args[1] for c in om.intent_queries.update_broker_status.await_args_list]
+    assert statuses.count("CANCELED") == 4 and "PENDING_CANCEL" in statuses
+
+
+@pytest.mark.asyncio
+async def test_bid_ladder_never_overlaps_orders_across_a_restart_cycle():
+    settings = make_settings(price_ladder_steps=4, price_ladder_step=0.10)
+    om, schwab = make_order_manager(settings)
+    candidate = make_candidate(5900, 5950, 6000, 3.75)
+    spread = LiveSpread(bid=1.85, mark=1.97, ask=2.10)
+    cancel_reads = [[PENDING_CANCEL, {"status": "WORKING"}, {"status": "CANCELED"}]] * 6
+    events = _broker_event_log(om, schwab, cancel_reads, final={"status": "CANCELED"})
+    fills = [False] * 6 + [broker_fill()]
+
+    with NO_SLEEP, \
+         patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=spread)), \
+         patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=fills)):
+        await om.execute_exit(candidate, current_value=1.97, quantity=1)
+
+    limits = [c[0][1] for c in om.builder.build_butterfly_close.call_args_list]
+    assert limits == pytest.approx([2.15, 2.05, 1.95, 1.85, 2.15, 2.05, 1.95])
+    _assert_one_order_at_a_time(events)

@@ -722,6 +722,54 @@ async def test_entry_loop_alerts_monitor_failure_after_market_close(monkeypatch)
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("paper_trading,halts", [(False, True), (True, False)])
+async def test_live_entry_loop_halts_when_its_monitor_dies_of_any_error(
+    monkeypatch, paper_trading, halts
+):
+    # Halt audit 2026-11-19: a non-broker monitor crash used to re-arm the entry loop.
+    # With one trade a day nothing re-enters, so a live fly was left open, unmonitored
+    # and unannounced (no halt log line for health.sh, no alert).
+    trade_service = Mock(attempt_entry=AsyncMock(return_value=None))
+    position_service = Mock()
+    position_service.config.execution.paper_trading = paper_trading
+    position_service.monitor_loop.return_value = _never_awaited()
+    monitor_task = Mock()
+    monitor_task.done.return_value = True
+    monitor_task.exception.return_value = RuntimeError("unexpected monitor crash")
+
+    def create_task(coro, **_kwargs):
+        coro.close()
+        return monitor_task
+
+    async def stop(_):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "create_task", create_task)
+    monkeypatch.setattr(asyncio, "sleep", stop)
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    set_readiness(None)
+    if halts:
+        await entry_loop(
+            trade_service, position_service, recovered_trade=Mock(trade_id=7),
+            recovered_candidate=Mock(), critical_notifier=critical_notifier,
+        )
+        critical_notifier.notify_critical.assert_awaited_once_with("broker_ambiguity")
+        assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+        trade_service.attempt_entry.assert_not_awaited()
+    else:
+        with pytest.raises(asyncio.CancelledError):
+            await entry_loop(
+                trade_service, position_service, recovered_trade=Mock(trade_id=7),
+                recovered_candidate=Mock(), critical_notifier=critical_notifier,
+            )
+        critical_notifier.notify_critical.assert_not_awaited()
+        trade_service.attempt_entry.assert_awaited_once()
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
 async def test_entry_loop_registers_recovered_monitor_for_reconciler(monkeypatch):
     position_service = Mock()
     position_service.monitor_loop.return_value = _never_awaited()

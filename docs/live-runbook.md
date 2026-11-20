@@ -82,6 +82,44 @@ reverification, the DB/risk/audit state was reconciled atomically and XSP was
 rebuilt paper-only with flat `/ready` proof. Evidence is in
 `reports/xsp_manual_flatten_2026-07-16.md`.
 
+## SPX Live: Bot Halted With An Open Fly
+
+A halt stops the live bot's monitor and entries but leaves the container up. It sends
+no more orders, so the fly is unmanaged until a human acts. You see it as health.sh's
+🚨 in the live channel ("live bot HALTED ... may hold an OPEN live fly"), repeated
+every 15 min, and as Alertmanager's `ButterflyGuyBrokerAmbiguity` (instance_role
+live). On 2026-11-19 the halt came at 07:20 PT and the first human action at 13:03 PT.
+
+1. **Read state (read-only).** `docker logs butterfly_spx_live_app 2>&1 | grep -E
+   'stopped_unknown|monitor_task_error|post_cancel|order_'` names the order and the
+   reason. In ToS, record the fly's legs and any working order on them.
+2. **Close or hold in ToS.** The bot will not act. Cancel any working order on the
+   legs and confirm it reads Canceled. Then either send the closing butterfly
+   yourself or decide to hold to settlement. Holding to settlement is fine for a
+   cash-settled 0DTE fly when its remaining value is small.
+3. **Do not restart the bot to "resume" while an order on the legs is working.**
+   Startup refuses on a bot-owned PENDING_CANCEL/partial order. It also hands the
+   exit to you on any working order it does not own in this process (including its
+   own order from before the restart).
+4. **After you close in ToS:** a restarted bot adopts nothing that it did not send.
+   Close the DB row from Schwab's fill (Manual Flatten, step 6).
+5. **If it expires:** after 16:02 ET, run the settle tool. Do the dry run first:
+   ```bash
+   docker exec -i butterfly_spx_live_app python - --trade-id <id> \
+     < $REL/tools/spx_live_settle_expired.py
+   docker exec -i butterfly_spx_live_app python - --trade-id <id> --apply \
+     < $REL/tools/spx_live_settle_expired.py
+   ```
+   It settles from Schwab's posted expiration transactions when they exist. The
+   same day, it settles only a fly that expired at least 20 SPX points out of the
+   money. It also updates `daily_risk_state`.
+6. **Stop the container.** Schwab lists expired legs until overnight, so
+   `stop-live.sh` refuses on broker flatness. Stop it with `FORCE=1` only after
+   step 5 shows the row CLOSED and ToS shows no working orders. Record why in the
+   session dir.
+7. **Before the next live day,** the activation gates (broker flat, live DB flat)
+   must pass on their own. Never edit the gates.
+
 ## Token Recovery
 
 1. Treat failed authentication as not ready and keep new entry disabled.

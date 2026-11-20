@@ -47,6 +47,8 @@ TERMINAL_FAILURE_STATUSES = {"REJECTED", "EXPIRED"}
 # DELETE, CANCELED by the next second). Wait this long for the order to settle.
 POST_CANCEL_SETTLE_SECONDS = 15.0
 POST_CANCEL_POLL_SECONDS = 1.0
+# An order edited in Schwab ends as REPLACED; its replacement is a new (operator) order.
+POST_CANCEL_SETTLED_STATUSES = TERMINAL_ORDER_STATUSES | {"REPLACED"}
 
 
 def walk_orders(order: dict) -> Iterator[dict]:
@@ -65,6 +67,19 @@ def order_ids(order: dict) -> set[str]:
 
 def order_statuses(order: dict) -> set[str]:
     return {str(node["status"]) for node in walk_orders(order) if node.get("status")}
+
+
+def _has_filled_quantity(order: dict) -> bool:
+    """True if any node reports executed quantity (a CANCELED-type execution is not one)."""
+    for node in walk_orders(order):
+        try:
+            if float(node.get("filledQuantity") or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            return True  # unreadable quantity: assume the worst
+        if node is not order and node.get("status") == "FILLED":
+            return True
+    return False
 
 
 def matches_underlying(symbol: str, underlying: str) -> bool:
@@ -729,7 +744,7 @@ class OrderManager:
                 await self.intent_queries.update_broker_status(
                     intent_id, "CANCEL_REQUESTED"
                 )
-            await self.schwab.cancel_order(order_id)
+            await self._cancel_then_settle(order_id)
             log.info("entry_unfilled_cancelled", price=limit_price)
             post_fill = await self._check_post_cancel_fill(
                 order_id,
@@ -915,7 +930,7 @@ class OrderManager:
                         await self.intent_queries.update_broker_status(
                             intent_id, "CANCEL_REQUESTED"
                         )
-                    await self.schwab.cancel_order(order_id)
+                    await self._cancel_then_settle(order_id)
                     post_fill = await self._check_post_cancel_fill(
                         order_id, quantity, order_type="exit", intent_id=intent_id
                     )
@@ -948,6 +963,18 @@ class OrderManager:
 
             log.warning("exit_ladder_exhausted")
 
+    async def _cancel_then_settle(self, order_id: str) -> None:
+        """Send the cancel; a failed DELETE is left to the post-cancel status check.
+
+        Schwab refuses to cancel an order that already filled, so a cancel error is not
+        evidence the order is unknown: the status check that always follows decides
+        (FILLED is booked, CANCELED moves on, still working past the budget halts).
+        """
+        try:
+            await self.schwab.cancel_order(order_id)
+        except Exception as e:
+            log.warning("cancel_failed_checking_status", order_id=order_id, error=str(e))
+
     async def _check_post_cancel_fill(
         self,
         order_id: str,
@@ -960,7 +987,16 @@ class OrderManager:
         try:
             deadline = monotonic() + POST_CANCEL_SETTLE_SECONDS
             while True:
-                status = await self.schwab.get_order_status(order_id)
+                try:
+                    status = await self.schwab.get_order_status(order_id)
+                except Exception as e:
+                    # One failed read (429, 5xx, timeout, a 401 mid token reload) says
+                    # nothing about the order; only a budget of failures is ambiguous.
+                    if monotonic() >= deadline:
+                        raise
+                    log.warning("post_cancel_status_read_failed", order_id=order_id, error=str(e))
+                    await asyncio.sleep(POST_CANCEL_POLL_SECONDS)
+                    continue
                 order_status = status.get("status")
                 statuses = order_statuses(status)
                 terminal_failure = next(
@@ -980,7 +1016,10 @@ class OrderManager:
                         f"Order {order_id} is partially filled after cancel; "
                         "reconcile broker state"
                     )
-                unsettled = statuses & (CANCEL_PENDING_STATUSES | WORKING_ORDER_STATUSES)
+                # Only a final status ends the wait: anything else (PENDING_REPLACE,
+                # AWAITING_*, a new status) may still fill, and the next ladder step
+                # must not be sent beside it.
+                unsettled = statuses - POST_CANCEL_SETTLED_STATUSES
                 if not unsettled:
                     break
                 if monotonic() >= deadline:
@@ -994,6 +1033,12 @@ class OrderManager:
                     statuses=sorted(unsettled),
                 )
                 await asyncio.sleep(POST_CANCEL_POLL_SECONDS)
+            if order_status != "FILLED" and _has_filled_quantity(status):
+                # Schwab ends a part-filled order CANCELED with filledQuantity > 0.
+                raise PartialFillError(
+                    f"Order {order_id} is {order_status} with a filled quantity after "
+                    "cancel; reconcile broker state"
+                )
             if terminal_failure:
                 raise TerminalOrderError(terminal_failure, order_id)
             if order_status == "FILLED":

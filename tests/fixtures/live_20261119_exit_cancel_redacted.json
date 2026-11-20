@@ -1,0 +1,128 @@
+{
+  "cancelable": false,
+  "closeTime": "2026-11-19T15:20:18+0000",
+  "complexOrderStrategyType": "BUTTERFLY",
+  "destinationLinkName": "SIGQ",
+  "duration": "DAY",
+  "editable": false,
+  "enteredTime": "2026-11-19T15:19:55+0000",
+  "filledQuantity": 0.0,
+  "orderActivityCollection": [
+    {
+      "activityId": 136796372708,
+      "activityType": "EXECUTION",
+      "executionLegs": [
+        {
+          "instrumentId": 261308306,
+          "legId": 1,
+          "mismarkedQuantity": 0.0,
+          "price": 0.0,
+          "quantity": 1.0,
+          "time": "2026-11-19T15:20:18+0000"
+        },
+        {
+          "instrumentId": 260125837,
+          "legId": 2,
+          "mismarkedQuantity": 0.0,
+          "price": 0.0,
+          "quantity": 2.0,
+          "time": "2026-11-19T15:20:18+0000"
+        },
+        {
+          "instrumentId": 261109467,
+          "legId": 3,
+          "mismarkedQuantity": 0.0,
+          "price": 0.0,
+          "quantity": 1.0,
+          "time": "2026-11-19T15:20:18+0000"
+        }
+      ],
+      "executionType": "CANCELED",
+      "orderRemainingQuantity": 0.0,
+      "quantity": 1.0
+    }
+  ],
+  "orderId": "REDACTED",
+  "orderLegCollection": [
+    {
+      "instruction": "SELL_TO_CLOSE",
+      "instrument": {
+        "assetType": "OPTION",
+        "cusip": "0SPXW.KJ67435000",
+        "description": "S & P 500 INDEX 11/19/2026 $7435 Call",
+        "instrumentId": 261308306,
+        "optionDeliverables": [
+          {
+            "deliverableUnits": 100.0,
+            "symbol": "$SPX"
+          }
+        ],
+        "putCall": "CALL",
+        "symbol": "SPXW  261119C07435000",
+        "type": "VANILLA",
+        "underlyingSymbol": "SPXW",
+        "uniformSymbol": "SPXW  261119C07435000"
+      },
+      "legId": 1,
+      "orderLegType": "OPTION",
+      "positionEffect": "CLOSING",
+      "quantity": 1.0
+    },
+    {
+      "instruction": "BUY_TO_CLOSE",
+      "instrument": {
+        "assetType": "OPTION",
+        "cusip": "0SPXW.KJ67475000",
+        "description": "S & P 500 INDEX 11/19/2026 $7475 Call",
+        "instrumentId": 260125837,
+        "optionDeliverables": [
+          {
+            "deliverableUnits": 100.0,
+            "symbol": "$SPX"
+          }
+        ],
+        "putCall": "CALL",
+        "symbol": "SPXW  261119C07475000",
+        "type": "VANILLA",
+        "underlyingSymbol": "SPXW",
+        "uniformSymbol": "SPXW  261119C07475000"
+      },
+      "legId": 2,
+      "orderLegType": "OPTION",
+      "positionEffect": "CLOSING",
+      "quantity": 2.0
+    },
+    {
+      "instruction": "SELL_TO_CLOSE",
+      "instrument": {
+        "assetType": "OPTION",
+        "cusip": "0SPXW.KJ67515000",
+        "description": "S & P 500 INDEX 11/19/2026 $7515 Call",
+        "instrumentId": 261109467,
+        "optionDeliverables": [
+          {
+            "deliverableUnits": 100.0,
+            "symbol": "$SPX"
+          }
+        ],
+        "putCall": "CALL",
+        "symbol": "SPXW  261119C07515000",
+        "type": "VANILLA",
+        "underlyingSymbol": "SPXW",
+        "uniformSymbol": "SPXW  261119C07515000"
+      },
+      "legId": 3,
+      "orderLegType": "OPTION",
+      "positionEffect": "CLOSING",
+      "quantity": 1.0
+    }
+  ],
+  "orderStrategyType": "SINGLE",
+  "orderType": "NET_CREDIT",
+  "price": 2.15,
+  "quantity": 1.0,
+  "remainingQuantity": 0.0,
+  "requestedDestination": "AUTO",
+  "session": "NORMAL",
+  "status": "CANCELED"
+}

@@ -813,7 +813,10 @@ async def entry_loop(
             exc = monitor_task.exception()
             if exc:
                 log.error("monitor_task_error", error=str(exc))
-                if isinstance(
+                # A live monitor that died for any reason may leave its fly open at the
+                # broker; re-arming would only drop it silently (one trade a day).
+                live = position_service.config.execution.paper_trading is False
+                if live or isinstance(
                     exc,
                     (
                         BrokerFillError,
