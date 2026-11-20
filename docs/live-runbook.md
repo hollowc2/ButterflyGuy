@@ -114,7 +114,10 @@ required` clears after a later `entry_intent_created` log event proves that the
 active-entry index allowed a new intent. Health then posts `✅ … health recovered
 (was: …)` once. A no-op `entry_loop_recovered` is insufficient proof. A later block
 warns again. Any `*_stopped_unknown_broker_state` event stays sticky for that container
-run and keeps its repeating 🚨 alert; only a restart scopes it out.
+run and keeps its repeating 🚨 alert; only a restart scopes it out. Notification
+failures log `notify failed` and retain the last successfully delivered state,
+repeat timestamp and restart count, so the next health run retries. A failed
+recovery post is also retried before its old warning state is cleared.
 
 1. **Read state (read-only).** `docker logs butterfly_spx_live_app 2>&1 | grep -E
    'stopped_unknown|monitor_task_error|post_cancel|order_'` names the order and the

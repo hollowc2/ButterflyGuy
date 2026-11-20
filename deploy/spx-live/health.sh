@@ -19,9 +19,10 @@ open_log health
 restarts=$(docker inspect -f '{{.RestartCount}}' "$LIVE_C" 2>/dev/null || echo 0)
 seen=$(cat "$D/restarts.seen" 2>/dev/null || echo 0)
 if [ "${restarts:-0}" -gt "${seen:-0}" ]; then
-  echo "$restarts" >"$D/restarts.seen"
   echo "$(ts) health live restarts=$restarts"
-  notify "⚠️ $LABEL $DATE: the live bot stopped (a crash, or a safety halt on unknown broker state) and Docker restarted it (restart $restarts of at most 3). On startup it reconciles with the broker and re-adopts any open fly, or refuses and stops again. Check its log and ToS. Log: $D/health.log"
+  if notify "⚠️ $LABEL $DATE: the live bot stopped (a crash, or a safety halt on unknown broker state) and Docker restarted it (restart $restarts of at most 3). On startup it reconciles with the broker and re-adopts any open fly, or refuses and stops again. Check its log and ToS. Log: $D/health.log"; then
+    echo "$restarts" >"$D/restarts.seen"
+  fi
 fi
 
 state="$D/health.state"
@@ -65,7 +66,7 @@ echo "$(ts) health fail=${fail:-none}"
 
 if [ -z "$fail" ]; then
   if [ -n "$last" ]; then
-    notify "✅ $LABEL $DATE health recovered (was: $last)"
+    notify "✅ $LABEL $DATE health recovered (was: $last)" || exit 1
   fi
   : >"$state"
   exit 0
@@ -84,7 +85,6 @@ if [ "$fail" = "$last" ]; then
   [ "$since" -ge $(( ${ALERT_REPEAT_MIN:-15} * 60 )) ] || exit 1
   repeat=" STILL UNRESOLVED after $(( since / 60 )) min."
 fi
-echo "$fail" >"$state"
 if [ "$unmanaged" = 1 ]; then
   if db_tool check "${CHECK_ARGS[@]}" >/dev/null; then
     held="$LIVE_DB is flat"
@@ -92,9 +92,11 @@ if [ "$unmanaged" = 1 ]; then
   else
     held="$LIVE_DB may hold an OPEN live fly that nothing is managing"
   fi
-  notify "🚨 $LABEL $DATE: $fail; $held.$repeat Check ToS and Helios now. Log: $D/health.log"
+  notify "🚨 $LABEL $DATE: $fail; $held.$repeat Check ToS and Helios now. Log: $D/health.log" || exit 1
   date +%s >"$alerted"
 else
-  notify "⚠️ $LABEL $DATE health: $fail. Log: $D/health.log"
+  notify "⚠️ $LABEL $DATE health: $fail. Log: $D/health.log" || exit 1
 fi
+# Deduplication records delivery, not a failed attempt. Leave old state for a retry.
+echo "$fail" >"$state"
 exit 1

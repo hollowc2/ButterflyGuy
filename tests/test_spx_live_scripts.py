@@ -116,7 +116,11 @@ def session(tmp_path):
     for name, body in (("curl", "exit 0"), ("sleep", "exit 0")):
         (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
     notify = bin_dir / "fake-python"
-    notify.write_text(f'#!/bin/sh\necho "$2" >> {tmp_path}/notify.log\n')
+    notify.write_text(
+        f'#!/bin/sh\necho "$2" >> {tmp_path}/notify-attempts.log\n'
+        '[ "${FAKE_NOTIFY_FAIL:-0}" != 1 ] || exit 1\n'
+        f'echo "$2" >> {tmp_path}/notify.log\n'
+    )
     for path in bin_dir.iterdir():
         path.chmod(0o755)
 
@@ -706,3 +710,78 @@ def test_health_noop_entry_loop_recovery_does_not_prove_the_intent_cleared(sessi
     ])
     assert session.run("health.sh")[0].returncode == 1
     assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+
+
+@pytest.mark.parametrize("halt", [False, True], ids=["warning", "halt"])
+def test_health_retries_a_failed_problem_post_before_saving_state(session, halt):
+    session.run("activate.sh")
+    initial = session.notifications()
+    session.state["check_rc"] = 1
+    event = "monitor_stopped_unknown_broker_state" if halt else "entry_blocked_active_intent"
+    session.state["logs"] = json.dumps({"event": event})
+    result, out = session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    assert result.returncode == 1, out
+    assert "notify failed" in out
+    assert session.notifications() == initial
+    state = session.dir / "health.state"
+    assert not state.exists() or not state.read_text().strip()
+    assert not (session.dir / "health.alerted").exists()
+
+    assert session.run("health.sh")[0].returncode == 1
+    assert len(session.notifications().splitlines()) == len(initial.splitlines()) + 1
+    assert state.read_text().strip()
+    if halt:
+        assert (session.dir / "health.alerted").read_text().strip()
+    session.run("health.sh")  # normal dedup/repeat interval still applies after success
+    assert len(session.notifications().splitlines()) == len(initial.splitlines()) + 1
+
+
+def test_health_failed_halt_repeat_preserves_the_last_success_timestamp(session):
+    session.run("activate.sh")
+    session.state["check_rc"] = 1
+    session.state["logs"] = json.dumps({"event": "monitor_stopped_unknown_broker_state"})
+    session.run("health.sh")
+    initial = session.notifications()
+    state = (session.dir / "health.state").read_text()
+    alerted = session.dir / "health.alerted"
+    alerted.write_text("0\n")
+    session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    assert alerted.read_text() == "0\n"
+    assert (session.dir / "health.state").read_text() == state
+    assert session.notifications() == initial
+    session.run("health.sh")
+    assert "STILL UNRESOLVED" in session.notifications().splitlines()[-1]
+    assert alerted.read_text() != "0\n"
+    sent = session.notifications()
+    session.run("health.sh")
+    assert session.notifications() == sent
+
+
+def test_health_failed_recovery_post_keeps_state_for_the_next_run(session):
+    session.run("activate.sh")
+    session.state["logs"] = json.dumps({"event": "entry_blocked_active_intent"})
+    session.run("health.sh")
+    previous = (session.dir / "health.state").read_text()
+    session.state["logs"] += "\n" + json.dumps({"event": "entry_intent_created"})
+    result, _ = session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    assert result.returncode == 1
+    assert (session.dir / "health.state").read_text() == previous
+    assert "health recovered" not in session.notifications()
+    assert session.run("health.sh")[0].returncode == 0
+    assert session.notifications().count("health recovered") == 1
+    session.run("health.sh")
+    assert session.notifications().count("health recovered") == 1
+
+
+def test_health_failed_restart_post_is_retried_before_saving_seen_count(session):
+    session.run("activate.sh")
+    session.state["restarts"] = {"butterfly_spx_live_app": 1}
+    session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    seen = session.dir / "restarts.seen"
+    assert not seen.exists() or seen.read_text().strip() == "0"
+    assert "restart 1 of at most 3" not in session.notifications()
+    session.run("health.sh")
+    assert seen.read_text().strip() == "1"
+    assert session.notifications().count("restart 1 of at most 3") == 1
+    session.run("health.sh")
+    assert session.notifications().count("restart 1 of at most 3") == 1

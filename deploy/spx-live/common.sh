@@ -110,7 +110,13 @@ act() {
   esac
 }
 
-notify() { act "$PY" "$D/notify.py" "$1" || echo "$(ts) notify failed"; }
+notify() {
+  if act "$PY" "$D/notify.py" "$1"; then
+    return 0
+  fi
+  echo "$(ts) notify failed"
+  return 1
+}
 
 compose() {
   local cmd=(env "SPX_LIVE_IMAGE=$CAND" "SPX_LIVE_TEST_DATE=$DATE"
