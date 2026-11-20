@@ -23,6 +23,7 @@ from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
     LiveSpread,
+    OperatorExitTakeoverError,
     OrderManager,
     PartialFillError,
     TerminalOrderError,
@@ -1527,14 +1528,52 @@ async def test_post_cancel_terminal_failure_stops_the_ladder(status):
 
 
 @pytest.mark.asyncio
-async def test_post_cancel_replaced_is_final_and_unfilled():
-    # The replacement is a new, operator-owned order: the next ladder step's
-    # operator-conflict check sees it working and hands the exit over.
+@pytest.mark.parametrize("order_type", ["entry", "exit"])
+async def test_post_cancel_replaced_hands_over_only_exits(order_type):
     om, schwab = make_order_manager(make_settings())
     schwab.get_order_status = AsyncMock(return_value=live_1119_status("REPLACED"))
 
     with NO_SLEEP:
-        assert await om._check_post_cancel_fill("ORD1", 1, order_type="exit") is None
+        if order_type == "exit":
+            with pytest.raises(OperatorExitTakeoverError, match="operator replaced"):
+                await om._check_post_cancel_fill("ORD1", 1, order_type=order_type)
+        else:
+            assert await om._check_post_cancel_fill("ORD1", 1, order_type=order_type) is None
+
+
+@pytest.mark.asyncio
+async def test_exit_post_cancel_replaced_stops_before_another_intent_or_order():
+    om, schwab = make_order_manager(make_settings(price_ladder_steps=2))
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    candidate.lower_symbol = "SPXW  260321P05900000"
+    candidate.center_symbol = "SPXW  260321P05950000"
+    candidate.upper_symbol = "SPXW  260321P06000000"
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": [
+        {
+            "instrument": {"assetType": "OPTION", "symbol": symbol},
+            "longQuantity": max(quantity, 0), "shortQuantity": max(-quantity, 0),
+        }
+        for symbol, quantity in (
+            (candidate.lower_symbol, 1), (candidate.center_symbol, -2),
+            (candidate.upper_symbol, 1),
+        )
+    ]}}
+    # No working replacement is listed: the REPLACED status itself must stop us.
+    schwab.get_todays_orders.return_value = []
+    payload = live_1119_status("REPLACED")
+    schwab.get_order_status = AsyncMock(return_value=payload)
+
+    with patch.object(om, "_wait_for_fill", new=AsyncMock(side_effect=[False, broker_fill()])), \
+         pytest.raises(OperatorExitTakeoverError, match="operator replaced"):
+        await om.execute_exit(candidate, current_value=3.00, trade_id=7)
+
+    om.intent_queries.create_intent.assert_awaited_once()
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_awaited_once_with("ORD1")
+    om.intent_queries.update_broker_status.assert_any_await(42, "REPLACED", payload)
+    om.intent_queries.mark_unknown.assert_not_awaited()
 
 
 @pytest.mark.asyncio

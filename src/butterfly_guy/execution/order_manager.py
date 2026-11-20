@@ -1058,6 +1058,8 @@ class OrderManager:
                 )
             if terminal_failure:
                 raise TerminalOrderError(terminal_failure, order_id)
+            if order_type == "exit" and order_status == "REPLACED":
+                raise OperatorExitTakeoverError("operator replaced bot exit order")
             if order_status == "FILLED":
                 fill = parse_broker_fill(status, requested_quantity, order_id)
                 if order_type == "entry" and limit_price is not None:
@@ -1078,7 +1080,10 @@ class OrderManager:
         except Exception as e:
             if isinstance(
                 e,
-                (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError),
+                (
+                    AmbiguousOrderError, BrokerFillError, PartialFillError,
+                    TerminalOrderError, OperatorExitTakeoverError,
+                ),
             ):
                 raise
             log.warning("post_cancel_check_failed", error=str(e))
