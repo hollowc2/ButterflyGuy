@@ -1666,6 +1666,89 @@ async def test_exit_post_cancel_replaced_stops_before_another_intent_or_order():
     om.intent_queries.mark_unknown.assert_not_awaited()
 
 
+MALFORMED_STATUS_READS = {
+    "empty": {},
+    "null": {"status": None},
+    "blank": {"status": ""},
+    "whitespace": {"status": "  "},
+    "parent-missing-child-final": {
+        "childOrderStrategies": [{"orderId": "C1", "status": "CANCELED"}],
+    },
+    "parent-final-child-missing": {
+        "status": "CANCELED", "childOrderStrategies": [{"orderId": "C1"}],
+    },
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("read", MALFORMED_STATUS_READS.values(), ids=MALFORMED_STATUS_READS)
+async def test_post_cancel_read_without_a_status_is_never_settled(read):
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    schwab.get_order_status = AsyncMock(return_value=read)
+    clock, mono, sleep = fake_clock()
+
+    with mono, sleep, pytest.raises(PartialFillError, match="15s after cancel; reconcile"):
+        await om._check_post_cancel_fill("ORD1", 1, "exit", intent_id=42)
+
+    assert clock[0] == pytest.approx(15.0)
+    om.intent_queries.update_broker_status.assert_not_awaited()  # nothing authoritative
+    om.intent_queries.mark_unknown.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final", ["canceled", "filled"])
+async def test_post_cancel_recovers_from_one_read_without_a_status(final):
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    last = live_1119_canceled_exit() if final == "canceled" else filled_order()
+    schwab.get_order_status = AsyncMock(side_effect=[{}, last])
+    _, mono, sleep = fake_clock()
+
+    with mono, sleep:
+        result = await om._check_post_cancel_fill("ORD1", 1, "exit", intent_id=42)
+
+    assert schwab.get_order_status.await_count == 2
+    assert (result is None) == (final == "canceled")
+    om.intent_queries.update_broker_status.assert_awaited_once_with(42, last["status"], last)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_intents", [True, False], ids=["intents", "no-intent-store"])
+async def test_exit_without_post_cancel_status_sends_no_second_order(with_intents):
+    # Without an intent store no unique index stands in the way: the status rule must.
+    om, schwab = make_order_manager(make_settings(price_ladder_steps=2))
+    if with_intents:
+        om.intent_queries = AsyncMock()
+        om.intent_queries.create_intent.return_value = 42
+    schwab.place_order = AsyncMock(side_effect=["ORD1", RuntimeError("a second order")])
+    schwab.get_order_status = AsyncMock(return_value={})
+    _, mono, sleep = fake_clock()
+
+    with mono, sleep, patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)), \
+         patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)), \
+         pytest.raises(PartialFillError, match="missing its status 15s after cancel"):
+        await om.execute_exit(make_candidate(5900, 5950, 6000, 2.50), 3.00, trade_id=7)
+
+    schwab.place_order.assert_awaited_once()
+    if with_intents:
+        om.intent_queries.create_intent.assert_awaited_once()
+        om.intent_queries.mark_unknown.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_entry_without_post_cancel_status_stops_instead_of_moving_on():
+    om, schwab = make_order_manager(make_settings())
+    schwab.get_order_status = AsyncMock(return_value={"status": None})
+    _, mono, sleep = fake_clock()
+
+    with mono, sleep, patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)), \
+         pytest.raises(PartialFillError, match="missing its status"):
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+
+    schwab.place_order.assert_awaited_once()
+
+
 def _working_replacement() -> dict:
     """The operator's order that replaced the bot's: a new id, still working."""
     return {**live_1119_status("WORKING"), "orderId": "OPERATOR-2"}

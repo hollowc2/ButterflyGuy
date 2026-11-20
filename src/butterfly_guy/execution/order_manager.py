@@ -74,6 +74,14 @@ def order_statuses(order: dict) -> set[str]:
     return {str(node["status"]) for node in walk_orders(order) if node.get("status")}
 
 
+def _has_missing_status(order: dict) -> bool:
+    """True if any node has no broker status: that is no evidence the order is final."""
+    return any(
+        not isinstance(node.get("status"), str) or not node["status"].strip()
+        for node in walk_orders(order)
+    )
+
+
 def _has_filled_quantity(order: dict) -> bool:
     """True if any node reports executed quantity (a CANCELED-type execution is not one)."""
     for node in walk_orders(order):
@@ -1066,6 +1074,7 @@ class OrderManager:
                     continue
                 order_status = status.get("status")
                 statuses = order_statuses(status)
+                missing_status = _has_missing_status(status)
                 terminal_failure = next(
                     (value for value in ("REJECTED", "EXPIRED") if value in statuses),
                     None,
@@ -1073,7 +1082,7 @@ class OrderManager:
                 if (
                     intent_id is not None
                     and self.intent_queries is not None
-                    and order_status
+                    and not missing_status
                 ):
                     await self.intent_queries.update_broker_status(
                         intent_id, terminal_failure or order_status, status
@@ -1084,20 +1093,22 @@ class OrderManager:
                         "reconcile broker state"
                     )
                 # Only a final status ends the wait: anything else (PENDING_REPLACE,
-                # AWAITING_*, a new status) may still fill, and the next ladder step
-                # must not be sent beside it.
+                # AWAITING_*, a new status, or none on any node) may still fill, and
+                # the next ladder step must not be sent beside it.
                 unsettled = statuses - POST_CANCEL_SETTLED_STATUSES
-                if not unsettled:
+                if not unsettled and not missing_status:
                     break
                 if monotonic() >= deadline:
+                    pending = ", ".join(sorted(unsettled)) or "missing its status"
                     raise PartialFillError(
-                        f"Order {order_id} is still {', '.join(sorted(unsettled))} "
+                        f"Order {order_id} is still {pending} "
                         f"{POST_CANCEL_SETTLE_SECONDS:g}s after cancel; reconcile broker state"
                     )
                 log.info(
                     "post_cancel_awaiting_settle",
                     order_id=order_id,
                     statuses=sorted(unsettled),
+                    missing_status=missing_status,
                 )
                 await asyncio.sleep(POST_CANCEL_POLL_SECONDS)
             if order_status != "FILLED" and _has_filled_quantity(status):
