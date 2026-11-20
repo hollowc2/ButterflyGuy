@@ -683,7 +683,12 @@ class OrderManager:
         assert self.intent_queries is not None
         try:
             return await self.intent_queries.create_intent(side=side, **kwargs)
-        except (Exception, asyncio.CancelledError) as exc:
+        except asyncio.CancelledError:
+            # Shutdown (SIGTERM cancels the loops), not a safety halt. A row this INSERT
+            # may have committed is refused by the next startup's reconciliation.
+            log.warning("intent_create_cancelled", side=side)
+            raise
+        except Exception as exc:
             # A single autocommit statement rolls back on a definitive server error.
             # Connection errors can be synthesized by asyncpg (with a SQLSTATE), and
             # completion-unknown / shutdown errors do not prove that rollback.
@@ -696,7 +701,7 @@ class OrderManager:
                 raise
             # Do not retry, adopt or terminalize a possibly committed row. Even an
             # empty read-back can race a still-finishing INSERT; a down DB proves
-            # nothing. Cancellation here must also reach the safety-halt handlers.
+            # nothing.
             raise IntentPersistenceError(
                 f"{side.lower()} intent creation outcome is unknown; "
                 "no broker order submitted; manual reconciliation required"

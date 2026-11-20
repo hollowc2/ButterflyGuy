@@ -227,7 +227,7 @@ async def test_before_submit_evidence_is_durable_before_the_order_is_sent(side):
 @pytest.mark.parametrize("committed", [True, False], ids=["committed", "no-row"])
 @pytest.mark.parametrize("error_type", [
     ConnectionError, ConnectionDoesNotExistError, InterfaceError, TimeoutError,
-    asyncio.CancelledError, StatementCompletionUnknownError, AdminShutdownError, RuntimeError,
+    StatementCompletionUnknownError, AdminShutdownError, RuntimeError,
 ])
 async def test_uncertain_intent_create_halts_on_the_first_failure(side, committed, error_type):
     error = error_type("lost INSERT reply")
@@ -244,6 +244,27 @@ async def test_uncertain_intent_create_halts_on_the_first_failure(side, committe
     # Even an unreachable read-back cannot delay or suppress this halt. No adoption,
     # terminalization or broker request, including when the fake knows no row exists.
     store.read_back.assert_not_awaited()
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("side", ["entry", "exit"])
+@pytest.mark.parametrize("committed", [True, False], ids=["committed", "no-row"])
+async def test_cancelled_intent_create_stays_a_cancellation(side, committed):
+    # SIGTERM cancels the loops to shut down. A stop during the INSERT is not a safety
+    # halt (no false broker_ambiguity page, no exit 1); a committed row is refused at
+    # the next startup like any other unresolved intent.
+    cancelled = asyncio.CancelledError()
+    store = _IntentStore(lose_ack=committed, create_error=cancelled)
+    om, schwab = _recording_manager(store)
+
+    with patch("butterfly_guy.execution.order_manager.log") as logger, \
+         pytest.raises(asyncio.CancelledError) as caught:
+        await _submit(om, side)
+
+    assert caught.value is cancelled
+    logger.warning.assert_any_call("intent_create_cancelled", side=side.upper())
+    assert [row["status"] for row in store.active()] == (["SUBMITTING"] if committed else [])
     schwab.place_order.assert_not_awaited()
 
 

@@ -978,6 +978,24 @@ async def test_runtime_leaves_an_in_flight_entry_intent_to_its_attempt():
 
 
 @pytest.mark.asyncio
+async def test_live_entry_loop_cancelled_mid_attempt_shuts_down_without_a_halt(monkeypatch):
+    # SIGTERM during an intent INSERT: a clean cancellation, no halt and no page.
+    trade_service = Mock(config=Mock(strategy=Mock(underlying="SPX")))
+    trade_service.attempt_entry = AsyncMock(side_effect=asyncio.CancelledError)
+    position_service = Mock()
+    position_service.config.execution.paper_trading = False
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    set_readiness(None)
+
+    with pytest.raises(asyncio.CancelledError):
+        await entry_loop(trade_service, position_service, critical_notifier=critical_notifier)
+
+    critical_notifier.notify_critical.assert_not_awaited()
+    assert readiness_snapshot() == (True, None)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "error",
     [
