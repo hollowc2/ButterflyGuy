@@ -7,6 +7,7 @@ import signal
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
+from asyncpg.exceptions import UniqueViolationError
 from schwab_gateway_sdk.config import GatewayClientSettings
 from schwab_token_store import TokenLockTimeoutError
 
@@ -754,8 +755,9 @@ async def test_startup_reports_broker_flat_before_an_unresolved_exit_intent():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [RuntimeError, UniqueViolationError])
 async def test_entry_loop_repeated_errors_degrade_and_recover(
-    monkeypatch,
+    monkeypatch, error_type,
 ):
     trade_service = Mock(
         config=Mock(strategy=Mock(underlying="SPX")),
@@ -763,14 +765,14 @@ async def test_entry_loop_repeated_errors_degrade_and_recover(
     )
     trade_service.attempt_entry = AsyncMock(
         side_effect=[
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
             None,
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
         ]
     )
     metric = Mock()

@@ -11,6 +11,8 @@ from collections.abc import Iterator
 from time import monotonic
 from typing import Any, NamedTuple
 
+from asyncpg.exceptions import UniqueViolationError
+
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.core.entry_pricing import entry_fill_within_limit
 from butterfly_guy.core.exit_pricing import exit_limit, static_quote_estimate
@@ -701,19 +703,23 @@ class OrderManager:
 
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
         if intent_id is None and self.intent_queries is not None:
-            intent_id = await self.intent_queries.create_intent(
-                underlying=self.underlying,
-                trade_date=(
-                    candidate.lower_quote.expiration
-                    if candidate.lower_quote is not None
-                    else get_0dte_expiration()
-                ),
-                side="ENTRY",
-                limit_price=limit_price,
-                quantity=quantity,
-                order_spec=order_spec,
-                candidate_snapshot=self._candidate_snapshot(candidate),
-            )
+            try:
+                intent_id = await self.intent_queries.create_intent(
+                    underlying=self.underlying,
+                    trade_date=(
+                        candidate.lower_quote.expiration
+                        if candidate.lower_quote is not None
+                        else get_0dte_expiration()
+                    ),
+                    side="ENTRY",
+                    limit_price=limit_price,
+                    quantity=quantity,
+                    order_spec=order_spec,
+                    candidate_snapshot=self._candidate_snapshot(candidate),
+                )
+            except UniqueViolationError:
+                log.error("entry_blocked_active_intent", underlying=self.underlying)
+                raise
         await self._record_execution_quote(
             candidate, intent_id, "before_submit", limit_price=limit_price
         )
@@ -869,20 +875,25 @@ class OrderManager:
                 if self.intent_queries is not None:
                     snapshot = self._candidate_snapshot(candidate)
                     snapshot["exit_reason"] = exit_reason
-                    intent_id = await self.intent_queries.create_intent(
-                        underlying=self.underlying,
-                        trade_date=(
-                            candidate.lower_quote.expiration
-                            if candidate.lower_quote is not None
-                            else get_0dte_expiration()
-                        ),
-                        trade_id=trade_id,
-                        side="EXIT",
-                        limit_price=limit_price,
-                        quantity=quantity,
-                        order_spec=order_spec,
-                        candidate_snapshot=snapshot,
-                    )
+                    try:
+                        intent_id = await self.intent_queries.create_intent(
+                            underlying=self.underlying,
+                            trade_date=(
+                                candidate.lower_quote.expiration
+                                if candidate.lower_quote is not None
+                                else get_0dte_expiration()
+                            ),
+                            trade_id=trade_id,
+                            side="EXIT",
+                            limit_price=limit_price,
+                            quantity=quantity,
+                            order_spec=order_spec,
+                            candidate_snapshot=snapshot,
+                        )
+                    except UniqueViolationError as e:
+                        raise AmbiguousOrderError(
+                            "an active exit intent already exists for this trade"
+                        ) from e
                 await self._record_execution_quote(
                     candidate, intent_id, "before_submit", limit_price=limit_price
                 )

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from asyncpg.exceptions import UniqueViolationError
 from pydantic import ValidationError
 
 from butterfly_guy.core.config import ExecutionSettings
@@ -590,6 +591,55 @@ async def test_exit_intent_db_failure_prevents_broker_write():
             trade_id=7,
         )
 
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "db_error,expected_error",
+    [
+        (UniqueViolationError("private DB detail"), AmbiguousOrderError),
+        (ConnectionError("db unavailable"), ConnectionError),
+    ],
+)
+async def test_exit_intent_conflict_halts_but_connection_failure_remains_retryable(
+    db_error, expected_error,
+):
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.side_effect = db_error
+
+    with pytest.raises(expected_error) as caught:
+        await om.execute_exit(
+            make_candidate(5900, 5950, 6000, 2.50), current_value=3.00, trade_id=7
+        )
+
+    if isinstance(db_error, UniqueViolationError):
+        assert str(caught.value) == "an active exit intent already exists for this trade"
+        assert caught.value.__cause__ is db_error
+    else:
+        assert caught.value is db_error
+    om.intent_queries.create_intent.assert_awaited_once()
+    om.intent_queries.mark_unknown.assert_not_awaited()
+    schwab.place_order.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_entry_intent_conflict_logs_distinct_event_and_preserves_exception():
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    db_error = UniqueViolationError("private DB detail")
+    om.intent_queries.create_intent.side_effect = db_error
+
+    with patch("butterfly_guy.execution.order_manager.log") as logger, \
+         pytest.raises(UniqueViolationError) as caught:
+        await om.execute_single_attempt(
+            make_candidate(5900, 5950, 6000, 2.50), limit_price=2.50
+        )
+
+    assert caught.value is db_error
+    logger.error.assert_called_once_with("entry_blocked_active_intent", underlying="SPX")
+    om.intent_queries.mark_unknown.assert_not_awaited()
     schwab.place_order.assert_not_awaited()
 
 
