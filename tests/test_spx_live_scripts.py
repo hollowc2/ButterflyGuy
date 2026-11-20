@@ -512,7 +512,11 @@ def test_health_posts_each_docker_restart_once(session):
     assert_paper_never_changed(session)
 
 
-def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
+@pytest.mark.parametrize("event", [
+    "monitor_stopped_unknown_broker_state", "entry_loop_stopped_unknown_broker_state",
+    "entry_blocked_active_intent",
+])
+def test_health_alerts_when_the_live_bot_halts_or_entries_are_blocked(session, event):
     # Live 2026-11-19: the bot stayed up but stopped monitoring an open fly for six hours.
     session.run("activate.sh")
     session.state["check_rc"] = 1
@@ -520,7 +524,7 @@ def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
     # SIGPIPE docker logs and pipefail would hide the halt.
     session.state["logs"] = "\n".join([
         '{"event": "live_trading_starting", "level": "info"}',
-        '{"trade_id": 100000, "event": "monitor_stopped_unknown_broker_state"}',
+        json.dumps({"event": event}),
         *['{"event": "HTTP Request: GET https://api.schwabapi.com/x"}'] * 20000,
     ])
 
@@ -528,13 +532,19 @@ def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
 
     assert result.returncode == 1, out
     alert = session.notifications().splitlines()[-1]
-    assert "🚨" in alert and "HALTED on unknown broker state" in alert
-    assert "may hold an OPEN live fly" in alert
+    if event == "entry_blocked_active_intent":
+        assert "⚠️" in alert and "entries BLOCKED by an active intent" in alert
+        assert "HALTED" not in alert and "nothing is managing" not in alert
+    else:
+        assert "🚨" in alert and "HALTED on unknown broker state" in alert
+        assert "may hold an OPEN live fly" in alert
     since = [c for c in session.calls() if c[0] == "logs" and "--since" in c]
     assert since and since[-1][-1] == "butterfly_spx_live_app"
 
     session.run("health.sh")
-    assert session.notifications().count("HALTED") == 1
+    assert session.notifications().count("health recovered") == 0
+    assert session.notifications().count("entries BLOCKED" if event == "entry_blocked_active_intent"
+                                         else "HALTED") == 1
     assert_paper_never_changed(session)
 
 
