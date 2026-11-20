@@ -446,6 +446,17 @@ async def _assert_broker_state_matches_db(
         if intent_queries is not None
         else []
     )
+    if intent_queries is not None and allow_repair:
+        # An OPEN trade's active EXIT intent holds its index whatever its date (a fly
+        # from an earlier session, or a mismatched date), so the startup checks need it.
+        seen = {intent.get("id") for intent in intents}
+        intents += [
+            intent
+            for intent in await intent_queries.active_exit_intents_for_trades(
+                underlying, [int(row["id"]) for row in open_rows if row.get("id") is not None]
+            )
+            if intent.get("id") not in seen
+        ]
     known_order_ids = _intent_order_ids(intents)
     manual_close_symbols: set[str] = set()
     if monitored_trade_id is not None:

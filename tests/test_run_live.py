@@ -754,6 +754,131 @@ async def test_startup_reports_broker_flat_before_an_unresolved_exit_intent():
         )
 
 
+TODAY = dt.date(2026, 11, 19)
+TERMINAL = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+
+
+class _IntentTable:
+    """broker_order_intents in memory, with the two reads' predicates (the SQL itself is
+    checked against Postgres in tests/integration/test_database_smoke.py)."""
+
+    def __init__(self, *rows):
+        self.rows = [{"underlying": "SPX", "broker_order_id": None, **row} for row in rows]
+        self.update_broker_status = AsyncMock()
+        self.active_exit_reads = 0
+
+    async def intents_for_day(self, underlying, trade_date):
+        return [
+            dict(row) for row in self.rows
+            if row["underlying"] == underlying and row["trade_date"] == trade_date
+        ]
+
+    async def active_exit_intents_for_trades(self, underlying, trade_ids):
+        self.active_exit_reads += 1
+        return [
+            dict(row) for row in self.rows
+            if row["underlying"] == underlying and row["side"] == "EXIT"
+            and row["trade_id"] in trade_ids and row["status"] not in TERMINAL
+        ]
+
+
+def _exit_intent(trade_date, status="SUBMITTING", broker_order_id=None, trade_id=7, **row):
+    return {"id": 2, "side": "EXIT", "trade_id": trade_id, "trade_date": trade_date,
+            "status": status, "broker_order_id": broker_order_id, **row}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("days", [-1, 1], ids=["dated-before-today", "dated-after-today"])
+@pytest.mark.parametrize(
+    ("broker_order_id", "reason"), [(None, "no order id"), ("55", "order not found")]
+)
+async def test_startup_refuses_an_open_trade_exit_intent_dated_outside_the_session(
+    days, broker_order_id, reason
+):
+    # The active-exit index is per trade, not per day, so the date-scoped read missed it.
+    schwab, _ = _unresolved_exit_state("SUBMITTING")
+    intents = _IntentTable(
+        _exit_intent(TODAY + dt.timedelta(days=days), broker_order_id=broker_order_id)
+    )
+
+    with pytest.raises(RuntimeError, match=rf"cannot be matched.*\(SUBMITTING, {reason}\)"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents, trade_date=TODAY
+        )
+
+
+@pytest.mark.asyncio
+async def test_startup_syncs_an_exit_intent_found_by_both_reads_once():
+    # The same row from both reads: one status sync, and its REPLACED order still refuses.
+    legs = [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)]
+    replaced = {"orderId": 55, "status": "REPLACED", "orderLegCollection": legs}
+    schwab, _ = _unresolved_exit_state("SUBMITTED", orders=[replaced])
+    intents = _IntentTable(_exit_intent(TODAY, "SUBMITTED", "55"))
+
+    with pytest.raises(RuntimeError, match=r"unresolved exit intent \(order REPLACED\)"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents, trade_date=TODAY
+        )
+
+    assert intents.active_exit_reads == 1
+    intents.update_broker_status.assert_awaited_once_with(2, "REPLACED", replaced)
+
+
+@pytest.mark.asyncio
+async def test_startup_ignores_old_intents_that_hold_no_open_trade():
+    yesterday = TODAY - dt.timedelta(days=1)
+    schwab, _ = _unresolved_exit_state("SUBMITTING")
+    intents = _IntentTable(
+        _exit_intent(yesterday, trade_id=8, id=3),  # a CLOSED trade's
+        _exit_intent(yesterday, underlying="NDX", id=4),  # another underlying's
+        _exit_intent(yesterday, "CANCELED", "50", id=5),  # final history of the OPEN trade
+        _exit_intent(yesterday, "FILLED", "51", id=6),
+        {"id": 9, "side": "ENTRY", "trade_id": None, "trade_date": yesterday,
+         "status": "UNKNOWN_ABORTED"},  # an old entry: its index key is yesterday's
+    )
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents, trade_date=TODAY
+    )
+
+    assert intents.active_exit_reads == 1
+
+
+@pytest.mark.asyncio
+async def test_runtime_does_not_read_exit_intents_outside_the_session():
+    # The monitor owns its in-flight exit; the extra read is startup-only.
+    schwab, _ = _unresolved_exit_state("SUBMITTING")
+    intents = _IntentTable(_exit_intent(TODAY), _exit_intent(TODAY - dt.timedelta(days=1), id=3))
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents,
+        trade_date=TODAY, allow_repair=False, monitored_trade_id=7,
+    )
+
+    assert intents.active_exit_reads == 0
+
+
+@pytest.mark.asyncio
+async def test_startup_still_settles_a_prior_session_trade_with_posted_settlement(monkeypatch):
+    # Broker flat and Schwab's closing transactions posted: they are the settlement evidence.
+    yesterday = TODAY - dt.timedelta(days=1)
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+    schwab.get_todays_orders.return_value = []
+    schwab.get_transactions_for_day.return_value = [{"settlement": "redacted"}]
+    monkeypatch.setattr(
+        "butterfly_guy.scripts.run_live.broker_cash_settlement_from_transactions",
+        lambda transactions, trade: Mock() if transactions else None,
+    )
+    trade = {
+        **OPEN_TRADE, "id": 7, "trade_date": yesterday, "direction": "CALL",
+        "lower_strike": 6000, "center_strike": 6050, "upper_strike": 6100, "entry_price": 1.0,
+    }
+    intents = _IntentTable(_exit_intent(yesterday))
+
+    await _assert_broker_state_matches_db(schwab, "SPX", [trade], intents, trade_date=TODAY)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error_type", [RuntimeError, UniqueViolationError])
 async def test_entry_loop_repeated_errors_degrade_and_recover(

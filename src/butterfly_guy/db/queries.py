@@ -573,6 +573,30 @@ class OrderIntentQueries:
         )
         return [dict(row) for row in rows]
 
+    async def active_exit_intents_for_trades(
+        self, underlying: str, trade_ids: list[int]
+    ) -> list[dict[str, Any]]:
+        """Non-terminal EXIT intents of these trades, whatever their date.
+
+        The active-exit unique index is per trade, not per day.
+        """
+        if not trade_ids:
+            return []
+        rows = await self.db.pool.fetch(
+            """
+            SELECT *
+            FROM broker_order_intents
+            WHERE underlying = $1
+              AND side = 'EXIT'
+              AND trade_id = ANY($2::int[])
+              AND status NOT IN ('FILLED', 'CANCELED', 'REJECTED', 'EXPIRED')
+            ORDER BY created_at, id
+            """,
+            underlying,
+            trade_ids,
+        )
+        return [dict(row) for row in rows]
+
     async def active_broker_order_ids(
         self,
         underlying: str,

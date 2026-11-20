@@ -113,8 +113,9 @@ Either way, health.sh's 🚨 in the live channel repeats every 15 min. Alertmana
    you as if that order were yours. After you cancel it in ToS, a stopped container
    needs `docker start butterfly_spx_live_app`.
    - **Refusal "exit intent that cannot be matched to a broker order" or "unresolved exit intent":** an exit submit
-     whose outcome is unknown. First confirm in ToS that no order is working on the
-     fly's legs and no fill is missing from the DB. Only then close the intent in the
+     whose outcome is unknown. It covers the OPEN trade's exit intents of any date,
+     including an earlier session's still-open fly. First confirm in ToS that no order
+     is working on the fly's legs and no fill is missing from the DB. Only then close the intent in the
      live DB; it must update exactly one row:
      `UPDATE broker_order_intents SET status = 'CANCELED', raw_broker_payload = '{"operator_resolved": "<reason>", "previous_status": "<old>"}'::jsonb, updated_at = NOW() WHERE id = <id> AND status NOT IN ('FILLED','CANCELED','REJECTED','EXPIRED') AND broker_order_id IS NULL;`
      For `REPLACED` or `order not found` with a recorded order id, first confirm in ToS
