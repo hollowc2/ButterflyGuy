@@ -1,0 +1,114 @@
+SPX MANUAL FILL LOG — week of 2026-10-19
+One block per order (entry and exit are separate blocks). Times in PT, to the second if you can.
+Leave a field blank rather than guessing.
+
+------------------------------------------------------------
+TEST #:            Date:            Side: ENTRY / EXIT
+Pairs with test #: (exit -> its entry)
+Fly (lo/ctr/hi):     /     /        Width:      Qty:
+Debit or credit:  DEBIT / CREDIT
+
+At click
+  Time clicked:
+  SPX spot:
+  Platform fly bid / ask / mid:      /      /
+  Starting limit:
+
+Steps (one line per replace)
+  1. time:          limit:
+  2. time:          limit:
+  3. time:          limit:
+  4. time:          limit:
+
+Result
+  FILLED / CANCELLED / PARTIAL
+  Fill time:          Fill price:
+  Notes (fast market, wide legs, data lag, anything odd):
+------------------------------------------------------------
+
+------------------------------------------------------------
+TEST #: 1          Date: 2026-10-19     Side: ENTRY
+Pairs with test #:
+Fly (lo/ctr/hi): 7725 / 7745 / 7765 C   Width: 20   Qty: 1
+Debit or credit:  DEBIT
+
+At click
+  Time clicked: 09:47:46 (broker enteredTime)
+  SPX spot:
+  Platform fly bid / ask / mid:      / ~1.50 /
+  Starting limit: 1.35
+
+Steps (one line per replace)
+  none
+
+Result
+  FILLED
+  Fill time: 09:47:55   Fill price: 1.35  (legs 1.97 / 0.37x2 / 0.12)
+  Notes: Schwab order #1008349379166. Filled on first limit in 9s.
+         Gateway chain ~09:43 had this fly 1.60/1.80 mid 1.70; SPX fell before the click.
+------------------------------------------------------------
+
+------------------------------------------------------------
+TEST #: 2          Date: 2026-10-19     Side: EXIT
+Pairs with test #: 1
+Fly (lo/ctr/hi): 7725 / 7745 / 7765 C   Width: 20   Qty: 1
+Debit or credit:  CREDIT
+
+At click
+  Time clicked: 09:50:27 (broker enteredTime)
+  SPX spot:
+  Platform fly bid / ask / mid:      /      / 1.30
+  Starting limit: 1.30 (at platform mid)
+
+Steps (one line per replace)
+  none
+
+Result
+  FILLED
+  Fill time: 09:50:28   Fill price: 1.30  (legs 1.92 / 0.37x2 / 0.12)
+  Notes: Schwab order #1008349379369. Filled at mid on first limit in ~1s.
+------------------------------------------------------------
+
+------------------------------------------------------------
+TEST #: 3          Date: 2026-10-19     Side: ENTRY
+Pairs with test #:
+Fly (lo/ctr/hi): 7725 / 7745 / 7765 C   Width: 20   Qty: 1
+Debit or credit:  DEBIT
+
+At click
+  Time clicked: 09:58:50 (broker enteredTime)
+  SPX spot: ~7701.8 (screencast)
+  Platform fly bid / ask / mid:  ~0.95 / 1.15 / 1.05  (ticket Mid 1.05, Nat 1.15)
+  Starting limit: 1.05 (at mid)
+
+Steps (one line per replace)
+  none
+
+Result
+  FILLED
+  Fill time: 09:58:54   Fill price: 1.05  (legs 1.47 / 0.27x2 / 0.12)
+  Notes: Schwab order #1008350238075. At mid, first limit, 4s.
+         Source: Screencast_20261019_095829.webm (on-screen clock vs broker within ~10s).
+------------------------------------------------------------
+
+------------------------------------------------------------
+TEST #: 4          Date: 2026-10-19     Side: EXIT
+Pairs with test #: 3
+Fly (lo/ctr/hi): 7725 / 7745 / 7765 C   Width: 20   Qty: 1
+Debit or credit:  CREDIT
+
+At click
+  Time clicked: 09:59:39 (broker enteredTime)
+  SPX spot: ~7701.4 (screencast)
+  Platform fly bid / ask / mid:  0.90 /  ~1.10 / 1.00  (ticket Mid 1.00, Nat 0.90)
+  Starting limit: 1.05 (mid + 0.05)
+
+Steps (one line per replace)
+  1. time: 10:01:00   limit: 0.95  (platform mid had drifted to 0.95, ticking to 0.90; Nat 0.85-0.80)
+
+Result
+  FILLED (after 1 replace)
+  Fill time: 10:01:05   Fill price: 0.95  (legs 1.40 / 0.28x2 / 0.11)
+  Notes: #1008350238125 @1.05 worked 82s, no fill, REPLACED at 10:01:01.
+         #1008350238219 @0.95 filled in 5s. Mid+0.05 did not fill; mid did.
+------------------------------------------------------------

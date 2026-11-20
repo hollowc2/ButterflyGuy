@@ -1,0 +1,1015 @@
+{
+  "recorded_at": "2026-11-12 23:06:40.694218+00:00",
+  "decision": "Reject exact relative-calm cells under frozen screen; absolute quiet-day variants have no trades and insufficient evidence",
+  "trial_cells": 72,
+  "archive_sessions": 185,
+  "final_features": {
+    "statuses": {
+      "excluded_prefix": 63,
+      "excluded_warmup": 20,
+      "covered": 102
+    },
+    "quiet_days": 30
+  },
+  "split_date": "2026-05-15",
+  "final_cash_records": 1140,
+  "cells": {
+    "atm_all_w2_CALL": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 100,
+        "excluded_entry": 2
+      },
+      "trades": 100,
+      "stressed": -1943.9999999999998,
+      "net": -1443.9999999999998,
+      "midpoint": -35.50000000000003,
+      "expectancy": -19.439999999999998,
+      "win_rate": 0.32,
+      "profit_factor": 0.5453482389260488,
+      "top3_removed": -2315.2,
+      "terminal_drawdown": 1963.9999999999961,
+      "mean_initial_risk": 73.30000000000001,
+      "mean_risk_units": -0.28118395757949993,
+      "paired": {
+        "days": 100,
+        "difference": 0.0,
+        "candidate": -1943.9999999999998,
+        "benchmark": -1943.9999999999998
+      },
+      "conditional_paired": {
+        "days": 100,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 20,
+          "stressed": -321.9999999999999
+        },
+        "second": {
+          "trades": 80,
+          "stressed": -1621.9999999999998
+        }
+      }
+    },
+    "atm_all_w2_PUT": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 101,
+        "excluded_entry": 1
+      },
+      "trades": 101,
+      "stressed": -2214.5999999999995,
+      "net": -1709.5999999999995,
+      "midpoint": -131.1000000000003,
+      "expectancy": -21.92673267326732,
+      "win_rate": 0.3069306930693069,
+      "profit_factor": 0.5021133093525179,
+      "top3_removed": -2582.7999999999993,
+      "terminal_drawdown": 2214.599999999996,
+      "mean_initial_risk": 75.54059405940596,
+      "mean_risk_units": -0.2996050078944462,
+      "paired": {
+        "days": 101,
+        "difference": 0.0,
+        "candidate": -2214.5999999999995,
+        "benchmark": -2214.5999999999995
+      },
+      "conditional_paired": {
+        "days": 101,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 20,
+          "stressed": -362.9999999999999
+        },
+        "second": {
+          "trades": 81,
+          "stressed": -1851.5999999999995
+        }
+      }
+    },
+    "atm_all_w2_IRON": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 102
+      },
+      "trades": 102,
+      "stressed": -1269.199999999999,
+      "net": -759.1999999999995,
+      "midpoint": -31.69999999999994,
+      "expectancy": -12.44313725490195,
+      "win_rate": 0.35294117647058826,
+      "profit_factor": 0.669358620330329,
+      "top3_removed": -1666.3999999999987,
+      "terminal_drawdown": 1373.1999999999975,
+      "mean_initial_risk": 67.07058823529414,
+      "mean_risk_units": -0.21145266157871723,
+      "paired": {
+        "days": 102,
+        "difference": 0.0,
+        "candidate": -1269.1999999999994,
+        "benchmark": -1269.1999999999994
+      },
+      "conditional_paired": {
+        "days": 102,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 20,
+          "stressed": -147.99999999999986
+        },
+        "second": {
+          "trades": 82,
+          "stressed": -1121.1999999999994
+        }
+      }
+    },
+    "atm_all_w4_CALL": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 100,
+        "excluded_entry": 2
+      },
+      "trades": 100,
+      "stressed": -2359.999999999999,
+      "net": -1859.9999999999995,
+      "midpoint": 196.50000000000125,
+      "expectancy": -23.59999999999999,
+      "win_rate": 0.48,
+      "profit_factor": 0.6503807294598679,
+      "top3_removed": -2959.199999999999,
+      "terminal_drawdown": 2431.5999999999967,
+      "mean_initial_risk": 210.82999999999993,
+      "mean_risk_units": -0.1248617301130478,
+      "paired": {
+        "days": 100,
+        "difference": 0.0,
+        "candidate": -2359.9999999999995,
+        "benchmark": -2359.9999999999995
+      },
+      "conditional_paired": {
+        "days": 100,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 20,
+          "stressed": -852.0000000000001
+        },
+        "second": {
+          "trades": 80,
+          "stressed": -1507.9999999999993
+        }
+      }
+    },
+    "atm_all_w4_PUT": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 101,
+        "excluded_entry": 1
+      },
+      "trades": 101,
+      "stressed": -3004.599999999999,
+      "net": -2499.5999999999995,
+      "midpoint": 127.90000000000045,
+      "expectancy": -29.74851485148514,
+      "win_rate": 0.45544554455445546,
+      "profit_factor": 0.5880723882643266,
+      "top3_removed": -3603.7999999999993,
+      "terminal_drawdown": 3101.799999999994,
+      "mean_initial_risk": 217.39207920792072,
+      "mean_risk_units": -0.13812957439862497,
+      "paired": {
+        "days": 101,
+        "difference": 0.0,
+        "candidate": -3004.5999999999995,
+        "benchmark": -3004.5999999999995
+      },
+      "conditional_paired": {
+        "days": 101,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 20,
+          "stressed": -906.9999999999999
+        },
+        "second": {
+          "trades": 81,
+          "stressed": -2097.6
+        }
+      }
+    },
+    "atm_all_w4_IRON": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 102
+      },
+      "trades": 102,
+      "stressed": -877.2000000000002,
+      "net": -367.19999999999993,
+      "midpoint": 301.3000000000005,
+      "expectancy": -8.600000000000001,
+      "win_rate": 0.5,
+      "profit_factor": 0.8562344303133601,
+      "top3_removed": -1507.4,
+      "terminal_drawdown": 1291.0,
+      "mean_initial_risk": 197.90392156862734,
+      "mean_risk_units": -0.061197936265945586,
+      "paired": {
+        "days": 102,
+        "difference": 0.0,
+        "candidate": -877.1999999999999,
+        "benchmark": -877.1999999999999
+      },
+      "conditional_paired": {
+        "days": 102,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 20,
+          "stressed": -564.9999999999999
+        },
+        "second": {
+          "trades": 82,
+          "stressed": -312.2000000000003
+        }
+      }
+    },
+    "atm_quiet_w2_CALL": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 29,
+        "no_signal": 72,
+        "excluded_entry": 1
+      },
+      "trades": 29,
+      "stressed": -206.3999999999999,
+      "net": -61.39999999999985,
+      "midpoint": 298.6000000000002,
+      "expectancy": -7.117241379310341,
+      "win_rate": 0.4482758620689655,
+      "profit_factor": 0.8196749956316618,
+      "top3_removed": -565.5999999999998,
+      "terminal_drawdown": 359.2,
+      "mean_initial_risk": 80.73793103448274,
+      "mean_risk_units": -0.08942119425000537,
+      "paired": {
+        "days": 100,
+        "difference": 1737.6,
+        "candidate": -206.39999999999986,
+        "benchmark": -1943.9999999999998
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -125.39999999999996
+        },
+        "second": {
+          "trades": 20,
+          "stressed": -80.99999999999991
+        }
+      }
+    },
+    "atm_quiet_w2_PUT": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 29,
+        "no_signal": 72,
+        "excluded_entry": 1
+      },
+      "trades": 29,
+      "stressed": -343.39999999999975,
+      "net": -198.3999999999998,
+      "midpoint": 244.09999999999994,
+      "expectancy": -11.841379310344818,
+      "win_rate": 0.41379310344827586,
+      "profit_factor": 0.7095246151243444,
+      "top3_removed": -704.5999999999997,
+      "terminal_drawdown": 409.79999999999984,
+      "mean_initial_risk": 84.42758620689652,
+      "mean_risk_units": -0.13866728848791315,
+      "paired": {
+        "days": 101,
+        "difference": 1871.1999999999996,
+        "candidate": -343.3999999999998,
+        "benchmark": -2214.5999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -143.39999999999998
+        },
+        "second": {
+          "trades": 20,
+          "stressed": -199.99999999999991
+        }
+      }
+    },
+    "atm_quiet_w2_IRON": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -17.999999999999716,
+      "net": 132.00000000000026,
+      "midpoint": 331.00000000000006,
+      "expectancy": -0.5999999999999905,
+      "win_rate": 0.4666666666666667,
+      "profit_factor": 0.9829319173146217,
+      "top3_removed": -401.1999999999997,
+      "terminal_drawdown": 319.1999999999999,
+      "mean_initial_risk": 75.99999999999999,
+      "mean_risk_units": -0.00781082481220748,
+      "paired": {
+        "days": 102,
+        "difference": 1251.1999999999998,
+        "candidate": -17.999999999999748,
+        "benchmark": -1269.1999999999994
+      },
+      "conditional_paired": {
+        "days": 30,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -42.39999999999998
+        },
+        "second": {
+          "trades": 21,
+          "stressed": 24.40000000000021
+        }
+      }
+    },
+    "atm_quiet_w4_CALL": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 29,
+        "no_signal": 72,
+        "excluded_entry": 1
+      },
+      "trades": 29,
+      "stressed": -76.39999999999979,
+      "net": 68.6000000000002,
+      "midpoint": 651.6000000000006,
+      "expectancy": -2.6344827586206825,
+      "win_rate": 0.5517241379310345,
+      "profit_factor": 0.9501890728908595,
+      "top3_removed": -617.5999999999998,
+      "terminal_drawdown": 416.4,
+      "mean_initial_risk": 237.39310344827592,
+      "mean_risk_units": -0.009883146590810212,
+      "paired": {
+        "days": 100,
+        "difference": 2283.5999999999995,
+        "candidate": -76.3999999999998,
+        "benchmark": -2359.9999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -175.3999999999999
+        },
+        "second": {
+          "trades": 20,
+          "stressed": 99.00000000000013
+        }
+      }
+    },
+    "atm_quiet_w4_PUT": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 29,
+        "no_signal": 72,
+        "excluded_entry": 1
+      },
+      "trades": 29,
+      "stressed": -111.39999999999982,
+      "net": 33.600000000000165,
+      "midpoint": 602.6,
+      "expectancy": -3.8413793103448213,
+      "win_rate": 0.4827586206896552,
+      "profit_factor": 0.9285897435897438,
+      "top3_removed": -651.5999999999998,
+      "terminal_drawdown": 420.0,
+      "mean_initial_risk": 237.56551724137935,
+      "mean_risk_units": -0.0152375090740701,
+      "paired": {
+        "days": 101,
+        "difference": 2893.1999999999994,
+        "candidate": -111.39999999999984,
+        "benchmark": -3004.5999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -202.3999999999998
+        },
+        "second": {
+          "trades": 20,
+          "stressed": 90.99999999999996
+        }
+      }
+    },
+    "atm_quiet_w4_IRON": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": 404.9999999999998,
+      "net": 554.9999999999999,
+      "midpoint": 739.0000000000002,
+      "expectancy": 13.499999999999993,
+      "win_rate": 0.6,
+      "profit_factor": 1.2900730554361841,
+      "top3_removed": -171.20000000000027,
+      "terminal_drawdown": 389.4000000000001,
+      "mean_initial_risk": 224.3333333333334,
+      "mean_risk_units": 0.06380831947611622,
+      "paired": {
+        "days": 102,
+        "difference": 1282.1999999999998,
+        "candidate": 404.9999999999999,
+        "benchmark": -877.1999999999999
+      },
+      "conditional_paired": {
+        "days": 30,
+        "difference": 0.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -44.39999999999992
+        },
+        "second": {
+          "trades": 21,
+          "stressed": 449.39999999999986
+        }
+      }
+    },
+    "otm_drift_quiet_w2_CALL": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -494.9999999999999,
+      "net": -344.9999999999999,
+      "midpoint": 21.50000000000006,
+      "expectancy": -16.499999999999996,
+      "win_rate": 0.4,
+      "profit_factor": 0.6217909535452324,
+      "top3_removed": -813.1999999999999,
+      "terminal_drawdown": 561.3999999999999,
+      "mean_initial_risk": 78.23333333333332,
+      "mean_risk_units": -0.22262648709575336,
+      "paired": {
+        "days": 100,
+        "difference": 1538.6,
+        "candidate": -405.39999999999986,
+        "benchmark": -1943.9999999999998
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": -199.00000000000003
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -215.39999999999995
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -279.5999999999999
+        }
+      }
+    },
+    "otm_drift_quiet_w2_PUT": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -855.0,
+      "net": -704.9999999999999,
+      "midpoint": 126.00000000000011,
+      "expectancy": -28.5,
+      "win_rate": 0.36666666666666664,
+      "profit_factor": 0.3916322755087521,
+      "top3_removed": -1076.2,
+      "terminal_drawdown": 939.1999999999999,
+      "mean_initial_risk": 90.2333333333333,
+      "mean_risk_units": -0.36973387770957833,
+      "paired": {
+        "days": 101,
+        "difference": 1365.1999999999996,
+        "candidate": -849.3999999999999,
+        "benchmark": -2214.5999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": -506.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -392.3999999999999
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -462.6
+        }
+      }
+    },
+    "otm_drift_quiet_w2_IRON": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -418.9999999999999,
+      "net": -268.9999999999999,
+      "midpoint": 67.50000000000017,
+      "expectancy": -13.966666666666663,
+      "win_rate": 0.4,
+      "profit_factor": 0.660123296560675,
+      "top3_removed": -708.1999999999998,
+      "terminal_drawdown": 502.19999999999993,
+      "mean_initial_risk": 75.69999999999999,
+      "mean_risk_units": -0.22287722772963656,
+      "paired": {
+        "days": 102,
+        "difference": 850.1999999999996,
+        "candidate": -418.9999999999999,
+        "benchmark": -1269.1999999999994
+      },
+      "conditional_paired": {
+        "days": 30,
+        "difference": -401.0000000000001
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -221.3999999999999
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -197.6
+        }
+      }
+    },
+    "otm_drift_quiet_w4_CALL": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -652.9999999999999,
+      "net": -502.9999999999999,
+      "midpoint": 55.00000000000005,
+      "expectancy": -21.766666666666662,
+      "win_rate": 0.43333333333333335,
+      "profit_factor": 0.6749950228946846,
+      "top3_removed": -1108.1999999999998,
+      "terminal_drawdown": 889.5999999999998,
+      "mean_initial_risk": 229.13333333333338,
+      "mean_risk_units": -0.1108920190445182,
+      "paired": {
+        "days": 100,
+        "difference": 1757.5999999999995,
+        "candidate": -602.3999999999999,
+        "benchmark": -2359.9999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": -526.0000000000001
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -333.4000000000001
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -319.5999999999998
+        }
+      }
+    },
+    "otm_drift_quiet_w4_PUT": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -1005.0000000000001,
+      "net": -854.9999999999999,
+      "midpoint": 159.50000000000023,
+      "expectancy": -33.50000000000001,
+      "win_rate": 0.4,
+      "profit_factor": 0.5318613750698716,
+      "top3_removed": -1393.2000000000003,
+      "terminal_drawdown": 1109.4,
+      "mean_initial_risk": 240.86666666666673,
+      "mean_risk_units": -0.1603922530783713,
+      "paired": {
+        "days": 101,
+        "difference": 2023.1999999999996,
+        "candidate": -981.3999999999999,
+        "benchmark": -3004.5999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": -870.0
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -455.40000000000003
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -549.5999999999999
+        }
+      }
+    },
+    "otm_drift_quiet_w4_IRON": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -350.9999999999999,
+      "net": -200.9999999999999,
+      "midpoint": 122.00000000000013,
+      "expectancy": -11.699999999999996,
+      "win_rate": 0.43333333333333335,
+      "profit_factor": 0.811513263881431,
+      "top3_removed": -817.1999999999998,
+      "terminal_drawdown": 787.5999999999999,
+      "mean_initial_risk": 219.06666666666672,
+      "mean_risk_units": -0.06639199014323136,
+      "paired": {
+        "days": 102,
+        "difference": 526.2,
+        "candidate": -350.9999999999999,
+        "benchmark": -877.1999999999999
+      },
+      "conditional_paired": {
+        "days": 30,
+        "difference": -755.9999999999998
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -253.40000000000003
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -97.59999999999991
+        }
+      }
+    },
+    "otm_pair_quiet_w2_CALL": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 29,
+        "no_signal": 72,
+        "excluded_entry": 1
+      },
+      "trades": 29,
+      "stressed": -908.7999999999998,
+      "net": -618.7999999999998,
+      "midpoint": 281.20000000000005,
+      "expectancy": -31.337931034482754,
+      "win_rate": 0.4482758620689655,
+      "profit_factor": 0.3810107614766381,
+      "top3_removed": -1104.1999999999998,
+      "terminal_drawdown": 953.8000000000001,
+      "mean_initial_risk": 158.751724137931,
+      "mean_risk_units": -0.18677933012841802,
+      "paired": {
+        "days": 100,
+        "difference": 1035.1999999999998,
+        "candidate": -908.7999999999998,
+        "benchmark": -1943.9999999999998
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": -702.4
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -588.8
+        },
+        "second": {
+          "trades": 20,
+          "stressed": -319.99999999999994
+        }
+      }
+    },
+    "otm_pair_quiet_w2_PUT": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -1197.0,
+      "net": -897.0,
+      "midpoint": 385.9999999999999,
+      "expectancy": -39.9,
+      "win_rate": 0.43333333333333335,
+      "profit_factor": 0.293138065430495,
+      "top3_removed": -1410.4,
+      "terminal_drawdown": 1257.4000000000003,
+      "mean_initial_risk": 168.19999999999993,
+      "mean_risk_units": -0.21127609794071944,
+      "paired": {
+        "days": 101,
+        "difference": 1143.7999999999995,
+        "candidate": -1070.8,
+        "benchmark": -2214.5999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": -727.4000000000001
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -704.8000000000001
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -492.2
+        }
+      }
+    },
+    "otm_pair_quiet_w2_IRON": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -519.0000000000001,
+      "net": -218.99999999999997,
+      "midpoint": 368.49999999999994,
+      "expectancy": -17.300000000000004,
+      "win_rate": 0.5,
+      "profit_factor": 0.5929411764705879,
+      "top3_removed": -748.4000000000001,
+      "terminal_drawdown": 613.7999999999998,
+      "mean_initial_risk": 145.59999999999997,
+      "mean_risk_units": -0.10592745258130624,
+      "paired": {
+        "days": 102,
+        "difference": 750.1999999999995,
+        "candidate": -519.0,
+        "benchmark": -1269.1999999999994
+      },
+      "conditional_paired": {
+        "days": 30,
+        "difference": -501.0000000000002
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -462.7999999999999
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -56.20000000000009
+        }
+      }
+    },
+    "otm_pair_quiet_w4_CALL": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 29,
+        "no_signal": 72,
+        "excluded_entry": 1
+      },
+      "trades": 29,
+      "stressed": -840.8,
+      "net": -550.7999999999995,
+      "midpoint": 716.7000000000005,
+      "expectancy": -28.99310344827586,
+      "win_rate": 0.5517241379310345,
+      "profit_factor": 0.6947651201626373,
+      "top3_removed": -1366.2000000000003,
+      "terminal_drawdown": 1100.7999999999997,
+      "mean_initial_risk": 452.78620689655185,
+      "mean_risk_units": -0.05873444859259624,
+      "paired": {
+        "days": 100,
+        "difference": 1519.1999999999998,
+        "candidate": -840.7999999999995,
+        "benchmark": -2359.9999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": -764.3999999999997
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -802.7999999999998
+        },
+        "second": {
+          "trades": 20,
+          "stressed": -37.999999999999716
+        }
+      }
+    },
+    "otm_pair_quiet_w4_PUT": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": -1050.0,
+      "net": -750.0,
+      "midpoint": 945.0000000000006,
+      "expectancy": -35.0,
+      "win_rate": 0.5333333333333333,
+      "profit_factor": 0.632198402690206,
+      "top3_removed": -1569.4,
+      "terminal_drawdown": 1267.7999999999997,
+      "mean_initial_risk": 463.13333333333344,
+      "mean_risk_units": -0.06979636772510885,
+      "paired": {
+        "days": 101,
+        "difference": 1991.7999999999995,
+        "candidate": -1012.8,
+        "benchmark": -3004.5999999999995
+      },
+      "conditional_paired": {
+        "days": 29,
+        "difference": -901.4000000000001
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -902.8000000000001
+        },
+        "second": {
+          "trades": 21,
+          "stressed": -147.2
+        }
+      }
+    },
+    "otm_pair_quiet_w4_IRON": {
+      "statuses": {
+        "excluded_prefix": 63,
+        "excluded_warmup": 20,
+        "completed": 30,
+        "no_signal": 72
+      },
+      "trades": 30,
+      "stressed": 36.0000000000004,
+      "net": 336.0000000000003,
+      "midpoint": 891.0000000000003,
+      "expectancy": 1.2000000000000133,
+      "win_rate": 0.6666666666666666,
+      "profit_factor": 1.014428857715431,
+      "top3_removed": -562.3999999999996,
+      "terminal_drawdown": 739.1999999999999,
+      "mean_initial_risk": 426.93333333333345,
+      "mean_risk_units": 0.01036281585467806,
+      "paired": {
+        "days": 102,
+        "difference": 913.2000000000003,
+        "candidate": 36.000000000000306,
+        "benchmark": -877.1999999999999
+      },
+      "conditional_paired": {
+        "days": 30,
+        "difference": -368.9999999999996
+      },
+      "decision": "reject exact cell",
+      "halves": {
+        "first": {
+          "trades": 9,
+          "stressed": -561.8
+        },
+        "second": {
+          "trades": 21,
+          "stressed": 597.8000000000002
+        }
+      }
+    }
+  },
+  "limitations": [
+    "Retrospective inspected development; no independent holdout",
+    "SPX/10 signal proxy, not native XSP",
+    "Component quotes, unknown event age, no demonstrated complex-order fills",
+    "Unverified all-in broker/exchange/exercise charges",
+    "Neutral pair doubles gross packages with no netting",
+    "Drawdown terminal outcomes only; no funded-account return"
+  ],
+  "hashes": {
+    "uv.lock": "4c22a869845d8ea612a17560557fa25a67e0f35e7d436f26b08171d1ee421725",
+    "pyproject.toml": "014dfde9a59d7f6a37777982aea8460628a363e680eaf64b14e2b7cb0d36d425",
+    "tests/test_xsp_quiet_flies.py": "ca1e6de607ba0e519e08ef5ebd4b471a906e1a01df9650e9769c9b594b1e3c30",
+    "tools/research_studies/xsp_independent/quiet_flies.py": "c6c54a1c6141075e77e83f393cd048a3fd262a960754d2a759fe162bb2a9894d",
+    "tools/research_studies/xsp_independent/review_quiet_flies.py": "bd0ec79bb75f836091a185787b8177f54ba0200bd6086003c9e4c97f92750f83",
+    "tools/research_studies/xsp_independent/render_quiet_report.py": "8a50aa39a95d505ca6c9f216b1f0bc1b4bd9f2818e75de8d193cfbf346a19a29",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-01/specification.json": "6754320c2461bbf098fc565c15b3ceaa15a72f4b7776b7bf360c6371f1fa7f88",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-01/summary.json": "041c899e6f7a10f03174b4a3b63fe055ac8923b80e2e2abbb29d74f329cb1eaa",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-01/completed-manifest.json": "4a57b654ed9e6f864b476ef9c2c23af9570fe10a61259edf237e31b2ef0ba1d7",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-01/cash-review.json": "aeb3ef26dd22a1f1196fb26d7fe61cfdd8921e03e329ef5349cd6269f637b453",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-02-spx/specification.json": "8d09c0293601bc0e6aa1424793556777182f93e4f2c00379e0dae669604c1e11",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-02-spx/summary.json": "5cb0a399be1b5085102c08f284b53949c26b1515271baba43f32b5a5cf4b0507",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-02-spx/completed-manifest.json": "9bdaa4b66205ca01e85a777b0d9c4dcaa19bc97ad08bdb344bb81b47ba476704",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-02-spx/cash-review.json": "7c42026f675ed71915c2c837c109beb9e25f68880c0a6cdc585fd9e88197829e",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-03-relative/specification.json": "ca7d078cb6cce05401dd15b529caa62e3ed842fcbaba82f3d40562eb47a36166",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-03-relative/summary.json": "485875791b2b38a77c5f50ec2d98e94bc42d493f8d25cf6f3e0aef3e24af244c",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-03-relative/completed-manifest.json": "ab84f83a6f015a54f35e961c61ba05f5fa07be1c3311cf2af92becc5fc7c09e3",
+    "reports/research/xsp-quiet-flies-2026-11-12/run-03-relative/cash-review.json": "4a2c5c7b87b2656b1ff9a8de23013e94bd2b39b8c71bf5cfa17611679cfc5cb3",
+    "reports/research/xsp-quiet-flies-2026-11-12/index.html": "2f8700029a377f7b96d019de3b281b28097e48d1ee079183ee40a6200c784ae8"
+  },
+  "environment": {
+    "python": "3.13.13",
+    "pyarrow": "25.0.1"
+  }
+}

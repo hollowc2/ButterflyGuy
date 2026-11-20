@@ -58,6 +58,9 @@ New SPX research runs through the [canonical research core](research/research-co
 
 Current decision and verification records:
 
+- [Completed independent XSP butterfly research](research/xsp-independent-research-2026-11-12.md):
+  entry/exit ideas already tested, rejected complete-cohort results, quote and
+  settlement findings, and requirements for reopening an experiment.
 - [NDX strategy development](research/ndx-strategy-development.md): living plan,
   evidence, experiment decisions, and handoff for improving the NDX strategy.
 - [NDX-01 baseline reproduction](research/ndx-strategy/README.md): verified private
