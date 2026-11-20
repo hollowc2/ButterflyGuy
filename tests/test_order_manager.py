@@ -2135,3 +2135,22 @@ async def test_missing_fill_poll_status_times_out_then_post_cancel_halts_without
     om.intent_queries.create_intent.assert_awaited_once()
     schwab.place_order.assert_awaited_once()
     schwab.cancel_order.assert_awaited_once_with("ORD1")
+
+
+@pytest.mark.asyncio
+async def test_entry_post_cancel_read_budget_exhaustion_preserves_original_unknown_detail():
+    om, schwab = make_order_manager(make_settings())
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    original = ConnectionError("original status read failure")
+    schwab.get_order_status = AsyncMock(side_effect=original)
+    _, mono, sleep = fake_clock()
+    with mono, sleep, patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=False)), \
+         pytest.raises(AmbiguousOrderError) as caught:
+        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.5), 2.5)
+
+    om.intent_queries.mark_unknown.assert_awaited_once_with(42, "original status read failure")
+    assert str(caught.value) == "post-cancel broker state is unknown"
+    assert caught.value.__cause__ is original
+    schwab.place_order.assert_awaited_once()
+    schwab.cancel_order.assert_awaited_once_with("ORD1")

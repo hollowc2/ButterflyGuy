@@ -837,7 +837,10 @@ class OrderManager:
                 )
                 return post_fill
 
-        except (BrokerFillError, PartialFillError, TerminalOrderError, EntryOrderReplacedError):
+        except (
+            AmbiguousOrderError, BrokerFillError, PartialFillError,
+            TerminalOrderError, EntryOrderReplacedError,
+        ):
             raise
         except OrderRejectedError as e:
             raise await self._submit_rejected(intent_id, e, "entry") from e
