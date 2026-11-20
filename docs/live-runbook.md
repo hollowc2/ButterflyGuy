@@ -82,6 +82,104 @@ reverification, the DB/risk/audit state was reconciled atomically and XSP was
 rebuilt paper-only with flat `/ready` proof. Evidence is in
 `reports/xsp_manual_flatten_2026-07-16.md`.
 
+## SPX Live: Bot Halted With An Open Fly
+
+A halt stops the live bot's monitor and entries; it sends no more orders.
+
+- **Releases from `audit/spx-live-halt-20261119` on:** a live halt exits the process
+  with code 1. Docker (`on-failure:3`) restarts it, and the startup reconcile decides.
+  - If every bot order is final and the broker matches the DB, it re-adopts the fly
+    and carries on.
+  - If not, it refuses and stops again. After three restarts it stays down.
+  - You see `⚠️ … stopped … and Docker restarted it` for each restart. If it stays
+    down, you see the 🚨 "live container is NOT running".
+- **bd870ae and earlier:** the container stays up but halted, and the fly is unmanaged
+  until a human acts.
+
+Either way, health.sh's 🚨 in the live channel repeats every 15 min. Alertmanager's
+`ButterflyGuyBrokerAmbiguity` (instance_role live) also posts to the live channel since
+2026-11-19. On 2026-11-19 the halt came at 07:20 PT and the first human action at 13:03 PT.
+
+An `IntentPersistenceError` with `entry intent creation outcome is unknown; no broker
+order submitted; manual reconciliation required` (or `exit intent creation outcome
+is unknown; no broker order submitted; manual reconciliation required`) halts on the
+first failed INSERT reply, even if the database is still unreachable. This attempt
+sent no broker order, but the intent may have committed. Do not retry it manually
+until the database is reachable and its intents and broker state have been checked.
+A surviving SUBMITTING row is refused at startup; resolve it only through the guarded
+operator procedure below. If no row survived, startup can reconcile normally.
+
+The health warning `live entries BLOCKED by an active intent; manual reconciliation
+required` clears after a later `entry_intent_created` log event proves that the
+active-entry index allowed a new intent. Health then posts `✅ … health recovered
+(was: …)` once. A no-op `entry_loop_recovered` is insufficient proof. A later block
+warns again. Any `*_stopped_unknown_broker_state` event stays sticky for that container
+run and keeps its repeating 🚨 alert; only a restart scopes it out. Notification
+failures log `notify failed` and retain the last successfully delivered state,
+repeat timestamp and restart count, so the next health run retries. A failed
+recovery post is also retried before its old warning state is cleared.
+
+Optionally set `CHECK_READY=1` in the session environment to check `/ready`. The
+warning `live bot NOT READY: <reason> (same reason on two consecutive health checks)`
+posts only after the same reason is observed in two consecutive health runs for
+the same container start time. Reasons containing `starting` or `shutting_down`
+are ignored. Ready, unreadable, unreachable or skipped checks, reason changes,
+disabling the check, and container restarts break the streak. This check follows
+the paper-container fingerprint check and precedes the blocked-entry check, so
+halts and the earlier health problems retain priority. It does not change trading
+readiness, resolve intents or restart anything. `health.ready` stores observations;
+`health.state` still records only successfully posted warnings.
+
+1. **Read state (read-only).** `docker logs butterfly_spx_live_app 2>&1 | grep -E
+   'stopped_unknown|monitor_task_error|post_cancel|order_'` names the order and the
+   reason. In ToS, record the fly's legs and any working order on them.
+2. **Close or hold in ToS.** The bot will not act. Cancel any working order on the
+   legs and confirm it reads Canceled. Then either send the closing butterfly
+   yourself or decide to hold to settlement. Holding to settlement is fine for a
+   cash-settled 0DTE fly when its remaining value is small.
+3. **Do not restart the bot to "resume" while an order on the legs is working.**
+   Startup refuses on any bot-owned order that is not final (working, PENDING_CANCEL,
+   partial). On bd870ae it accepts a bot-owned working order, then hands the exit to
+   you as if that order were yours. After you cancel it in ToS, a stopped container
+   needs `docker start butterfly_spx_live_app`.
+   - **Refusal "exit intent that cannot be matched to a broker order" or "unresolved exit intent":** an exit submit
+     whose outcome is unknown. It covers the OPEN trade's exit intents of any date,
+     including an earlier session's still-open fly. First confirm in ToS that no order
+     is working on the fly's legs and no fill is missing from the DB. Only then close the intent in the
+     live DB; it must update exactly one row:
+     `UPDATE broker_order_intents SET status = 'CANCELED', raw_broker_payload = '{"operator_resolved": "<reason>", "previous_status": "<old>"}'::jsonb, updated_at = NOW() WHERE id = <id> AND status NOT IN ('FILLED','CANCELED','REJECTED','EXPIRED') AND broker_order_id IS NULL;`
+     For `REPLACED` or `order not found` with a recorded order id, first confirm in ToS
+     that that order and every replacement are final and no fill is missing from the DB.
+     Use this variant instead; it must also update exactly one row:
+     `UPDATE broker_order_intents SET status = 'CANCELED', raw_broker_payload = '{"operator_resolved": "<reason>", "previous_status": "<old>"}'::jsonb, updated_at = NOW() WHERE id = <id> AND broker_order_id = '<order id>' AND status NOT IN ('FILLED','CANCELED','REJECTED','EXPIRED');`
+     Then `docker start butterfly_spx_live_app`. This is the only sanctioned manual DB
+     edit, and only after the ToS check.
+   - **Refusal "entry intent that cannot be matched to a broker order" or "unresolved entry intent":**
+     today's entry, e.g. one you replaced in ToS (the bot halts on that). It blocks
+     every entry today. Check ToS the same way for today's SPX orders and positions,
+     then use the same UPDATE with its id.
+4. **After you close in ToS:** a restarted bot adopts nothing that it did not send.
+   Close the DB row from Schwab's fill (Manual Flatten, step 6).
+5. **If it expires:** after 16:02 ET, run the settle tool. Do the dry run first:
+   ```bash
+   docker exec -i butterfly_spx_live_app python - --trade-id <id> \
+     < $REL/tools/spx_live_settle_expired.py
+   docker exec -i butterfly_spx_live_app python - --trade-id <id> --apply \
+     < $REL/tools/spx_live_settle_expired.py
+   ```
+   It settles from Schwab's posted expiration transactions when they exist. The
+   same day, it settles only a fly that expired at least 20 SPX points out of the
+   money at SPX's final session bar, marked provisional so the next startup replaces it
+   with Schwab's posting. It updates `daily_risk_state` in the same transaction.
+6. **Stop the container.** A running live bot books the settlement at the close,
+   marked provisional; the next startup replaces it with Schwab's posting. Close-out
+   and `stop-live.sh` ignore legs whose expiry has passed (`--ignore-expired`). On
+   bd870ae they don't: Schwab lists expired legs until overnight, so stop with
+   `FORCE=1`, and only after step 5 shows the row CLOSED and ToS shows no working
+   orders. Record why in the session dir.
+7. **Before the next live day,** the activation gates (broker flat, live DB flat)
+   must pass on their own. Never edit the gates.
+
 ## Token Recovery
 
 1. Treat failed authentication as not ready and keep new entry disabled.

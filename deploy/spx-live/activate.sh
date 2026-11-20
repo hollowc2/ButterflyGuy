@@ -14,6 +14,7 @@ abort() {
 
 [ "$(date -u +%F)" = "$DATE" ] || abort "wrong date $(date -u +%F)"
 [ -z "$EXIT_PRICING_ERROR" ] || abort "$EXIT_PRICING_ERROR"
+[ -z "$OBSERVE_ERROR" ] || abort "$OBSERVE_ERROR"
 [ -e "$D/ACTIVATED" ] && abort "activation already attempted"
 [ "$(running "$PAPER_C")" = 1 ] || abort "expected exactly one running paper SPX container"
 paper_is_paper || abort "paper container is not paper on $PAPER_DB"
@@ -52,6 +53,10 @@ if [ -n "$fail" ]; then
   fi
   exit 1
 fi
-notify "✅ $LABEL $DATE RUNNING beside paper: 1 fly max, ≤4.00 debit, $EXITS, entries 07:00–07:45 PT, DB $LIVE_DB. Close-out $CLOSEOUT_PT PT."
+if [ "$OBSERVE" = 1 ]; then
+  notify "✅ $LABEL $DATE RUNNING beside paper: entries BLOCKED (live-test date $OBSERVE_DATE), no orders; startup reconcile, broker checks and health only. DB $LIVE_DB. Close-out $CLOSEOUT_PT PT."
+else
+  notify "✅ $LABEL $DATE RUNNING beside paper: 1 fly max, ≤4.00 debit, $EXITS, entries 07:00–07:45 PT, DB $LIVE_DB. Close-out $CLOSEOUT_PT PT."
+fi
 act touch "$D/VERIFIED"
 echo "=== $(ts) activation done"

@@ -51,7 +51,9 @@ def broker_fill_payload(*, order_type: str = "NET_DEBIT") -> dict:
 
 
 @pytest.mark.asyncio
-async def test_startup_allows_bot_owned_working_order():
+async def test_startup_refuses_bot_owned_working_order_after_recording_it():
+    # Halt audit 2026-11-19 (M2): after a restart nothing waits on the previous process's
+    # resting order; an exit would read as the operator's, an entry could fill unbooked.
     schwab = AsyncMock()
     schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
     schwab.get_todays_orders.return_value = [
@@ -68,7 +70,8 @@ async def test_startup_allows_bot_owned_working_order():
         {"id": 1, "broker_order_id": "BOT1", "status": "SUBMITTED"}
     ]
 
-    await _assert_broker_state_matches_db(schwab, "SPX", [], intents)
+    with pytest.raises(RuntimeError, match="working bot-owned"):
+        await _assert_broker_state_matches_db(schwab, "SPX", [], intents)
 
     intents.update_broker_status.assert_awaited_once()
 
@@ -96,7 +99,8 @@ async def test_startup_matches_bot_intent_to_nested_order_id():
         {"id": 1, "broker_order_id": "BOT1", "status": "SUBMITTED"}
     ]
 
-    await _assert_broker_state_matches_db(schwab, "SPX", [], intents)
+    with pytest.raises(RuntimeError, match="working bot-owned"):
+        await _assert_broker_state_matches_db(schwab, "SPX", [], intents)
 
     intents.update_broker_status.assert_awaited_once_with(1, "WORKING", child)
 

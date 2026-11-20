@@ -66,6 +66,8 @@ elif cmd == "inspect":
         print(state["image"][name])
     elif "ExitCode" in fmt:
         print("exit 137 at 2026-11-20T17:02:00Z")
+    elif fmt == "{{.State.StartedAt}}":
+        print(state.get("started_at", "2026-11-20T00:00:00Z"))
     elif fmt == "{{.RestartCount}}":
         print(state.get("restarts", {}).get(name, 0))
     elif "RestartCount" in fmt:
@@ -79,7 +81,7 @@ elif cmd == "exec":
     name = rest[0]
     if rest[1:3] == ["sh", "-c"]:
         print(state.get("token_override", {}).get(name) or token())
-    elif rest[1:] == ["python", "-"]:
+    elif rest[1:] in (["python", "-"], ["python", "-", "--ignore-expired"]):
         sys.stdin.read()
         sys.exit(state["broker_rc"])
     elif rest[1] == "python":
@@ -113,10 +115,33 @@ def session(tmp_path):
     bin_dir.mkdir()
     docker = bin_dir / "docker"
     docker.write_text(f"#!{sys.executable}\n{FAKE_DOCKER}")
-    for name, body in (("curl", "exit 0"), ("sleep", "exit 0")):
+    curl = bin_dir / "curl"
+    curl.write_text(f"#!{sys.executable}\n" + r'''
+import json, os, sys
+state = json.load(open(os.environ["FAKE_DOCKER_STATE"]))
+with open(os.environ["FAKE_CURL_CALLS"], "a") as f:
+    f.write(json.dumps(sys.argv[1:]) + "\n")
+if sys.argv[-1].endswith("/ready"):
+    if state.get("ready_rc", 0):
+        sys.exit(state["ready_rc"])
+    ready = state.get("ready", {"status": "ready", "reason": None})
+    if ready.get("status") == "not_ready" and any(
+        arg.startswith("-") and "f" in arg for arg in sys.argv[1:]
+    ):
+        sys.exit(22)  # HTTP 503: curl -f would suppress its reason body
+    print(state.get("ready_body", json.dumps(ready)))
+else:
+    sys.exit(state.get("health_rc", 0))
+''')
+    for name, body in (("sleep", "exit 0"),):
         (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
     notify = bin_dir / "fake-python"
-    notify.write_text(f'#!/bin/sh\necho "$2" >> {tmp_path}/notify.log\n')
+    notify.write_text(
+        f'#!/bin/sh\n[ "$1" != "-c" ] || exec {sys.executable} "$@"\n'
+        f'echo "$2" >> {tmp_path}/notify-attempts.log\n'
+        '[ "${FAKE_NOTIFY_FAIL:-0}" != 1 ] || exit 1\n'
+        f'echo "$2" >> {tmp_path}/notify.log\n'
+    )
     for path in bin_dir.iterdir():
         path.chmod(0o755)
 
@@ -156,6 +181,7 @@ def session(tmp_path):
         state_path = tmp_path / "state.json"
         calls_path = tmp_path / "calls.log"
         notify_log = tmp_path / "notify.log"
+        curl_calls_path = tmp_path / "curl-calls.log"
 
         def __init__(self):
             self.state = state
@@ -173,6 +199,7 @@ def session(tmp_path):
                 **os.environ,
                 "PATH": f"{bin_dir}:{os.environ['PATH']}",
                 "FAKE_DOCKER_STATE": str(self.state_path),
+                "FAKE_CURL_CALLS": str(self.curl_calls_path),
                 "FAKE_DOCKER_CALLS": str(self.calls_path),
                 "FAKE_TOKEN": str(tokens / "tokens.json"),
                 "ROOT": str(tmp_path),
@@ -196,6 +223,11 @@ def session(tmp_path):
                 return []
             return [json.loads(line) for line in self.calls_path.read_text().splitlines()]
 
+        def curl_calls(self):
+            if not self.curl_calls_path.exists():
+                return []
+            return [json.loads(line) for line in self.curl_calls_path.read_text().splitlines()]
+
         def notifications(self):
             return self.notify_log.read_text() if self.notify_log.exists() else ""
 
@@ -217,7 +249,11 @@ def assert_paper_never_changed(session):
                     assert call[-1] == "app_spx_live", joined
             assert not {"rm", "restart", "kill", "down"} & set(call), joined
         if call[0] == "exec" and "butterfly_spx_app" in call:
-            assert call[-2:] == ["python", "-"] or call[-2] == "-c", joined
+            assert (
+                call[-2:] == ["python", "-"]
+                or call[-3:] == ["python", "-", "--ignore-expired"]  # read-only flat check
+                or call[-2] == "-c"
+            ), joined
     assert session.state["fingerprint"]["butterfly_spx_app"] in {PAPER_FINGERPRINT, "changed"}
 
 
@@ -508,7 +544,11 @@ def test_health_posts_each_docker_restart_once(session):
     assert_paper_never_changed(session)
 
 
-def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
+@pytest.mark.parametrize("event", [
+    "monitor_stopped_unknown_broker_state", "entry_loop_stopped_unknown_broker_state",
+    "entry_blocked_active_intent",
+])
+def test_health_alerts_when_the_live_bot_halts_or_entries_are_blocked(session, event):
     # Live 2026-11-19: the bot stayed up but stopped monitoring an open fly for six hours.
     session.run("activate.sh")
     session.state["check_rc"] = 1
@@ -516,7 +556,7 @@ def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
     # SIGPIPE docker logs and pipefail would hide the halt.
     session.state["logs"] = "\n".join([
         '{"event": "live_trading_starting", "level": "info"}',
-        '{"trade_id": 100000, "event": "monitor_stopped_unknown_broker_state"}',
+        json.dumps({"event": event}),
         *['{"event": "HTTP Request: GET https://api.schwabapi.com/x"}'] * 20000,
     ])
 
@@ -524,14 +564,43 @@ def test_health_alerts_when_the_live_bot_halts_on_unknown_broker_state(session):
 
     assert result.returncode == 1, out
     alert = session.notifications().splitlines()[-1]
-    assert "🚨" in alert and "HALTED on unknown broker state" in alert
-    assert "may hold an OPEN live fly" in alert
+    if event == "entry_blocked_active_intent":
+        assert "⚠️" in alert and "entries BLOCKED by an active intent" in alert
+        assert "HALTED" not in alert and "nothing is managing" not in alert
+    else:
+        assert "🚨" in alert and "HALTED on unknown broker state" in alert
+        assert "may hold an OPEN live fly" in alert
     since = [c for c in session.calls() if c[0] == "logs" and "--since" in c]
     assert since and since[-1][-1] == "butterfly_spx_live_app"
 
     session.run("health.sh")
-    assert session.notifications().count("HALTED") == 1
+    assert session.notifications().count("health recovered") == 0
+    assert session.notifications().count("entries BLOCKED" if event == "entry_blocked_active_intent"
+                                         else "HALTED") == 1
     assert_paper_never_changed(session)
+
+
+@pytest.mark.parametrize(
+    ("problem", "expected"),
+    [
+        ({"fingerprint": {"butterfly_spx_app": "changed"}}, "PAPER CONTAINER CHANGED"),
+        ({"token_override": {"butterfly_spx_live_app": "1 deadbeef"}}, "token file differs"),
+    ],
+    ids=["paper-changed", "token-mismatch"],
+)
+def test_health_reports_a_later_problem_over_an_earlier_blocked_entry(session, problem, expected):
+    # The blocked-entry event stays in this run's log; it must not hide what breaks next.
+    session.run("activate.sh")
+    session.state["logs"] = '{"event": "entry_blocked_active_intent"}'
+    session.run("health.sh")
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+
+    for key, value in problem.items():
+        session.state[key] = {**session.state.get(key, {}), **value}
+    result, out = session.run("health.sh")
+
+    assert result.returncode == 1, out
+    assert expected in session.notifications().splitlines()[-1]
 
 
 def test_health_repeats_the_unmanaged_fly_alert_until_flat(session):
@@ -590,6 +659,54 @@ def test_default_session_fails_verification_if_live_runs_mid_walk(session):
     assert_paper_never_changed(session)
 
 
+OBSERVE_DATE = "2000-01-01"
+OBSERVE_LIMITS = [
+    f"EXECUTION__LIVE_TEST_DATE={OBSERVE_DATE}" if kv.startswith("EXECUTION__LIVE_TEST_DATE=")
+    else kv
+    for kv in LIVE_LIMITS
+]
+
+
+def test_observe_session_runs_the_live_bot_with_every_entry_blocked(session):
+    session.env_file(REHEARSAL=0, OBSERVE=1)
+    session.state["env"]["butterfly_spx_live_app"] = OBSERVE_LIMITS
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 0, out
+    assert "verify fail=none" in out
+    assert _up_files(session) == ["docker-compose.spx-live.yml",
+                                  "docker-compose.spx-live-observe.yml"]
+    last = session.notifications().splitlines()[-1]
+    assert "OBSERVE" in last and "no orders" in last and "1 fly max" not in last
+    assert (session.dir / "VERIFIED").exists()
+    assert_paper_never_changed(session)
+
+
+def test_observe_session_stops_a_live_bot_that_could_still_trade(session):
+    # The overlay did not apply: today's live-test date would let it enter. Fail closed.
+    session.env_file(REHEARSAL=0, OBSERVE=1)
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1
+    assert f"live env lacks EXECUTION__LIVE_TEST_DATE={OBSERVE_DATE}" in out
+    assert session.state["running"]["butterfly_spx_live_app"] is False
+    assert not (session.dir / "VERIFIED").exists()
+    assert_paper_never_changed(session)
+
+
+def test_observe_is_refused_on_a_rehearsal(session):
+    session.env_file(REHEARSAL=1, OBSERVE=1)
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1
+    assert "OBSERVE=1 is for the live container" in out
+    assert not any(c[0] == "compose" and "up" in c for c in session.calls())
+    assert_paper_never_changed(session)
+
+
 def test_mid_walk_session_adds_the_overlay_and_requires_the_rule(session):
     session.env_file(REHEARSAL=0, EXIT_PRICING="mid_walk")
     session.state["env"]["butterfly_spx_live_app"] = [*LIVE_LIMITS,
@@ -625,3 +742,254 @@ def test_bad_exit_pricing_aborts_before_anything_starts(session, values, reason)
     assert reason in out and "NOT started" in session.notifications()
     assert not any(c[0] == "compose" for c in session.calls())
     assert not (session.dir / "ACTIVATED").exists()
+
+
+def test_health_clears_blocked_entry_after_a_created_intent_and_warns_on_reblock(session):
+    session.run("activate.sh")
+    session.state["logs"] = json.dumps({"event": "entry_blocked_active_intent"})
+    assert session.run("health.sh")[0].returncode == 1
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+
+    session.state["logs"] += "\n" + json.dumps({"event": "entry_intent_created"})
+    result, out = session.run("health.sh")
+    assert result.returncode == 0, out
+    assert "health fail=none" in out
+    assert session.notifications().count("health recovered") == 1
+    session.run("health.sh")
+    assert session.notifications().count("health recovered") == 1
+
+    session.state["logs"] += "\n" + json.dumps({"event": "entry_blocked_active_intent"})
+    assert session.run("health.sh")[0].returncode == 1
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+    assert session.notifications().count("entries BLOCKED") == 3  # includes recovered's 'was'
+    assert_paper_never_changed(session)
+
+
+@pytest.mark.parametrize("halt_first", [True, False])
+def test_health_halt_stays_sticky_despite_entry_intent_recovery(session, halt_first):
+    session.run("activate.sh")
+    session.state["check_rc"] = 1
+    events = ["entry_blocked_active_intent", "entry_intent_created"]
+    events.insert(0 if halt_first else len(events), "monitor_stopped_unknown_broker_state")
+    session.state["logs"] = "\n".join(json.dumps({"event": event}) for event in events)
+    result, out = session.run("health.sh")
+    assert result.returncode == 1, out
+    assert "🚨" in session.notifications().splitlines()[-1]
+    assert "HALTED on unknown broker state" in session.notifications().splitlines()[-1]
+    assert "health recovered" not in session.notifications()
+
+
+def test_health_noop_entry_loop_recovery_does_not_prove_the_intent_cleared(session):
+    session.run("activate.sh")
+    session.state["logs"] = "\n".join(json.dumps({"event": event}) for event in [
+        "entry_blocked_active_intent", "entry_loop_recovered",
+    ])
+    assert session.run("health.sh")[0].returncode == 1
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+
+
+@pytest.mark.parametrize("halt", [False, True], ids=["warning", "halt"])
+def test_health_retries_a_failed_problem_post_before_saving_state(session, halt):
+    session.run("activate.sh")
+    initial = session.notifications()
+    session.state["check_rc"] = 1
+    event = "monitor_stopped_unknown_broker_state" if halt else "entry_blocked_active_intent"
+    session.state["logs"] = json.dumps({"event": event})
+    result, out = session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    assert result.returncode == 1, out
+    assert "notify failed" in out
+    assert session.notifications() == initial
+    state = session.dir / "health.state"
+    assert not state.exists() or not state.read_text().strip()
+    assert not (session.dir / "health.alerted").exists()
+
+    assert session.run("health.sh")[0].returncode == 1
+    assert len(session.notifications().splitlines()) == len(initial.splitlines()) + 1
+    assert state.read_text().strip()
+    if halt:
+        assert (session.dir / "health.alerted").read_text().strip()
+    session.run("health.sh")  # normal dedup/repeat interval still applies after success
+    assert len(session.notifications().splitlines()) == len(initial.splitlines()) + 1
+
+
+def test_health_failed_halt_repeat_preserves_the_last_success_timestamp(session):
+    session.run("activate.sh")
+    session.state["check_rc"] = 1
+    session.state["logs"] = json.dumps({"event": "monitor_stopped_unknown_broker_state"})
+    session.run("health.sh")
+    initial = session.notifications()
+    state = (session.dir / "health.state").read_text()
+    alerted = session.dir / "health.alerted"
+    alerted.write_text("0\n")
+    session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    assert alerted.read_text() == "0\n"
+    assert (session.dir / "health.state").read_text() == state
+    assert session.notifications() == initial
+    session.run("health.sh")
+    assert "STILL UNRESOLVED" in session.notifications().splitlines()[-1]
+    assert alerted.read_text() != "0\n"
+    sent = session.notifications()
+    session.run("health.sh")
+    assert session.notifications() == sent
+
+
+def test_health_failed_recovery_post_keeps_state_for_the_next_run(session):
+    session.run("activate.sh")
+    session.state["logs"] = json.dumps({"event": "entry_blocked_active_intent"})
+    session.run("health.sh")
+    previous = (session.dir / "health.state").read_text()
+    session.state["logs"] += "\n" + json.dumps({"event": "entry_intent_created"})
+    result, _ = session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    assert result.returncode == 1
+    assert (session.dir / "health.state").read_text() == previous
+    assert "health recovered" not in session.notifications()
+    assert session.run("health.sh")[0].returncode == 0
+    assert session.notifications().count("health recovered") == 1
+    session.run("health.sh")
+    assert session.notifications().count("health recovered") == 1
+
+
+def test_health_failed_restart_post_is_retried_before_saving_seen_count(session):
+    session.run("activate.sh")
+    session.state["restarts"] = {"butterfly_spx_live_app": 1}
+    session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    seen = session.dir / "restarts.seen"
+    assert not seen.exists() or seen.read_text().strip() == "0"
+    assert "restart 1 of at most 3" not in session.notifications()
+    session.run("health.sh")
+    assert seen.read_text().strip() == "1"
+    assert session.notifications().count("restart 1 of at most 3") == 1
+    session.run("health.sh")
+    assert session.notifications().count("restart 1 of at most 3") == 1
+
+
+
+def test_health_ready_alert_waits_for_two_matching_reads_and_recovers_once(session):
+    session.run("activate.sh")
+    initial = session.notifications()
+    session.state["ready"] = {"status": "not_ready", "reason": "entry_loop_repeated_failures"}
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+    assert session.notifications() == initial
+    result, out = session.run("health.sh", CHECK_READY="1")
+    assert result.returncode == 1, out
+    assert "live bot NOT READY: entry_loop_repeated_failures" in session.notifications()
+    assert "⚠️" in session.notifications().splitlines()[-1]
+    sent = session.notifications()
+    session.run("health.sh", CHECK_READY="1")
+    assert session.notifications() == sent
+    session.state["ready"] = {"status": "ready", "reason": None}
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+    assert session.notifications().count("health recovered") == 1
+    session.run("health.sh", CHECK_READY="1")
+    assert session.notifications().count("health recovered") == 1
+
+
+def test_health_ready_reason_change_restarts_the_two_run_confirmation(session):
+    session.run("activate.sh")
+    session.state["ready"] = {"status": "not_ready", "reason": "reason_a"}
+    session.run("health.sh", CHECK_READY="1")
+    session.state["ready"]["reason"] = "reason_b"
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+    assert "NOT READY" not in session.notifications()
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 1
+    assert "NOT READY: reason_b" in session.notifications()
+    assert "NOT READY: reason_a" not in session.notifications()
+
+
+@pytest.mark.parametrize("reason", [
+    "starting", "shutting_down", "starting,shutting_down", "shutting_down,token_reload_unsafe",
+])
+def test_health_ready_ignores_lifecycle_reasons(session, reason):
+    session.run("activate.sh")
+    initial = session.notifications()
+    session.state["ready"] = {"status": "not_ready", "reason": reason}
+    for _ in range(3):
+        assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+    assert session.notifications() == initial
+
+
+def test_health_ready_check_is_opt_in_and_disabling_it_breaks_the_streak(session):
+    session.run("activate.sh")
+    session.state["ready"] = {"status": "not_ready", "reason": "token_reload_unsafe"}
+    assert session.run("health.sh")[0].returncode == 0
+    assert session.run("health.sh")[0].returncode == 0
+    assert not any(call[-1].endswith("/ready") for call in session.curl_calls())
+    session.run("health.sh", CHECK_READY="1")
+    session.run("health.sh")
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+    assert "NOT READY" not in session.notifications()
+
+
+def test_health_ready_confirmation_is_scoped_to_the_container_run(session):
+    session.run("activate.sh")
+    session.state["ready"] = {"status": "not_ready", "reason": "token_reload_unsafe"}
+    session.run("health.sh", CHECK_READY="1")
+    session.state["started_at"] = "2026-11-20T12:00:00Z"
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+    assert "NOT READY" not in session.notifications()
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 1
+    assert "NOT READY: token_reload_unsafe" in session.notifications()
+
+
+@pytest.mark.parametrize("problem", ["halt", "paper-changed"])
+def test_health_ready_never_masks_a_halt_or_a_paper_change(session, problem):
+    session.run("activate.sh")
+    session.state["check_rc"] = 1
+    session.state["ready"] = {"status": "not_ready", "reason": "token_reload_unsafe"}
+    session.run("health.sh", CHECK_READY="1")
+    if problem == "halt":
+        session.state["logs"] = json.dumps({"event": "monitor_stopped_unknown_broker_state"})
+        expected = "HALTED on unknown broker state"
+    else:
+        session.state["fingerprint"]["butterfly_spx_app"] = "changed"
+        expected = "PAPER CONTAINER CHANGED"
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 1
+    assert expected in session.notifications().splitlines()[-1]
+    assert "NOT READY" not in session.notifications().splitlines()[-1]
+    if problem == "paper-changed":
+        session.state["fingerprint"]["butterfly_spx_app"] = PAPER_FINGERPRINT
+        assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+
+
+@pytest.mark.parametrize("gap", ["ready", "malformed", "unreachable"])
+def test_health_ready_requires_consecutive_valid_not_ready_observations(session, gap):
+    session.run("activate.sh")
+    not_ready = {"status": "not_ready", "reason": "token_reload_unsafe"}
+    session.state["ready"] = not_ready
+    session.run("health.sh", CHECK_READY="1")
+    if gap == "ready":
+        session.state["ready"] = {"status": "ready", "reason": None}
+    elif gap == "malformed":
+        session.state["ready_body"] = "not json"
+    else:
+        session.state["ready_rc"] = 7
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+    session.state["ready"] = not_ready
+    session.state.pop("ready_body", None)
+    session.state.pop("ready_rc", None)
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 0
+    assert "NOT READY" not in session.notifications()
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 1
+    assert "NOT READY: token_reload_unsafe" in session.notifications()
+
+
+def test_health_confirmed_ready_warning_precedes_a_blocked_entry(session):
+    session.run("activate.sh")
+    session.state["ready"] = {"status": "not_ready", "reason": "token_reload_unsafe"}
+    session.state["logs"] = json.dumps({"event": "entry_blocked_active_intent"})
+    session.run("health.sh", CHECK_READY="1")
+    assert "entries BLOCKED" in session.notifications().splitlines()[-1]
+    session.run("health.sh", CHECK_READY="1")
+    assert "NOT READY: token_reload_unsafe" in session.notifications().splitlines()[-1]
+
+
+def test_health_failed_ready_warning_is_retried_on_the_next_confirmed_read(session):
+    session.run("activate.sh")
+    session.state["ready"] = {"status": "not_ready", "reason": "token_reload_unsafe"}
+    session.run("health.sh", CHECK_READY="1")
+    result, out = session.run("health.sh", CHECK_READY="1", FAKE_NOTIFY_FAIL="1")
+    assert result.returncode == 1, out
+    assert "notify failed" in out
+    assert not (session.dir / "health.state").read_text().strip()
+    assert session.run("health.sh", CHECK_READY="1")[0].returncode == 1
+    assert session.notifications().count("NOT READY: token_reload_unsafe") == 1

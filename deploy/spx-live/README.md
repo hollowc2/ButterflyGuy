@@ -18,6 +18,10 @@ None of them creates, recreates, restarts or stops `butterfly_spx_app`.
 1. Copy this directory to `/opt/butterflyguy-releases/spx-live-<DATE>-<sha7>/`.
 2. Fill in `session.env` from `session.env.example`. `REHEARSAL=1` is the Phase 3 paper-mode
    run on `butterfly_guy_spx_live_rehearsal`.
+   `OBSERVE=1` runs the real live bot with every entry blocked
+   (`infra/docker-compose.spx-live-observe.yml` pins its live-test date to 2000-01-01), so it
+   sends no orders: startup reconcile, broker checks, collector and health only. Activation
+   verifies the blocked date and stops a container that could still enter.
    `EXIT_PRICING` picks the live exit rule. Leave it empty on the first concurrent live day
    (default bid ladder). From the second live day on, set `EXIT_PRICING=mid_walk` to pilot
    the exit-ladder study's R3 rule (owner, 2026-11-18). That adds

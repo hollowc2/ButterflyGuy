@@ -90,6 +90,25 @@ case "$EXIT_PRICING" in
   *) EXIT_PRICING_ERROR="unknown EXIT_PRICING '$EXIT_PRICING' (empty or mid_walk)" ;;
 esac
 
+# OBSERVE=1: the real live bot with every entry blocked (infra/docker-compose.spx-live-observe.yml
+# pins its live-test date to a day that is never a session), so verification requires that
+# date instead of today's. A container that could still enter fails verification and stops.
+OBSERVE=${OBSERVE:-0}
+OBSERVE_DATE=2000-01-01
+OBSERVE_ERROR=""
+if [ "$OBSERVE" = 1 ]; then
+  if [ "$REHEARSAL" = 1 ]; then
+    OBSERVE_ERROR="OBSERVE=1 is for the live container, not a rehearsal"
+  else
+    LABEL="SPX live OBSERVE (no orders)"
+    COMPOSE_FILES+=(-f "$REL/infra/docker-compose.spx-live-observe.yml")
+    for i in "${!EXPECT_ENV[@]}"; do
+      [ "${EXPECT_ENV[$i]}" = "EXECUTION__LIVE_TEST_DATE=$DATE" ] \
+        && EXPECT_ENV[$i]="EXECUTION__LIVE_TEST_DATE=$OBSERVE_DATE"
+    done
+  fi
+fi
+
 ts() { date -u +%FT%TZ; }
 
 open_log() {
@@ -110,7 +129,13 @@ act() {
   esac
 }
 
-notify() { act "$PY" "$D/notify.py" "$1" || echo "$(ts) notify failed"; }
+notify() {
+  if act "$PY" "$D/notify.py" "$1"; then
+    return 0
+  fi
+  echo "$(ts) notify failed"
+  return 1
+}
 
 compose() {
   local cmd=(env "SPX_LIVE_IMAGE=$CAND" "SPX_LIVE_TEST_DATE=$DATE"
@@ -160,7 +185,8 @@ token_match() {
 
 broker_flat() {
   # Read-only and account-wide (SPX, NDX, XSP), so the paper container is a valid host.
-  docker exec -i "$PAPER_C" python - <"$REL/tools/deploy_broker_flat_check.py"
+  # Close-out and stop pass --ignore-expired: Schwab lists expired 0DTE legs until overnight.
+  docker exec -i "$PAPER_C" python - "$@" <"$REL/tools/deploy_broker_flat_check.py"
 }
 
 verify_live() {

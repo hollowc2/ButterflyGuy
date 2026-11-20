@@ -330,6 +330,54 @@ class TradeQueries:
         )
         return result == "UPDATE 1"
 
+    async def get_provisional_settlements(self, underlying: str) -> list[dict[str, Any]]:
+        """CLOSED cash settlements booked at the close before Schwab posted them."""
+        rows = await self.db.pool.fetch(
+            """
+            SELECT * FROM butterfly_trades
+            WHERE underlying = $1 AND status = 'CLOSED'
+              AND metadata->>'settlement_provisional' = 'true'
+            ORDER BY trade_date
+            """,
+            underlying,
+        )
+        return [dict(r) for r in rows]
+
+    async def finalize_provisional_settlement(
+        self, trade_id: int, exit_price: float, pnl: float, metadata: dict[str, Any],
+        *, max_daily_loss: float,
+    ) -> bool:
+        # One statement: the guarded trade correction and the day's risk delta commit or
+        # roll back together, and only one true-up can win the guard. The halt flags
+        # follow RiskEngine.record_pnl: set at -max_daily_loss, never cleared.
+        return bool(await self.db.pool.fetchval(
+            """
+            WITH corrected AS (
+                UPDATE butterfly_trades SET
+                    exit_price = $2, pnl = $3, metadata = metadata || $4::jsonb
+                WHERE id = $1 AND status = 'CLOSED'
+                  AND metadata->>'settlement_provisional' = 'true'
+                RETURNING trade_date, underlying,
+                    ($4::jsonb->>'net_pnl_dollars')::numeric
+                    - ($4::jsonb->>'provisional_net_pnl_dollars')::numeric AS delta
+            ), risk AS (
+                INSERT INTO daily_risk_state
+                    (trade_date, underlying, realized_pnl, halted, max_loss_hit)
+                SELECT trade_date, underlying, delta, delta <= -$5::numeric, delta <= -$5::numeric
+                FROM corrected
+                ON CONFLICT (trade_date, underlying) DO UPDATE SET
+                    realized_pnl = daily_risk_state.realized_pnl + EXCLUDED.realized_pnl,
+                    halted = daily_risk_state.halted OR
+                        daily_risk_state.realized_pnl + EXCLUDED.realized_pnl <= -$5::numeric,
+                    max_loss_hit = daily_risk_state.max_loss_hit OR
+                        daily_risk_state.realized_pnl + EXCLUDED.realized_pnl <= -$5::numeric
+                RETURNING 1
+            )
+            SELECT EXISTS (SELECT 1 FROM risk)
+            """,
+            trade_id, exit_price, pnl, json.dumps(metadata), max_daily_loss,
+        ))
+
     async def update_peak_value(self, trade_id: int, peak_value: float) -> None:
         await self.db.pool.execute(
             """
@@ -543,6 +591,30 @@ class OrderIntentQueries:
             """,
             underlying,
             trade_date,
+        )
+        return [dict(row) for row in rows]
+
+    async def active_exit_intents_for_trades(
+        self, underlying: str, trade_ids: list[int]
+    ) -> list[dict[str, Any]]:
+        """Non-terminal EXIT intents of these trades, whatever their date.
+
+        The active-exit unique index is per trade, not per day.
+        """
+        if not trade_ids:
+            return []
+        rows = await self.db.pool.fetch(
+            """
+            SELECT *
+            FROM broker_order_intents
+            WHERE underlying = $1
+              AND side = 'EXIT'
+              AND trade_id = ANY($2::int[])
+              AND status NOT IN ('FILLED', 'CANCELED', 'REJECTED', 'EXPIRED')
+            ORDER BY created_at, id
+            """,
+            underlying,
+            trade_ids,
         )
         return [dict(row) for row in rows]
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Read-only liveness check for a running live session; run every few minutes from a timer.
-# The live container restarts on a crash at most three times; after that, if it dies holding
-# a fly, nothing manages the exit until someone looks. This posts to the live channel when it
+# The live container restarts on a crash or a safety halt (the bot then exits 1) at most
+# three times; after that, if it dies holding a fly, nothing manages the exit until someone
+# looks. This posts to the live channel when it
 # is down or unhealthy, again when the problem changes, and once on recovery. Each Docker
 # restart is posted once, because a restarted bot otherwise looks healthy. A bot that is up but
 # has halted on unknown broker state counts as down: it leaves an open fly unmanaged (live
@@ -18,24 +19,58 @@ open_log health
 restarts=$(docker inspect -f '{{.RestartCount}}' "$LIVE_C" 2>/dev/null || echo 0)
 seen=$(cat "$D/restarts.seen" 2>/dev/null || echo 0)
 if [ "${restarts:-0}" -gt "${seen:-0}" ]; then
-  echo "$restarts" >"$D/restarts.seen"
   echo "$(ts) health live restarts=$restarts"
-  notify "⚠️ $LABEL $DATE: the live bot crashed and Docker restarted it (restart $restarts of at most 3). On startup it reconciles with the broker and re-adopts any open fly. Check its log and ToS. Log: $D/health.log"
+  if notify "⚠️ $LABEL $DATE: the live bot stopped (a crash, or a safety halt on unknown broker state) and Docker restarted it (restart $restarts of at most 3). On startup it reconciles with the broker and re-adopts any open fly, or refuses and stops again. Check its log and ToS. Log: $D/health.log"; then
+    echo "$restarts" >"$D/restarts.seen"
+  fi
 fi
 
 state="$D/health.state"
 last=$(cat "$state" 2>/dev/null)
 p0=$(cat "$D/paper.fingerprint" 2>/dev/null)
 
-# The bot's own halt: it stays up but no longer monitors or exits. Only this run counts;
-# a restart reconciles with the broker before it trades again.
-halted() {
+# Broker-state halts and blocked entries. Only this run counts; a restart reconciles
+# with the broker before it trades again.
+broker_state_events() {
   local started
   started=$(docker inspect -f '{{.State.StartedAt}}' "$LIVE_C" 2>/dev/null)
   # grep reads to the end: an early `grep -q` exit SIGPIPEs docker logs, and pipefail then
   # reports "not halted" (it did on 2026-11-19's 1 MB log).
   docker logs --since "${started:-${DATE}T00:00:00Z}" "$LIVE_C" 2>&1 \
-    | grep -E '"event": "(monitor|entry_loop)_stopped_unknown_broker_state"' >/dev/null
+    | grep -E '"event": "((monitor|entry_loop)_stopped_unknown_broker_state|entry_blocked_active_intent|entry_intent_created)"'
+}
+
+# Optional readiness confirmation. This file records observations, not alert delivery.
+# Clear it on every run so skipped/failed checks break the consecutive-read streak.
+ready_state="$D/health.ready"
+previous_ready=$(cat "$ready_state" 2>/dev/null)
+: >"$ready_state"
+ready_reason=""
+ready_problem() {
+  [ "${CHECK_READY:-0}" = 1 ] || return 1
+  # /ready returns its reason with HTTP 503, so do not use curl -f here.
+  ready_reason=$(curl -sS --max-time 5 "http://127.0.0.1:$LIVE_PORT/ready" \
+    | "$PY" -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+if not isinstance(data, dict) or data.get("status") != "not_ready":
+    sys.exit(0)
+reason = data.get("reason")
+if isinstance(reason, str):
+    reasons = {part.strip() for part in reason.split(",") if part.strip()}
+    if not reasons.intersection({"starting", "shutting_down"}):
+        print(",".join(sorted(reasons)))
+') || return 1
+  [ -n "$ready_reason" ] || return 1
+  local started current
+  started=$(docker inspect -f '{{.State.StartedAt}}' "$LIVE_C" 2>/dev/null) || return 1
+  [ -n "$started" ] || return 1
+  current="$started $ready_reason"
+  printf '%s\n' "$current" >"$ready_state"
+  [ "$current" = "$previous_ready" ]
 }
 
 fail=""
@@ -43,7 +78,8 @@ if [ "$(running "$LIVE_C")" != 1 ]; then
   fail="live container is NOT running ($(docker inspect -f 'exit {{.State.ExitCode}} at {{.State.FinishedAt}}' "$LIVE_C" 2>/dev/null || echo 'missing'))"
 elif [ "$(docker inspect -f '{{.Image}}' "$LIVE_C")" != "$CAND" ]; then
   fail="live image is not $CAND"
-elif halted; then
+elif broker_events=$(broker_state_events) \
+    && [[ "$broker_events" == *"_stopped_unknown_broker_state"* ]]; then
   fail="live bot HALTED on unknown broker state; it is up but not managing exits"
 elif ! curl -sf --max-time 5 "http://127.0.0.1:$LIVE_PORT/health" >/dev/null; then
   fail="metrics port $LIVE_PORT not answering"
@@ -53,12 +89,19 @@ elif [ "$(running "$PAPER_C")" != 1 ]; then
   fail="paper container is not running"
 elif [ -n "$p0" ] && [ "$(paper_fingerprint)" != "$p0" ]; then
   fail="PAPER CONTAINER CHANGED since activation"
+elif ready_problem; then
+  fail="live bot NOT READY: $ready_reason (same reason on two consecutive health checks)"
+elif [[ "$(printf '%s\n' "${broker_events:-}" \
+    | grep -E '"event": "entry_(blocked_active_intent|intent_created)"' \
+    | tail -n 1)" == *'"entry_blocked_active_intent"'* ]]; then
+  # Last: only the latest block/create event decides; other health problems win.
+  fail="live entries BLOCKED by an active intent; manual reconciliation required"
 fi
 echo "$(ts) health fail=${fail:-none}"
 
 if [ -z "$fail" ]; then
   if [ -n "$last" ]; then
-    notify "✅ $LABEL $DATE health recovered (was: $last)"
+    notify "✅ $LABEL $DATE health recovered (was: $last)" || exit 1
   fi
   : >"$state"
   exit 0
@@ -77,7 +120,6 @@ if [ "$fail" = "$last" ]; then
   [ "$since" -ge $(( ${ALERT_REPEAT_MIN:-15} * 60 )) ] || exit 1
   repeat=" STILL UNRESOLVED after $(( since / 60 )) min."
 fi
-echo "$fail" >"$state"
 if [ "$unmanaged" = 1 ]; then
   if db_tool check "${CHECK_ARGS[@]}" >/dev/null; then
     held="$LIVE_DB is flat"
@@ -85,9 +127,11 @@ if [ "$unmanaged" = 1 ]; then
   else
     held="$LIVE_DB may hold an OPEN live fly that nothing is managing"
   fi
-  notify "🚨 $LABEL $DATE: $fail; $held.$repeat Check ToS and Helios now. Log: $D/health.log"
+  notify "🚨 $LABEL $DATE: $fail; $held.$repeat Check ToS and Helios now. Log: $D/health.log" || exit 1
   date +%s >"$alerted"
 else
-  notify "⚠️ $LABEL $DATE health: $fail. Log: $D/health.log"
+  notify "⚠️ $LABEL $DATE health: $fail. Log: $D/health.log" || exit 1
 fi
+# Deduplication records delivery, not a failed attempt. Leave old state for a retry.
+echo "$fail" >"$state"
 exit 1

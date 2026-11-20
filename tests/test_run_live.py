@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import os
 import signal
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
+from asyncpg.exceptions import UniqueViolationError
 from schwab_gateway_sdk.config import GatewayClientSettings
 from schwab_token_store import TokenLockTimeoutError
 
@@ -27,6 +29,8 @@ from butterfly_guy.data.schwab_client import SchwabClientWrapper
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
+    EntryOrderReplacedError,
+    IntentPersistenceError,
     TerminalOrderError,
 )
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
@@ -34,6 +38,7 @@ from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.scripts.run_live import (
     ActiveMonitor,
     BrokerStateGate,
+    LiveTradingHaltedError,
     _assert_broker_state_matches_db,
     _assert_live_config_supported,
     _broker_option_positions,
@@ -587,8 +592,503 @@ async def test_entry_loop_stops_after_unsafe_order_error(monkeypatch, error):
 
 
 @pytest.mark.asyncio
+async def test_live_entry_loop_halt_raises_so_the_process_restarts(monkeypatch):
+    trade_service = Mock()
+    trade_service.attempt_entry = AsyncMock(side_effect=AmbiguousOrderError("unknown"))
+    position_service = Mock()
+    position_service.config.execution.paper_trading = False
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    with pytest.raises(LiveTradingHaltedError, match="entry stopped"):
+        await entry_loop(trade_service, position_service, critical_notifier=critical_notifier)
+
+    critical_notifier.notify_critical.assert_awaited_once_with("broker_ambiguity")
+    assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_startup_refuses_a_working_bot_owned_order_but_runtime_allows_it():
+    # After a restart, nothing waits on the previous process's resting exit, and the
+    # monitor would hand it to the operator as if it were theirs.
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = _synthetic_butterfly_snapshot()
+    schwab.get_todays_orders.return_value = [{
+        "orderId": 55, "status": "WORKING",
+        "orderLegCollection": [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)],
+    }]
+    intents = AsyncMock()
+    intents.intents_for_day.return_value = [
+        {"id": 2, "side": "EXIT", "status": "WORKING", "broker_order_id": "55", "trade_id": 7}
+    ]
+    open_rows = [{**OPEN_TRADE, "id": 7}]
+
+    with pytest.raises(RuntimeError, match="working bot-owned"):
+        await _assert_broker_state_matches_db(schwab, "SPX", open_rows, intents)
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", open_rows, intents, allow_repair=False, monitored_trade_id=7
+    )
+
+
+def _unresolved_exit_state(status, broker_order_id=None, orders=()):
+    # An ambiguous exit submit: the fly's legs still match, the EXIT intent stays active.
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = _synthetic_butterfly_snapshot()
+    schwab.get_todays_orders.return_value = list(orders)
+    intents = AsyncMock()
+    intents.intents_for_day.return_value = [{
+        "id": 2, "side": "EXIT", "status": status,
+        "broker_order_id": broker_order_id, "trade_id": 7,
+    }]
+    return schwab, intents
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["UNKNOWN_ABORTED", "SUBMITTING", "SUBMITTED"])
+async def test_startup_refuses_an_open_trade_exit_intent_with_no_broker_order(status):
+    # The next exit's create_intent would hit the active-exit unique index forever.
+    schwab, intents = _unresolved_exit_state(status)
+
+    with pytest.raises(RuntimeError, match=rf"cannot be matched.*\({status}, no order id\)"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents
+        )
+
+
+@pytest.mark.asyncio
+async def test_startup_refuses_an_exit_intent_whose_order_is_not_in_todays_orders():
+    schwab, intents = _unresolved_exit_state("SUBMITTED", broker_order_id="55")
+
+    with pytest.raises(RuntimeError, match=r"cannot be matched.*\(SUBMITTED, order not found\)"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("broker_status", ["CANCELED", "REJECTED"])
+async def test_startup_allows_an_exit_intent_its_final_broker_order_resolves(broker_status):
+    order = {
+        "orderId": 55, "status": broker_status,
+        "orderLegCollection": [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)],
+    }
+    schwab, intents = _unresolved_exit_state(
+        "CANCEL_REQUESTED", broker_order_id="55", orders=[order]
+    )
+
+    await _assert_broker_state_matches_db(schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents)
+
+    intents.update_broker_status.assert_awaited_once_with(2, broker_status, order)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allow_repair", [True, False])
+async def test_replaced_exit_intent_requires_reconciliation_only_at_startup(allow_repair):
+    legs = [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)]
+    replaced = {"orderId": 55, "status": "REPLACED", "orderLegCollection": legs}
+    canceled = {"orderId": 56, "status": "CANCELED", "orderLegCollection": legs}
+    schwab, intents = _unresolved_exit_state(
+        "CANCEL_REQUESTED", broker_order_id="55", orders=[replaced, canceled]
+    )
+
+    async def reconcile():
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents,
+            allow_repair=allow_repair, monitored_trade_id=None if allow_repair else 7,
+        )
+
+    if allow_repair:
+        with pytest.raises(
+            RuntimeError, match=r"exit intent.*order REPLACED.*manual reconciliation"
+        ):
+            await reconcile()
+    else:
+        await reconcile()
+    intents.update_broker_status.assert_awaited_once_with(2, "REPLACED", replaced)
+
+
+@pytest.mark.asyncio
+async def test_runtime_leaves_an_in_flight_exit_intent_to_its_monitor():
+    # Every live submit has a SUBMITTING intent with no order id for a moment.
+    schwab, intents = _unresolved_exit_state("SUBMITTING")
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents,
+        allow_repair=False, monitored_trade_id=7,
+    )
+
+
+@pytest.mark.asyncio
+async def test_startup_ignores_an_unresolved_exit_intent_of_a_trade_that_is_not_open():
+    schwab, intents = _unresolved_exit_state("UNKNOWN_ABORTED")
+
+    # Another trade is open and matches the broker.
+    await _assert_broker_state_matches_db(schwab, "SPX", [{**OPEN_TRADE, "id": 8}], intents)
+    # No trade is open and the broker is flat.
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+    await _assert_broker_state_matches_db(schwab, "SPX", [], intents)
+
+
+@pytest.mark.asyncio
+async def test_startup_reports_an_unknown_working_order_before_an_unresolved_exit_intent():
+    # The working order is the likely ambiguous submit and the more urgent fact.
+    order = {
+        "orderId": 99, "status": "WORKING",
+        "orderLegCollection": [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)],
+    }
+    schwab, intents = _unresolved_exit_state("UNKNOWN_ABORTED", orders=[order])
+
+    with pytest.raises(RuntimeError, match="unknown active SPX order"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents
+        )
+
+
+@pytest.mark.asyncio
+async def test_startup_reports_broker_flat_before_an_unresolved_exit_intent():
+    # A filled ambiguous exit: the existing flat-broker refusal keeps its message.
+    schwab, intents = _unresolved_exit_state("UNKNOWN_ABORTED")
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+
+    with pytest.raises(RuntimeError, match="broker is flat"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents
+        )
+
+
+TODAY = dt.date(2026, 11, 19)
+TERMINAL = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+
+
+class _IntentTable:
+    """broker_order_intents in memory, with the two reads' predicates (the SQL itself is
+    checked against Postgres in tests/integration/test_database_smoke.py)."""
+
+    def __init__(self, *rows):
+        self.rows = [{"underlying": "SPX", "broker_order_id": None, **row} for row in rows]
+        self.update_broker_status = AsyncMock()
+        self.active_exit_reads = 0
+
+    async def intents_for_day(self, underlying, trade_date):
+        return [
+            dict(row) for row in self.rows
+            if row["underlying"] == underlying and row["trade_date"] == trade_date
+        ]
+
+    async def active_exit_intents_for_trades(self, underlying, trade_ids):
+        self.active_exit_reads += 1
+        return [
+            dict(row) for row in self.rows
+            if row["underlying"] == underlying and row["side"] == "EXIT"
+            and row["trade_id"] in trade_ids and row["status"] not in TERMINAL
+        ]
+
+
+def _exit_intent(trade_date, status="SUBMITTING", broker_order_id=None, trade_id=7, **row):
+    return {"id": 2, "side": "EXIT", "trade_id": trade_id, "trade_date": trade_date,
+            "status": status, "broker_order_id": broker_order_id, **row}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("days", [-1, 1], ids=["dated-before-today", "dated-after-today"])
+@pytest.mark.parametrize(
+    ("broker_order_id", "reason"), [(None, "no order id"), ("55", "order not found")]
+)
+async def test_startup_refuses_an_open_trade_exit_intent_dated_outside_the_session(
+    days, broker_order_id, reason
+):
+    # The active-exit index is per trade, not per day, so the date-scoped read missed it.
+    schwab, _ = _unresolved_exit_state("SUBMITTING")
+    intents = _IntentTable(
+        _exit_intent(TODAY + dt.timedelta(days=days), broker_order_id=broker_order_id)
+    )
+
+    with pytest.raises(RuntimeError, match=rf"cannot be matched.*\(SUBMITTING, {reason}\)"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents, trade_date=TODAY
+        )
+
+
+@pytest.mark.asyncio
+async def test_startup_syncs_an_exit_intent_found_by_both_reads_once():
+    # The same row from both reads: one status sync, and its REPLACED order still refuses.
+    legs = [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)]
+    replaced = {"orderId": 55, "status": "REPLACED", "orderLegCollection": legs}
+    schwab, _ = _unresolved_exit_state("SUBMITTED", orders=[replaced])
+    intents = _IntentTable(_exit_intent(TODAY, "SUBMITTED", "55"))
+
+    with pytest.raises(RuntimeError, match=r"unresolved exit intent \(order REPLACED\)"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents, trade_date=TODAY
+        )
+
+    assert intents.active_exit_reads == 1
+    intents.update_broker_status.assert_awaited_once_with(2, "REPLACED", replaced)
+
+
+@pytest.mark.asyncio
+async def test_startup_ignores_old_intents_that_hold_no_open_trade():
+    yesterday = TODAY - dt.timedelta(days=1)
+    schwab, _ = _unresolved_exit_state("SUBMITTING")
+    intents = _IntentTable(
+        _exit_intent(yesterday, trade_id=8, id=3),  # a CLOSED trade's
+        _exit_intent(yesterday, underlying="NDX", id=4),  # another underlying's
+        _exit_intent(yesterday, "CANCELED", "50", id=5),  # final history of the OPEN trade
+        _exit_intent(yesterday, "FILLED", "51", id=6),
+        {"id": 9, "side": "ENTRY", "trade_id": None, "trade_date": yesterday,
+         "status": "UNKNOWN_ABORTED"},  # an old entry: its index key is yesterday's
+    )
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents, trade_date=TODAY
+    )
+
+    assert intents.active_exit_reads == 1
+
+
+@pytest.mark.asyncio
+async def test_runtime_does_not_read_exit_intents_outside_the_session():
+    # The monitor owns its in-flight exit; the extra read is startup-only.
+    schwab, _ = _unresolved_exit_state("SUBMITTING")
+    intents = _IntentTable(_exit_intent(TODAY), _exit_intent(TODAY - dt.timedelta(days=1), id=3))
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents,
+        trade_date=TODAY, allow_repair=False, monitored_trade_id=7,
+    )
+
+    assert intents.active_exit_reads == 0
+
+
+@pytest.mark.asyncio
+async def test_startup_still_settles_a_prior_session_trade_with_posted_settlement(monkeypatch):
+    # Broker flat and Schwab's closing transactions posted: they are the settlement evidence.
+    yesterday = TODAY - dt.timedelta(days=1)
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+    schwab.get_todays_orders.return_value = []
+    schwab.get_transactions_for_day.return_value = [{"settlement": "redacted"}]
+    monkeypatch.setattr(
+        "butterfly_guy.scripts.run_live.broker_cash_settlement_from_transactions",
+        lambda transactions, trade: Mock() if transactions else None,
+    )
+    trade = {
+        **OPEN_TRADE, "id": 7, "trade_date": yesterday, "direction": "CALL",
+        "lower_strike": 6000, "center_strike": 6050, "upper_strike": 6100, "entry_price": 1.0,
+    }
+    intents = _IntentTable(_exit_intent(yesterday))
+
+    await _assert_broker_state_matches_db(schwab, "SPX", [trade], intents, trade_date=TODAY)
+
+
+LEGS = [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)]
+FLAT = {"securitiesAccount": {"positions": []}}
+
+
+def _entry_intent(status, broker_order_id=None, **row):
+    return {"id": 3, "side": "ENTRY", "trade_id": None, "trade_date": TODAY,
+            "status": status, "broker_order_id": broker_order_id, **row}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent", "orders", "match"),
+    [
+        (
+            _entry_intent("SUBMITTED", "55"),
+            [{"orderId": 55, "status": "REPLACED", "orderLegCollection": LEGS},
+             {"orderId": 56, "status": "CANCELED", "orderLegCollection": LEGS}],
+            r"SPX has an unresolved entry intent \(order REPLACED\); manual reconciliation",
+        ),
+        (_entry_intent("SUBMITTING"), [], r"entry intent that cannot be matched.*no order id"),
+        (_entry_intent("UNKNOWN_ABORTED"), [], r"\(UNKNOWN_ABORTED, no order id\)"),
+        (_entry_intent("SUBMITTED", "55"), [], r"\(SUBMITTED, order not found\)"),
+    ],
+    ids=["replaced", "submitting", "unknown-aborted", "order-not-found"],
+)
+async def test_startup_refuses_an_unresolved_entry_intent(intent, orders, match):
+    # It holds today's active-entry index: re-adopting it would only block every entry.
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = FLAT
+    schwab.get_todays_orders.return_value = orders
+
+    with pytest.raises(RuntimeError, match=match):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [], _IntentTable(intent), trade_date=TODAY
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("replacement", "positions", "match"),
+    [
+        ("WORKING", FLAT, "unknown active SPX order"),
+        ("FILLED", _synthetic_butterfly_snapshot(), "DB has no OPEN trade"),
+    ],
+)
+async def test_startup_reports_the_replacement_before_the_replaced_entry_intent(
+    replacement, positions, match
+):
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = positions
+    schwab.get_todays_orders.return_value = [
+        {"orderId": 55, "status": "REPLACED", "orderLegCollection": LEGS},
+        {"orderId": 56, "status": replacement, "orderLegCollection": LEGS},
+    ]
+
+    with pytest.raises(RuntimeError, match=match):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [], _IntentTable(_entry_intent("SUBMITTED", "55")),
+            trade_date=TODAY,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allow_repair", [True, False], ids=["startup", "runtime"])
+@pytest.mark.parametrize("intent", [
+    _entry_intent("CANCELED", "55"),
+    _exit_intent(TODAY, "CANCELED", "55"),
+], ids=["entry", "exit"])
+async def test_sync_never_reopens_an_intent_closed_by_the_runbook(intent, allow_repair):
+    # Schwab lists an order edited in ToS as REPLACED all session. Once the operator has
+    # closed its intent by the runbook, the sync must not copy REPLACED back over it.
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = (
+        _synthetic_butterfly_snapshot() if intent["side"] == "EXIT" else FLAT
+    )
+    schwab.get_todays_orders.return_value = [
+        {"orderId": 55, "status": "REPLACED", "orderLegCollection": LEGS},
+        {"orderId": 56, "status": "CANCELED", "orderLegCollection": LEGS},
+    ]
+    intents = _IntentTable(intent)
+    open_rows = [{**OPEN_TRADE, "id": 7}] if intent["side"] == "EXIT" else []
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", open_rows, intents, trade_date=TODAY,
+        allow_repair=allow_repair, monitored_trade_id=None if allow_repair else 7,
+    )
+
+    intents.update_broker_status.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("recorded", "broker", "synced"), [
+    ("CANCEL_REQUESTED", "CANCELED", "CANCELED"),  # open -> final
+    ("SUBMITTED", "REPLACED", "REPLACED"),  # open -> REPLACED, still refused below
+    ("CANCELED", "FILLED", "FILLED"),  # final -> final: a fill is never hidden
+])
+async def test_sync_still_records_broker_evidence_that_does_not_reopen(
+    recorded, broker, synced
+):
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = FLAT
+    order = {"orderId": 55, "status": broker, "orderLegCollection": LEGS}
+    schwab.get_todays_orders.return_value = [order]
+    intents = _IntentTable(_entry_intent(recorded, "55"))
+
+    with contextlib.suppress(RuntimeError):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [], intents, trade_date=TODAY
+        )
+
+    intents.update_broker_status.assert_awaited_once_with(3, synced, order)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["CANCELED", "REJECTED", "EXPIRED"])
+async def test_startup_accepts_final_entry_intents(status):
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = FLAT
+    schwab.get_todays_orders.return_value = []
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [], _IntentTable(_entry_intent(status, "55")), trade_date=TODAY
+    )
+
+
+@pytest.mark.asyncio
+async def test_startup_accepts_the_filled_entry_of_its_open_trade():
+    schwab, _ = _unresolved_exit_state("CANCELED")
+    intents = _IntentTable(_entry_intent("FILLED", "55", trade_id=7))
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents, trade_date=TODAY
+    )
+
+
+@pytest.mark.asyncio
+async def test_runtime_leaves_an_in_flight_entry_intent_to_its_attempt():
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = FLAT
+    schwab.get_todays_orders.return_value = []
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [], _IntentTable(_entry_intent("SUBMITTING")),
+        trade_date=TODAY, allow_repair=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_live_entry_loop_cancelled_mid_attempt_shuts_down_without_a_halt(monkeypatch):
+    # SIGTERM during an intent INSERT: a clean cancellation, no halt and no page.
+    trade_service = Mock(config=Mock(strategy=Mock(underlying="SPX")))
+    trade_service.attempt_entry = AsyncMock(side_effect=asyncio.CancelledError)
+    position_service = Mock()
+    position_service.config.execution.paper_trading = False
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    set_readiness(None)
+
+    with pytest.raises(asyncio.CancelledError):
+        await entry_loop(trade_service, position_service, critical_notifier=critical_notifier)
+
+    critical_notifier.notify_critical.assert_not_awaited()
+    assert readiness_snapshot() == (True, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [
+        EntryOrderReplacedError("operator replaced bot entry order"),
+        IntentPersistenceError("entry order was rejected at submit (HTTP 400), but ..."),
+        IntentPersistenceError("entry intent creation outcome is unknown; "
+                               "no broker order submitted; manual reconciliation required"),
+    ],
+    ids=["replaced", "unrecorded-rejection", "uncertain-create"],
+)
+async def test_live_entry_loop_halts_on_entry_intent_safety_errors(monkeypatch, error):
+    trade_service = Mock(
+        config=Mock(strategy=Mock(underlying="SPX")),
+        decision_queries=Mock(log_event=AsyncMock()),
+    )
+    trade_service.attempt_entry = AsyncMock(side_effect=error)
+    position_service = Mock()
+    position_service.config.execution.paper_trading = False
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    async def no_second_attempt(_):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "sleep", no_second_attempt)
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    set_readiness(None)
+    with pytest.raises(LiveTradingHaltedError, match="entry stopped: ") as caught:
+        await entry_loop(trade_service, position_service, critical_notifier=critical_notifier)
+
+    assert caught.value.__cause__ is error
+
+    trade_service.attempt_entry.assert_awaited_once()
+    critical_notifier.notify_critical.assert_awaited_once_with("broker_ambiguity")
+    assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [RuntimeError, UniqueViolationError])
 async def test_entry_loop_repeated_errors_degrade_and_recover(
-    monkeypatch,
+    monkeypatch, error_type,
 ):
     trade_service = Mock(
         config=Mock(strategy=Mock(underlying="SPX")),
@@ -596,14 +1096,14 @@ async def test_entry_loop_repeated_errors_degrade_and_recover(
     )
     trade_service.attempt_entry = AsyncMock(
         side_effect=[
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
             None,
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
-            RuntimeError("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
+            error_type("invalid SQL"),
         ]
     )
     metric = Mock()
@@ -718,6 +1218,56 @@ async def test_entry_loop_alerts_monitor_failure_after_market_close(monkeypatch)
     trade_service.attempt_entry.assert_not_awaited()
     critical_notifier.notify_critical.assert_awaited_once_with("settlement_failure")
     assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("paper_trading,halts", [(False, True), (True, False)])
+async def test_live_entry_loop_halts_when_its_monitor_dies_of_any_error(
+    monkeypatch, paper_trading, halts
+):
+    # Halt audit 2026-11-19: a non-broker monitor crash used to re-arm the entry loop.
+    # With one trade a day nothing re-enters, so a live fly was left open, unmonitored
+    # and unannounced (no halt log line for health.sh, no alert).
+    trade_service = Mock(attempt_entry=AsyncMock(return_value=None))
+    position_service = Mock()
+    position_service.config.execution.paper_trading = paper_trading
+    position_service.monitor_loop.return_value = _never_awaited()
+    monitor_task = Mock()
+    monitor_task.done.return_value = True
+    monitor_task.exception.return_value = RuntimeError("unexpected monitor crash")
+
+    def create_task(coro, **_kwargs):
+        coro.close()
+        return monitor_task
+
+    async def stop(_):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(asyncio, "create_task", create_task)
+    monkeypatch.setattr(asyncio, "sleep", stop)
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+
+    critical_notifier = Mock(notify_critical=AsyncMock())
+    set_readiness(None)
+    if halts:
+        # Live exits non-zero so on-failure restarts into the startup reconcile.
+        with pytest.raises(LiveTradingHaltedError, match="unexpected monitor crash"):
+            await entry_loop(
+                trade_service, position_service, recovered_trade=Mock(trade_id=7),
+                recovered_candidate=Mock(), critical_notifier=critical_notifier,
+            )
+        critical_notifier.notify_critical.assert_awaited_once_with("broker_ambiguity")
+        assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+        trade_service.attempt_entry.assert_not_awaited()
+    else:
+        with pytest.raises(asyncio.CancelledError):
+            await entry_loop(
+                trade_service, position_service, recovered_trade=Mock(trade_id=7),
+                recovered_candidate=Mock(), critical_notifier=critical_notifier,
+            )
+        critical_notifier.notify_critical.assert_not_awaited()
+        trade_service.attempt_entry.assert_awaited_once()
     set_readiness(None)
 
 

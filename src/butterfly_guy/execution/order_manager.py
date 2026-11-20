@@ -11,6 +11,8 @@ from collections.abc import Iterator
 from time import monotonic
 from typing import Any, NamedTuple
 
+from asyncpg.exceptions import PostgresError, UniqueViolationError
+
 from butterfly_guy.core.config import ExecutionSettings
 from butterfly_guy.core.entry_pricing import entry_fill_within_limit
 from butterfly_guy.core.exit_pricing import exit_limit, static_quote_estimate
@@ -47,6 +49,11 @@ TERMINAL_FAILURE_STATUSES = {"REJECTED", "EXPIRED"}
 # DELETE, CANCELED by the next second). Wait this long for the order to settle.
 POST_CANCEL_SETTLE_SECONDS = 15.0
 POST_CANCEL_POLL_SECONDS = 1.0
+# Live test exits never submit on a stale quote; re-fetch this long before halting.
+EXIT_QUOTE_WAIT_SECONDS = 20.0
+EXIT_QUOTE_RETRY_SECONDS = 1.0
+# An order edited in Schwab ends as REPLACED; its replacement is a new (operator) order.
+POST_CANCEL_SETTLED_STATUSES = TERMINAL_ORDER_STATUSES | {"REPLACED"}
 
 
 def walk_orders(order: dict) -> Iterator[dict]:
@@ -65,6 +72,27 @@ def order_ids(order: dict) -> set[str]:
 
 def order_statuses(order: dict) -> set[str]:
     return {str(node["status"]) for node in walk_orders(order) if node.get("status")}
+
+
+def _has_missing_status(order: dict) -> bool:
+    """True if any node has no broker status: that is no evidence the order is final."""
+    return any(
+        not isinstance(node.get("status"), str) or not node["status"].strip()
+        for node in walk_orders(order)
+    )
+
+
+def _has_filled_quantity(order: dict) -> bool:
+    """True if any node reports executed quantity (a CANCELED-type execution is not one)."""
+    for node in walk_orders(order):
+        try:
+            if float(node.get("filledQuantity") or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            return True  # unreadable quantity: assume the worst
+        if node is not order and node.get("status") == "FILLED":
+            return True
+    return False
 
 
 def matches_underlying(symbol: str, underlying: str) -> bool:
@@ -114,6 +142,14 @@ class AmbiguousOrderError(RuntimeError):
 
 class OperatorExitTakeoverError(RuntimeError):
     """The operator acted on this fly in Schwab; the bot must not send exit orders."""
+
+
+class EntryOrderReplacedError(RuntimeError):
+    """The operator replaced the bot's entry order in Schwab; automated entries stop."""
+
+
+class IntentPersistenceError(RuntimeError):
+    """Intent persistence is unsafe; automated submission must stop for reconciliation."""
 
 
 class BrokerFill(NamedTuple):
@@ -388,6 +424,31 @@ class OrderManager:
             log.warning("live_spread_fetch_failed", error=str(e))
             return None
 
+    def _execution_observation(
+        self, phase: str, limit_price: float | None = None
+    ) -> dict[str, object]:
+        return {
+            "phase": phase, "observed_at": now_utc().isoformat(),
+            "limit_price": limit_price, "quote": self._spread_observation,
+            "paper_commission_per_contract": self.settings.paper_commission_per_contract,
+            "paper_slippage_per_spread": self.settings.paper_slippage_per_spread,
+            "quote_available": self._spread_observation is not None,
+            "timing_note": "local observation; fill-detected quotes follow broker execution",
+        }
+
+    def _with_before_submit_evidence(
+        self, snapshot: dict[str, object], limit_price: float
+    ) -> dict[str, object]:
+        """Put the mandatory before-submit evidence in the intent's own INSERT.
+
+        One statement: if it fails, no SUBMITTING intent is left holding its index.
+        """
+        if self.settings.record_live_execution and not self.settings.paper_trading:
+            snapshot["execution_observations"] = [
+                self._execution_observation("before_submit", limit_price)
+            ]
+        return snapshot
+
     async def _record_execution_quote(
         self, candidate: ButterflyCandidate, intent_id: int | None,
         phase: str, *, refresh: bool = False, limit_price: float | None = None,
@@ -399,14 +460,7 @@ class OrderManager:
                 await asyncio.wait_for(self._fetch_live_spread(candidate), timeout=3)
             except Exception:
                 self._spread_observation = None
-        observation = {
-            "phase": phase, "observed_at": now_utc().isoformat(),
-            "limit_price": limit_price, "quote": self._spread_observation,
-            "paper_commission_per_contract": self.settings.paper_commission_per_contract,
-            "paper_slippage_per_spread": self.settings.paper_slippage_per_spread,
-            "quote_available": self._spread_observation is not None,
-            "timing_note": "local observation; fill-detected quotes follow broker execution",
-        }
+        observation = self._execution_observation(phase, limit_price)
         try:
             if intent_id is None or self.intent_queries is None:
                 raise RuntimeError("execution recording requires durable order intents")
@@ -498,7 +552,10 @@ class OrderManager:
     async def _submit_rejected(
         self, intent_id: int | None, error: OrderRejectedError, side: str
     ) -> TerminalOrderError:
-        """Record a definitive submit rejection and return the ladder-stopping error."""
+        """Record a definitive submit rejection and return the ladder-stopping error.
+
+        Unrecorded, the intent stays active and holds its index, so that raises instead.
+        """
         log.error(
             f"{side}_order_rejected_at_submit",
             http_status=error.status_code,
@@ -513,6 +570,10 @@ class OrderManager:
                 )
             except Exception as db_error:
                 log.error("intent_reject_record_failed", error=str(db_error))
+                raise IntentPersistenceError(
+                    f"{side} order was rejected at submit (HTTP {error.status_code}), but "
+                    "its intent could not be recorded REJECTED; reconcile the intent"
+                ) from db_error
         return TerminalOrderError("REJECTED", "not-placed")
 
     async def _mark_intent_unknown(self, intent_id: int | None, error: str) -> None:
@@ -617,6 +678,35 @@ class OrderManager:
         )
         return True
 
+    async def _create_intent(self, *, side: str, **kwargs: Any) -> int:
+        """A missing INSERT reply is unsafe persistent state, before any broker write."""
+        assert self.intent_queries is not None
+        try:
+            return await self.intent_queries.create_intent(side=side, **kwargs)
+        except asyncio.CancelledError:
+            # Shutdown (SIGTERM cancels the loops), not a safety halt. A row this INSERT
+            # may have committed is refused by the next startup's reconciliation.
+            log.warning("intent_create_cancelled", side=side)
+            raise
+        except Exception as exc:
+            # A single autocommit statement rolls back on a definitive server error.
+            # Connection errors can be synthesized by asyncpg (with a SQLSTATE), and
+            # completion-unknown / shutdown errors do not prove that rollback.
+            if (
+                isinstance(exc, PostgresError)
+                and exc.sqlstate
+                and not exc.sqlstate.startswith("08")
+                and exc.sqlstate not in {"40003", "57P01", "57P02", "57P03"}
+            ):
+                raise
+            # Do not retry, adopt or terminalize a possibly committed row. Even an
+            # empty read-back can race a still-finishing INSERT; a down DB proves
+            # nothing.
+            raise IntentPersistenceError(
+                f"{side.lower()} intent creation outcome is unknown; "
+                "no broker order submitted; manual reconciliation required"
+            ) from exc
+
     async def execute_single_attempt(
         self,
         candidate: ButterflyCandidate,
@@ -683,22 +773,31 @@ class OrderManager:
 
         order_spec = self.builder.build_butterfly_open(candidate, limit_price, quantity)
         if intent_id is None and self.intent_queries is not None:
-            intent_id = await self.intent_queries.create_intent(
-                underlying=self.underlying,
-                trade_date=(
-                    candidate.lower_quote.expiration
-                    if candidate.lower_quote is not None
-                    else get_0dte_expiration()
-                ),
-                side="ENTRY",
-                limit_price=limit_price,
-                quantity=quantity,
-                order_spec=order_spec,
-                candidate_snapshot=self._candidate_snapshot(candidate),
+            try:
+                intent_id = await self._create_intent(
+                    underlying=self.underlying,
+                    trade_date=(
+                        candidate.lower_quote.expiration
+                        if candidate.lower_quote is not None
+                        else get_0dte_expiration()
+                    ),
+                    side="ENTRY",
+                    limit_price=limit_price,
+                    quantity=quantity,
+                    order_spec=order_spec,
+                    candidate_snapshot=self._with_before_submit_evidence(
+                        self._candidate_snapshot(candidate), limit_price
+                    ),
+                )
+            except UniqueViolationError:
+                log.error("entry_blocked_active_intent", underlying=self.underlying)
+                raise
+            # The INSERT passed the active-entry index: any earlier block has cleared.
+            log.info("entry_intent_created", underlying=self.underlying)
+        else:
+            await self._record_execution_quote(
+                candidate, intent_id, "before_submit", limit_price=limit_price
             )
-        await self._record_execution_quote(
-            candidate, intent_id, "before_submit", limit_price=limit_price
-        )
         orders_placed.labels(underlying=self.underlying, order_type="entry").inc()
         start_time = now_utc()
 
@@ -729,7 +828,7 @@ class OrderManager:
                 await self.intent_queries.update_broker_status(
                     intent_id, "CANCEL_REQUESTED"
                 )
-            await self.schwab.cancel_order(order_id)
+            await self._cancel_then_settle(order_id)
             log.info("entry_unfilled_cancelled", price=limit_price)
             post_fill = await self._check_post_cancel_fill(
                 order_id,
@@ -743,7 +842,10 @@ class OrderManager:
                 )
                 return post_fill
 
-        except (BrokerFillError, PartialFillError, TerminalOrderError):
+        except (
+            AmbiguousOrderError, BrokerFillError, PartialFillError,
+            TerminalOrderError, EntryOrderReplacedError,
+        ):
             raise
         except OrderRejectedError as e:
             raise await self._submit_rejected(intent_id, e, "entry") from e
@@ -807,14 +909,17 @@ class OrderManager:
                     return None
 
                 spread = await self._fetch_live_spread(candidate)
+                if self.settings.live_test_date is not None and spread is None:
+                    # No closing order based on a stale signal or earlier ladder quote, but
+                    # one stale leg or a 429 burst is not a reason to stop managing the fly.
+                    spread = await self._refetch_live_spread(candidate)
+                    if spread is None:
+                        raise BrokerFillError(
+                            "live test exit requires fresh leg quotes; supervise broker"
+                        )
                 if spread is not None:
                     recent_bids.append(spread.bid)
                     recent_mids.append((spread.bid + spread.ask) / 2)
-                if self.settings.live_test_date is not None and spread is None:
-                    # No closing order based on a stale signal or earlier ladder quote.
-                    raise BrokerFillError(
-                        "live test exit requires fresh leg quotes; supervise broker"
-                    )
                 bid_anchor = statistics.median(recent_bids) if recent_bids else current_value
                 mid_anchor = statistics.median(recent_mids) if recent_mids else current_value
 
@@ -848,23 +953,31 @@ class OrderManager:
                 if self.intent_queries is not None:
                     snapshot = self._candidate_snapshot(candidate)
                     snapshot["exit_reason"] = exit_reason
-                    intent_id = await self.intent_queries.create_intent(
-                        underlying=self.underlying,
-                        trade_date=(
-                            candidate.lower_quote.expiration
-                            if candidate.lower_quote is not None
-                            else get_0dte_expiration()
-                        ),
-                        trade_id=trade_id,
-                        side="EXIT",
-                        limit_price=limit_price,
-                        quantity=quantity,
-                        order_spec=order_spec,
-                        candidate_snapshot=snapshot,
+                    try:
+                        intent_id = await self._create_intent(
+                            underlying=self.underlying,
+                            trade_date=(
+                                candidate.lower_quote.expiration
+                                if candidate.lower_quote is not None
+                                else get_0dte_expiration()
+                            ),
+                            trade_id=trade_id,
+                            side="EXIT",
+                            limit_price=limit_price,
+                            quantity=quantity,
+                            order_spec=order_spec,
+                            candidate_snapshot=self._with_before_submit_evidence(
+                                snapshot, limit_price
+                            ),
+                        )
+                    except UniqueViolationError as e:
+                        raise AmbiguousOrderError(
+                            "an active exit intent already exists for this trade"
+                        ) from e
+                else:
+                    await self._record_execution_quote(
+                        candidate, intent_id, "before_submit", limit_price=limit_price
                     )
-                await self._record_execution_quote(
-                    candidate, intent_id, "before_submit", limit_price=limit_price
-                )
                 orders_placed.labels(underlying=self.underlying, order_type="exit").inc()
                 start_time = now_utc()
 
@@ -915,7 +1028,7 @@ class OrderManager:
                         await self.intent_queries.update_broker_status(
                             intent_id, "CANCEL_REQUESTED"
                         )
-                    await self.schwab.cancel_order(order_id)
+                    await self._cancel_then_settle(order_id)
                     post_fill = await self._check_post_cancel_fill(
                         order_id, quantity, order_type="exit", intent_id=intent_id
                     )
@@ -948,6 +1061,29 @@ class OrderManager:
 
             log.warning("exit_ladder_exhausted")
 
+    async def _refetch_live_spread(self, candidate: ButterflyCandidate) -> LiveSpread | None:
+        """Re-fetch a fresh exit quote for up to EXIT_QUOTE_WAIT_SECONDS; no order meanwhile."""
+        deadline = monotonic() + EXIT_QUOTE_WAIT_SECONDS
+        while monotonic() < deadline:
+            log.warning("exit_waiting_for_fresh_quote", center=candidate.center_strike)
+            await asyncio.sleep(EXIT_QUOTE_RETRY_SECONDS)
+            spread = await self._fetch_live_spread(candidate)
+            if spread is not None:
+                return spread
+        return None
+
+    async def _cancel_then_settle(self, order_id: str) -> None:
+        """Send the cancel; a failed DELETE is left to the post-cancel status check.
+
+        Schwab refuses to cancel an order that already filled, so a cancel error is not
+        evidence the order is unknown: the status check that always follows decides
+        (FILLED is booked, CANCELED moves on, still working past the budget halts).
+        """
+        try:
+            await self.schwab.cancel_order(order_id)
+        except Exception as e:
+            log.warning("cancel_failed_checking_status", order_id=order_id, error=str(e))
+
     async def _check_post_cancel_fill(
         self,
         order_id: str,
@@ -960,9 +1096,19 @@ class OrderManager:
         try:
             deadline = monotonic() + POST_CANCEL_SETTLE_SECONDS
             while True:
-                status = await self.schwab.get_order_status(order_id)
+                try:
+                    status = await self.schwab.get_order_status(order_id)
+                except Exception as e:
+                    # One failed read (429, 5xx, timeout, a 401 mid token reload) says
+                    # nothing about the order; only a budget of failures is ambiguous.
+                    if monotonic() >= deadline:
+                        raise
+                    log.warning("post_cancel_status_read_failed", order_id=order_id, error=str(e))
+                    await asyncio.sleep(POST_CANCEL_POLL_SECONDS)
+                    continue
                 order_status = status.get("status")
                 statuses = order_statuses(status)
+                missing_status = _has_missing_status(status)
                 terminal_failure = next(
                     (value for value in ("REJECTED", "EXPIRED") if value in statuses),
                     None,
@@ -970,7 +1116,7 @@ class OrderManager:
                 if (
                     intent_id is not None
                     and self.intent_queries is not None
-                    and order_status
+                    and not missing_status
                 ):
                     await self.intent_queries.update_broker_status(
                         intent_id, terminal_failure or order_status, status
@@ -980,22 +1126,37 @@ class OrderManager:
                         f"Order {order_id} is partially filled after cancel; "
                         "reconcile broker state"
                     )
-                unsettled = statuses & (CANCEL_PENDING_STATUSES | WORKING_ORDER_STATUSES)
-                if not unsettled:
+                # Only a final status ends the wait: anything else (PENDING_REPLACE,
+                # AWAITING_*, a new status, or none on any node) may still fill, and
+                # the next ladder step must not be sent beside it.
+                unsettled = statuses - POST_CANCEL_SETTLED_STATUSES
+                if not unsettled and not missing_status:
                     break
                 if monotonic() >= deadline:
+                    pending = ", ".join(sorted(unsettled)) or "missing its status"
                     raise PartialFillError(
-                        f"Order {order_id} is still {', '.join(sorted(unsettled))} "
+                        f"Order {order_id} is still {pending} "
                         f"{POST_CANCEL_SETTLE_SECONDS:g}s after cancel; reconcile broker state"
                     )
                 log.info(
                     "post_cancel_awaiting_settle",
                     order_id=order_id,
                     statuses=sorted(unsettled),
+                    missing_status=missing_status,
                 )
                 await asyncio.sleep(POST_CANCEL_POLL_SECONDS)
+            if order_status != "FILLED" and _has_filled_quantity(status):
+                # Schwab ends a part-filled order CANCELED with filledQuantity > 0.
+                raise PartialFillError(
+                    f"Order {order_id} is {order_status} with a filled quantity after "
+                    "cancel; reconcile broker state"
+                )
             if terminal_failure:
                 raise TerminalOrderError(terminal_failure, order_id)
+            if order_type == "exit" and order_status == "REPLACED":
+                raise OperatorExitTakeoverError("operator replaced bot exit order")
+            if order_status == "REPLACED":
+                raise EntryOrderReplacedError("operator replaced bot entry order")
             if order_status == "FILLED":
                 fill = parse_broker_fill(status, requested_quantity, order_id)
                 if order_type == "entry" and limit_price is not None:
@@ -1016,7 +1177,10 @@ class OrderManager:
         except Exception as e:
             if isinstance(
                 e,
-                (AmbiguousOrderError, BrokerFillError, PartialFillError, TerminalOrderError),
+                (
+                    AmbiguousOrderError, BrokerFillError, PartialFillError,
+                    TerminalOrderError, OperatorExitTakeoverError, EntryOrderReplacedError,
+                ),
             ):
                 raise
             log.warning("post_cancel_check_failed", error=str(e))
@@ -1040,6 +1204,12 @@ class OrderManager:
         while monotonic() < deadline:
             try:
                 status = await self.schwab.get_order_status(order_id)
+                if _has_missing_status(status):
+                    # No authoritative status for the whole tree, even with a FILLED
+                    # parent. Preserve the last real intent status and the same deadline.
+                    log.warning("order_poll_missing_status", order_id=order_id)
+                    await asyncio.sleep(poll_interval)
+                    continue
                 order_status = status.get("status", "")
                 statuses = order_statuses(status)
                 terminal_failure = next(
@@ -1069,6 +1239,10 @@ class OrderManager:
                     raise OperatorExitTakeoverError(
                         f"operator {order_status.lower()} bot exit order"
                     )
+                if order_status == "REPLACED":
+                    # An entry edited in Schwab: the replacement is the operator's order.
+                    # Stop now; never cancel it or send another entry beside it.
+                    raise EntryOrderReplacedError("operator replaced bot entry order")
                 if order_status == "CANCELED":
                     log.warning("order_terminal_status", status=order_status, order_id=order_id)
                     return False
@@ -1077,8 +1251,8 @@ class OrderManager:
                 if isinstance(
                     e,
                     (
-                        BrokerFillError, PartialFillError,
-                        TerminalOrderError, OperatorExitTakeoverError,
+                        BrokerFillError, PartialFillError, TerminalOrderError,
+                        OperatorExitTakeoverError, EntryOrderReplacedError,
                     ),
                 ):
                     raise

@@ -2,6 +2,8 @@
 
 import asyncio
 import datetime as dt
+import json
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -886,3 +888,297 @@ async def test_cash_settlement_db_failure_stops_after_one_close_attempt() -> Non
         await service.monitor_loop(trade, MagicMock())
 
     service.trade_queries.close_trade.assert_awaited_once()
+
+
+# --- Live settles at the close like paper (owner D8, 2026-11-19 halt audit) -------------
+
+LIVE_LEGS = tuple(f"SPXW  261119C0{k}000" for k in (7435, 7475, 7515))
+
+
+def _live_fly_trade() -> TradeRecord:
+    return TradeRecord(
+        trade_id=100000, trade_date=dt.date(2026, 11, 19), direction="CALL",
+        lower_strike=7435.0, center_strike=7475.0, upper_strike=7515.0,
+        entry_price=3.75, quantity=1, peak_value=4.93,
+        lower_symbol=LIVE_LEGS[0], center_symbol=LIVE_LEGS[1], upper_symbol=LIVE_LEGS[2],
+    )
+
+
+def _live_fly_candidate():
+    from tests.test_order_manager import make_candidate
+
+    return make_candidate(7435, 7475, 7515, 3.75, direction="CALL")
+
+
+def _tx(effect, legs, net, time):
+    return {
+        "type": "TRADE", "time": time, "netAmount": net,
+        "transferItems": [
+            {"amount": amount, "positionEffect": effect, "price": price,
+             "instrument": {"symbol": symbol, "assetType": "OPTION"}}
+            for symbol, amount, price in legs
+        ],
+    }
+
+
+# Live 100000's opening: -$375 debit and $4.79 fees.
+OPENING_100000 = _tx(
+    "OPENING",
+    [(LIVE_LEGS[0], 1.0, 8.0), (LIVE_LEGS[1], -2.0, 3.5), (LIVE_LEGS[2], 1.0, 2.75)],
+    -379.79, "2026-11-19T15:00:18+0000",
+)
+
+
+def _settling_service(transactions, close_price):
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.execution.paper_trading = False
+    service.config.strategy.underlying = "SPX"
+    service.schwab = AsyncMock()
+    service.schwab.get_transactions_for_day.return_value = transactions
+    service.market_data = AsyncMock()
+    service.market_data.get_intraday_bars_for_day.return_value = [
+        _candle(dt.datetime(2026, 11, 19, 16, 0, tzinfo=EASTERN), close_price)
+    ]
+    service.trade_queries = MagicMock(close_trade=AsyncMock(return_value=True))
+    service.decision_queries = MagicMock(log_event=AsyncMock())
+    service.notifier = None
+    service.position_manager = MagicMock()
+    service.state_machine = MagicMock()
+    service._last_persisted_peak = 4.93
+    service._record_exit_metrics = AsyncMock()
+    service._wait_for_broker_cash_settlement = AsyncMock(
+        side_effect=AssertionError("waited for Schwab's overnight posting")
+    )
+    return service
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("close_price", "value"),
+    [(7176.0, 0.0), (7465.0, 30.0)],  # 11-19's worthless expiry, and one inside the fly
+)
+async def test_live_books_a_provisional_settlement_at_the_close(close_price, value):
+    service = _settling_service([OPENING_100000], close_price)
+
+    with patch("butterfly_guy.services.position_service.is_market_open", return_value=False):
+        await service.monitor_loop(_live_fly_trade(), _live_fly_candidate())
+
+    args = service.trade_queries.close_trade.await_args.args
+    assert args[1] == pytest.approx(value)
+    assert args[3] == "cash_settled"
+    net = -379.79 + value * 100
+    assert args[4] == pytest.approx(net / 100)
+    metadata = service.trade_queries.close_trade.await_args.kwargs["metadata"]
+    assert metadata["settlement_provisional"] is True
+    assert metadata["settlement_source"] == "provisional_final_1m_close"
+    assert metadata["net_pnl_dollars"] == pytest.approx(net)
+    service._wait_for_broker_cash_settlement.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_live_settlement_waits_for_schwab_without_clean_opening_evidence():
+    partly_closed = _tx("CLOSING", [(LIVE_LEGS[0], -1.0, 1.0)], 100.0, "2026-11-19T18:00:00+0000")
+    service = _settling_service([OPENING_100000, partly_closed], 7176.0)
+    service._wait_for_broker_cash_settlement = AsyncMock(return_value=BrokerCashSettlement(
+        settlement_value=0.0, settlement_spot=None,
+        processing_time=dt.datetime(2026, 11, 20, 6, 0, tzinfo=dt.timezone.utc),
+        entry_net_amount=-379.79, settlement_net_amount=0.0, net_pnl_dollars=-379.79,
+        evidence={"status": "SETTLED"},
+    ))
+
+    with patch("butterfly_guy.services.position_service.is_market_open", return_value=False):
+        await service.monitor_loop(_live_fly_trade(), _live_fly_candidate())
+
+    service._wait_for_broker_cash_settlement.assert_awaited_once()
+    metadata = service.trade_queries.close_trade.await_args.kwargs["metadata"]
+    assert metadata["settlement_provisional"] is False
+    assert metadata["settlement_source"] == "schwab_expiration_transactions"
+
+
+@pytest.mark.asyncio
+async def test_next_startup_trues_up_a_provisional_settlement_from_schwab():
+    # Booked at the 1-minute close (7465.00, value 30.00); Schwab settled at 7465.50.
+    posted = [OPENING_100000, _tx(
+        "CLOSING",
+        [(LIVE_LEGS[0], -1.0, 30.5), (LIVE_LEGS[1], 2.0, 0.0), (LIVE_LEGS[2], -1.0, 0.0)],
+        3050.0, "2026-11-20T06:00:00+0000",
+    )]
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.strategy.underlying = "SPX"
+    service.schwab = AsyncMock()
+    service.schwab.get_transactions_for_day.side_effect = lambda day: (
+        posted if day == dt.date(2026, 11, 19) else []
+    )
+    row = {
+        "id": 100000, "trade_date": dt.date(2026, 11, 19), "direction": "CALL",
+        "lower_strike": 7435.0, "center_strike": 7475.0, "upper_strike": 7515.0,
+        # asyncpg returns NUMERIC columns as Decimal.
+        "entry_price": Decimal("3.75"), "quantity": 1, "exit_price": Decimal("30.0000"),
+        "lower_symbol": LIVE_LEGS[0], "center_symbol": LIVE_LEGS[1],
+        "upper_symbol": LIVE_LEGS[2],
+        "metadata": {"settlement_provisional": True, "net_pnl_dollars": 2620.21},
+    }
+    service.trade_queries = MagicMock(
+        get_provisional_settlements=AsyncMock(return_value=[row]),
+        finalize_provisional_settlement=AsyncMock(return_value=True),
+    )
+    service.risk_engine = MagicMock(record_pnl=AsyncMock())
+    service.notifier = MagicMock(notify_text=AsyncMock())
+
+    with patch(
+        "butterfly_guy.services.position_service.session_date",
+        return_value=dt.date(2026, 11, 20),
+    ):
+        assert await service.true_up_provisional_settlements() == 1
+
+    args = service.trade_queries.finalize_provisional_settlement.await_args.args
+    assert args[0] == 100000
+    assert args[1] == pytest.approx(30.5)
+    assert args[2] == pytest.approx((3050.0 - 379.79) / 100)
+    assert args[3]["settlement_provisional"] is False
+    assert args[3]["provisional_net_pnl_dollars"] == pytest.approx(2620.21)
+    json.dumps(args[3])  # the metadata must serialize (finalize writes it as jsonb)
+    # The day's risk P&L is corrected in the same statement as the row, not afterwards.
+    service.risk_engine.record_pnl.assert_not_awaited()
+    assert (
+        service.trade_queries.finalize_provisional_settlement.await_args.kwargs["max_daily_loss"]
+        == service.config.risk.max_daily_loss
+    )
+    service.notifier.notify_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_true_up_leaves_a_row_provisional_until_schwab_posts():
+    service = PositionService.__new__(PositionService)
+    service.config = MagicMock()
+    service.config.strategy.underlying = "SPX"
+    service.schwab = AsyncMock()
+    service.schwab.get_transactions_for_day.return_value = [OPENING_100000]
+    service.trade_queries = MagicMock(
+        get_provisional_settlements=AsyncMock(return_value=[{
+            "id": 100000, "trade_date": dt.date(2026, 11, 19), "direction": "CALL",
+            "lower_strike": 7435.0, "center_strike": 7475.0, "upper_strike": 7515.0,
+            "entry_price": 3.75, "quantity": 1, "lower_symbol": LIVE_LEGS[0],
+            "center_symbol": LIVE_LEGS[1], "upper_symbol": LIVE_LEGS[2], "metadata": {},
+        }]),
+        finalize_provisional_settlement=AsyncMock(),
+    )
+
+    with patch(
+        "butterfly_guy.services.position_service.session_date",
+        return_value=dt.date(2026, 11, 19),
+    ):
+        assert await service.true_up_provisional_settlements() == 0
+
+    service.trade_queries.finalize_provisional_settlement.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message", [
+    "exit order was rejected at submit (HTTP 400), but its intent could not be recorded",
+    "exit intent creation outcome is unknown; "
+    "no broker order submitted; manual reconciliation required",
+], ids=["unrecorded-rejection", "uncertain-create"])
+async def test_unsafe_exit_intent_after_the_close_halts_instead_of_settling(message) -> None:
+    # Unlike a recorded rejection, its intent still holds the exit index: reconcile first.
+    set_readiness(None)
+    service = _settling_service([OPENING_100000], 7176.0)
+    service.schwab.get_option_chain.return_value = {}
+    service.order_manager = AsyncMock()
+    error = order_manager_module.IntentPersistenceError(message)
+    service.order_manager.execute_exit.side_effect = error
+    service.trade_queries.merge_metadata = AsyncMock()
+    service.monitoring_leg_queries = None
+    service.tent_queries = MagicMock(insert=AsyncMock())
+    pos_state = MagicMock(
+        peak_update_rejected=False, peak_value=4.93, current_value=1.0,
+        drawdown_from_peak=0.8, time_regime="afternoon", entry_price=3.75,
+    )
+    service.position_manager.update_position_value.return_value = pos_state
+    service.state_machine.state.name = "LOSS"
+    service.state_machine.evaluate.return_value = MagicMock(
+        reason="drawdown_afternoon", urgency="high"
+    )
+    service._extract_quotes = MagicMock(return_value=[])
+    service._manual_close_fill = AsyncMock(return_value=(None, None, False))
+    trade = _live_fly_trade()
+    market_open = iter([True])
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open",
+        side_effect=lambda *a: next(market_open, False),
+    ), patch(
+        "butterfly_guy.services.position_service.session_date",
+        return_value=trade.trade_date,
+    ), patch("butterfly_guy.services.position_service.get_0dte_expiration"), \
+         pytest.raises(order_manager_module.IntentPersistenceError) as caught:
+        await service.monitor_loop(trade, _live_fly_candidate())
+
+    assert caught.value is error
+    service.order_manager.execute_exit.assert_awaited_once()
+    service.trade_queries.close_trade.assert_not_awaited()
+    assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_exit_rejected_after_the_close_settles_instead_of_halting() -> None:
+    set_readiness(None)
+    service = _settling_service([OPENING_100000], 7176.0)
+    service.schwab.get_option_chain.return_value = {}
+    service.order_manager = AsyncMock()
+    service.order_manager.execute_exit.side_effect = order_manager_module.TerminalOrderError(
+        "REJECTED", "not-placed"
+    )
+    service.trade_queries.merge_metadata = AsyncMock()
+    service.monitoring_leg_queries = None
+    service.tent_queries = MagicMock(insert=AsyncMock())
+    pos_state = MagicMock(
+        peak_update_rejected=False, peak_value=4.93, current_value=1.0,
+        drawdown_from_peak=0.8, time_regime="afternoon", entry_price=3.75,
+    )
+    service.position_manager.update_position_value.return_value = pos_state
+    service.state_machine.state.name = "LOSS"
+    service.state_machine.evaluate.return_value = MagicMock(
+        reason="drawdown_afternoon", urgency="high"
+    )
+    service._extract_quotes = MagicMock(return_value=[])
+    service._manual_close_fill = AsyncMock(return_value=(None, None, False))
+    trade = _live_fly_trade()
+    # Open for the first loop check only: the ladder ran across 16:00 ET.
+    market_open = iter([True])
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open",
+        side_effect=lambda *a: next(market_open, False),
+    ), patch(
+        "butterfly_guy.services.position_service.session_date",
+        return_value=trade.trade_date,
+    ), patch("butterfly_guy.services.position_service.get_0dte_expiration"):
+        await service.monitor_loop(trade, _live_fly_candidate())
+
+    service.order_manager.execute_exit.assert_awaited_once()
+    assert service.trade_queries.close_trade.await_args.args[3] == "cash_settled"
+    assert readiness_snapshot() == (True, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("minute", "books"), [(None, False), (58, False), (59, True)],
+                         ids=["no-bars-quote-fallback", "last-bar-1558", "final-bar-1559"])
+async def test_provisional_settlement_requires_the_final_session_bar(minute, books):
+    # A quote, or a regular-session bar that is not the last minute, is not the close.
+    # Without it, the fly waits for Schwab's posting instead.
+    service = _settling_service([OPENING_100000], 7465.0)
+    service.market_data.get_intraday_bars_for_day.return_value = (
+        [] if minute is None
+        else [_candle(dt.datetime(2026, 11, 19, 15, minute, tzinfo=EASTERN), 7465.0)]
+    )
+    service.market_data.get_spot_price.return_value = 7465.0
+
+    settlement = await service._provisional_cash_settlement(
+        _live_fly_trade(), _live_fly_candidate(),
+    )
+
+    assert (settlement is not None) == books
