@@ -679,6 +679,32 @@ async def test_startup_allows_an_exit_intent_its_final_broker_order_resolves(bro
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("allow_repair", [True, False])
+async def test_replaced_exit_intent_requires_reconciliation_only_at_startup(allow_repair):
+    legs = [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)]
+    replaced = {"orderId": 55, "status": "REPLACED", "orderLegCollection": legs}
+    canceled = {"orderId": 56, "status": "CANCELED", "orderLegCollection": legs}
+    schwab, intents = _unresolved_exit_state(
+        "CANCEL_REQUESTED", broker_order_id="55", orders=[replaced, canceled]
+    )
+
+    async def reconcile():
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents,
+            allow_repair=allow_repair, monitored_trade_id=None if allow_repair else 7,
+        )
+
+    if allow_repair:
+        with pytest.raises(
+            RuntimeError, match=r"exit intent.*order REPLACED.*manual reconciliation"
+        ):
+            await reconcile()
+    else:
+        await reconcile()
+    intents.update_broker_status.assert_awaited_once_with(2, "REPLACED", replaced)
+
+
+@pytest.mark.asyncio
 async def test_runtime_leaves_an_in_flight_exit_intent_to_its_monitor():
     # Every live submit has a SUBMITTING intent with no order id for a moment.
     schwab, intents = _unresolved_exit_state("SUBMITTING")

@@ -112,11 +112,15 @@ Either way, health.sh's 🚨 in the live channel repeats every 15 min. Alertmana
    partial). On bd870ae it accepts a bot-owned working order, then hands the exit to
    you as if that order were yours. After you cancel it in ToS, a stopped container
    needs `docker start butterfly_spx_live_app`.
-   - **Refusal "exit intent that cannot be matched to a broker order":** an exit submit
+   - **Refusal "exit intent that cannot be matched to a broker order" or "unresolved exit intent":** an exit submit
      whose outcome is unknown. First confirm in ToS that no order is working on the
      fly's legs and no fill is missing from the DB. Only then close the intent in the
      live DB; it must update exactly one row:
      `UPDATE broker_order_intents SET status = 'CANCELED', raw_broker_payload = '{"operator_resolved": "<reason>", "previous_status": "<old>"}'::jsonb, updated_at = NOW() WHERE id = <id> AND status NOT IN ('FILLED','CANCELED','REJECTED','EXPIRED') AND broker_order_id IS NULL;`
+     For `REPLACED` or `order not found` with a recorded order id, first confirm in ToS
+     that that order and every replacement are final and no fill is missing from the DB.
+     Use this variant instead; it must also update exactly one row:
+     `UPDATE broker_order_intents SET status = 'CANCELED', raw_broker_payload = '{"operator_resolved": "<reason>", "previous_status": "<old>"}'::jsonb, updated_at = NOW() WHERE id = <id> AND broker_order_id = '<order id>' AND status NOT IN ('FILLED','CANCELED','REJECTED','EXPIRED');`
      Then `docker start butterfly_spx_live_app`. This is the only sanctioned manual DB
      edit, and only after the ToS check.
 4. **After you close in ToS:** a restarted bot adopts nothing that it did not send.
