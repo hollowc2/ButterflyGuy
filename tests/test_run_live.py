@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import os
 import signal
@@ -941,6 +942,57 @@ async def test_startup_reports_the_replacement_before_the_replaced_entry_intent(
             schwab, "SPX", [], _IntentTable(_entry_intent("SUBMITTED", "55")),
             trade_date=TODAY,
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allow_repair", [True, False], ids=["startup", "runtime"])
+@pytest.mark.parametrize("intent", [
+    _entry_intent("CANCELED", "55"),
+    _exit_intent(TODAY, "CANCELED", "55"),
+], ids=["entry", "exit"])
+async def test_sync_never_reopens_an_intent_closed_by_the_runbook(intent, allow_repair):
+    # Schwab lists an order edited in ToS as REPLACED all session. Once the operator has
+    # closed its intent by the runbook, the sync must not copy REPLACED back over it.
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = (
+        _synthetic_butterfly_snapshot() if intent["side"] == "EXIT" else FLAT
+    )
+    schwab.get_todays_orders.return_value = [
+        {"orderId": 55, "status": "REPLACED", "orderLegCollection": LEGS},
+        {"orderId": 56, "status": "CANCELED", "orderLegCollection": LEGS},
+    ]
+    intents = _IntentTable(intent)
+    open_rows = [{**OPEN_TRADE, "id": 7}] if intent["side"] == "EXIT" else []
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", open_rows, intents, trade_date=TODAY,
+        allow_repair=allow_repair, monitored_trade_id=None if allow_repair else 7,
+    )
+
+    intents.update_broker_status.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("recorded", "broker", "synced"), [
+    ("CANCEL_REQUESTED", "CANCELED", "CANCELED"),  # open -> final
+    ("SUBMITTED", "REPLACED", "REPLACED"),  # open -> REPLACED, still refused below
+    ("CANCELED", "FILLED", "FILLED"),  # final -> final: a fill is never hidden
+])
+async def test_sync_still_records_broker_evidence_that_does_not_reopen(
+    recorded, broker, synced
+):
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = FLAT
+    order = {"orderId": 55, "status": broker, "orderLegCollection": LEGS}
+    schwab.get_todays_orders.return_value = [order]
+    intents = _IntentTable(_entry_intent(recorded, "55"))
+
+    with contextlib.suppress(RuntimeError):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [], intents, trade_date=TODAY
+        )
+
+    intents.update_broker_status.assert_awaited_once_with(3, synced, order)
 
 
 @pytest.mark.asyncio

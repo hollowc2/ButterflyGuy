@@ -37,13 +37,6 @@ from tests.test_order_manager import (
 )
 
 FINAL = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
-# Found by these replays: the startup status sync (run_live.py, _assert_broker_state_matches_db)
-# copies Schwab's REPLACED back over an intent the operator closed by the runbook, so every
-# restart that session refuses again. Strict: these flip to failures once the sync is fixed.
-SYNC_REOPENS_RESOLVED_INTENT = pytest.mark.xfail(
-    strict=True, raises=RuntimeError,
-    reason="startup sync reopens a runbook-resolved REPLACED intent",
-)
 LEGS = ("SPXW  261119C07435000", "SPXW  261119C07475000", "SPXW  261119C07515000")
 SPREAD = LiveSpread(bid=1.85, mark=1.97, ask=2.10)  # live 100001's quote at its signal
 
@@ -313,7 +306,6 @@ async def test_cancel_that_never_settles_halts_restarts_and_resumes_only_once_fi
 
 
 @pytest.mark.asyncio
-@SYNC_REOPENS_RESOLVED_INTENT
 async def test_entry_the_operator_replaced_halts_and_startup_waits_for_the_runbook():
     # An operator edits the bot's resting entry in ToS. The bot stops at once, cancels
     # nothing, and every restart refuses until the operator has resolved it.
@@ -366,7 +358,6 @@ async def test_entry_the_operator_replaced_halts_and_startup_waits_for_the_runbo
 
 
 @pytest.mark.asyncio
-@SYNC_REOPENS_RESOLVED_INTENT
 async def test_runbook_resolution_of_a_replaced_exit_intent_lets_the_next_startup_adopt():
     # docs/live-runbook.md: for REPLACED with a recorded order id, confirm in ToS that the
     # order and every replacement are final, then close the intent by id and order id.

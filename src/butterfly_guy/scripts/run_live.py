@@ -483,6 +483,14 @@ async def _assert_broker_state_matches_db(
                 intent = intent_by_order_id.get(order_id)
                 if intent is None or not order.get("status"):
                     continue
+                # A final intent never reopens: Schwab lists an order edited in ToS as
+                # REPLACED all session, and the runbook closes that intent by hand. A
+                # still-live order is refused below from Schwab's own status.
+                if (
+                    intent.get("status") in TERMINAL_ORDER_STATUSES
+                    and str(order["status"]) not in TERMINAL_ORDER_STATUSES
+                ):
+                    continue
                 intent["status"] = str(order["status"])
                 intent["raw_broker_payload"] = order
                 await intent_queries.update_broker_status(
