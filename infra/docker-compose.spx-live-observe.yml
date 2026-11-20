@@ -1,0 +1,10 @@
+# Apply LAST over docker-compose.spx-live.yml for an observe-only live session (OBSERVE=1 in
+# deploy/spx-live/session.env). Same live container, DB, account, token and limits, but the
+# live-test date is a day that is never a session, so TradeService.attempt_entry and
+# OrderManager.execute_single_attempt refuse every entry before any read or order. With no
+# OPEN trade (activation gates on it) the bot never sends an order; it runs the startup
+# reconcile, the broker reconciler, the collector and health only.
+services:
+  app_spx_live:
+    environment:
+      EXECUTION__LIVE_TEST_DATE: "2000-01-01"

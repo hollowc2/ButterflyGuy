@@ -640,3 +640,35 @@ async def test_reconciler_still_flags_orders_on_other_legs():
             schwab, "SPX", [_open_row()], intents, allow_repair=False,
             monitored_trade_id=500,
         )
+
+
+def test_observe_overlay_date_blocks_both_entry_guards():
+    # infra/docker-compose.spx-live-observe.yml pins the live-test date to a day that is
+    # never a session; with the live limits it is still a valid live config.
+    from pathlib import Path
+
+    import yaml
+
+    from butterfly_guy.core.time_utils import is_trading_day
+
+    overlay = yaml.safe_load(Path("infra/docker-compose.spx-live-observe.yml").read_text())
+    environment = overlay["services"]["app_spx_live"]["environment"]
+    assert set(environment) == {"EXECUTION__LIVE_TEST_DATE"}
+    observe_date = dt.date.fromisoformat(environment["EXECUTION__LIVE_TEST_DATE"])
+    assert not is_trading_day(observe_date)
+    config = AppConfig(execution=ExecutionSettings(
+        live_test_date=observe_date, paper_trading=False, record_live_execution=True,
+    ))
+
+    service = TradeService.__new__(TradeService)
+    service.config = config  # nothing else: the date guard returns before any read
+    om, schwab = make_order_manager(make_settings(live_test_date=observe_date))
+    with patch(
+        "butterfly_guy.services.trade_service.session_date", return_value=dt.date(2026, 11, 23)
+    ), patch("butterfly_guy.core.time_utils.session_date", return_value=dt.date(2026, 11, 23)):
+        assert asyncio.run(service.attempt_entry()) is None
+        assert asyncio.run(
+            om.execute_single_attempt(make_candidate(5900, 5950, 6000, 3), 3)
+        ) is None
+    schwab.place_order.assert_not_called()
+    schwab.get_account_snapshot.assert_not_called()

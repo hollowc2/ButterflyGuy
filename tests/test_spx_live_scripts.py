@@ -659,6 +659,54 @@ def test_default_session_fails_verification_if_live_runs_mid_walk(session):
     assert_paper_never_changed(session)
 
 
+OBSERVE_DATE = "2000-01-01"
+OBSERVE_LIMITS = [
+    f"EXECUTION__LIVE_TEST_DATE={OBSERVE_DATE}" if kv.startswith("EXECUTION__LIVE_TEST_DATE=")
+    else kv
+    for kv in LIVE_LIMITS
+]
+
+
+def test_observe_session_runs_the_live_bot_with_every_entry_blocked(session):
+    session.env_file(REHEARSAL=0, OBSERVE=1)
+    session.state["env"]["butterfly_spx_live_app"] = OBSERVE_LIMITS
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 0, out
+    assert "verify fail=none" in out
+    assert _up_files(session) == ["docker-compose.spx-live.yml",
+                                  "docker-compose.spx-live-observe.yml"]
+    last = session.notifications().splitlines()[-1]
+    assert "OBSERVE" in last and "no orders" in last and "1 fly max" not in last
+    assert (session.dir / "VERIFIED").exists()
+    assert_paper_never_changed(session)
+
+
+def test_observe_session_stops_a_live_bot_that_could_still_trade(session):
+    # The overlay did not apply: today's live-test date would let it enter. Fail closed.
+    session.env_file(REHEARSAL=0, OBSERVE=1)
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1
+    assert f"live env lacks EXECUTION__LIVE_TEST_DATE={OBSERVE_DATE}" in out
+    assert session.state["running"]["butterfly_spx_live_app"] is False
+    assert not (session.dir / "VERIFIED").exists()
+    assert_paper_never_changed(session)
+
+
+def test_observe_is_refused_on_a_rehearsal(session):
+    session.env_file(REHEARSAL=1, OBSERVE=1)
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1
+    assert "OBSERVE=1 is for the live container" in out
+    assert not any(c[0] == "compose" and "up" in c for c in session.calls())
+    assert_paper_never_changed(session)
+
+
 def test_mid_walk_session_adds_the_overlay_and_requires_the_rule(session):
     session.env_file(REHEARSAL=0, EXIT_PRICING="mid_walk")
     session.state["env"]["butterfly_spx_live_app"] = [*LIVE_LIMITS,
