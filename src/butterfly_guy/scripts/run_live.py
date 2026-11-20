@@ -646,6 +646,29 @@ async def _assert_broker_state_matches_db(
             f"Broker/DB OPEN {underlying} leg mismatch; {'; '.join(details)}"
         )
 
+    # At startup an active EXIT intent no broker order resolves is an ambiguous submit
+    # from the previous process; it holds the trade's active-exit index, so the next
+    # exit could never be recorded. Runtime skips this: every submit briefly has one.
+    if allow_repair:
+        broker_order_ids = set().union(*(order_ids(order) for order in todays_orders))
+        open_ids = {row.get("id") for row in open_rows}
+        for intent in intents:
+            if (
+                intent.get("side") != "EXIT"
+                or intent.get("trade_id") not in open_ids
+                or intent.get("status") in TERMINAL_ORDER_STATUSES
+            ):
+                continue
+            order_id = intent.get("broker_order_id")
+            if order_id and str(order_id) in broker_order_ids:
+                continue
+            raise RuntimeError(
+                f"OPEN {underlying} trade has an exit intent that cannot be matched to a "
+                f"broker order ({intent.get('status')}, "
+                f"{'order not found' if order_id else 'no order id'}); "
+                "manual reconciliation required"
+            )
+
 
 async def _reconcile_broker_state(
     schwab: SchwabClientWrapper,

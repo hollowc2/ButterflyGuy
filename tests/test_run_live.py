@@ -627,6 +627,106 @@ async def test_startup_refuses_a_working_bot_owned_order_but_runtime_allows_it()
     )
 
 
+def _unresolved_exit_state(status, broker_order_id=None, orders=()):
+    # An ambiguous exit submit: the fly's legs still match, the EXIT intent stays active.
+    schwab = AsyncMock()
+    schwab.get_account_snapshot.return_value = _synthetic_butterfly_snapshot()
+    schwab.get_todays_orders.return_value = list(orders)
+    intents = AsyncMock()
+    intents.intents_for_day.return_value = [{
+        "id": 2, "side": "EXIT", "status": status,
+        "broker_order_id": broker_order_id, "trade_id": 7,
+    }]
+    return schwab, intents
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["UNKNOWN_ABORTED", "SUBMITTING", "SUBMITTED"])
+async def test_startup_refuses_an_open_trade_exit_intent_with_no_broker_order(status):
+    # The next exit's create_intent would hit the active-exit unique index forever.
+    schwab, intents = _unresolved_exit_state(status)
+
+    with pytest.raises(RuntimeError, match=rf"cannot be matched.*\({status}, no order id\)"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents
+        )
+
+
+@pytest.mark.asyncio
+async def test_startup_refuses_an_exit_intent_whose_order_is_not_in_todays_orders():
+    schwab, intents = _unresolved_exit_state("SUBMITTED", broker_order_id="55")
+
+    with pytest.raises(RuntimeError, match=r"cannot be matched.*\(SUBMITTED, order not found\)"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("broker_status", ["CANCELED", "REJECTED"])
+async def test_startup_allows_an_exit_intent_its_final_broker_order_resolves(broker_status):
+    order = {
+        "orderId": 55, "status": broker_status,
+        "orderLegCollection": [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)],
+    }
+    schwab, intents = _unresolved_exit_state(
+        "CANCEL_REQUESTED", broker_order_id="55", orders=[order]
+    )
+
+    await _assert_broker_state_matches_db(schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents)
+
+    intents.update_broker_status.assert_awaited_once_with(2, broker_status, order)
+
+
+@pytest.mark.asyncio
+async def test_runtime_leaves_an_in_flight_exit_intent_to_its_monitor():
+    # Every live submit has a SUBMITTING intent with no order id for a moment.
+    schwab, intents = _unresolved_exit_state("SUBMITTING")
+
+    await _assert_broker_state_matches_db(
+        schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents,
+        allow_repair=False, monitored_trade_id=7,
+    )
+
+
+@pytest.mark.asyncio
+async def test_startup_ignores_an_unresolved_exit_intent_of_a_trade_that_is_not_open():
+    schwab, intents = _unresolved_exit_state("UNKNOWN_ABORTED")
+
+    # Another trade is open and matches the broker.
+    await _assert_broker_state_matches_db(schwab, "SPX", [{**OPEN_TRADE, "id": 8}], intents)
+    # No trade is open and the broker is flat.
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+    await _assert_broker_state_matches_db(schwab, "SPX", [], intents)
+
+
+@pytest.mark.asyncio
+async def test_startup_reports_an_unknown_working_order_before_an_unresolved_exit_intent():
+    # The working order is the likely ambiguous submit and the more urgent fact.
+    order = {
+        "orderId": 99, "status": "WORKING",
+        "orderLegCollection": [{"instrument": {"symbol": s}} for s in (LOWER, CENTER, UPPER)],
+    }
+    schwab, intents = _unresolved_exit_state("UNKNOWN_ABORTED", orders=[order])
+
+    with pytest.raises(RuntimeError, match="unknown active SPX order"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents
+        )
+
+
+@pytest.mark.asyncio
+async def test_startup_reports_broker_flat_before_an_unresolved_exit_intent():
+    # A filled ambiguous exit: the existing flat-broker refusal keeps its message.
+    schwab, intents = _unresolved_exit_state("UNKNOWN_ABORTED")
+    schwab.get_account_snapshot.return_value = {"securitiesAccount": {"positions": []}}
+
+    with pytest.raises(RuntimeError, match="broker is flat"):
+        await _assert_broker_state_matches_db(
+            schwab, "SPX", [{**OPEN_TRADE, "id": 7}], intents
+        )
+
+
 @pytest.mark.asyncio
 async def test_entry_loop_repeated_errors_degrade_and_recover(
     monkeypatch,
