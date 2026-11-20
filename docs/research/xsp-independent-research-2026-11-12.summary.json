@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "campaign": "Independent XSP symmetric butterfly research, 2026-11-11 through 2026-11-12",
+  "recorded_at_utc": "2026-11-12T18:53:52.321947+00:00",
+  "decision": "reject exact completed policies; no validated profitable strategy",
+  "notes": "xsp-independent-research-2026-11-12.md",
+  "classification": "Retrospective development and selected-cohort completion; no untouched holdout. Initial partial positive subsets are superseded for full-strategy interpretation.",
+  "window_et_inclusive": [
+    "2026-01-02",
+    "2026-09-28"
+  ],
+  "archive_sessions": 185,
+  "widths_xsp_points": [
+    2,
+    4
+  ],
+  "families": {
+    "MR1": "failed opening-range breakout",
+    "MR2": "one-range excursion then reversal toward midpoint",
+    "T1": "opening-range continuation",
+    "T2": "14:00 range compression"
+  },
+  "initial_timed_exit_cells": {
+    "MR1/w2": {
+      "completed": 96,
+      "midpoint_net": -502.2,
+      "marketable_net": -3144.2,
+      "stressed_net": -4104.2
+    },
+    "MR1/w4": {
+      "completed": 94,
+      "midpoint_net": -573.3,
+      "marketable_net": -4572.8,
+      "stressed_net": -5512.8
+    },
+    "MR2/w2": {
+      "completed": 104,
+      "midpoint_net": -730.3,
+      "marketable_net": -2120.8,
+      "stressed_net": -3160.8
+    },
+    "MR2/w4": {
+      "completed": 101,
+      "midpoint_net": -1194.2,
+      "marketable_net": -3697.2,
+      "stressed_net": -4707.2
+    },
+    "T1/w2": {
+      "completed": 157,
+      "midpoint_net": -547.9,
+      "marketable_net": -3975.4,
+      "stressed_net": -5545.4
+    },
+    "T1/w4": {
+      "completed": 152,
+      "midpoint_net": -72.9,
+      "marketable_net": -5564.4,
+      "stressed_net": -7084.4
+    },
+    "T2/w2": {
+      "completed": 30,
+      "midpoint_net": -175.0,
+      "marketable_net": -1367.0,
+      "stressed_net": -1667.0
+    },
+    "T2/w4": {
+      "completed": 18,
+      "midpoint_net": -349.6,
+      "marketable_net": -1297.6,
+      "stressed_net": -1477.6
+    }
+  },
+  "lifecycle": {
+    "accepted_entry_instances": 784,
+    "exact_original_candidate_baselines": 752,
+    "completed_policy_records_cash_checked": 2153,
+    "additional_exit_cells": 24,
+    "conditional_leads_insufficient": {
+      "MR2_w4/center_cross": {
+        "accepted": 105,
+        "completed": 39,
+        "unresolved": 66,
+        "observed_stressed_net": 493.2000000000002,
+        "unresolved_cohort_settlement_net": -3471.599999999963
+      },
+      "MR2_w4/net_profit_25pct": {
+        "accepted": 105,
+        "completed": 20,
+        "unresolved": 85,
+        "observed_stressed_net": 500.9999999999999,
+        "unresolved_cohort_settlement_net": -2843.999999999944
+      }
+    }
+  },
+  "completed_MR2_width4_cohort": {
+    "accepted_entries_per_policy": 105,
+    "policy_records": 420,
+    "policies": {
+      "baseline_60m": {
+        "stressed_net_dollars": -4640.6,
+        "component_net_dollars": -3610.6,
+        "terminal_modes": {
+          "fallback_native_settlement": 4,
+          "original_priced_exit": 101
+        }
+      },
+      "center_cross": {
+        "stressed_net_dollars": -2978.4,
+        "component_net_dollars": -2258.4,
+        "terminal_modes": {
+          "fallback_native_settlement": 66,
+          "original_priced_exit": 39
+        }
+      },
+      "net_profit_25pct": {
+        "stressed_net_dollars": -2343.0,
+        "component_net_dollars": -1718.0,
+        "terminal_modes": {
+          "fallback_native_settlement": 85,
+          "original_priced_exit": 20
+        }
+      },
+      "settlement": {
+        "stressed_net_dollars": -1750.0,
+        "component_net_dollars": -1225.0,
+        "terminal_modes": {
+          "native_settlement": 105
+        }
+      }
+    },
+    "fallback": "Irrevocable native settlement on first required gap/anchor/fill failure; no restart after recovery; original priced exits unchanged."
+  },
+  "quote_audit": {
+    "cutoffs": 105,
+    "unresolved_policy_events": 151,
+    "raw_snapshots": 1192,
+    "cutoff_primary_reasons": {
+      "required_side_zero_bid_no_size": 95,
+      "valid": 6,
+      "required_side_undersized": 3,
+      "solely_unused_side_size_filter": 1
+    },
+    "cutoff_both_sides_valid": 6,
+    "cutoff_closing_sides_valid": 7,
+    "center_unpriced_cutoff_events": 57,
+    "all_57_have_required_zero_bid_zero_bid_size": true,
+    "profit_first_missing_snapshot_unused_side_only": 32
+  },
+  "settlement": {
+    "source_type": "cboe_native_xsp_published_settlement",
+    "native_dates": 185,
+    "superseded": "Earlier three-decimal mathematical derivation settlements.csv/manifest.json must not be consumed; use settlements-native.csv and native-manifest.json.",
+    "primary": "Cboe published values unchanged; scaled SPX closes are diagnostics only."
+  },
+  "untested": [
+    "Transaction-needed quote-size policy (audit only so far)",
+    "Independent intraday XSP feed and leg update ages",
+    "Observed complex execution and validated all-in tariff",
+    "Alternative outage/partial-execution responses",
+    "Independent new cohort validation"
+  ],
+  "reuse_rule": "Reuse these findings. Reproduce as needed; reopen with a recorded material evidence/mechanics/assumption change or explicit user request. Same inspected period remains development data.",
+  "recorded_verification": {
+    "initial_stage_focused_tests": 32,
+    "lifecycle_stage_focused_tests": 51,
+    "completion_stage_focused_tests": 25,
+    "counts_are_separate_stage_runs": true,
+    "runtime_changes": false
+  },
+  "artifact_sha256": {
+    "reports/research/xsp-independent-2026-11-11/root-review-01/review.json": "3d21d56808e4af4d321c669a55a104a665ab00911609ca8b80515246fe2b7328",
+    "reports/research/xsp-independent-2026-11-11/mean-reversion/full-01/manifest.json": "58a3b8d9f8a3f11a7eb19a3fd106c54fa1a3c5407340bac92ab28543264b2ee2",
+    "reports/research/xsp-independent-2026-11-11/trend-range/run-02/manifest.json": "5fb5951d94fe91fb5b84e13fa9aa6d6dd67e394d69908e51e5c80fb38a6fda3b",
+    "reports/research/xsp-realization-2026-11-11/realization/run-01/manifest.json": "176e6ea9ceae9cd43090b63e0ac83af22b792d32364fc4c1a255d9cd6b00bb74",
+    "reports/research/xsp-realization-2026-11-11/root-review-02/review.json": "53642726aa99d18b464bc5dd7055f61fe34d7f272f1d46afa80393f8caa15bd8",
+    "reports/research/xsp-realization-2026-11-11/settlement/settlements-native.csv": "7a4b367f322e85edeb3aa96e65164cb82bdc2ef359bf38c7828f51cb73c0fe2c",
+    "reports/research/xsp-realization-2026-11-11/settlement/native-manifest.json": "dd0abff6363731c204a6ce612d3c05600f5a46bd5d208111db29869c407712fb",
+    "reports/research/xsp-fallback-2026-11-12/decision.json": "9d98019ed0e310b04107dfe411c96e37d305c456475780641b5987cff2c183fd",
+    "reports/research/xsp-fallback-2026-11-12/replay/run-01/manifest.json": "1f0d3e40e1b4d6ab833aab3c4f68ed620df9ddc744fcccd2417bec442761559c",
+    "reports/research/xsp-fallback-2026-11-12/replay/run-01/summary.json": "810975b13f925a01fbdca7f60d942cc4c90dfa4c19fc756e9c648901d337d342",
+    "reports/research/xsp-fallback-2026-11-12/quote-audit/summary.json": "94bd62dc5e8997b9a582d2797cdb2e8783fcc7d00a621242ffc5204f661a8cad",
+    "reports/research/xsp-fallback-2026-11-12/independent-review/cohort-cash-review.json": "71df6f5725bbe10b71984b3a69264b3da0bcf48ca21c4b6bd6c7e2ecf933292a",
+    "reports/research/xsp-fallback-2026-11-12/index.html": "c9e2b741a37ac1d63eab33672c78cfa2737bbaa899b864a85339e9b9e8515d02"
+  },
+  "research_source_sha256": {
+    "tools/research_studies/xsp_independent/common.py": "e47d5a1f1fb0aaad0a857491032f4784d005ce49daeb3e7462aa5e486594c836",
+    "tools/research_studies/xsp_independent/data_audit.py": "37284db9650658a7033fe35dc912b67cc507e25833ed3f3d65e3c87ad466307e",
+    "tools/research_studies/xsp_independent/fallback.py": "23dcb074e687df5f63f1405ec33356a07fcacb8bf945aa7e9ce221d7a36a71d2",
+    "tools/research_studies/xsp_independent/mean_reversion.py": "b5c38c6825aa3e6e8f0d0b4b1571dd4f8f9acf34f2120be523f305074d066d13",
+    "tools/research_studies/xsp_independent/quote_evidence.py": "316a89cb4fd53d8f4d8fe2cb3dc8854a856c1951df97b19bd6f503d65801e2fb",
+    "tools/research_studies/xsp_independent/realization.py": "6ab6f73e0ccf4a34c2fd6f6f88d98e66e2aea70dcdd0353f566f0a46992a99ec",
+    "tools/research_studies/xsp_independent/render_fallback_report.py": "b504192352e574d521ee7abab39f41bbb1eca2d98f5e4975241b8c1f09e977e9",
+    "tools/research_studies/xsp_independent/review_realization.py": "150e63bfc60bb3503808ead0193ead17cb6e0b8f73c742fa1cc3015351a66bd6",
+    "tools/research_studies/xsp_independent/review_results.py": "2459da367ab784d2992001d68cd300e9395feb8bdbc9ce8a670475773bd26458",
+    "tools/research_studies/xsp_independent/settlement_data.py": "9357f3b1efd6d04fe7d1147adbe9a5ca0da5e9c7c568893170ba7ef26ddf5495",
+    "tools/research_studies/xsp_independent/trend_range.py": "49cc278ed51d6a0558a5d98a5df84e660a84d59969905fca604dc931935eb510"
+  },
+  "retention": "This small receipt is versionable. Raw vendor data and large local artifacts remain private/gitignored and may be absent in fresh checkouts. Git SHA alone does not identify the dirty research helpers."
+}

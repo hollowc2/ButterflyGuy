@@ -104,6 +104,7 @@ Useful container names:
 ## Working Rules
 
 - Establish the requested outcome before coding. State material assumptions and trade-offs; ask only when an unresolved choice would materially change the result or introduce risk.
+- Before proposing or running XSP butterfly research, read `docs/research/xsp-independent-research-2026-11-12.md`. Reuse its completed experiments and rejected findings; document the materially new evidence or assumption before reopening them. Reproduction or an explicitly requested rerun is allowed.
 - Prefer the smallest clear implementation that satisfies the request. Do not add speculative features, abstractions, configuration, or handling for impossible scenarios.
 - Make surgical changes. Touch only files needed for the request.
 - Do not refactor adjacent code or reformat unrelated files.

@@ -117,6 +117,10 @@ The [2026-10-01 completion record](docs/research/thetadata-backtesting-completio
 records the durable 585-session SPXW development baseline, quality checks, and
 reproduction commands.
 
+Before proposing new XSP butterfly experiments, read the
+[completed XSP research record](docs/research/xsp-independent-research-2026-11-12.md)
+for tested ideas, rejected results, and remaining evidence gaps.
+
 There are two tools, with separate jobs:
 
 - **The research core** (`python -m butterfly_guy.research`) is where SPX rule research happens: comparing variants, testing hypotheses, and the holdout protocol.

@@ -2213,3 +2213,168 @@ P(>0) 0.96, Δ vs E0 90% CI +$14.6k / +$50.5k. Validation bootstrap P(>0) 0.92.
   (`.worktrees/f2-shadow-reviewed`) and writing to `reports/f2_shadow_reviewed/`. No F2
   trade had been recorded at the time, so nothing was lost by switching.
 - No runtime configuration changed.
+
+
+## 2026-11-12 — independent XSP butterfly research completed; apparent early-exit edge rejected
+
+See the [durable XSP research record](xsp-independent-research-2026-11-12.md) and
+[small decision/hash receipt](xsp-independent-research-2026-11-12.summary.json)
+before proposing another XSP experiment. Four entry families at two widths,
+24 exit extensions, and a complete missing-quote fallback audit were examined
+on January 2–September 28, 2026; all are retrospective development evidence.
+
+The apparent MR2/4-point early-exit gains of +$493.20 / +$501.00 came from
+incomplete subsets. On all 105 accepted entries with the explicit native
+settlement fallback, center crossing loses $2,978.40 and the 25% target loses
+$2,343.00 after modeled fees/stress. Reject these exact completed policies.
+The unused-side size filter was diagnosed only; changing it remains untested.
+Do not repeat these ideas as new discoveries or reuse the selected positive
+subsets as profitability evidence. No runtime configuration was changed.
+
+## 2026-11-12 — quiet-day XSP flies retained; mixed call/put Batman idea queued
+
+The owner asked to retain the [quiet-day iron and OTM-body findings](xsp-quiet-flies-2026-11-12.md).
+The strongest simulated candidate was the ATM four-point iron fly: +$405 after
+modeled fees/stress over 30 quiet dates, but −$171.20 after removing its three
+biggest winners and −$44.40 in the first archive half. No final candidate passed
+the frozen screen. Keep this as a fragile development observation, not an edge.
+The inspected January–September 2026 data is not a fresh holdout.
+
+**New owner idea: Batman.** Buy one XSP 0-DTE call debit butterfly above the
+market and one put debit butterfly below it, simultaneously. Each fly is long
+one lower strike, short two at its body and long one upper strike, with its own
+option right. Evaluate the combined eight-contract position after paying for
+both flies. The user proposed capturing a move in either direction; neither
+direction nor mere movement guarantees a profitable pair.
+
+Relationship to completed work: the earlier `otm_pair_quiet` cells used the same
+construction for both flies: CALL/CALL, PUT/PUT, or IRON/IRON. **Lower PUT plus
+upper CALL has not been tested.** At identical strikes and equal widths it has
+the same gross expiry tents as the same-right debit pairs, but quoted opening
+costs and liquidity can differ. Earlier quiet-day pair results cannot be
+reported as an exact Batman test or as evidence against every such setup.
+
+Material new hypotheses to specify before a backtest:
+
+- Test the actual lower-put/upper-call quote legs and their combined costs.
+- Examine an ex-ante move setup rather than automatically inheriting the quiet
+  filter. A movement forecast must target one of two finite payoff zones, not
+  simply classify realized days after the fact.
+- Resolve whether OTM means only the bodies or **all strikes**: for entirely
+  OTM flies, the highest put strike is below entry spot and the lowest call
+  strike is above it. Body-only OTM flies may overlap across spot and have a
+  different combined payoff shape.
+- Freeze entry time, body offsets, widths, cost/risk budget, and whether to hold
+  to settlement or exit intraday. Selling only a winning fly leaves a second
+  open position and is not equivalent to closing the combined trade.
+
+At expiry, each symmetric debit fly pays `max(width - abs(S - body), 0)` in
+index points. The pair's net dollars are 100 times the sum of both payoffs minus
+both entry debits, then all applicable costs. With disjoint payoff zones it can
+lose both debits if the market stays in the middle or moves beyond the outside
+wings. One winning fly must cover the other fly's loss and costs. A sampled
+intraday body touch does not establish an executable profitable exit.
+
+Status: **queued / insufficient evidence; no Batman backtest or runtime change
+made.** Preserve the completed cohort. Future trials must identify their new
+mechanism, retain all accepted entries and use independently timed features.
+Payoff reference: [Options Industry Council — Long Call Butterfly](https://www.optionseducation.org/strategies/all-strategies/long-call-butterfly).
+
+## 2026-11-12 — bounded mixed PUT/CALL Batman completed; quiet iron unchanged
+
+The previously queued Batman idea is now tested as the actual **lower PUT debit
+fly + upper CALL debit fly**, eight gross contracts priced and tracked together.
+See the [completed bounded-study record](xsp-batman-bounded-2026-11-12.md),
+[retained receipt](xsp-batman-2026-11-12.summary.json), and
+[standalone HTML report](../../reports/research/xsp-batman-2026-11-12/index.html).
+This supersedes the queued status above, while preserving that historical entry.
+
+**Decisions:** quiet ATM iron — **insufficient evidence for fresh validation**;
+the exact prior policy still fails its original robustness screen. Batman —
+**reject these eight exact cells**, not every possible mixed-fly geometry.
+No runtime settings, deployments, services, credentials or orders were changed.
+
+Before outcomes, coverage was audited and eight new cells frozen: four-point
+wings; body-only versus every-strike OTM relative to independent SPX/10; 10:30 ET
+unconditional versus efficient-first-hour-movement entry; native published
+settlement versus a causal combined zone exit. The two exact prior ATM IRON
+width-four cells were imported unchanged, making ten total cells including
+benchmarks. No threshold/width/exit expansion followed results.
+
+- Body-only, unconditional: settlement **−$5,042.80 / 119**; zone exit
+  **−$11,383.20 / 119**.
+- Body-only, movement: settlement **−$776.60 / 8**; zone exit **−$656.20 / 8**.
+- All-strikes OTM, unconditional: settlement **−$2,313.20 / 121**; zone exit
+  **−$4,820.00 / 121**.
+- All-strikes OTM, movement: settlement **+$414.00 / 10**, but **−$202.40** after
+  removing the three largest winners; zone exit **−$169.80 / 10**. Settlement
+  halves are +$344.60 / +$69.40 (fixed May 15 split). This is another fragile
+  development observation, not a paper-trade candidate.
+
+The movement rule uses completed first-hour efficiency >=0.30 and absolute drift
+>=half the XSP ATM straddle midpoint. It does not inherit the quiet filter.
+All-strikes sampled payoff-zone reach is 7/10 signal paths versus 72/105 other
+complete paths: insufficient forecast evidence. Body-only wings overlap around
+entry, explaining near-immediate zone signals without a meaningful later move.
+All eight movement-filtered body zone exits lose after modeled costs.
+
+Both debits, gross-contract opening/closing fees and adverse package stress are
+included. Exits close both flies at a strictly later simultaneous quote, preserving
+signed payable liquidation values. A first failed window or signal outage
+irreversibly settles the whole pair; no future exit admission test, recovered
+retry, interpolated quote, losing-position discard or missing-as-zero outcome.
+Every-strike OTM is relative to SPX/10, not proven native intraday XSP spot.
+Component-side estimates are not demonstrated complex-order fills.
+
+All 185 native settlements exist, but only 122 independent SPX/10 signal prefixes
+are covered. Local XSP quotes still end September 28. No genuinely new joint
+cohort or better observed execution evidence was found. All January–September
+results remain development evidence; older quote-file counts do not establish
+validated joint coverage. The quiet 30-date baseline remains exactly +$405,
+−$171.20 after removing its three largest wins, and −$44.40 in its first half.
+Do not retune that cohort or recast these mixed trials as independent validation.
+
+Independent direct raw-quote cash accounting reconciles all **648** completed
+records (173 combined liquidations, 475 settlements; correlated reused entries)
+with zero discrepancies. Full date/cell journal: **1,850 records**, including
+no-signals and exclusions. Focused verification: **59 tests passed**, full Ruff
+passed. Graphify AST update completed with its existing missing
+`tree_sitter_sql` warning; no SQL was changed. The report embeds evidence and
+downloadable journals; fresh run directories preserve source/input hashes,
+frozen specifications, prior source receipts and independent cash ledgers.
+
+Do not repeat this matrix as a new discovery. Fresh evidence or a separately
+frozen material hypothesis is needed before further Batman research. Neither
+research decision authorizes promotion or activation.
+
+
+## 2026-11-13 — Batman extended to2022–2026, same eight cells
+
+Owner requested a larger date range; this explicitly authorizes a date extension
+of the stopped matrix, not parameter expansion. See the
+[completed extension](xsp-batman-history-2026-11-13.md) and
+[standalone report](../../reports/research/xsp-batman-2026-11-13/index.html).
+Decision: **insufficient evidence** under the frozen completeness/robustness rules.
+1,118 option dates;1,035 entry-feature-covered sessions. Older SPX/10 minute
+source has unknown original provider;2026 recorded feed is unchanged.
+All1,480 original2026 rows reproduce exactly. No untouched holdout claimed.
+
+- `all_strikes_movement_settlement`: 74 accepted, 72 priced, 2 unresolved; priced stressed net $-1,641.40; full-cohort bounds [$-1,934.80, $-1,134.80]; **insufficient evidence**.
+- `all_strikes_movement_zone_exit`: 74 accepted, 72 priced, 2 unresolved; priced stressed net $-2,498.40; full-cohort bounds [$-2,791.80, $-1,991.80]; **insufficient evidence**.
+- `all_strikes_unconditional_settlement`: 861 accepted, 822 priced, 39 unresolved; priced stressed net $-22,447.40; full-cohort bounds [$-28,161.20, $-12,561.20]; **insufficient evidence**.
+- `all_strikes_unconditional_zone_exit`: 861 accepted, 827 priced, 34 unresolved; priced stressed net $-30,207.20; full-cohort bounds [$-35,192.00, $-21,592.00]; **insufficient evidence**.
+- `body_movement_settlement`: 80 accepted, 78 priced, 2 unresolved; priced stressed net $-6,073.60; full-cohort bounds [$-6,930.00, $-6,030.00]; **insufficient evidence**.
+- `body_movement_zone_exit`: 80 accepted, 80 priced, 0 unresolved; priced stressed net $-11,744.20; full-cohort bounds [$-11,744.20, $-11,744.20]; **reject**.
+- `body_unconditional_settlement`: 990 accepted, 949 priced, 41 unresolved; priced stressed net $-79,424.80; full-cohort bounds [$-100,247.00, $-80,447.00]; **insufficient evidence**.
+- `body_unconditional_zone_exit`: 990 accepted, 962 priced, 28 unresolved; priced stressed net $-148,767.20; full-cohort bounds [$-164,448.80, $-150,748.80]; **insufficient evidence**.
+
+The44 missing native settlement dates are retained, not future-filtered.
+Priced-only P&L is incomplete; full-cohort bounds are contract payoff limits,
+not imputed outcomes. Every cell's upper bound is negative even if unresolved
+settlements receive their theoretical maximum payout under this cost model.
+Post-entry stale data is handled through a causal quarantine
+and the unchanged fallback. 3862 completed records plus
+148 unresolved openings reconcile to raw cash;
+67 tests, Ruff and desktop/mobile checks pass. The8,944-row journal and all
+input/source receipts remain private, fresh and hashed. Original evidence and
+unrelated changes are preserved. No runtime changes, orders or activation.
