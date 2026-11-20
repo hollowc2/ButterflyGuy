@@ -169,7 +169,8 @@ readiness, resolve intents or restart anything. `health.ready` stores observatio
    ```
    It settles from Schwab's posted expiration transactions when they exist. The
    same day, it settles only a fly that expired at least 20 SPX points out of the
-   money. It also updates `daily_risk_state`.
+   money at SPX's final session bar, marked provisional so the next startup replaces it
+   with Schwab's posting. It updates `daily_risk_state` in the same transaction.
 6. **Stop the container.** A running live bot books the settlement at the close,
    marked provisional; the next startup replaces it with Schwab's posting. Close-out
    and `stop-live.sh` ignore legs whose expiry has passed (`--ignore-expired`). On

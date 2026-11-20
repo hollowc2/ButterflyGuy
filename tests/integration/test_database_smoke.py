@@ -3,6 +3,7 @@
 import datetime as dt
 import json
 import os
+import runpy
 import uuid
 
 import asyncpg
@@ -243,6 +244,62 @@ async def test_provisional_true_up_corrects_the_trade_and_its_risk_day_atomicall
             trade4,
         ) == "true"
         assert await risk(day4) is None
+    finally:
+        await db.close()
+        await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_settle_tool_closes_the_row_and_books_risk_in_one_transaction():
+    dsn = os.getenv("CI_DATABASE_URL")
+    if not dsn:
+        pytest.skip("CI_DATABASE_URL is only set by the real-DB workflow")
+
+    tool = runpy.run_path("tools/spx_live_settle_expired.py", run_name="spx_live_settle_expired")
+    name = f"settle_{uuid.uuid4().hex[:8]}"
+    admin = await asyncpg.connect(dsn)
+    await admin.execute(f'CREATE DATABASE "{name}"')
+    db = DatabasePool(spx_live_db.dsn_for(_settings(dsn), name), min_size=1, max_size=2)
+    try:
+        await db.initialize()
+        await run_migrations(db)
+        pool = db.pool
+
+        async def open_trade(day):
+            return await pool.fetchval(TRADE, day, "OPEN", "SPX")
+
+        async def apply(trade_id, day, net):
+            close_at = dt.datetime(day.year, day.month, day.day, 21, 0, tzinfo=dt.timezone.utc)
+            await tool["apply_settlement"](
+                db, (trade_id, 0.0, close_at, "cash_settled", net / 100, 4.93),
+                {"net_pnl_dollars": net, "settlement_provisional": True}, day, "SPX",
+            )
+
+        async def state(trade_id, day):
+            status = await pool.fetchval(
+                "SELECT status FROM butterfly_trades WHERE id = $1", trade_id
+            )
+            pnl = await pool.fetchval(
+                "SELECT realized_pnl FROM daily_risk_state"
+                " WHERE trade_date = $1 AND underlying = 'SPX'", day,
+            )
+            return status, None if pnl is None else float(pnl)
+
+        day = dt.date(2026, 11, 19)
+        trade = await open_trade(day)
+        await apply(trade, day, -379.79)
+        assert await state(trade, day) == ("CLOSED", -379.79)
+        with pytest.raises(tool["SettleRefusedError"], match="no longer OPEN"):
+            await apply(trade, day, -379.79)
+        assert await state(trade, day) == ("CLOSED", -379.79)
+
+        # The risk write fails, so the close rolls back with it: the row stays OPEN.
+        day2 = dt.date(2026, 11, 18)
+        trade2 = await open_trade(day2)
+        with pytest.raises(asyncpg.exceptions.NumericValueOutOfRangeError):
+            await apply(trade2, day2, 10_000_000.0)  # past NUMERIC(10,4)
+        assert await state(trade2, day2) == ("OPEN", None)
     finally:
         await db.close()
         await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')

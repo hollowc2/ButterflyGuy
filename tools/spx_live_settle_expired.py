@@ -16,8 +16,10 @@ It refuses unless the trade is OPEN, its session closed at least two minutes ago
      fly's strikes, so every leg expires worthless, and Schwab's opening transactions match
      the three legs. Net P&L is then the opening net amount (fees included).
 Anything else (SPX near or inside the strikes, mismatched legs) waits for Schwab's posting.
-On --apply it closes the row as cash_settled and adds the net P&L to daily_risk_state, as
-the bot's own close would.
+SPX's close is the session's final regular 1-minute bar, as the bot's settlement uses. Case 2
+is booked provisional, so the next live startup replaces it with Schwab's posting. On --apply
+it closes the row as cash_settled and adds the net P&L to daily_risk_state in one transaction,
+as the bot's own close would.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ import asyncio
 import datetime as dt
 import json
 import sys
+from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -73,6 +76,8 @@ def plan_settlement(
     from butterfly_guy.data.schemas import TradeRecord
     from butterfly_guy.services.position_service import broker_cash_settlement_from_transactions
 
+    if row.get("underlying") != "SPX":
+        raise SettleRefusedError("this tool only settles SPX trades")
     if row["status"] != "OPEN":
         raise SettleRefusedError(f"trade {row['id']} is {row['status']}, not OPEN")
     qty = int(row["quantity"])
@@ -113,6 +118,7 @@ def plan_settlement(
     net, evidence = _opening_net(row, transactions)
     return 0.0, net / (100 * qty), {
         "settlement_source": "operator_spx_close_all_legs_otm",
+        "settlement_provisional": True,
         "settlement_spot": spx_close,
         "gross_pnl_dollars": round(-trade.entry_price * 100 * qty, 2),
         "net_pnl_dollars": net,
@@ -122,12 +128,38 @@ def plan_settlement(
     }
 
 
+def spx_session_close(candles: list[dict[str, Any]], day: dt.date) -> float | None:
+    """SPX's final regular-session 1-minute close, or None if that bar is not there."""
+    from butterfly_guy.core.time_utils import market_close_time
+    from butterfly_guy.services.position_service import final_regular_session_close_from_candles
+
+    close_et = dt.datetime.combine(day, market_close_time(day), tzinfo=ET)
+    final = final_regular_session_close_from_candles(candles, day)
+    if final is None or not close_et - dt.timedelta(minutes=1) <= final[0] <= close_et:
+        return None
+    return final[1]
+
+
+async def apply_settlement(
+    db: Any, close_args: tuple, meta: dict[str, Any], day: dt.date, underlying: str,
+) -> None:
+    """Close the row and book its net P&L in one transaction: both or neither."""
+    from butterfly_guy.db.queries import RiskQueries, TradeQueries
+
+    async with db.pool.acquire() as conn, conn.transaction():
+        tx_db = SimpleNamespace(pool=conn)
+        if not await TradeQueries(tx_db).close_trade(*close_args, metadata=meta):
+            raise SettleRefusedError("NOT APPLIED: the row is no longer OPEN")
+        risk = RiskQueries(tx_db)
+        await risk.get_or_create(day, underlying)
+        await risk.update_pnl(day, meta["net_pnl_dollars"], underlying)
+
+
 async def main() -> None:
     from butterfly_guy.core.config import load_config
     from butterfly_guy.core.time_utils import market_close_time
     from butterfly_guy.data.schwab_client import SchwabClientWrapper
     from butterfly_guy.db.connection import DatabasePool
-    from butterfly_guy.db.queries import RiskQueries, TradeQueries
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--trade-id", type=int, required=True)
@@ -153,14 +185,13 @@ async def main() -> None:
         while d <= dt.datetime.now(ET).date():
             transactions.extend(await schwab.get_transactions_for_day(d))
             d += dt.timedelta(days=1)
-        quote = (await schwab._retry(
-            schwab.client.get_quotes, ["$SPX"], endpoint="operator_settle"
-        )).json()["$SPX"]["quote"]
-        # closePrice is the prior close until the session ends; after it, lastPrice is today's.
-        spx_close = float(quote.get("lastPrice") or quote.get("closePrice"))
+        spx_close = spx_session_close(
+            await schwab.get_intraday_bars_for_day("$SPX", day, include_extended_hours=False),
+            day,
+        )
         print("trade", {k: row[k] for k in ("id", "status", "trade_date", "direction",
               "lower_strike", "center_strike", "upper_strike", "entry_price", "quantity")})
-        print("SPX", {k: quote.get(k) for k in ("lastPrice", "closePrice", "tradeTime")})
+        print("SPX session close", spx_close)
 
         value, pnl, meta = plan_settlement(row, transactions, spx_close)
         meta = {"exit_ladder_steps": [], "exit_signal_reason": "cash_settled",
@@ -172,11 +203,7 @@ async def main() -> None:
         if not args.apply:
             print("dry run; pass --apply to write")
             return
-        if not await TradeQueries(db).close_trade(*close_args, metadata=meta):
-            raise SettleRefusedError("NOT APPLIED: the row is no longer OPEN")
-        risk = RiskQueries(db)
-        await risk.get_or_create(day, row["underlying"])
-        await risk.update_pnl(day, meta["net_pnl_dollars"], row["underlying"])
+        await apply_settlement(db, close_args, meta, day, row["underlying"])
         print("APPLIED: trade closed and daily_risk_state realized_pnl updated")
     finally:
         await schwab.close()

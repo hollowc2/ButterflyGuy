@@ -72,3 +72,40 @@ def test_refuses_opening_legs_that_are_not_the_fly():
     wrong = tx("OPENING", [(LOWER, 1.0, 8.0), (CENTER, -1.0, 3.5), (UPPER, 1.0, 2.75)], -100.0)
     with pytest.raises(SettleRefusedError, match="do not match"):
         plan_settlement(trade_100000(), [wrong], spx_close=7176.0)
+
+
+def test_refuses_a_trade_that_is_not_spx():
+    with pytest.raises(SettleRefusedError, match="only settles SPX"):
+        plan_settlement(trade_100000(underlying="XSP"), [OPENING], spx_close=7176.0)
+
+
+def test_an_operator_settlement_before_schwab_posts_stays_provisional():
+    # The next live startup's true-up then replaces it with Schwab's posting.
+    _, _, worthless = plan_settlement(trade_100000(), [OPENING], spx_close=7176.0)
+    closing = tx(
+        "CLOSING", [(LOWER, -1.0, 15.0), (CENTER, 2.0, 0.0), (UPPER, -1.0, 0.0)], 1500.0,
+        time="2026-11-20T06:00:00+0000",
+    )
+    _, _, posted = plan_settlement(trade_100000(), [OPENING, closing], spx_close=7450.0)
+
+    assert worthless["settlement_provisional"] is True
+    assert "settlement_provisional" not in posted
+
+
+def _bar(hour, minute, close):
+    ts = dt.datetime(2026, 11, 19, hour, minute, tzinfo=TOOL["ET"])
+    return {"datetime": ts.timestamp() * 1000, "close": close}
+
+
+@pytest.mark.parametrize(
+    ("bars", "close"),
+    [
+        ([], None),
+        ([_bar(15, 58, 7176.0)], None),  # not the final minute
+        ([_bar(15, 58, 7170.0), _bar(15, 59, 7176.0)], 7176.0),
+        ([_bar(15, 59, 7176.0), _bar(16, 5, 7180.0)], 7176.0),  # after-hours bar ignored
+    ],
+    ids=["no-bars", "last-bar-1558", "final-bar", "after-hours-ignored"],
+)
+def test_spx_close_comes_only_from_the_final_session_bar(bars, close):
+    assert TOOL["spx_session_close"](bars, dt.date(2026, 11, 19)) == close
