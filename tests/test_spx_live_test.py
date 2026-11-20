@@ -1,14 +1,22 @@
 """Dated live pilot cannot open outside its session or lose audit evidence silently."""
 
 import datetime as dt
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from asyncpg.exceptions import UniqueViolationError
 
 from butterfly_guy.core.config import AppConfig, ExecutionSettings
 from butterfly_guy.db.queries import OrderIntentQueries
+from butterfly_guy.execution.order_manager import AmbiguousOrderError, LiveSpread
 from butterfly_guy.services.trade_service import TradeService
-from tests.test_order_manager import make_candidate, make_order_manager, make_settings
+from tests.test_order_manager import (
+    broker_fill,
+    make_candidate,
+    make_order_manager,
+    make_settings,
+)
 
 DAY = dt.date(2026, 10, 29)
 
@@ -87,6 +95,146 @@ async def test_observation_contains_leg_quotes_and_local_timing():
     assert args[1]["limit_price"] == 3
     assert len(args[1]["quote"]["legs"]) == 3
     assert args[1]["quote"]["requested_at"] <= args[1]["quote"]["received_at"]
+
+
+class _IntentStore:
+    """broker_order_intents as the DB holds them, with both active-intent indexes.
+
+    *fail_phases* are observation phases whose write fails. *lose_ack* commits the
+    intent row and then raises, as a connection lost before the INSERT's reply would.
+    """
+
+    def __init__(self, fail_phases=(), lose_ack=False):
+        self.rows: dict[int, dict] = {}
+        self.fail_phases = set(fail_phases)
+        self.lose_ack = lose_ack
+        self.snapshot_at_submit = None
+
+    def active(self):
+        final = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+        return [row for row in self.rows.values() if row["status"] not in final]
+
+    async def create_intent(self, *, side, candidate_snapshot, trade_id=None, **_):
+        phases = {o["phase"] for o in candidate_snapshot.get("execution_observations", [])}
+        if phases & self.fail_phases:
+            raise ConnectionError("db unavailable")  # one statement: nothing committed
+        if any(
+            row["side"] == side and (side == "ENTRY" or row["trade_id"] == trade_id)
+            for row in self.active()
+        ):
+            raise UniqueViolationError("duplicate key value violates unique constraint")
+        intent_id = len(self.rows) + 1
+        self.rows[intent_id] = {
+            "side": side, "trade_id": trade_id, "status": "SUBMITTING",
+            "snapshot": json.loads(json.dumps(candidate_snapshot)),
+        }
+        if self.lose_ack:
+            raise ConnectionError("connection lost")
+        return intent_id
+
+    async def active_broker_order_ids(self, underlying, trade_date, *, exclude_intent_id=None):
+        return {row["broker_order_id"] for row in self.active() if row.get("broker_order_id")}
+
+    async def append_execution_observation(self, intent_id, observation):
+        if observation["phase"] in self.fail_phases:
+            raise ConnectionError("db unavailable")
+        self.rows[intent_id]["snapshot"].setdefault("execution_observations", []).append(
+            observation
+        )
+
+    async def mark_broker_order_id(self, intent_id, broker_order_id):
+        self.rows[intent_id].update(status="SUBMITTED", broker_order_id=broker_order_id)
+
+    async def update_broker_status(self, intent_id, status, payload=None):
+        self.rows[intent_id]["status"] = status
+
+    async def mark_unknown(self, intent_id, error):
+        self.rows[intent_id]["status"] = "UNKNOWN_ABORTED"
+
+
+SPREAD = LiveSpread(bid=1.85, mark=1.97, ask=2.10)
+
+
+def _recording_manager(store):
+    om, schwab = make_order_manager(make_settings(record_live_execution=True))
+    om.intent_queries = store
+    om._fetch_live_spread = AsyncMock(return_value=SPREAD)
+    return om, schwab
+
+
+async def _submit(om, side):
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    if side == "entry":
+        return await om.execute_single_attempt(candidate, limit_price=2.50)
+    return await om.execute_exit(candidate, current_value=2.50, trade_id=7)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("side", ["entry", "exit"])
+async def test_failed_before_submit_evidence_leaves_no_intent_and_sends_no_order(side):
+    store = _IntentStore(fail_phases={"before_submit"})
+    om, schwab = _recording_manager(store)
+
+    for _ in range(2):  # the retry is a fresh attempt, not a conflict with an orphan
+        with pytest.raises(ConnectionError, match="db unavailable"):
+            await _submit(om, side)
+
+    schwab.place_order.assert_not_awaited()
+    assert store.active() == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("side", ["entry", "exit"])
+async def test_before_submit_evidence_is_durable_before_the_order_is_sent(side):
+    store = _IntentStore()
+    om, schwab = _recording_manager(store)
+
+    async def place(_spec):
+        (row,) = store.rows.values()
+        store.snapshot_at_submit = json.loads(json.dumps(row["snapshot"]))
+        return "ORD1"
+
+    schwab.place_order = AsyncMock(side_effect=place)
+    with patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
+        assert await _submit(om, side) is not None
+
+    build = om.builder.build_butterfly_open if side == "entry" else om.builder.build_butterfly_close
+    (first, *_) = store.snapshot_at_submit["execution_observations"]
+    assert first["phase"] == "before_submit"
+    assert first["limit_price"] == build.call_args.args[1]
+    assert [o["phase"] for o in store.rows[1]["snapshot"]["execution_observations"]] == [
+        "before_submit", "broker_acknowledged", "fill_detected",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("side", ["entry", "exit"])
+async def test_a_lost_intent_insert_reply_never_reaches_the_broker(side):
+    # The INSERT may have committed: no order now, and the next attempt meets the index.
+    store = _IntentStore(lose_ack=True)
+    om, schwab = _recording_manager(store)
+
+    with pytest.raises(ConnectionError, match="connection lost"):
+        await _submit(om, side)
+    with pytest.raises(UniqueViolationError if side == "entry" else AmbiguousOrderError):
+        await _submit(om, side)
+
+    schwab.place_order.assert_not_awaited()
+    assert [row["status"] for row in store.active()] == ["SUBMITTING"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("side", ["entry", "exit"])
+async def test_failed_evidence_after_submit_keeps_the_fill_without_resubmitting(side):
+    store = _IntentStore(fail_phases={"broker_acknowledged", "fill_detected"})
+    om, schwab = _recording_manager(store)
+
+    with patch.object(om, "_wait_for_fill", new=AsyncMock(return_value=broker_fill())):
+        result = await _submit(om, side)
+
+    assert result["order_id"] == "ORD1"
+    schwab.place_order.assert_awaited_once()
+    assert len(store.rows) == 1
 
 
 @pytest.mark.asyncio

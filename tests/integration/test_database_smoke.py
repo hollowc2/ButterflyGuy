@@ -1,6 +1,7 @@
 """Real TimescaleDB smoke test for migrations and critical risk and intent reads."""
 
 import datetime as dt
+import json
 import os
 import uuid
 
@@ -105,6 +106,48 @@ async def test_startup_exit_intent_read_spans_dates_for_open_trades_only():
         assert await queries.active_exit_intents_for_trades("SPX", []) == []
         # The date-scoped read keeps its meaning.
         assert [row["id"] for row in await queries.intents_for_day("SPX", today)] == [same_day]
+    finally:
+        await db.close()
+        await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_intent_insert_carries_its_before_submit_evidence_atomically():
+    dsn = os.getenv("CI_DATABASE_URL")
+    if not dsn:
+        pytest.skip("CI_DATABASE_URL is only set by the real-DB workflow")
+
+    name = f"intents_{uuid.uuid4().hex[:8]}"
+    admin = await asyncpg.connect(dsn)
+    await admin.execute(f'CREATE DATABASE "{name}"')
+    db = DatabasePool(spx_live_db.dsn_for(_settings(dsn), name), min_size=1, max_size=2)
+    try:
+        await db.initialize()
+        await run_migrations(db)
+        queries = OrderIntentQueries(db)
+        today = dt.date(2026, 11, 19)
+        intent = dict(
+            underlying="SPX", trade_date=today, side="ENTRY", limit_price=3.75, quantity=1,
+            order_spec={}, candidate_snapshot={
+                "center_strike": 7475, "execution_observations": [{"phase": "before_submit"}],
+            },
+        )
+        intent_id = await queries.create_intent(**intent)
+        await queries.append_execution_observation(intent_id, {"phase": "broker_acknowledged"})
+        phases = await db.pool.fetchval(
+            "SELECT jsonb_path_query_array(candidate_snapshot, '$.execution_observations[*].phase')"
+            " FROM broker_order_intents WHERE id = $1",
+            intent_id,
+        )
+        assert json.loads(phases) == ["before_submit", "broker_acknowledged"]
+
+        # A failed INSERT commits nothing: no second active intent and no evidence row.
+        with pytest.raises(asyncpg.exceptions.UniqueViolationError):
+            await queries.create_intent(**intent)
+        with pytest.raises(asyncpg.exceptions.ForeignKeyViolationError):
+            await queries.create_intent(**{**intent, "side": "EXIT", "trade_id": 999_999})
+        assert await db.pool.fetchval("SELECT count(*) FROM broker_order_intents") == 1
     finally:
         await db.close()
         await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')

@@ -412,6 +412,31 @@ class OrderManager:
             log.warning("live_spread_fetch_failed", error=str(e))
             return None
 
+    def _execution_observation(
+        self, phase: str, limit_price: float | None = None
+    ) -> dict[str, object]:
+        return {
+            "phase": phase, "observed_at": now_utc().isoformat(),
+            "limit_price": limit_price, "quote": self._spread_observation,
+            "paper_commission_per_contract": self.settings.paper_commission_per_contract,
+            "paper_slippage_per_spread": self.settings.paper_slippage_per_spread,
+            "quote_available": self._spread_observation is not None,
+            "timing_note": "local observation; fill-detected quotes follow broker execution",
+        }
+
+    def _with_before_submit_evidence(
+        self, snapshot: dict[str, object], limit_price: float
+    ) -> dict[str, object]:
+        """Put the mandatory before-submit evidence in the intent's own INSERT.
+
+        One statement: if it fails, no SUBMITTING intent is left holding its index.
+        """
+        if self.settings.record_live_execution and not self.settings.paper_trading:
+            snapshot["execution_observations"] = [
+                self._execution_observation("before_submit", limit_price)
+            ]
+        return snapshot
+
     async def _record_execution_quote(
         self, candidate: ButterflyCandidate, intent_id: int | None,
         phase: str, *, refresh: bool = False, limit_price: float | None = None,
@@ -423,14 +448,7 @@ class OrderManager:
                 await asyncio.wait_for(self._fetch_live_spread(candidate), timeout=3)
             except Exception:
                 self._spread_observation = None
-        observation = {
-            "phase": phase, "observed_at": now_utc().isoformat(),
-            "limit_price": limit_price, "quote": self._spread_observation,
-            "paper_commission_per_contract": self.settings.paper_commission_per_contract,
-            "paper_slippage_per_spread": self.settings.paper_slippage_per_spread,
-            "quote_available": self._spread_observation is not None,
-            "timing_note": "local observation; fill-detected quotes follow broker execution",
-        }
+        observation = self._execution_observation(phase, limit_price)
         try:
             if intent_id is None or self.intent_queries is None:
                 raise RuntimeError("execution recording requires durable order intents")
@@ -719,14 +737,17 @@ class OrderManager:
                     limit_price=limit_price,
                     quantity=quantity,
                     order_spec=order_spec,
-                    candidate_snapshot=self._candidate_snapshot(candidate),
+                    candidate_snapshot=self._with_before_submit_evidence(
+                        self._candidate_snapshot(candidate), limit_price
+                    ),
                 )
             except UniqueViolationError:
                 log.error("entry_blocked_active_intent", underlying=self.underlying)
                 raise
-        await self._record_execution_quote(
-            candidate, intent_id, "before_submit", limit_price=limit_price
-        )
+        else:
+            await self._record_execution_quote(
+                candidate, intent_id, "before_submit", limit_price=limit_price
+            )
         orders_placed.labels(underlying=self.underlying, order_type="entry").inc()
         start_time = now_utc()
 
@@ -892,15 +913,18 @@ class OrderManager:
                             limit_price=limit_price,
                             quantity=quantity,
                             order_spec=order_spec,
-                            candidate_snapshot=snapshot,
+                            candidate_snapshot=self._with_before_submit_evidence(
+                                snapshot, limit_price
+                            ),
                         )
                     except UniqueViolationError as e:
                         raise AmbiguousOrderError(
                             "an active exit intent already exists for this trade"
                         ) from e
-                await self._record_execution_quote(
-                    candidate, intent_id, "before_submit", limit_price=limit_price
-                )
+                else:
+                    await self._record_execution_quote(
+                        candidate, intent_id, "before_submit", limit_price=limit_price
+                    )
                 orders_placed.labels(underlying=self.underlying, order_type="exit").inc()
                 start_time = now_utc()
 
