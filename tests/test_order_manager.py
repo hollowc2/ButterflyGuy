@@ -24,6 +24,7 @@ from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
     EntryOrderReplacedError,
+    IntentPersistenceError,
     LiveSpread,
     OperatorExitTakeoverError,
     OrderManager,
@@ -699,17 +700,54 @@ async def test_exit_ladder_stops_after_4xx_submit_rejection():
     om.intent_queries.mark_unknown.assert_not_called()
 
 
+async def _rejected_submit(om, side):
+    candidate = make_candidate(5900, 5950, 6000, 2.50)
+    if side == "entry":
+        return await om.execute_single_attempt(candidate, 2.50)
+    with patch.object(om, "_fetch_live_spread", new=AsyncMock(return_value=None)):
+        return await om.execute_exit(candidate, current_value=3.00, trade_id=7)
+
+
 @pytest.mark.asyncio
-async def test_rejection_is_still_terminal_when_recording_it_fails():
-    settings = make_settings(paper_trading=False, retry_interval_seconds=0)
-    om, schwab = make_order_manager(settings)
+@pytest.mark.parametrize("side", ["entry", "exit"])
+async def test_recorded_rejection_stops_the_ladder_as_terminal(side):
+    om, schwab = make_order_manager(make_settings(price_ladder_steps=2))
     om.intent_queries = AsyncMock()
     om.intent_queries.create_intent.return_value = 42
-    om.intent_queries.update_broker_status.side_effect = RuntimeError("db down")
-    schwab.place_order = AsyncMock(side_effect=OrderRejectedError(403, "forbidden"))
+    schwab.place_order = AsyncMock(side_effect=OrderRejectedError(400, "bad price"))
 
-    with pytest.raises(TerminalOrderError):
-        await om.execute_single_attempt(make_candidate(5900, 5950, 6000, 2.50), 2.50)
+    with pytest.raises(TerminalOrderError, match="REJECTED"):
+        await _rejected_submit(om, side)
+
+    om.intent_queries.update_broker_status.assert_awaited_once_with(
+        42, "REJECTED", {"http_status": 400, "error": "bad price"}
+    )
+    schwab.place_order.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("side", ["entry", "exit"])
+@pytest.mark.parametrize("db_error", [RuntimeError("db down"), ConnectionError("reset")])
+async def test_unrecorded_rejection_halts_as_unsafe_intent_state(side, db_error):
+    # Schwab refused it, but the intent still says SUBMITTING and holds its index.
+    om, schwab = make_order_manager(make_settings(price_ladder_steps=2))
+    om.intent_queries = AsyncMock()
+    om.intent_queries.create_intent.return_value = 42
+    om.intent_queries.update_broker_status.side_effect = db_error
+    om.intent_queries.mark_unknown.side_effect = RuntimeError("must not be called")
+    rejection = OrderRejectedError(403, "forbidden for account 1234-5678")
+    schwab.place_order = AsyncMock(side_effect=rejection)
+
+    with pytest.raises(IntentPersistenceError) as caught:
+        await _rejected_submit(om, side)
+
+    error = caught.value
+    assert not isinstance(error, (TerminalOrderError, AmbiguousOrderError))
+    assert error.__cause__ is db_error and error.__cause__.__context__ is rejection
+    assert "rejected at submit (HTTP 403)" in str(error) and "1234" not in str(error)
+    om.intent_queries.create_intent.assert_awaited_once()
+    schwab.place_order.assert_awaited_once()
+    om.intent_queries.mark_unknown.assert_not_awaited()
 
 
 @pytest.mark.asyncio

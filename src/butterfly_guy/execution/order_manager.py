@@ -140,6 +140,10 @@ class EntryOrderReplacedError(RuntimeError):
     """The operator replaced the bot's entry order in Schwab; automated entries stop."""
 
 
+class IntentPersistenceError(RuntimeError):
+    """A known broker outcome could not be recorded; its intent stays active."""
+
+
 class BrokerFill(NamedTuple):
     order_id: str
     net_fill_price: float
@@ -540,7 +544,10 @@ class OrderManager:
     async def _submit_rejected(
         self, intent_id: int | None, error: OrderRejectedError, side: str
     ) -> TerminalOrderError:
-        """Record a definitive submit rejection and return the ladder-stopping error."""
+        """Record a definitive submit rejection and return the ladder-stopping error.
+
+        Unrecorded, the intent stays active and holds its index, so that raises instead.
+        """
         log.error(
             f"{side}_order_rejected_at_submit",
             http_status=error.status_code,
@@ -555,6 +562,10 @@ class OrderManager:
                 )
             except Exception as db_error:
                 log.error("intent_reject_record_failed", error=str(db_error))
+                raise IntentPersistenceError(
+                    f"{side} order was rejected at submit (HTTP {error.status_code}), but "
+                    "its intent could not be recorded REJECTED; reconcile the intent"
+                ) from db_error
         return TerminalOrderError("REJECTED", "not-placed")
 
     async def _mark_intent_unknown(self, intent_id: int | None, error: str) -> None:

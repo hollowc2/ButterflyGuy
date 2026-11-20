@@ -29,6 +29,7 @@ from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
     EntryOrderReplacedError,
+    IntentPersistenceError,
     TerminalOrderError,
 )
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
@@ -977,14 +978,20 @@ async def test_runtime_leaves_an_in_flight_entry_intent_to_its_attempt():
 
 
 @pytest.mark.asyncio
-async def test_live_entry_loop_halts_when_the_operator_replaced_the_entry(monkeypatch):
+@pytest.mark.parametrize(
+    "error",
+    [
+        EntryOrderReplacedError("operator replaced bot entry order"),
+        IntentPersistenceError("entry order was rejected at submit (HTTP 400), but ..."),
+    ],
+    ids=["replaced", "unrecorded-rejection"],
+)
+async def test_live_entry_loop_halts_on_entry_intent_safety_errors(monkeypatch, error):
     trade_service = Mock(
         config=Mock(strategy=Mock(underlying="SPX")),
         decision_queries=Mock(log_event=AsyncMock()),
     )
-    trade_service.attempt_entry = AsyncMock(
-        side_effect=EntryOrderReplacedError("operator replaced bot entry order")
-    )
+    trade_service.attempt_entry = AsyncMock(side_effect=error)
     position_service = Mock()
     position_service.config.execution.paper_trading = False
     monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
@@ -995,8 +1002,10 @@ async def test_live_entry_loop_halts_when_the_operator_replaced_the_entry(monkey
     monkeypatch.setattr(asyncio, "sleep", no_second_attempt)
     critical_notifier = Mock(notify_critical=AsyncMock())
     set_readiness(None)
-    with pytest.raises(LiveTradingHaltedError, match="entry stopped: operator replaced"):
+    with pytest.raises(LiveTradingHaltedError, match="entry stopped: ") as caught:
         await entry_loop(trade_service, position_service, critical_notifier=critical_notifier)
+
+    assert caught.value.__cause__ is error
 
     trade_service.attempt_entry.assert_awaited_once()
     critical_notifier.notify_critical.assert_awaited_once_with("broker_ambiguity")

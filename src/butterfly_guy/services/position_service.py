@@ -57,6 +57,7 @@ from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFill,
     BrokerFillError,
+    IntentPersistenceError,
     OperatorExitTakeoverError,
     OrderManager,
     PartialFillError,
@@ -1024,6 +1025,7 @@ class PositionService:
             except (
                 AmbiguousOrderError,
                 BrokerFillError,
+                IntentPersistenceError,
                 PartialFillError,
                 TerminalOrderError,
             ):

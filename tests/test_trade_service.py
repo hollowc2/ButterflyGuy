@@ -14,6 +14,7 @@ from butterfly_guy.data.schemas import OptionQuote
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     EntryOrderReplacedError,
+    IntentPersistenceError,
     TerminalOrderError,
 )
 from butterfly_guy.services.trade_service import (
@@ -278,8 +279,9 @@ async def test_attempt_entry_does_not_restart_after_terminal_rejection():
     [
         TerminalOrderError("REJECTED", "not-placed"),
         EntryOrderReplacedError("operator replaced bot entry order"),
+        IntentPersistenceError("rejected at submit, not recorded"),
     ],
-    ids=["rejected", "replaced"],
+    ids=["rejected", "replaced", "unrecorded-rejection"],
 )
 async def test_live_entry_safety_error_releases_the_lock_without_another_step(error):
     config = AppConfig(

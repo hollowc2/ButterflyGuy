@@ -1071,6 +1071,51 @@ async def test_true_up_leaves_a_row_provisional_until_schwab_posts():
 
 
 @pytest.mark.asyncio
+async def test_unrecorded_exit_rejection_after_the_close_halts_instead_of_settling() -> None:
+    # Unlike a recorded rejection, its intent still holds the exit index: reconcile first.
+    set_readiness(None)
+    service = _settling_service([OPENING_100000], 7176.0)
+    service.schwab.get_option_chain.return_value = {}
+    service.order_manager = AsyncMock()
+    error = order_manager_module.IntentPersistenceError(
+        "exit order was rejected at submit (HTTP 400), but its intent could not be recorded"
+    )
+    service.order_manager.execute_exit.side_effect = error
+    service.trade_queries.merge_metadata = AsyncMock()
+    service.monitoring_leg_queries = None
+    service.tent_queries = MagicMock(insert=AsyncMock())
+    pos_state = MagicMock(
+        peak_update_rejected=False, peak_value=4.93, current_value=1.0,
+        drawdown_from_peak=0.8, time_regime="afternoon", entry_price=3.75,
+    )
+    service.position_manager.update_position_value.return_value = pos_state
+    service.state_machine.state.name = "LOSS"
+    service.state_machine.evaluate.return_value = MagicMock(
+        reason="drawdown_afternoon", urgency="high"
+    )
+    service._extract_quotes = MagicMock(return_value=[])
+    service._manual_close_fill = AsyncMock(return_value=(None, None, False))
+    trade = _live_fly_trade()
+    market_open = iter([True])
+
+    with patch(
+        "butterfly_guy.services.position_service.is_market_open",
+        side_effect=lambda *a: next(market_open, False),
+    ), patch(
+        "butterfly_guy.services.position_service.session_date",
+        return_value=trade.trade_date,
+    ), patch("butterfly_guy.services.position_service.get_0dte_expiration"), \
+         pytest.raises(order_manager_module.IntentPersistenceError) as caught:
+        await service.monitor_loop(trade, _live_fly_candidate())
+
+    assert caught.value is error
+    service.order_manager.execute_exit.assert_awaited_once()
+    service.trade_queries.close_trade.assert_not_awaited()
+    assert readiness_snapshot() == (False, "broker_order_state_unsafe")
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
 async def test_exit_rejected_after_the_close_settles_instead_of_halting() -> None:
     set_readiness(None)
     service = _settling_service([OPENING_100000], 7176.0)
