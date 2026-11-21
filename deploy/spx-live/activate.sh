@@ -27,6 +27,9 @@ token_match "$PAPER_C" || abort "token file differs between host and paper conta
 broker_flat || abort "broker flat/auth check failed"
 db_tool check "${CHECK_ARGS[@]}" || abort "$LIVE_DB gate failed (schema, flatness or paper rows)"
 act db_tool seed-daily-bars || abort "daily bar top-up failed"
+# The rollback below needs halt-entries; an older image would make it fail mid-session.
+db_tool halt-entries --date "$DATE" --help >/dev/null \
+  || abort "live image $CAND lacks spx_live_db halt-entries"
 
 echo "$(ts) gates passed; starting $LIVE_C"
 act touch "$D/ACTIVATED"
@@ -46,24 +49,28 @@ echo "$(ts) verify fail=${fail:-none}"
 container_env "$LIVE_C" | grep -E '^(BUTTERFLY_INSTANCE_ROLE|DATABASE__NAME|EXECUTION__|RISK__|LIVE_ACCOUNT|LIVE_MAX)'
 
 if [ -n "$fail" ]; then
-  # The bot ran with orders enabled for WAIT_SECONDS and may already hold a fly. Block new
-  # entries first (the risk gate's halted flag; exits are unaffected), then stop it only
-  # if the broker and the live DB are flat. Not flat, or unknown: it keeps managing the
-  # fly, and VERIFY_FAILED keeps health.sh watching it.
-  if db_tool halt-entries --date "$DATE"; then
-    entries="new entries halted"
-  else
-    entries="entry halt FAILED, new entries may still be enabled"
-  fi
-  if broker_flat --ignore-expired && db_tool check "${CHECK_ARGS[@]}"; then
+  # The bot ran with orders enabled for WAIT_SECONDS and may hold a fly or be mid-entry.
+  # VERIFY_FAILED first, so health.sh watches every outcome below except a confirmed stop.
+  act touch "$D/VERIFY_FAILED"
+  # Halt new entries (the risk gate's halted flag; exits are unaffected) and drain any
+  # entry already admitted. Stop only once that is proven and the broker and the live DB
+  # are flat, checked after the drain. Anything uncertain keeps the bot managing.
+  db_tool halt-entries --date "$DATE"
+  halt_rc=$?
+  case "$halt_rc" in
+    0) entries="new entries halted" ;;
+    3) entries="new entries halted, but an admitted entry did not finish; it may be filling" ;;
+    *) entries="entry halt FAILED, new entries may still be ENABLED"
+       act touch "$D/ENTRY_HALT_FAILED" ;;
+  esac
+  if [ "$halt_rc" = 0 ] && broker_flat --ignore-expired && db_tool check "${CHECK_ARGS[@]}"; then
     if stop_live; then
       notify "🛑 $LABEL $DATE failed verification ($fail). Live container stopped; paper untouched. Log: $D/activation.log"
     else
       notify "🚨 $LABEL $DATE failed verification ($fail) AND the live container did not stop ($entries). Check Helios now: $D/activation.log"
     fi
   else
-    act touch "$D/VERIFY_FAILED"
-    notify "🚨 $LABEL $DATE failed verification ($fail), but the broker or $LIVE_DB is not flat or could not be checked, so the live container was LEFT RUNNING to manage the position; $entries. Check ToS and Helios now; stop it once flat with $D/stop-live.sh. Log: $D/activation.log"
+    notify "🚨 $LABEL $DATE failed verification ($fail), and it could not be shown flat with entries drained, so the live container was LEFT RUNNING to manage any position; $entries. Check ToS and Helios now; stop it once flat with $D/stop-live.sh. Log: $D/activation.log"
   fi
   exit 1
 fi

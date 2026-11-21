@@ -7,6 +7,30 @@
 - **Read first:** `AGENTS.md` (authoritative), then `deploy/spx-live/README.md` and
   `docs/operations/concurrent-paper-live-spx-design.md` for the session scripts.
 
+## Round 2: Codex review of `d81f887` (hold for three P1s), addressed
+
+Sections below "Why this PR exists" describe round 1; where round 2 changed the behavior,
+this section wins. Review the round-2 diff with `git diff d81f887 -- src deploy tests`.
+
+| Codex finding | Change |
+|---|---|
+| P1 activation rollback did not drain admitted entries; `check` missed a FILLED entry with no trade row | `halt_entries` (`spx_live_db.py`) commits the halt, then takes the session's entry advisory lock (`pg_advisory_lock` with `lock_timeout` 120 s, key from the new shared `db.queries.entry_lock_key`) and releases it. A live entry re-checks `can_trade` while holding that lock and keeps it until its fill is saved, so this drains an admitted attempt; every later attempt sees the halt, so exclusion holds until the stop without keeping the lock. Exit code 3 = halted but not drained. `check` now also counts `unlinked_filled_spx_entries` (FILLED ENTRY intents with no `trade_id`). In `activate.sh`, flatness is read after the drain, and live is stopped only if halt and drain both succeeded and broker and DB are flat. |
+| P1 unlock failure masked the persistence halt | New `TradeService._release_entry_lock_quietly`, used on every path after a broker order was sent: the order-error `except`, the persistence `except` (so `AmbiguousOrderError` always propagates), and the post-fill path. |
+| P1 failed activation plus failed stop left health off | `VERIFY_FAILED` is written first in the failure branch; `STOPPED` still only after a confirmed stop. |
+| P2 unsaved ownership had no persistent escalation | `_persist_operator_exit` failure sets readiness `operator_exit_unpersisted` and repeats a CRITICAL Telegram and Discord alert every `OPERATOR_EXIT_ALERT_REPEAT_SECONDS` (300) until saved; on success it clears readiness and posts OK. Exits stay suppressed in memory; nothing restarts the manager. |
+| P2 second cancel bypassed monitor drainage | `run_live._drain_monitor`: cancels the monitor, loops `asyncio.wait` while swallowing further cancels, then re-raises `CancelledError` once the monitor is done. |
+| P2 detached position tasks unjoined | `PositionService.stop_background_tasks()` cancels and joins `_background_tasks` and `_post_exit_task`; `main()` calls it before `_close_runtime_resources`. |
+| Judgment call (finding 2) | Preflight gate: activation aborts before `compose up` unless `spx_live_db halt-entries --help` succeeds in `$CAND`. A failed halt now never stops on "flat" alone (no drain = flatness uncertain): live stays up, `ENTRY_HALT_FAILED` is written, and `health.sh` reports "live entries may still be ENABLED" and repeats it every `ALERT_REPEAT_MIN` until someone stops live or halts entries and removes the marker. |
+
+Round-2 decisions worth a second look:
+- Paper-mode rehearsals take no entry lock, so the drain is a no-op there (paper only).
+- A failed halt plus a flat-looking bot is kept running, not stopped. That follows the
+  "keep the manager when uncertain" verdict over stopping a misconfigured bot, and relies
+  on the repeating alert. Say so if you would rather stop.
+- `_release_entry_lock_quietly` can leak a pooled connection if `pool.release` itself
+  fails. A halted bot exits; after a saved fill the leaked lock only blocks that
+  session's next entry (max one trade a day).
+
 ## Why this PR exists
 
 A read-only review of the concurrent paper/live SPX feature on 2026-11-20 found six missing

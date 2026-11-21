@@ -6,6 +6,7 @@ import asyncio
 import datetime as dt
 import json
 import math
+import time
 from collections.abc import Awaitable
 from time import monotonic
 from typing import Any, NamedTuple
@@ -97,6 +98,8 @@ MARKET_DATA_RECOVERY_HOLD_SECONDS = 120.0
 TELEMETRY_FAILURE_THRESHOLD = 5
 # Live: poll the broker for an operator's Schwab close every N monitor polls.
 MANUAL_CLOSE_CHECK_POLLS = 5
+# Repeat the alert while an operator exit handoff is not yet saved on its trade.
+OPERATOR_EXIT_ALERT_REPEAT_SECONDS = 300.0
 ACTIVE_ORDER_STATUSES = (
     WORKING_ORDER_STATUSES | PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
 )
@@ -1544,7 +1547,11 @@ class PositionService:
         log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason="manual_close")
 
     async def _persist_operator_exit(self, trade: TradeRecord, reason: str) -> bool:
-        """Record on the trade row that the operator owns its exit; never raises."""
+        """Record on the trade row that the operator owns its exit; never raises.
+
+        Until it is saved, a restart would resume bot exits: readiness stays degraded and
+        the alert repeats on Telegram and Discord. Exits stay suppressed in memory.
+        """
         try:
             await self.trade_queries.merge_metadata(
                 trade.trade_id,
@@ -1554,8 +1561,31 @@ class PositionService:
             log.error(
                 "operator_exit_persist_failed", trade_id=trade.trade_id, error=str(error)
             )
+            set_readiness("operator_exit_unpersisted")
+            last = getattr(self, "_operator_exit_alerted_at", None)
+            now = time.monotonic()
+            if last is None or now - last >= OPERATOR_EXIT_ALERT_REPEAT_SECONDS:
+                self._operator_exit_alerted_at = now
+                text = (
+                    f"CRITICAL: trade {trade.trade_id}: your exit handoff could not be "
+                    "saved (DB write failing, retrying). The bot sends no exit orders now, "
+                    "but if it restarts before the handoff saves it WILL resume bot exits. "
+                    "Do not restart it; check the live DB."
+                )
+                await self._best_effort("operator_exit_unpersisted_telegram", notify_telegram(text))
+                if self.notifier:
+                    await self._best_effort(
+                        "operator_exit_unpersisted_notify", self.notifier.notify_text(text)
+                    )
             return False
         trade.operator_exit = True
+        if getattr(self, "_operator_exit_alerted_at", None) is not None:
+            self._operator_exit_alerted_at = None
+            clear_readiness("operator_exit_unpersisted")
+            await self._best_effort(
+                "operator_exit_saved_telegram",
+                notify_telegram(f"OK: trade {trade.trade_id}: exit handoff saved."),
+            )
         return True
 
     async def _announce_operator_exit(self, trade: TradeRecord, reason: str) -> bool:
@@ -1840,6 +1870,18 @@ class PositionService:
                 trade_id=trade.trade_id,
                 error=str(e),
             )
+
+    async def stop_background_tasks(self) -> None:
+        """Cancel and join detached position work (pending-exit metadata writes, post-exit
+        leg recording) before the runtime closes the DB and market-data clients."""
+        tasks = [*getattr(self, "_background_tasks", ())]
+        post_exit = getattr(self, "_post_exit_task", None)
+        if post_exit is not None:
+            tasks.append(post_exit)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def _start_post_exit_recording(
         self, trade: TradeRecord, candidate: ButterflyCandidate, poll_interval: float,

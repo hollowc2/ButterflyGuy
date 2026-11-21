@@ -1,5 +1,6 @@
 """Real TimescaleDB test of the live SPX database bootstrap, seed and gate."""
 
+import asyncio
 import datetime as dt
 import json
 import os
@@ -112,6 +113,7 @@ async def test_bootstrap_seed_and_check_on_real_scratch_databases():
             "schema_at_head": True,
             "open_spx_trades": 0,
             "nonterminal_spx_intents": 0,
+            "unlinked_filled_spx_entries": 0,
             "paper_trades": 0,
             "ok": True,
         }
@@ -258,3 +260,86 @@ async def test_halt_entries_refuses_the_paper_database(capsys, monkeypatch):
     )
     assert code == 2
     assert "refusing to write" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_halt_entries_drains_an_admitted_entry_before_reporting_ok():
+    """Codex review of #103: an entry admitted under its lock must finish first."""
+    from butterfly_guy.db.queries import entry_lock_key
+
+    dsn = os.getenv("CI_DATABASE_URL")
+    if not dsn:
+        pytest.skip("CI_DATABASE_URL is only set by the real-DB workflow")
+
+    base = _settings(dsn)
+    target = f"butterfly_guy_spx_live_test_{uuid.uuid4().hex[:8]}"
+    admin = await asyncpg.connect(dsn)
+    await admin.execute(f'CREATE DATABASE "{target}"')
+    db = DatabasePool(spx_live_db.dsn_for(base, target), min_size=1, max_size=2)
+    try:
+        await db.initialize()
+        await run_migrations(db)
+        # The bot's admitted attempt: the same session lock TradeService takes.
+        bot = await asyncpg.connect(spx_live_db.dsn_for(base, target))
+        key = entry_lock_key("SPX", DAY)
+        assert await bot.fetchval("SELECT pg_try_advisory_lock(hashtext($1)::bigint)", key)
+        tool = await asyncpg.connect(spx_live_db.dsn_for(base, target))
+        try:
+            # Still in flight past the drain timeout: halted, not drained.
+            stuck = await spx_live_db.halt_entries(tool, DAY, drain_timeout_s=0.3)
+            assert stuck == {
+                "trade_date": DAY, "halted": True, "entries_drained": False, "ok": False,
+            }
+
+            async def finish_entry() -> None:
+                await asyncio.sleep(0.3)
+                await bot.execute("SELECT pg_advisory_unlock(hashtext($1)::bigint)", key)
+
+            finishing = asyncio.create_task(finish_entry())
+            drained = await spx_live_db.halt_entries(tool, DAY, drain_timeout_s=5)
+            await finishing
+            assert drained["ok"] is True and drained["entries_drained"] is True
+            # The tool released the lock again: the bot's next attempt can take it
+            # (and then sees the halt in can_trade).
+            assert await bot.fetchval("SELECT pg_try_advisory_lock(hashtext($1)::bigint)", key)
+        finally:
+            await tool.close()
+            await bot.close()
+    finally:
+        await db.close()
+        await admin.execute(f'DROP DATABASE IF EXISTS "{target}" WITH (FORCE)')
+        await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_check_refuses_a_filled_entry_that_never_got_its_trade_row():
+    """Codex review of #103: open at the broker, flat in the DB."""
+    dsn = os.getenv("CI_DATABASE_URL")
+    if not dsn:
+        pytest.skip("CI_DATABASE_URL is only set by the real-DB workflow")
+
+    base = _settings(dsn)
+    target = f"butterfly_guy_spx_live_test_{uuid.uuid4().hex[:8]}"
+    admin = await asyncpg.connect(dsn)
+    await admin.execute(f'CREATE DATABASE "{target}"')
+    db = DatabasePool(spx_live_db.dsn_for(base, target), min_size=1, max_size=2)
+    try:
+        await db.initialize()
+        await run_migrations(db)
+        conn = await asyncpg.connect(spx_live_db.dsn_for(base, target))
+        try:
+            assert (await spx_live_db.check(conn))["ok"] is True
+            await conn.execute(
+                "INSERT INTO broker_order_intents "
+                "(underlying, trade_date, side, status, broker_order_id) "
+                "VALUES ('SPX', $1, 'ENTRY', 'FILLED', 'b-9')",
+                DAY,
+            )
+            result = await spx_live_db.check(conn)
+            assert result["ok"] is False and result["unlinked_filled_spx_entries"] == 1
+        finally:
+            await conn.close()
+    finally:
+        await db.close()
+        await admin.execute(f'DROP DATABASE IF EXISTS "{target}" WITH (FORCE)')
+        await admin.close()

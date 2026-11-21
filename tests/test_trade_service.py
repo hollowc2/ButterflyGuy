@@ -471,6 +471,43 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure_point", ["trade", "intent", "risk"])
+async def test_unlock_failure_never_masks_the_persistence_halt(failure_point):
+    """Codex review of #103: a failing unlock must not turn the halt into a retry."""
+    f = _filled_live_entry()
+    f.service._release_entry_lock.side_effect = RuntimeError("unlock failed")
+    if failure_point == "trade":
+        f.trade_queries.insert_trade.side_effect = RuntimeError("db unavailable")
+    elif failure_point == "intent":
+        f.order_manager.intent_queries.link_trade.side_effect = RuntimeError("intent")
+    else:
+        f.risk_engine.record_trade.side_effect = RuntimeError("risk unavailable")
+
+    with _patch_filled_entry(f.selection), pytest.raises(
+        AmbiguousOrderError, match="broker fill was not fully persisted"
+    ):
+        await f.service.attempt_entry()
+
+    f.service._release_entry_lock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    [AmbiguousOrderError("order state unknown"), TerminalOrderError("REJECTED", "rejected")],
+)
+async def test_unlock_failure_never_masks_an_order_safety_error(error):
+    f = _filled_live_entry()
+    f.order_manager.execute_single_attempt.side_effect = error
+    f.service._release_entry_lock.side_effect = RuntimeError("unlock failed")
+
+    with _patch_filled_entry(f.selection), pytest.raises(type(error)):
+        await f.service.attempt_entry()
+
+    f.trade_queries.insert_trade.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "failure_point", ["trade_entered", "entry_ladder_trace", "lock_release", "metrics"]
 )

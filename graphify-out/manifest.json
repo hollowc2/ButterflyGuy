@@ -260,9 +260,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/db/queries.py": {
-    "mtime": 1795210757.8883052,
-    "seen": 1795218387.256951,
-    "ast_hash": "2dd72273ccf72203e5d08b4e8ed5f72b",
+    "mtime": 1795239042.0231845,
+    "seen": 1795239469.5239942,
+    "ast_hash": "ec2982fdc3e29ee4e344bf5f2d6e0f4a",
     "semantic_hash": ""
   },
   "src/butterfly_guy/execution/__init__.py": {
@@ -470,9 +470,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1795236192.8492944,
-    "seen": 1795237555.3003247,
-    "ast_hash": "e12287dab87e448910157d1960c30664",
+    "mtime": 1795239164.9089482,
+    "seen": 1795239469.5282097,
+    "ast_hash": "004988eb29eb2a6216bf0e8cde597aef",
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_paper_replay.py": {
@@ -518,9 +518,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/position_service.py": {
-    "mtime": 1795236150.0870864,
-    "seen": 1795237555.3018377,
-    "ast_hash": "3c9be09fb2aca225c37a15b9bf5308f7",
+    "mtime": 1795239164.8429494,
+    "seen": 1795239469.5287173,
+    "ast_hash": "55e6faa6bc9f6990d9358b05168443b6",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/trade_chart.py": {
@@ -530,9 +530,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/trade_service.py": {
-    "mtime": 1795236239.0084362,
-    "seen": 1795237555.3020296,
-    "ast_hash": "3766ed283429499e1738fc61e280d4bd",
+    "mtime": 1795239108.2559795,
+    "seen": 1795239469.5287647,
+    "ast_hash": "73f64483f8e2d3b1eb0d1798aadcc504",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/weekend_review.py": {
@@ -854,9 +854,9 @@
     "semantic_hash": ""
   },
   "tests/test_run_live.py": {
-    "mtime": 1795237056.5879157,
-    "seen": 1795237555.3249133,
-    "ast_hash": "2197c33555b66f7c6742c3d710b6d188",
+    "mtime": 1795239250.326424,
+    "seen": 1795239469.5340066,
+    "ast_hash": "eb0fcc53e34e07abd168731f7ed5260f",
     "semantic_hash": ""
   },
   "tests/test_run_migrations.py": {
@@ -914,9 +914,9 @@
     "semantic_hash": ""
   },
   "tests/test_trade_service.py": {
-    "mtime": 1795236532.579918,
-    "seen": 1795237555.3270593,
-    "ast_hash": "d1ec4eab9d548a60400233a71c342d03",
+    "mtime": 1795239206.604196,
+    "seen": 1795239469.5345154,
+    "ast_hash": "a6b90f89b3ae2802e4d63f7e66fa9cdb",
     "semantic_hash": ""
   },
   "tests/test_weekend_review.py": {
@@ -3986,9 +3986,9 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/activate.sh": {
-    "mtime": 1795236386.5396745,
-    "seen": 1795237555.2413433,
-    "ast_hash": "1d552578c9cdbe71efa36fda4be7fc2a",
+    "mtime": 1795239090.8642962,
+    "seen": 1795239469.4914074,
+    "ast_hash": "2bc4a672802a1aa6196cb387e4f6ba8b",
     "semantic_hash": ""
   },
   "deploy/spx-live/closeout.sh": {
@@ -4004,9 +4004,9 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/health.sh": {
-    "mtime": 1795236386.561674,
-    "seen": 1795237555.2415686,
-    "ast_hash": "bbe068ce349724192401b4ecba12db66",
+    "mtime": 1795239090.8872957,
+    "seen": 1795239469.4915044,
+    "ast_hash": "42d8617cfda104044baec6debe78e51d",
     "semantic_hash": ""
   },
   "deploy/spx-live/notify.py": {
@@ -4112,9 +4112,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/spx_live_db.py": {
-    "mtime": 1795236369.5589936,
-    "seen": 1795237555.3008752,
-    "ast_hash": "a64690927c405a3e3cb03ec445af6bb8",
+    "mtime": 1795239073.443613,
+    "seen": 1795239469.5283484,
+    "ast_hash": "43f42eb62cf82b8ebf484658a6295952",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/account_monitor.py": {
@@ -4148,9 +4148,9 @@
     "semantic_hash": ""
   },
   "tests/integration/test_spx_live_db.py": {
-    "mtime": 1795237495.5411758,
-    "seen": 1795237555.3062878,
-    "ast_hash": "ba885d7bd33616f71960b41c972f8bd3",
+    "mtime": 1795239357.8965156,
+    "seen": 1795239469.5300477,
+    "ast_hash": "b079414ca32aa08da4e86b9b147edc67",
     "semantic_hash": ""
   },
   "tests/test_account_monitor.py": {
@@ -4238,9 +4238,9 @@
     "semantic_hash": ""
   },
   "tests/test_spx_live_scripts.py": {
-    "mtime": 1795237091.728241,
-    "seen": 1795237555.3258417,
-    "ast_hash": "d258edd8385b54f7514e2a8f5db47f4e",
+    "mtime": 1795239365.8863735,
+    "seen": 1795239469.5342255,
+    "ast_hash": "adbf3bc79a918e633f93e2b1cadf88ff",
     "semantic_hash": ""
   },
   "tests/test_spx_live_settle_expired.py": {
@@ -4250,9 +4250,9 @@
     "semantic_hash": ""
   },
   "tests/test_spx_live_test.py": {
-    "mtime": 1795236570.508199,
-    "seen": 1795237555.3260229,
-    "ast_hash": "e7661c81db8896ee434c2ab5a09bead7",
+    "mtime": 1795239232.6547363,
+    "seen": 1795239469.5342636,
+    "ast_hash": "671c4b07e3c6ac253b1299564ad546ec",
     "semantic_hash": ""
   },
   "tests/test_spx_paired_report.py": {
@@ -4592,9 +4592,9 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/README.md": {
-    "mtime": 1795236397.8144624,
-    "seen": 1795237555.3429048,
-    "ast_hash": "37fbac2e30e602488660a0fb0c4d3598",
+    "mtime": 1795239418.936428,
+    "seen": 1795239469.5382526,
+    "ast_hash": "54b9c731c4bf02dbdc713172dfa32194",
     "semantic_hash": ""
   },
   "docs/operations/concurrent-paper-live-spx-design.md": {
@@ -4733,6 +4733,12 @@
     "mtime": 1795229268.7938468,
     "seen": 1795237555.2758224,
     "ast_hash": "130b40612b8a62ecec5ff4639cbdc6cb",
+    "semantic_hash": ""
+  },
+  "docs/reviews/2026-11-20-spx-live-review-fixes-codex-handoff.md": {
+    "mtime": 1795237963.0124552,
+    "seen": 1795239469.5451171,
+    "ast_hash": "c0924e6aa333bd95b950affcedc41236",
     "semantic_hash": ""
   }
 }

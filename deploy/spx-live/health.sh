@@ -82,6 +82,8 @@ elif [ "$(docker inspect -f '{{.Image}}' "$LIVE_C")" != "$CAND" ]; then
 elif broker_events=$(broker_state_events) \
     && [[ "$broker_events" == *"_stopped_unknown_broker_state"* ]]; then
   fail="live bot HALTED on unknown broker state; it is up but not managing exits"
+elif [ -e "$D/ENTRY_HALT_FAILED" ]; then
+  fail="live entries may still be ENABLED: activation failed verification and could not halt them"
 elif ! curl -sf --max-time 5 "http://127.0.0.1:$LIVE_PORT/health" >/dev/null; then
   fail="metrics port $LIVE_PORT not answering"
 elif ! token_match "$LIVE_C"; then
@@ -111,12 +113,15 @@ fi
 # A dead or halted bot with an open fly leaves it unmanaged, so that alert repeats every
 # ALERT_REPEAT_MIN minutes until the fly is flat or the bot recovers; one post was missed for
 # six hours on 2026-11-19. Everything else posts once per problem.
+# An entry halt that activation could not apply repeats the same way until resolved.
 unmanaged=0
 { [ "$(running "$LIVE_C")" != 1 ] || [[ "$fail" == "live bot HALTED"* ]]; } && unmanaged=1
+repeating=$unmanaged
+[[ "$fail" == "live entries may still be ENABLED"* ]] && repeating=1
 alerted="$D/health.alerted"
 repeat=""
 if [ "$fail" = "$last" ]; then
-  [ "$unmanaged" = 1 ] || exit 1
+  [ "$repeating" = 1 ] || exit 1
   since=$(( $(date +%s) - $(cat "$alerted" 2>/dev/null || echo 0) ))
   [ "$since" -ge $(( ${ALERT_REPEAT_MIN:-15} * 60 )) ] || exit 1
   repeat=" STILL UNRESOLVED after $(( since / 60 )) min."
@@ -129,6 +134,9 @@ if [ "$unmanaged" = 1 ]; then
     held="$LIVE_DB may hold an OPEN live fly that nothing is managing"
   fi
   notify "🚨 $LABEL $DATE: $fail; $held.$repeat Check ToS and Helios now. Log: $D/health.log" || exit 1
+  date +%s >"$alerted"
+elif [ "$repeating" = 1 ]; then
+  notify "🚨 $LABEL $DATE: $fail.$repeat Stop live once flat ($D/stop-live.sh), or halt entries by hand and remove $D/ENTRY_HALT_FAILED. Log: $D/health.log" || exit 1
   date +%s >"$alerted"
 else
   notify "⚠️ $LABEL $DATE health: $fail. Log: $D/health.log" || exit 1

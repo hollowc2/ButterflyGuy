@@ -107,6 +107,8 @@ elif cmd == "compose":
         if sub == "compare":
             print("# paired report")
         if sub == "halt-entries":
+            if "--help" in args:  # activation's capability preflight
+                sys.exit(state.get("halt_help_rc", 0))
             sys.exit(state.get("halt_rc", 0))
         sys.exit(state["check_rc"] if sub == "check" else 0)
 '''
@@ -373,11 +375,22 @@ def _db_tool_calls(session, sub):
     return [
         c for c in session.calls()
         if c[0] == "compose" and "butterfly_guy.scripts.spx_live_db" in c
-        and c[c.index("butterfly_guy.scripts.spx_live_db") + 1] == sub
+        and c[c.index("butterfly_guy.scripts.spx_live_db") + 1] == sub and "--help" not in c
     ]
 
 
-def test_failed_verification_halts_entries_before_stopping_a_flat_bot(session):
+def test_activation_refuses_an_image_without_halt_entries(session):
+    session.state["halt_help_rc"] = 2  # argparse: invalid choice
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1
+    assert "lacks spx_live_db halt-entries" in out
+    assert not any("up" in call for call in session.calls() if call[0] == "compose")
+    assert "NOT started" in session.notifications()
+
+
+def test_failed_verification_halts_and_drains_entries_before_stopping_a_flat_bot(session):
     session.state["health_rc"] = 7
 
     result, out = session.run("activate.sh")
@@ -388,12 +401,21 @@ def test_failed_verification_halts_entries_before_stopping_a_flat_bot(session):
         "--db", "butterfly_guy_spx_live", "--date", TODAY,
     ]
     calls = session.calls()
+    halt = calls.index(halts[0])
+    # Flatness is read after the drain, then the stop.
+    broker = max(i for i, c in enumerate(calls) if c[0] == "exec" and "--ignore-expired" in c)
+    check = max(i for i, c in enumerate(calls) if c in _db_tool_calls(session, "check"))
     stop = next(i for i, c in enumerate(calls) if c[0] == "compose" and "stop" in c)
-    assert calls.index(halts[0]) < stop
+    assert halt < broker < check < stop
     assert session.state["running"]["butterfly_spx_live_app"] is False
     assert (session.dir / "STOPPED").exists()
-    assert not (session.dir / "VERIFY_FAILED").exists()
+    assert not (session.dir / "ENTRY_HALT_FAILED").exists()
     assert_paper_never_changed(session)
+
+    # A confirmed stop still silences health.
+    before = session.notifications()
+    session.run("health.sh")
+    assert session.notifications() == before
 
 
 @pytest.mark.parametrize(
@@ -416,7 +438,7 @@ def test_failed_verification_keeps_managing_a_fly_that_filled_meanwhile(session,
     assert not (session.dir / "VERIFIED").exists()
     assert not (session.dir / "STOPPED").exists()
     last = session.notifications().splitlines()[-1]
-    assert "LEFT RUNNING to manage the position; new entries halted" in last
+    assert "LEFT RUNNING to manage any position; new entries halted" in last
     assert_paper_never_changed(session)
 
     # Health watches the unverified bot: a later crash with the fly open alerts.
@@ -426,24 +448,60 @@ def test_failed_verification_keeps_managing_a_fly_that_filled_meanwhile(session,
     assert "may hold an OPEN live fly" in session.notifications().splitlines()[-1]
 
 
-def test_failed_entry_halt_is_reported_and_a_held_fly_stays_managed(session):
-    session.state.update(health_rc=7, halt_rc=1, after_up={"check_rc": 1})
+def test_an_undrained_entry_keeps_even_a_flat_looking_bot_running(session):
+    """Codex review of #103: an admitted entry can fill after the flatness reads."""
+    session.state.update(health_rc=7, halt_rc=3)
 
     result, out = session.run("activate.sh")
 
     assert result.returncode == 1, out
     assert session.state["running"]["butterfly_spx_live_app"] is True
-    assert "entry halt FAILED, new entries may still be enabled" in session.notifications()
+    assert not any(c[0] == "compose" and "stop" in c for c in session.calls())
+    assert "admitted entry did not finish" in session.notifications().splitlines()[-1]
+    assert not (session.dir / "ENTRY_HALT_FAILED").exists()  # the halt itself holds
 
 
-def test_failed_entry_halt_on_a_flat_bot_still_stops_it(session):
+def test_failed_entry_halt_keeps_the_bot_managed_and_alerts_until_resolved(session):
+    """Codex review of #103: a failed halt never trusts the unverified config."""
     session.state.update(health_rc=7, halt_rc=1)
 
     result, out = session.run("activate.sh")
 
     assert result.returncode == 1, out
-    assert session.state["running"]["butterfly_spx_live_app"] is False
-    assert (session.dir / "STOPPED").exists()
+    assert session.state["running"]["butterfly_spx_live_app"] is True
+    assert (session.dir / "ENTRY_HALT_FAILED").exists()
+    assert "entry halt FAILED, new entries may still be ENABLED" in session.notifications()
+
+    session.state["health_rc"] = 0
+    session.run("health.sh")
+    first = session.notifications().splitlines()[-1]
+    assert "live entries may still be ENABLED" in first
+    # The same problem repeats on the repeat interval, unlike ordinary warnings.
+    session.run("health.sh", ALERT_REPEAT_MIN="0")
+    assert "STILL UNRESOLVED" in session.notifications().splitlines()[-1]
+
+
+def test_failed_activation_stop_leaves_health_watching(session):
+    """Codex review of #103: verification fails, the bot looks flat, the stop fails."""
+    session.state["health_rc"] = 7
+    fake = session.dir.parent / "bin" / "docker"
+    fake.write_text(fake.read_text().replace(
+        '    elif "stop" in args:\n',
+        '    elif "stop" in args:\n        sys.exit(1)\n',
+    ))
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1, out
+    assert session.state["running"]["butterfly_spx_live_app"] is True
+    assert (session.dir / "VERIFY_FAILED").exists()
+    assert not (session.dir / "STOPPED").exists()
+    assert "did not stop" in session.notifications()
+
+    session.state["running"]["butterfly_spx_live_app"] = False
+    session.state["check_rc"] = 1
+    session.run("health.sh")
+    assert "may hold an OPEN live fly" in session.notifications().splitlines()[-1]
 
 
 def test_failed_stop_keeps_health_monitoring_on(session):

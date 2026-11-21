@@ -1572,6 +1572,67 @@ async def test_sibling_failure_stops_a_new_trade_monitor_and_still_propagates(mo
 
 
 @pytest.mark.asyncio
+async def test_a_second_cancel_waits_for_the_monitor_cleanup(monkeypatch):
+    """Codex review of #103: a repeated cancel must not end entry_loop mid-cleanup."""
+    started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    monitor: asyncio.Task | None = None
+
+    async def monitor_loop(*_args, **_kwargs):
+        nonlocal monitor
+        monitor = asyncio.current_task()
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await release.wait()
+
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: False)
+    loop = asyncio.create_task(entry_loop(
+        Mock(), Mock(monitor_loop=monitor_loop),
+        recovered_trade=Mock(trade_id=7), recovered_candidate=Mock(),
+    ))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    loop.cancel()
+    await asyncio.wait_for(cleaning.wait(), timeout=1)
+    loop.cancel()
+    await asyncio.sleep(0.05)
+    assert not loop.done()  # still draining
+
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await loop
+    assert monitor is not None and monitor.done()
+
+
+@pytest.mark.asyncio
+async def test_position_background_tasks_are_joined_before_cleanup():
+    """Codex review of #103: detached pending-exit and post-exit work is joined."""
+    from butterfly_guy.services.position_service import PositionService
+
+    stopped: list[str] = []
+
+    async def work(name: str) -> None:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.append(name)
+
+    service = PositionService.__new__(PositionService)
+    pending = asyncio.create_task(work("pending_exit"))
+    service._background_tasks = {pending}
+    service._post_exit_task = asyncio.create_task(work("post_exit"))
+    await asyncio.sleep(0)
+
+    await service.stop_background_tasks()
+
+    assert sorted(stopped) == ["pending_exit", "post_exit"]
+    assert pending.cancelled() and service._post_exit_task.cancelled()
+    # Nothing started yet (no monitor ran) is a no-op.
+    await PositionService.__new__(PositionService).stop_background_tasks()
+
+
+@pytest.mark.asyncio
 async def test_shutdown_handler_tolerates_already_finished_tasks():
     async def done_immediately() -> None:
         return None

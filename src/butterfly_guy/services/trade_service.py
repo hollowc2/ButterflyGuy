@@ -44,7 +44,13 @@ from butterfly_guy.data.schwab_client import (
     SCHWAB_SPOT_SYMBOLS,
     SchwabClientWrapper,
 )
-from butterfly_guy.db.queries import CandidateQueries, ChainQueries, DecisionQueries, TradeQueries
+from butterfly_guy.db.queries import (
+    CandidateQueries,
+    ChainQueries,
+    DecisionQueries,
+    TradeQueries,
+    entry_lock_key,
+)
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
@@ -150,7 +156,7 @@ class TradeService:
         self, underlying: str, trade_date: dt.date
     ) -> tuple[Any, str] | None:
         conn = await self.trade_queries.db.pool.acquire()
-        key = f"butterfly_entry:{underlying}:{trade_date.isoformat()}"
+        key = entry_lock_key(underlying, trade_date)
         locked = await conn.fetchval(
             "SELECT pg_try_advisory_lock(hashtext($1)::bigint)",
             key,
@@ -175,6 +181,16 @@ class TradeService:
             )
         finally:
             await self.trade_queries.db.pool.release(conn)
+
+    async def _release_entry_lock_quietly(
+        self, entry_lock: tuple[Any, str], trade_id: int | None = None
+    ) -> None:
+        """Release once a broker order was sent: an unlock error must never replace the
+        safety exception or the saved fill. The pool's connection reset drops the lock."""
+        try:
+            await self._release_entry_lock(*entry_lock)
+        except Exception as e:
+            log.error("entry_lock_release_failed", trade_id=trade_id, error=str(e))
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
         """Full entry flow from eligibility checks through entry fill."""
@@ -562,7 +578,7 @@ class TradeService:
                         )
             except Exception:
                 if entry_lock is not None:
-                    await self._release_entry_lock(*entry_lock)
+                    await self._release_entry_lock_quietly(entry_lock)
                     entry_lock = None
                 raise
             if fill:
@@ -628,7 +644,7 @@ class TradeService:
                     await self.risk_engine.record_trade()
                 except Exception as exc:
                     if entry_lock is not None:
-                        await self._release_entry_lock(*entry_lock)
+                        await self._release_entry_lock_quietly(entry_lock)
                         entry_lock = None
                     raise AmbiguousOrderError(
                         "broker fill was not fully persisted"
@@ -650,14 +666,7 @@ class TradeService:
                 # The fill is persisted: from here nothing may keep the record from
                 # reaching entry_loop, which starts the position monitor.
                 if entry_lock is not None:
-                    try:
-                        await self._release_entry_lock(*entry_lock)
-                    except Exception as e:
-                        log.error(
-                            "entry_lock_release_failed_after_fill",
-                            trade_id=trade_id,
-                            error=str(e),
-                        )
+                    await self._release_entry_lock_quietly(entry_lock, trade_id=trade_id)
                     entry_lock = None
 
                 try:

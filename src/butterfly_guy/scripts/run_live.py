@@ -994,9 +994,26 @@ async def entry_loop(
     finally:
         # The monitor runs outside main()'s TaskGroup: stop it before main() closes
         # the broker client and DB it uses.
-        if monitor_task is not None and not monitor_task.done():
-            monitor_task.cancel()
+        await _drain_monitor(monitor_task)
+
+
+async def _drain_monitor(monitor_task: asyncio.Task | None) -> None:
+    """Cancel the monitor and wait until it has finished, however often we are cancelled.
+
+    A repeated cancel (a second SIGTERM, the TaskGroup) is deferred until the monitor's
+    own cleanup is done, then re-raised, so shared resources never close under it.
+    """
+    if monitor_task is None or monitor_task.done():
+        return
+    monitor_task.cancel()
+    interrupted = False
+    while not monitor_task.done():
+        try:
             await asyncio.wait([monitor_task])
+        except asyncio.CancelledError:
+            interrupted = True
+    if interrupted:
+        raise asyncio.CancelledError
 
 
 EOD_CHART_DELAY_MINUTES = 5
@@ -1184,6 +1201,7 @@ async def main() -> None:
     schwab: SchwabClientWrapper | None = None
     shadow_market_data: ShadowComparingMarketDataProvider | None = None
     gateway_client: GatewayMarketDataClient | None = None
+    position_service: PositionService | None = None
     task_group_failed = False
     try:
         await db.initialize()
@@ -1499,12 +1517,17 @@ async def main() -> None:
                     await notifier.notify_error(str(exc), context="TaskGroup")
     finally:
         set_readiness("shutting_down")
-        await _close_runtime_resources(
-            shadow_market_data,
-            gateway_client,
-            schwab,
-            db,
-        )
+        try:
+            # entry_loop has already drained the monitor; this joins its detached work.
+            if position_service is not None:
+                await position_service.stop_background_tasks()
+        finally:
+            await _close_runtime_resources(
+                shadow_market_data,
+                gateway_client,
+                schwab,
+                db,
+            )
     if task_group_failed:
         # Non-zero so a restart policy (live: on-failure:3) sees a failure, not a clean stop.
         raise SystemExit(1)

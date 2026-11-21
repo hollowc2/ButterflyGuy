@@ -615,6 +615,66 @@ async def test_unsaved_operator_exit_is_retried_and_flagged_without_releasing_it
     assert any("handoff is not saved yet" in text for text in texts)
 
 
+def _critical_texts(telegram):
+    return [c.args[0] for c in telegram.await_args_list if c.args[0].startswith("CRITICAL")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("repeat_seconds, expected", [(300.0, 1), (0.0, 3)])
+async def test_unsaved_operator_exit_degrades_readiness_and_repeats_its_alert(
+    repeat_seconds, expected
+):
+    """Codex review of #103: notification-only escalation was not enough."""
+    from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
+
+    service = live_service([HELD] * 10, [[manual_close_order("WORKING")]] * 10)
+    service.notifier = AsyncMock()
+    service.notifier.notify_text.side_effect = RuntimeError("discord down")
+    attempts = []
+
+    async def merge(trade_id, metadata):
+        if "operator_exit" in metadata:
+            attempts.append(metadata)
+            raise RuntimeError("db unavailable")
+
+    service.trade_queries.merge_metadata.side_effect = merge
+    set_readiness(None)
+    with patch(
+        "butterfly_guy.services.position_service.OPERATOR_EXIT_ALERT_REPEAT_SECONDS",
+        repeat_seconds,
+    ):
+        telegram = await run_live_monitor(service, polls=2)
+
+    assert len(attempts) == 3  # takeover + a retry on each later poll
+    assert len(_critical_texts(telegram)) == expected
+    assert "WILL resume bot exits" in _critical_texts(telegram)[0]
+    assert readiness_snapshot() == (False, "operator_exit_unpersisted")
+    service.order_manager.execute_exit.assert_not_awaited()  # still the operator's
+    set_readiness(None)
+
+
+@pytest.mark.asyncio
+async def test_saved_operator_exit_clears_the_escalation():
+    from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
+
+    service = live_service([HELD] * 10, [[manual_close_order("WORKING")]] * 10)
+    failures = iter([True, True])
+
+    async def merge(trade_id, metadata):
+        if "operator_exit" in metadata and next(failures, False):
+            raise RuntimeError("db unavailable")
+
+    service.trade_queries.merge_metadata.side_effect = merge
+    set_readiness(None)
+    telegram = await run_live_monitor(service, polls=4)
+
+    assert readiness_snapshot() == (True, None)
+    texts = [c.args[0] for c in telegram.await_args_list]
+    assert texts[-1] == "OK: trade 500: exit handoff saved."
+    assert _persisted_metadata(service)["operator_exit"]
+    service.order_manager.execute_exit.assert_not_awaited()
+
+
 def symbol_candidate():
     import dataclasses
 
