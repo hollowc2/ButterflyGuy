@@ -8,6 +8,8 @@ docs/operations/concurrent-paper-live-spx-design.md §4, §5, §9, §10.
         --copy-live-trade 415
     python -m butterfly_guy.scripts.spx_live_db seed-daily-bars --db butterfly_guy_spx_live
     python -m butterfly_guy.scripts.spx_live_db check --db butterfly_guy_spx_live
+    python -m butterfly_guy.scripts.spx_live_db halt-entries --db butterfly_guy_spx_live \
+        --date 2026-11-20
     python -m butterfly_guy.scripts.spx_live_db compare --date 2026-11-20 --out-dir /tmp/x
 """
 
@@ -28,6 +30,7 @@ from butterfly_guy.core.config import DatabaseSettings, load_config
 from butterfly_guy.core.instance_role import PAPER_DATABASE_NAME
 from butterfly_guy.db.connection import DatabasePool
 from butterfly_guy.db.migrations.run_migrations import MIGRATIONS_DIR, run_migrations
+from butterfly_guy.db.queries import entry_lock_key
 from butterfly_guy.reports import spx_paired
 
 LIVE_DB_PREFIX = "butterfly_guy_spx_live"
@@ -36,6 +39,8 @@ LIVE_ID_START = 100_000
 DAILY_BAR_SYMBOLS = ("SPX", "$VIX")
 DAILY_BAR_SEED_DAYS = 400
 TERMINAL_INTENT_STATUSES = ("FILLED", "CANCELED", "REJECTED", "EXPIRED")
+# Longest a live entry attempt holds its advisory lock: one ladder step plus persistence.
+DRAIN_TIMEOUT_S = 120.0
 
 # The same 7-day compression butterfly_guy carries (added there by hand, not by migrations).
 COMPRESSION = {
@@ -241,15 +246,60 @@ async def check(conn: asyncpg.Connection, *, allow_paper_trades: bool = False) -
         "WHERE underlying = 'SPX' AND NOT (status = ANY($1::text[]))",
         list(TERMINAL_INTENT_STATUSES),
     )
+    # A broker fill whose trade row was never saved: open at the broker, flat in the DB.
+    result["unlinked_filled_spx_entries"] = await conn.fetchval(
+        "SELECT count(*) FROM broker_order_intents "
+        "WHERE underlying = 'SPX' AND side = 'ENTRY' AND status = 'FILLED' "
+        "AND trade_id IS NULL"
+    )
     result["paper_trades"] = await conn.fetchval(
         "SELECT count(*) FROM butterfly_trades WHERE metadata ? 'paper_fill_model'"
     )
     result["ok"] = not (
         result["open_spx_trades"]
         or result["nonterminal_spx_intents"]
+        or result["unlinked_filled_spx_entries"]
         or (result["paper_trades"] and not allow_paper_trades)
     )
     return result
+
+
+async def halt_entries(
+    conn: asyncpg.Connection, session: dt.date, drain_timeout_s: float = DRAIN_TIMEOUT_S
+) -> dict[str, Any]:
+    """Block new SPX entries for the session, then wait out any entry already admitted.
+
+    The halt is the risk gate's halted flag: RiskEngine.can_trade reads it before every
+    entry; exits and settlement never read it, so a running bot keeps managing an open
+    fly. Nothing clears it that day. A live entry re-checks the gate while holding the
+    session's entry advisory lock and keeps that lock until its fill is saved, so taking
+    the lock once after the halt commits drains an admitted attempt; every later attempt
+    then sees the halt. ok is False when the drain timed out: an entry may be in flight.
+    """
+    halted = await conn.fetchval(
+        """
+        INSERT INTO daily_risk_state (trade_date, underlying, halted)
+        VALUES ($1, 'SPX', TRUE)
+        ON CONFLICT (trade_date, underlying) DO UPDATE SET halted = TRUE
+        RETURNING halted
+        """,
+        session,
+    )
+    key = entry_lock_key("SPX", session)
+    try:
+        await conn.execute(f"SET lock_timeout = '{int(drain_timeout_s * 1000)}ms'")
+        await conn.execute("SELECT pg_advisory_lock(hashtext($1)::bigint)", key)
+    except asyncpg.LockNotAvailableError:
+        drained = False
+    else:
+        drained = True
+        await conn.execute("SELECT pg_advisory_unlock(hashtext($1)::bigint)", key)
+    return {
+        "trade_date": session,
+        "halted": halted,
+        "entries_drained": drained,
+        "ok": halted is True and drained,
+    }
 
 
 async def bootstrap(
@@ -326,6 +376,9 @@ async def _main(argv: list[str] | None = None) -> int:
             p.add_argument("--copy-live-trade", type=int, action="append", default=[])
         if command == "check":
             p.add_argument("--allow-paper-trades", action="store_true")
+    p = sub.add_parser("halt-entries")
+    p.add_argument("--db", required=True)
+    p.add_argument("--date", required=True, type=dt.date.fromisoformat)
     p = sub.add_parser("compare")
     p.add_argument("--date", required=True, type=dt.date.fromisoformat)
     p.add_argument("--paper-db", default=PAPER_DATABASE_NAME)
@@ -371,6 +424,16 @@ async def _main(argv: list[str] | None = None) -> int:
             finally:
                 await source.close()
                 await target.close()
+            ok = True
+        elif args.command == "halt-entries":
+            conn = await asyncpg.connect(dsn_for(base, name))
+            try:
+                result = await halt_entries(conn, args.date)
+            finally:
+                await conn.close()
+            if not result["ok"]:
+                print(json.dumps(result, default=str, sort_keys=True))
+                return 3  # halted, but an admitted entry may still be in flight
             ok = True
         else:
             conn = await connect_read_only(base, name)

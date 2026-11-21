@@ -2,9 +2,11 @@
 
 Each bot has its own database (docs/operations/concurrent-paper-live-spx-design.md §12).
 Selection marks come from the trade's per_width_bests entry for its chosen width; exit marks
-from exit_mark_at_signal. P&L is before fees on both sides: live's DB P&L already is, and a
-paper fill books the fee model (4 legs x paper_commission_per_contract per side, no exit
-side when cash-settled) into its price, so the report backs it out of paper's fills and P&L.
+from exit_mark_at_signal. P&L is before fees on both sides. Live's is its fill (or settlement)
+prices: a live cash settlement stores Schwab's net P&L, fees included, so the fees in its DB
+P&L are shown separately and never counted as fill cost. A paper fill books the fee model
+(4 legs x paper_commission_per_contract per side, no exit side when cash-settled) into its
+price, so the report backs it out of paper's fills and P&L.
 
 The two bots often pick different flies from near-tied candidates, so live minus paper P&L
 mixes selection, path and fills. The live fill check prices live's own fly at its order-time
@@ -127,8 +129,15 @@ def summarize_trade(
     entry_fill = _num(float(row["entry_price"]) - side_fee)
     exit_fill = _num(None if row.get("exit_price") is None else float(row["exit_price"]) + exit_fee)
     pnl = row.get("pnl")
+    live_fees = None
     if pnl is not None:
-        pnl = float(pnl) + side_fee + exit_fee
+        if meta.get("paper_fill_model") or row.get("exit_price") is None:
+            pnl = float(pnl) + side_fee + exit_fee
+        else:
+            # Live fills store exit minus entry price; cash settlements store Schwab's net.
+            gross = float(row["exit_price"]) - float(row["entry_price"])
+            live_fees = round((gross - float(pnl)) * 100 * quantity, 2)
+            pnl = gross
     intent_marks = row.get("intent_order_marks") or {}
     entry_order_mark = _num(
         (meta.get("entry_execution_diagnostics") or {}).get("observed_mark")
@@ -174,6 +183,7 @@ def summarize_trade(
         "exit_vs_order_mark": _diff(exit_fill, exit_order_mark),
         "pnl_usd": None if pnl is None else round(pnl * 100 * quantity, 2),
         "paper_fees_backed_out_usd": round((side_fee + exit_fee) * 100 * quantity, 2),
+        "live_fees_in_db_pnl_usd": live_fees,
         "paper_fill_model": meta.get("paper_fill_model"),
         "per_width_bests": meta.get("per_width_bests") or [],
         "monitor_polls": row.get("monitor_polls"),
@@ -324,6 +334,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         ("exit mark (order)", "exit_order_mark"), ("exit fill", "exit_fill"),
         ("exit fill − order mark", "exit_vs_order_mark"), ("P&L $", "pnl_usd"),
         ("paper fees backed out $", "paper_fees_backed_out_usd"),
+        ("live fees in DB P&L $", "live_fees_in_db_pnl_usd"),
         ("monitor polls", "monitor_polls"), ("median poll gap s", "monitor_median_gap_s"),
     ]
     paper = report["paper"][0] if report["paper"] else {}

@@ -240,9 +240,10 @@ paired_report() {
 
 stop_live() {
   # The v2 rollback: stop (never rm) the live container so its logs survive; never paper.
-  # STOPPED tells health.sh the stop was deliberate.
+  # STOPPED tells health.sh the stop was deliberate, so it is written only once the
+  # container is confirmed down; a failed stop leaves health monitoring on.
   echo "$(ts) stopping $LIVE_C"
-  act touch "$D/STOPPED"
   act compose stop app_spx_live
-  [ "$DRY_RUN" = 1 ] || [ "$(running "$LIVE_C")" = 0 ]
+  [ "$DRY_RUN" = 1 ] || [ "$(running "$LIVE_C")" = 0 ] || return 1
+  act touch "$D/STOPPED"
 }

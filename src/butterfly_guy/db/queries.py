@@ -286,6 +286,11 @@ class SpotQueries:
         )
 
 
+def entry_lock_key(underlying: str, trade_date: dt.date) -> str:
+    """The session advisory lock a live entry holds from its risk check to its saved fill."""
+    return f"butterfly_entry:{underlying}:{trade_date.isoformat()}"
+
+
 class TradeQueries:
     """Queries for trades table."""
 

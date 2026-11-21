@@ -44,7 +44,13 @@ from butterfly_guy.data.schwab_client import (
     SCHWAB_SPOT_SYMBOLS,
     SchwabClientWrapper,
 )
-from butterfly_guy.db.queries import CandidateQueries, ChainQueries, DecisionQueries, TradeQueries
+from butterfly_guy.db.queries import (
+    CandidateQueries,
+    ChainQueries,
+    DecisionQueries,
+    TradeQueries,
+    entry_lock_key,
+)
 from butterfly_guy.execution.order_manager import (
     AmbiguousOrderError,
     BrokerFillError,
@@ -150,7 +156,7 @@ class TradeService:
         self, underlying: str, trade_date: dt.date
     ) -> tuple[Any, str] | None:
         conn = await self.trade_queries.db.pool.acquire()
-        key = f"butterfly_entry:{underlying}:{trade_date.isoformat()}"
+        key = entry_lock_key(underlying, trade_date)
         locked = await conn.fetchval(
             "SELECT pg_try_advisory_lock(hashtext($1)::bigint)",
             key,
@@ -175,6 +181,16 @@ class TradeService:
             )
         finally:
             await self.trade_queries.db.pool.release(conn)
+
+    async def _release_entry_lock_quietly(
+        self, entry_lock: tuple[Any, str], trade_id: int | None = None
+    ) -> None:
+        """Release once a broker order was sent: an unlock error must never replace the
+        safety exception or the saved fill. The pool's connection reset drops the lock."""
+        try:
+            await self._release_entry_lock(*entry_lock)
+        except Exception as e:
+            log.error("entry_lock_release_failed", trade_id=trade_id, error=str(e))
 
     async def attempt_entry(self) -> tuple[TradeRecord, ButterflyCandidate] | None:
         """Full entry flow from eligibility checks through entry fill."""
@@ -562,7 +578,7 @@ class TradeService:
                         )
             except Exception:
                 if entry_lock is not None:
-                    await self._release_entry_lock(*entry_lock)
+                    await self._release_entry_lock_quietly(entry_lock)
                     entry_lock = None
                 raise
             if fill:
@@ -628,31 +644,11 @@ class TradeService:
                     await self.risk_engine.record_trade()
                 except Exception as exc:
                     if entry_lock is not None:
-                        await self._release_entry_lock(*entry_lock)
+                        await self._release_entry_lock_quietly(entry_lock)
                         entry_lock = None
                     raise AmbiguousOrderError(
                         "broker fill was not fully persisted"
                     ) from exc
-                if entry_lock is not None:
-                    await self._release_entry_lock(*entry_lock)
-                    entry_lock = None
-
-                trades_active.labels(underlying=underlying).inc()
-                daily_trade_count.labels(underlying=underlying).inc()
-
-                # Emit entry detail metrics for Grafana
-                entry_center_strike.labels(underlying=underlying).set(best.center_strike)
-                entry_wing_width.labels(underlying=underlying).set(best.wing_width)
-                entry_cost.labels(underlying=underlying).set(fill["fill_price"])
-                entry_max_profit.labels(underlying=underlying).set(best.max_profit)
-                entry_lower_be.labels(underlying=underlying).set(best.lower_be)
-                entry_upper_be.labels(underlying=underlying).set(best.upper_be)
-                if vix_price:
-                    entry_vix.labels(underlying=underlying).set(vix_price)
-                    entry_expected_move.labels(underlying=underlying).set(
-                        _vix_expected_move(vix_price, spot_price)
-                    )
-
                 record = TradeRecord(
                     trade_id=trade_id,
                     trade_date=expiration,
@@ -667,37 +663,77 @@ class TradeService:
                     center_symbol=best.center_symbol,
                     upper_symbol=best.upper_symbol,
                 )
+                # The fill is persisted: from here nothing may keep the record from
+                # reaching entry_loop, which starts the position monitor.
+                if entry_lock is not None:
+                    await self._release_entry_lock_quietly(entry_lock, trade_id=trade_id)
+                    entry_lock = None
 
-                await self.decision_queries.log_event(
-                    "trade_entered",
-                    {
-                        "trade_id": trade_id,
-                        "center": best.center_strike,
-                        "width": best.wing_width,
-                        "cost": fill["fill_price"],
-                        "fill_time": fill["fill_time"].isoformat(),
-                        "broker_fill_evidence": fill.get("broker_fill_evidence"),
-                        "direction": direction,
-                        "entry_step": step,
-                    },
-                    underlying=underlying,
-                )
-                await self.decision_queries.log_event(
-                    "entry_ladder_trace",
-                    {
-                        "trade_id": trade_id,
-                        "selection_method": selection_method,
-                        "direction": direction,
-                        "entry_spot": spot_price,
-                        "prev_close": previous_close,
-                        "vix": vix_price,
-                        "selected_center": best.center_strike,
-                        "selected_width": best.wing_width,
-                        "entry_attempts": entry_attempts,
-                        "selection_parity": selection_parity_report,
-                    },
-                    underlying=underlying,
-                )
+                try:
+                    trades_active.labels(underlying=underlying).inc()
+                    daily_trade_count.labels(underlying=underlying).inc()
+
+                    # Emit entry detail metrics for Grafana
+                    entry_center_strike.labels(underlying=underlying).set(best.center_strike)
+                    entry_wing_width.labels(underlying=underlying).set(best.wing_width)
+                    entry_cost.labels(underlying=underlying).set(fill["fill_price"])
+                    entry_max_profit.labels(underlying=underlying).set(best.max_profit)
+                    entry_lower_be.labels(underlying=underlying).set(best.lower_be)
+                    entry_upper_be.labels(underlying=underlying).set(best.upper_be)
+                    if vix_price:
+                        entry_vix.labels(underlying=underlying).set(vix_price)
+                        entry_expected_move.labels(underlying=underlying).set(
+                            _vix_expected_move(vix_price, spot_price)
+                        )
+                except Exception as e:
+                    log.error("entry_metrics_failed_after_fill", trade_id=trade_id, error=str(e))
+
+                try:
+                    await self.decision_queries.log_event(
+                        "trade_entered",
+                        {
+                            "trade_id": trade_id,
+                            "center": best.center_strike,
+                            "width": best.wing_width,
+                            "cost": fill["fill_price"],
+                            "fill_time": fill["fill_time"].isoformat(),
+                            "broker_fill_evidence": fill.get("broker_fill_evidence"),
+                            "direction": direction,
+                            "entry_step": step,
+                        },
+                        underlying=underlying,
+                    )
+                except Exception as e:
+                    log.error(
+                        "post_fill_audit_failed",
+                        audit_event="trade_entered",
+                        trade_id=trade_id,
+                        error=str(e),
+                    )
+                try:
+                    await self.decision_queries.log_event(
+                        "entry_ladder_trace",
+                        {
+                            "trade_id": trade_id,
+                            "selection_method": selection_method,
+                            "direction": direction,
+                            "entry_spot": spot_price,
+                            "prev_close": previous_close,
+                            "vix": vix_price,
+                            "selected_center": best.center_strike,
+                            "selected_width": best.wing_width,
+                            "entry_attempts": entry_attempts,
+                            "selection_parity": selection_parity_report,
+                        },
+                        underlying=underlying,
+                    )
+                except Exception as e:
+                    log.error(
+                        "post_fill_audit_failed",
+                        audit_event="entry_ladder_trace",
+                        trade_id=trade_id,
+                        error=str(e),
+                    )
 
                 if self.notifier:
                     try:
