@@ -61,6 +61,19 @@ def test_live_service_uses_its_own_database_role_and_chain_journal():
     assert not any(v.startswith("../data/chains:") for v in SERVICE["volumes"])
 
 
+def test_continuous_paper_service_owns_account_alerts_independently_of_shared_env_file():
+    assert PAPER["environment"]["ACCOUNT_MONITOR__ENABLED"] == (
+        "${ACCOUNT_MONITOR_ENABLED_SPX:-true}"
+    )
+    assert SERVICE["environment"]["ACCOUNT_MONITOR__ENABLED"] == (
+        "${ACCOUNT_MONITOR_ENABLED_SPX_LIVE:-false}"
+    )
+    for asset in ("ndx", "xsp"):
+        assert BASE["services"][f"app_{asset}"]["environment"]["ACCOUNT_MONITOR__ENABLED"] == (
+            f"${{ACCOUNT_MONITOR_ENABLED_{asset.upper()}:-false}}"
+        )
+
+
 def test_live_limits_are_unchanged_from_the_pilot():
     env = SERVICE["environment"]
     assert {key: env[key] for key in PILOT_LIMITS} == PILOT_LIMITS

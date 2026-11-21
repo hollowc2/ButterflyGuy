@@ -1,0 +1,31 @@
+# Reviewable rules for /opt/monitoring/prometheus-alerts/ on Helios.
+# Merely adding this repository file does not install/reload the live rules.
+groups:
+  - name: butterfly_account_monitor
+    rules:
+      - alert: ButterflyGuyAccountMonitorStopped
+        expr: >-
+          (butterfly_account_monitor_enabled == 1)
+          and (time() - butterfly_account_monitor_last_tick_timestamp_seconds > 180)
+        for: 3m
+        labels:
+          project: butterflyguy
+          notify: discord
+          severity: warning
+        annotations:
+          summary: ButterflyGuy account monitor is not completing checks
+          description: Database errors, a stuck lock, or a stopped monitor may prevent account alerts.
+      - alert: ButterflyGuyAccountEquityCheckMissed
+        expr: >-
+          (butterfly_account_monitor_enabled == 1)
+          and (butterfly_account_monitor_last_success_timestamp_seconds
+          < butterfly_account_monitor_required_check_timestamp_seconds)
+          and (time() - butterfly_account_monitor_required_check_timestamp_seconds > 600)
+        for: 5m
+        labels:
+          project: butterflyguy
+          notify: discord
+          severity: warning
+        annotations:
+          summary: ButterflyGuy scheduled account equity verification is overdue
+          description: No valid broker equity observation covers the latest required session check.

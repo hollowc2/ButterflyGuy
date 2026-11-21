@@ -198,6 +198,12 @@ class MonitoringSettings(ConfigModel):
     log_level: str = "INFO"
 
 
+class AccountMonitorSettings(ConfigModel):
+    # Read-only brokerage alerts, also in paper mode. No entry or exit decisions.
+    enabled: bool | None = None  # Auto: SPX paper owns the account alerts.
+    minimum_equity: float = Field(default=2000.0, gt=0, allow_inf_nan=False)
+
+
 class PositionDataSettings(ConfigModel):
     # Sleep between position-monitor polls, after each poll's work; the post-exit
     # recorder uses it too. Each poll is one chain request per held position.
@@ -228,7 +234,14 @@ class AppConfig(BaseSettings):
     collector: CollectorSettings = Field(default_factory=CollectorSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
+    account_monitor: AccountMonitorSettings = Field(default_factory=AccountMonitorSettings)
     position_data: PositionDataSettings = Field(default_factory=PositionDataSettings)
+
+    @property
+    def should_monitor_account(self) -> bool:
+        if self.account_monitor.enabled is not None:
+            return self.account_monitor.enabled
+        return self.execution.paper_trading and self.strategy.underlying == "SPX"
 
     @model_validator(mode="after")
     def validate_trading_safety(self) -> AppConfig:
@@ -328,5 +341,13 @@ def load_config(config_path: str | Path = "config.yaml", env_file: str = ".env")
     if allow_live:
         execution_data["allow_live_trading"] = True
     yaml_data["execution"] = execution_data
+
+    # An alert-owner deployment override must win even when the YAML has settings.
+    account_monitor_data = yaml_data.get("account_monitor")
+    if account_monitor_data is None:
+        account_monitor_data = {}
+    if "ACCOUNT_MONITOR__ENABLED" in os.environ:
+        account_monitor_data["enabled"] = os.environ["ACCOUNT_MONITOR__ENABLED"]
+    yaml_data["account_monitor"] = account_monitor_data
 
     return AppConfig(**yaml_data)

@@ -89,6 +89,7 @@ from butterfly_guy.execution.order_manager import (
 from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvider
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
+from butterfly_guy.services.account_monitor import AccountMonitor
 from butterfly_guy.services.notifier import (
     AlertmanagerNotifier,
     DiscordNotifier,
@@ -1205,6 +1206,11 @@ async def main() -> None:
             if webhook and config.strategy.underlying == "SPX"
             else None
         )
+        # Account warnings use Discord for every asset, independently of trade alerts.
+        account_monitor = AccountMonitor(
+            db, schwab, config.account_monitor,
+            DiscordNotifier(webhook) if webhook else None,
+        ) if config.should_monitor_account else None
 
         # Classify today's market regime (must precede TradeService construction);
         # daily_reset_loop refreshes it each trading day.
@@ -1405,6 +1411,10 @@ async def main() -> None:
         supervised: list[asyncio.Task[Any]] = []
         try:
             async with asyncio.TaskGroup() as tg:
+                if account_monitor is not None:
+                    supervised.append(
+                        tg.create_task(account_monitor.run(), name="account_monitor")
+                    )
                 supervised.append(tg.create_task(collector.run_loop(), name="collector"))
                 if isinstance(market_data, GatewayAuthoritativeMarketDataProvider):
                     supervised.append(

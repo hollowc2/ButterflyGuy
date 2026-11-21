@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 import sys
 import types
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -15,6 +16,109 @@ from butterfly_guy.notify import send_alertmanager as _send_alertmanager
 from butterfly_guy.services.notifier import AlertmanagerNotifier, DiscordNotifier
 
 EASTERN = ZoneInfo("America/New_York")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,accepted", [(200, True), (204, True), (429, False), (500, False)])
+async def test_checked_discord_send_reports_http_acceptance(monkeypatch, status, accepted):
+    response = MagicMock(status=status)
+    response.__aenter__ = AsyncMock(return_value=response)
+    response.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock()
+    session.post.return_value = response
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    factory = MagicMock(return_value=session)
+    monkeypatch.setattr("butterfly_guy.services.notifier.aiohttp.ClientSession", factory)
+    assert await DiscordNotifier("https://example.com").send_checked("warning") is accepted
+    assert session.post.call_args.kwargs["json"] == {"content": "warning"}
+    assert factory.call_args.kwargs["timeout"].total == 15
+    assert session.post.call_args.kwargs["timeout"].total == 10
+
+
+@pytest.mark.asyncio
+async def test_checked_discord_send_reports_transport_failure(monkeypatch):
+    monkeypatch.setattr(
+        "butterfly_guy.services.notifier.aiohttp.ClientSession",
+        MagicMock(side_effect=TimeoutError("private-webhook-url")),
+    )
+    assert not await DiscordNotifier("https://example.com").send_checked("warning")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("checked", [True, False])
+async def test_only_checked_account_discord_posts_redact_exception_details(monkeypatch, checked):
+    log = MagicMock()
+    monkeypatch.setattr("butterfly_guy.services.notifier.log", log)
+    monkeypatch.setattr(
+        "butterfly_guy.services.notifier.aiohttp.ClientSession",
+        MagicMock(side_effect=TimeoutError("transport detail")),
+    )
+    notifier = DiscordNotifier("https://example.com")
+    if checked:
+        await notifier.send_checked("account warning")
+        log.error.assert_called_once_with("discord_error", error_type="TimeoutError")
+    else:
+        await notifier.notify_text("existing trade notification")
+        log.error.assert_called_once_with("discord_error", error="transport detail")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,accepted", [(200, True), (429, False), (500, False)])
+async def test_checked_telegram_has_one_total_http_deadline(monkeypatch, status, accepted):
+    import butterfly_guy.notify as notify
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "fake-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "fake-chat")
+    response = MagicMock(status=status)
+    response.__aenter__ = AsyncMock(return_value=response)
+    response.__aexit__ = AsyncMock(return_value=False)
+    session = MagicMock()
+    session.post.return_value = response
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    factory = MagicMock(return_value=session)
+    monkeypatch.setattr(notify.aiohttp, "ClientSession", factory)
+
+    assert await notify.send_checked_async("warning") is accepted
+    timeout = factory.call_args.kwargs["timeout"]
+    assert timeout.total == 10 and timeout.connect == 5 and timeout.sock_read == 5
+    assert session.post.call_args.kwargs["json"] == {"chat_id": "fake-chat", "text": "warning"}
+
+
+@pytest.mark.asyncio
+async def test_cancelled_checked_telegram_cannot_deliver_later_in_a_worker(monkeypatch):
+    import butterfly_guy.notify as notify
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "fake-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "fake-chat")
+    entered, release = asyncio.Event(), asyncio.Event()
+    delivered = []
+
+    class PendingRequest:
+        async def __aenter__(self):
+            entered.set()
+            await release.wait()
+            delivered.append(True)
+            return MagicMock(status=200)
+
+        async def __aexit__(self, *_args):
+            return False
+
+    session = MagicMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    session.post.return_value = PendingRequest()
+    monkeypatch.setattr(notify.aiohttp, "ClientSession", MagicMock(return_value=session))
+    task = asyncio.create_task(notify.send_checked_async("warning"))
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    release.set()
+    await asyncio.sleep(0)
+    assert not delivered
+    session.__aexit__.assert_awaited_once()
 
 
 @pytest.mark.parametrize(

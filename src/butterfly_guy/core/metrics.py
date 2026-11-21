@@ -9,6 +9,23 @@ from threading import Lock, Thread
 
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
+# Account-alert health (one account per database; no account identifiers in labels).
+account_monitor_enabled = Gauge(
+    "butterfly_account_monitor_enabled", "This runtime owns brokerage account alerts",
+)
+account_monitor_last_tick = Gauge(
+    "butterfly_account_monitor_last_tick_timestamp_seconds",
+    "Last completed account-monitor tick including database state and delivery attempts",
+)
+account_monitor_last_success = Gauge(
+    "butterfly_account_monitor_last_success_timestamp_seconds",
+    "Last valid Schwab equity observation, including a balance below the floor",
+)
+account_monitor_required_check = Gauge(
+    "butterfly_account_monitor_required_check_timestamp_seconds",
+    "Latest required 09:00 ET or calendar-aware end-of-day equity check",
+)
+
 # Chain collection
 chain_snapshots_total = Counter(
     "butterfly_chain_snapshots_total", "Total option chain snapshots collected",
