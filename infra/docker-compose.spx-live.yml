@@ -51,6 +51,8 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy_spx_live
       DATABASE__USER: butterfly
+      # Paper owns alerts and outlives this session-only service's close-out.
+      ACCOUNT_MONITOR__ENABLED: "${ACCOUNT_MONITOR_ENABLED_SPX_LIVE:-false}"
       ALERTMANAGER_URL: http://alertmanager:9093
       SCHWAB_ACCESS_MODE: direct
       SCHWAB_GATEWAY_SHADOW_READS: "false"

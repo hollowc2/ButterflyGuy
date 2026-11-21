@@ -4,7 +4,57 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from butterfly_guy.core.config import AppConfig, PositionDataSettings, load_config
+from butterfly_guy.core.config import (
+    AccountMonitorSettings,
+    AppConfig,
+    PositionDataSettings,
+    load_config,
+)
+
+
+@pytest.mark.parametrize("floor", [0, -1, float("nan"), float("inf")])
+def test_account_monitor_rejects_invalid_floor(floor):
+    with pytest.raises(ValueError):
+        AccountMonitorSettings(minimum_equity=floor)
+
+
+def test_account_monitor_defaults_and_environment_optout(monkeypatch, tmp_path):
+    config = AppConfig()
+    assert config.should_monitor_account
+    assert config.account_monitor.minimum_equity == 2000
+    monkeypatch.setenv("ACCOUNT_MONITOR__ENABLED", "false")
+    assert not load_config(tmp_path / "missing.yaml", env_file="/dev/null").account_monitor.enabled
+
+
+def test_account_monitor_environment_optout_overrides_yaml(monkeypatch, tmp_path):
+    path = tmp_path / "monitor.yaml"
+    path.write_text("account_monitor:\n  enabled: true\n  minimum_equity: 2100\n")
+    monkeypatch.setenv("ACCOUNT_MONITOR__ENABLED", "false")
+    config = load_config(path, env_file="/dev/null")
+    assert not config.account_monitor.enabled
+    assert config.account_monitor.minimum_equity == 2100
+
+
+@pytest.mark.parametrize("yaml_text", ["account_monitor:\n", "account_monitor: null\n"])
+def test_empty_account_monitor_with_environment_optout(monkeypatch, tmp_path, yaml_text):
+    path = tmp_path / "monitor.yaml"
+    path.write_text(yaml_text)
+    monkeypatch.setenv("ACCOUNT_MONITOR__ENABLED", "false")
+    assert not load_config(path, env_file="/dev/null").should_monitor_account
+
+
+@pytest.mark.parametrize("paper,underlying,enabled", [
+    (True, "SPX", True), (False, "SPX", False),
+    (True, "NDX", False), (True, "XSP", False),
+])
+def test_account_monitor_default_owner_is_paper_spx(paper, underlying, enabled):
+    config = AppConfig(execution={"paper_trading": paper}, strategy={"underlying": underlying})
+    assert config.should_monitor_account is enabled
+
+
+def test_account_monitor_explicit_owner_override():
+    config = AppConfig(execution={"paper_trading": False}, account_monitor={"enabled": True})
+    assert config.should_monitor_account
 
 
 def test_load_config_defaults():

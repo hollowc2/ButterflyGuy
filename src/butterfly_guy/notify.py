@@ -19,6 +19,10 @@ import os
 import urllib.parse
 import urllib.request
 
+import aiohttp
+
+TELEGRAM_HTTP_TIMEOUT_SECONDS = 10
+
 
 def send(message: str) -> bool:
     """Send a Telegram message. Returns True on success, False on failure."""
@@ -42,6 +46,29 @@ def send(message: str) -> bool:
 async def send_async(message: str) -> bool:
     """Async-safe :func:`send`: runs the blocking request in a worker thread."""
     return await asyncio.to_thread(send, message)
+
+
+async def send_checked_async(message: str) -> bool:
+    """Cancellable, bounded Telegram transport for durable account-alert delivery.
+
+    Keep the existing thread-based helper's behavior for its other callers. DNS,
+    connection and response operations here share one aiohttp total deadline.
+    """
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        return False
+    timeout = aiohttp.ClientTimeout(total=TELEGRAM_HTTP_TIMEOUT_SECONDS, connect=5, sock_read=5)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": message},
+            ) as response:
+                return response.status == 200
+    except Exception:
+        # Transport exceptions may contain the bot token in the request URL.
+        return False
 
 
 def send_alertmanager(

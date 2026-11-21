@@ -31,6 +31,8 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
+      # The continuously running paper SPX service owns account-wide alerts.
+      ACCOUNT_MONITOR__ENABLED: "${ACCOUNT_MONITOR_ENABLED_SPX:-true}"
       ALERTMANAGER_URL: http://alertmanager:9093
       # Market-data cutover is staged per strategy and defaults to the existing
       # direct path. Account/order/token operations remain direct in both modes.
@@ -73,6 +75,7 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
+      ACCOUNT_MONITOR__ENABLED: "${ACCOUNT_MONITOR_ENABLED_NDX:-false}"
       ALERTMANAGER_URL: http://alertmanager:9093
       SCHWAB_ACCESS_MODE: "${SCHWAB_ACCESS_MODE_NDX:-direct}"
       SCHWAB_GATEWAY_URL: "${SCHWAB_GATEWAY_URL:-http://schwab-gateway:8011}"
@@ -116,6 +119,7 @@ services:
       DATABASE__PORT: 5432
       DATABASE__NAME: butterfly_guy
       DATABASE__USER: butterfly
+      ACCOUNT_MONITOR__ENABLED: "${ACCOUNT_MONITOR_ENABLED_XSP:-false}"
       ALERTMANAGER_URL: http://alertmanager:9093
       LIVE_ACCOUNT_ALLOCATION: "20000"
       LIVE_MAX_ACCOUNT_DAILY_LOSS: "50"

@@ -79,6 +79,80 @@ SCHWAB_GATEWAY_TOKEN_DIR=/absolute/path/to/schwab-token-directory
 
 The trading/gateway uid must be able to write to this directory, because token refresh uses a sibling lock file and an atomic replace. Compose refuses to start while the variable is unset.
 
+### Account equity alerts
+
+The runtime includes a read-only account monitor. The continuously running **paper
+SPX** service owns these alerts by default; the session-only live service, NDX and
+XSP do not. It checks the **actual Schwab account**, without applying simulated paper
+P&L, and alerts through Telegram and Discord when current margin-account equity is
+**at or below $2,000**. This is an equity-floor check; it does not establish options
+eligibility, promise sufficient buying power, block entries, or change risk limits.
+
+- Checks run at 09:00 ET and 15 minutes after the calendar-aware market close,
+  including days without trades. Startup catches up checks within the check window.
+- Recorded trade closes and settlement true-ups trigger checks approximately one
+  and five minutes after detection (the database is polled every minute).
+- Checks run only between 09:00 ET and one hour after close. Removed rows in the
+  rolling ledger window do not trigger post-close checks. Holidays/weekends skip reads.
+- Low or unavailable balances are rechecked every five minutes in that window.
+  **Two consecutive failed reads** are required for an unable-to-verify warning.
+  One transient failure does not create a warning/recovery pair or replace a low warning.
+- Local open/submitted trades and provisional settlements are a note in messages;
+  they never change the broker-equity condition or independently cause alerts.
+- Warnings repeat on the next trading day if unresolved. Recovery sends a new
+  notice. Failed channel deliveries retry independently every minute, even on weekends.
+
+The balance source is `securitiesAccount.currentBalances.equity` on a `MARGIN`
+account. Missing, nonnumeric, or nonfinite values produce an **unable to verify**
+alert; cash, liquidation value, and buying power are never substituted. Before
+deployment, compare this field with the account's displayed Margin Equity in a
+read-only validation. The recorded check time is local observation time; the broker
+does not supply a balance timestamp here. Transfers count only when reflected by Schwab.
+
+Telegram uses `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`; Discord uses
+`DISCORD_WEBHOOK_URL`, independently of SPX-only trade notifications. Missing channel
+configuration remains a failed delivery in state and logs; it is not marked sent.
+Migration `013_account_monitor.sql` stores the latest check and per-channel receipt
+state. A fixed, database-local state key and advisory lock prevent simultaneous
+checks. Neither key derives from an account number or broker account hash.
+
+**Keep one monitoring owner per brokerage account.** Compose sets
+`ACCOUNT_MONITOR__ENABLED` per service, overriding the shared application `.env`.
+The independent Compose interpolation switches are `ACCOUNT_MONITOR_ENABLED_SPX`
+(default `true`), `ACCOUNT_MONITOR_ENABLED_NDX`, `ACCOUNT_MONITOR_ENABLED_XSP` and
+`ACCOUNT_MONITOR_ENABLED_SPX_LIVE` (all default `false`). Set them in the Compose
+environment (for example `infra/.env` or the invoking shell), not the shared
+application env-file. This keeps the owner running beyond live close-out and before
+the next live activation. In standalone runs, an unset/null `account_monitor.enabled`
+automatically selects SPX paper; an explicit YAML value or `ACCOUNT_MONITOR__ENABLED`
+overrides that choice.
+
+Each database must belong to one account: trade rows and monitor state have no
+account identifiers. Separate databases do not deduplicate each other. Only the
+owner's ledger drives post-close checks; daily broker reads cover the whole account.
+
+`account_monitor.minimum_equity` can override the default floor in YAML, and
+`account_monitor.enabled` controls the monitor. The environment opt-out above wins
+over YAML. Account-alert Telegram sends use a cancellable async HTTP transport with
+a 10-second total deadline; Discord plain-text requests also have a 10-second total
+deadline. The monitor's outer delivery timeout is 20 seconds. Delivery is at least
+once: lost acknowledgments or a crash between acceptance and receipt persistence can
+cause a duplicate. A pooled connection holds the advisory lock across balance and
+delivery requests (normally bounded by 15 + 10 + 10 seconds, plus database work).
+
+Monitor health is exported through Prometheus: `butterfly_account_monitor_enabled`,
+`butterfly_account_monitor_last_tick_timestamp_seconds`,
+`butterfly_account_monitor_last_success_timestamp_seconds` (last valid broker read),
+and `butterfly_account_monitor_required_check_timestamp_seconds`. Heartbeat progress
+requires a completed database/delivery tick; a failed read does not refresh the last
+valid balance time. Persisted valid-read time is restored after restart.
+[`infra/account-monitor-alerts.yml`](infra/account-monitor-alerts.yml) supplies rules
+for a stuck/failed monitor and overdue scheduled verification, accounting for nights,
+weekends and early closes. **These rules are prepared, not installed live.** Helios
+loads `/opt/monitoring/prometheus-alerts/*.yml`; deploying the reviewed rule file and
+reloading Prometheus is a separate operational step. Process/container-down alerts
+remain the responsibility of the existing monitoring stack.
+
 ## Before trading real money
 
 All three assets are paper-only unless the owner explicitly authorizes a supervised live canary. Before any restart, deploy, or live pilot, follow [`docs/live-runbook.md`](docs/live-runbook.md). The runbook requires:

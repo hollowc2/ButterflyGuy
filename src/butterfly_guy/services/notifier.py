@@ -83,9 +83,10 @@ class DiscordNotifier:
         *,
         image_png: bytes | None = None,
         image_name: str = "chart.png",
-    ) -> None:
+        redact_errors: bool = False,
+    ) -> bool:
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
                 if image_png:
                     payload = {
                         "content": content,
@@ -117,8 +118,18 @@ class DiscordNotifier:
                 async with request as resp:
                     if resp.status not in (200, 204):
                         log.warning("discord_post_failed", status=resp.status)
+                        return False
+                    return True
         except Exception as e:
-            log.error("discord_error", error=str(e))
+            if redact_errors:
+                log.error("discord_error", error_type=type(e).__name__)
+            else:
+                log.error("discord_error", error=str(e))
+            return False
+
+    async def send_checked(self, text: str) -> bool:
+        """Report acceptance so durable risk alerts can retry failed delivery."""
+        return await self._post(text, redact_errors=True)
 
     async def notify_text(self, text: str) -> None:
         """Post a plain-text message."""
