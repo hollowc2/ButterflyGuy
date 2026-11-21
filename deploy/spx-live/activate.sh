@@ -46,10 +46,24 @@ echo "$(ts) verify fail=${fail:-none}"
 container_env "$LIVE_C" | grep -E '^(BUTTERFLY_INSTANCE_ROLE|DATABASE__NAME|EXECUTION__|RISK__|LIVE_ACCOUNT|LIVE_MAX)'
 
 if [ -n "$fail" ]; then
-  if stop_live; then
-    notify "🛑 $LABEL $DATE failed verification ($fail). Live container stopped; paper untouched. Log: $D/activation.log"
+  # The bot ran with orders enabled for WAIT_SECONDS and may already hold a fly. Block new
+  # entries first (the risk gate's halted flag; exits are unaffected), then stop it only
+  # if the broker and the live DB are flat. Not flat, or unknown: it keeps managing the
+  # fly, and VERIFY_FAILED keeps health.sh watching it.
+  if db_tool halt-entries --date "$DATE"; then
+    entries="new entries halted"
   else
-    notify "🚨 $LABEL $DATE failed verification ($fail) AND the live container did not stop. Check Helios now: $D/activation.log"
+    entries="entry halt FAILED, new entries may still be enabled"
+  fi
+  if broker_flat --ignore-expired && db_tool check "${CHECK_ARGS[@]}"; then
+    if stop_live; then
+      notify "🛑 $LABEL $DATE failed verification ($fail). Live container stopped; paper untouched. Log: $D/activation.log"
+    else
+      notify "🚨 $LABEL $DATE failed verification ($fail) AND the live container did not stop ($entries). Check Helios now: $D/activation.log"
+    fi
+  else
+    act touch "$D/VERIFY_FAILED"
+    notify "🚨 $LABEL $DATE failed verification ($fail), but the broker or $LIVE_DB is not flat or could not be checked, so the live container was LEFT RUNNING to manage the position; $entries. Check ToS and Helios now; stop it once flat with $D/stop-live.sh. Log: $D/activation.log"
   fi
   exit 1
 fi

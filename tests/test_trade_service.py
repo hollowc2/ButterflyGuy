@@ -1,4 +1,6 @@
 import datetime as dt
+from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -339,11 +341,8 @@ async def test_live_entry_safety_error_releases_the_lock_without_another_step(er
     service._release_entry_lock.assert_awaited_once()
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("failure_point", ["trade", "intent", "risk"])
-async def test_filled_entry_persistence_failure_stops_for_reconciliation(
-    failure_point,
-):
+def _filled_live_entry() -> SimpleNamespace:
+    """A live TradeService whose single entry attempt fills (trade 99, intent 42)."""
     config = AppConfig(
         execution=ExecutionSettings(
             paper_trading=False,
@@ -419,34 +418,133 @@ async def test_filled_entry_persistence_failure_stops_for_reconciliation(
     service._entry_selection_parity_report = AsyncMock(return_value={})
     service._acquire_entry_lock = AsyncMock(return_value=(MagicMock(), "lock"))
     service._release_entry_lock = AsyncMock()
+    return SimpleNamespace(
+        service=service,
+        risk_engine=risk_engine,
+        order_manager=order_manager,
+        trade_queries=trade_queries,
+        decision_queries=decision_queries,
+        selection=selection,
+        best=best,
+    )
 
-    if failure_point == "trade":
-        trade_queries.insert_trade.side_effect = RuntimeError("db unavailable")
-    elif failure_point == "intent":
-        order_manager.intent_queries.link_trade.side_effect = RuntimeError(
-            "intent unavailable"
-        )
-    else:
-        risk_engine.record_trade.side_effect = RuntimeError("risk unavailable")
 
+@contextmanager
+def _patch_filled_entry(selection: EntrySelectionResult):
     with patch("butterfly_guy.services.trade_service.time_in_window", return_value=True), patch(
         "butterfly_guy.services.trade_service.get_0dte_expiration",
         return_value=dt.date(2026, 7, 14),
     ), patch(
         "butterfly_guy.services.trade_service.select_entry_candidate",
         return_value=selection,
-    ), pytest.raises(AmbiguousOrderError, match="broker fill was not fully persisted"):
-        await service.attempt_entry()
+    ):
+        yield
 
-    order_manager.execute_single_attempt.assert_awaited_once()
-    inserted = trade_queries.insert_trade.await_args.args[0]
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_point", ["trade", "intent", "risk"])
+async def test_filled_entry_persistence_failure_stops_for_reconciliation(
+    failure_point,
+):
+    f = _filled_live_entry()
+    if failure_point == "trade":
+        f.trade_queries.insert_trade.side_effect = RuntimeError("db unavailable")
+    elif failure_point == "intent":
+        f.order_manager.intent_queries.link_trade.side_effect = RuntimeError(
+            "intent unavailable"
+        )
+    else:
+        f.risk_engine.record_trade.side_effect = RuntimeError("risk unavailable")
+
+    with _patch_filled_entry(f.selection), pytest.raises(
+        AmbiguousOrderError, match="broker fill was not fully persisted"
+    ):
+        await f.service.attempt_entry()
+
+    f.order_manager.execute_single_attempt.assert_awaited_once()
+    inserted = f.trade_queries.insert_trade.await_args.args[0]
     assert inserted["metadata"]["paper_fill_model"] == "mark_v1"
     assert inserted["metadata"]["entry_execution_diagnostics"] == {
         "estimated_execution_drag": 0.25
     }
-    service._release_entry_lock.assert_awaited_once()
+    f.service._release_entry_lock.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure_point", ["trade_entered", "entry_ladder_trace", "lock_release", "metrics"]
+)
+async def test_post_fill_telemetry_failure_still_hands_the_trade_to_the_monitor(
+    failure_point,
+):
+    """Review 2026-11-20 finding 1: optional work after a persisted fill never strands it."""
+    f = _filled_live_entry()
+
+    async def event(event_type, *args, **kwargs):
+        if event_type == failure_point:
+            raise RuntimeError("post-fill audit unavailable")
+
+    f.decision_queries.log_event.side_effect = event
+    if failure_point == "lock_release":
+        f.service._release_entry_lock.side_effect = RuntimeError("connection lost")
+    metrics = MagicMock()
+    metrics.labels.side_effect = RuntimeError("metrics broken")
+
+    with _patch_filled_entry(f.selection), patch(
+        "butterfly_guy.services.trade_service.trades_active",
+        new=metrics if failure_point == "metrics" else MagicMock(),
+    ):
+        result = await f.service.attempt_entry()
+
+    assert result is not None
+    record, candidate = result
+    assert record.trade_id == 99 and candidate is f.best
+    assert record.entry_price == 1.0 and record.center_symbol == "CENTER"
+    f.trade_queries.insert_trade.assert_awaited_once()
+    f.order_manager.intent_queries.link_trade.assert_awaited_once_with(42, 99)
+    f.risk_engine.record_trade.assert_awaited_once()
+    f.service._release_entry_lock.assert_awaited_once()
+    # Each audit event is attempted independently of the other.
+    events = [c.args[0] for c in f.decision_queries.log_event.await_args_list]
+    assert "trade_entered" in events and "entry_ladder_trace" in events
+
+
+@pytest.mark.asyncio
+async def test_post_fill_audit_failure_starts_the_position_monitor(monkeypatch):
+    """The reviewed path end to end: a failing trade_entered audit still gets monitored."""
+    import asyncio
+
+    from butterfly_guy.scripts.run_live import entry_loop
+
+    f = _filled_live_entry()
+
+    async def event(event_type, *args, **kwargs):
+        if event_type == "trade_entered":
+            raise RuntimeError("post-fill audit unavailable")
+
+    f.decision_queries.log_event.side_effect = event
+    monitored = asyncio.Event()
+    position_service = MagicMock(config=f.service.config)
+
+    async def monitor_loop(trade, candidate, **kwargs):
+        assert trade.trade_id == 99 and candidate is f.best
+        monitored.set()
+        await asyncio.Event().wait()
+
+    position_service.monitor_loop = monitor_loop
+    critical = MagicMock(notify_critical=AsyncMock())
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+    with _patch_filled_entry(f.selection):
+        loop = asyncio.create_task(
+            entry_loop(f.service, position_service, critical_notifier=critical)
+        )
+        await asyncio.wait_for(monitored.wait(), timeout=2)
+        loop.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await loop
+
+    f.order_manager.execute_single_attempt.assert_awaited_once()
+    critical.notify_critical.assert_not_awaited()
 
 
 def _prev_close_service(fetchrow: AsyncMock) -> tuple[TradeService, MagicMock]:

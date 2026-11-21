@@ -7,12 +7,13 @@
 # restart is posted once, because a restarted bot otherwise looks healthy. A bot that is up but
 # has halted on unknown broker state counts as down: it leaves an open fly unmanaged (live
 # 2026-11-19). It never starts, stops or execs into anything that writes. It stays silent
-# until activation has verified the container (VERIFIED) and after a deliberate stop (STOPPED).
+# until activation has verified the container (VERIFIED) or left an unverified one running
+# to manage a fly (VERIFY_FAILED), and after a confirmed deliberate stop (STOPPED).
 set -uo pipefail
 source "$(dirname "$0")/common.sh"
 
 [ "$(date -u +%F)" = "$DATE" ] || exit 0
-[ -e "$D/VERIFIED" ] || exit 0
+[ -e "$D/VERIFIED" ] || [ -e "$D/VERIFY_FAILED" ] || exit 0
 [ -e "$D/STOPPED" ] && exit 0
 open_log health
 

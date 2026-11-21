@@ -416,13 +416,13 @@ def live_service(snapshots, orders, execute_exit=None):
     return service
 
 
-async def run_live_monitor(service, polls=12):
+async def run_live_monitor(service, polls=12, trade=None):
     import asyncio
 
     from butterfly_guy.data.schemas import TradeRecord
     from tests.test_position_monitoring import EXPIRATION, _candidate
 
-    trade = TradeRecord(
+    trade = trade or TradeRecord(
         trade_id=500, trade_date=EXPIRATION, direction="PUT", entry_price=0.30,
         lower_symbol=LOWER, center_symbol=CENTER, upper_symbol=UPPER,
     )
@@ -524,6 +524,95 @@ async def test_unresolved_manual_close_alerts_once_and_never_trades(orders):
     assert telegram.await_count == 1
     assert readiness_snapshot() == (False, "manual_close_unresolved")
     set_readiness(None)
+
+
+def _persisted_metadata(service):
+    """The trade metadata the monitor merged, as the DB row would hold it."""
+    merged = {}
+    for call in service.trade_queries.merge_metadata.await_args_list:
+        assert call.args[0] == 500
+        merged.update(call.args[1])
+    return merged
+
+
+def _restarted_trade(metadata):
+    """Startup recovery of trade 500's OPEN row, through run_live's real conversion."""
+    from butterfly_guy.scripts.run_live import _recovered_trade_record
+    from tests.test_position_monitoring import EXPIRATION
+
+    return _recovered_trade_record({
+        "id": 500, "trade_date": EXPIRATION, "direction": "PUT", "wing_width": 20,
+        "center_strike": 0.0, "lower_strike": 0.0, "upper_strike": 0.0,
+        "entry_price": 0.30, "entry_time": None, "lower_symbol": LOWER,
+        "center_symbol": CENTER, "upper_symbol": UPPER, "quantity": 1, "status": "OPEN",
+        "metadata": json.dumps(metadata),
+    })
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["operator_order", "ladder_takeover"])
+async def test_operator_exit_ownership_survives_a_restart(trigger):
+    """Review 2026-11-20 finding 3: the handoff is permanent, across restarts too."""
+    from butterfly_guy.execution.order_manager import OperatorExitTakeoverError
+
+    if trigger == "operator_order":
+        first = live_service([HELD] * 10, [[manual_close_order("WORKING")]] * 10)
+    else:
+        first = live_service(
+            [HELD] * 10, [[]] * 10,
+            execute_exit=OperatorExitTakeoverError("operator canceled bot exit order"),
+        )
+    await run_live_monitor(first, polls=2)
+    assert first.order_manager.execute_exit.await_count == (trigger == "ladder_takeover")
+    metadata = _persisted_metadata(first)
+    assert metadata["operator_exit"]["reason"]
+
+    # The operator cancels their order; the bot restarts and reconciles clean.
+    trade = _restarted_trade(metadata)
+    assert trade.operator_exit is True
+    second = live_service([HELD] * 10, [[manual_close_order("CANCELED")]] * 10)
+    await run_live_monitor(second, polls=6, trade=trade)
+
+    second.order_manager.execute_exit.assert_not_awaited()
+    events = [c.args[0] for c in second.decision_queries.log_event.await_args_list]
+    assert events.count("manual_exit_signal_suppressed") == 1
+    assert "exit_handed_to_operator" not in events  # restored, not re-announced
+
+
+@pytest.mark.asyncio
+async def test_restored_operator_exit_still_adopts_the_manual_fill():
+    trade = _restarted_trade({"operator_exit": {"reason": "Schwab order or leg change"}})
+    service = live_service([HELD, FLAT], [[], [manual_close_order()]])
+    await run_live_monitor(service, trade=trade)
+
+    service.order_manager.execute_exit.assert_not_awaited()
+    assert_manual_close_recorded(service)
+
+
+def test_recovered_trade_without_a_handoff_keeps_bot_exits():
+    assert _restarted_trade({}).operator_exit is False
+    assert _restarted_trade({"pending_exit": {"reason": "x"}}).operator_exit is False
+
+
+@pytest.mark.asyncio
+async def test_unsaved_operator_exit_is_retried_and_flagged_without_releasing_it():
+    service = live_service([HELD] * 10, [[manual_close_order("WORKING")]] * 10)
+    service.notifier = AsyncMock()
+    attempts = []
+
+    async def merge(trade_id, metadata):
+        if "operator_exit" in metadata:
+            attempts.append(metadata)
+            if len(attempts) == 1:
+                raise RuntimeError("db unavailable")
+
+    service.trade_queries.merge_metadata.side_effect = merge
+    await run_live_monitor(service, polls=3)
+
+    assert len(attempts) == 2  # retried once on the next poll, then saved
+    service.order_manager.execute_exit.assert_not_awaited()
+    texts = [c.args[0] for c in service.notifier.notify_text.await_args_list]
+    assert any("handoff is not saved yet" in text for text in texts)
 
 
 def symbol_candidate():

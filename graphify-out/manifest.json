@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/config.py": {
-    "mtime": 1795219754.8577762,
-    "seen": 1795219847.7266026,
+    "mtime": 1795229268.9298456,
+    "seen": 1795237555.2814183,
     "ast_hash": "2f77e36f21ae4bf1c86742c56c068361",
     "semantic_hash": ""
   },
@@ -132,8 +132,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/core/metrics.py": {
-    "mtime": 1795219486.6783786,
-    "seen": 1795219734.887628,
+    "mtime": 1795229268.974845,
+    "seen": 1795237555.282149,
     "ast_hash": "d75957f975db26ae8be5eeef39e1d4f5",
     "semantic_hash": ""
   },
@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/schemas.py": {
-    "mtime": 1775063220.2827864,
-    "seen": 1795218387.2569377,
-    "ast_hash": "5c1c3ce574663f06392f60d43d41c519",
+    "mtime": 1795236135.175362,
+    "seen": 1795237555.2832773,
+    "ast_hash": "844c2e1df4e4321505d9e8c2d0452166",
     "semantic_hash": ""
   },
   "src/butterfly_guy/data/schwab_client.py": {
@@ -470,9 +470,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_live.py": {
-    "mtime": 1795219486.8593755,
-    "seen": 1795219734.8930073,
-    "ast_hash": "9ad0884a85666ee7b9cda6d0a2ee9423",
+    "mtime": 1795236192.8492944,
+    "seen": 1795237555.3003247,
+    "ast_hash": "e12287dab87e448910157d1960c30664",
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/run_paper_replay.py": {
@@ -512,15 +512,15 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/notifier.py": {
-    "mtime": 1795219487.3313675,
-    "seen": 1795219734.8933918,
+    "mtime": 1795229269.2208424,
+    "seen": 1795237555.3014684,
     "ast_hash": "6fd711ee3a983fe188f9e0cb2e95bc79",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/position_service.py": {
-    "mtime": 1795210758.0913007,
-    "seen": 1795218387.257157,
-    "ast_hash": "c0334c9d7eadf44dcc693e22172d72d2",
+    "mtime": 1795236150.0870864,
+    "seen": 1795237555.3018377,
+    "ast_hash": "3c9be09fb2aca225c37a15b9bf5308f7",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/trade_chart.py": {
@@ -530,9 +530,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/trade_service.py": {
-    "mtime": 1795141266.8969676,
-    "seen": 1795218387.2571616,
-    "ast_hash": "bd4f2ea07c6419420ec1a47cdd8519b6",
+    "mtime": 1795236239.0084362,
+    "seen": 1795237555.3020296,
+    "ast_hash": "3766ed283429499e1738fc61e280d4bd",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/weekend_review.py": {
@@ -698,8 +698,8 @@
     "semantic_hash": ""
   },
   "tests/test_config.py": {
-    "mtime": 1795219520.8437972,
-    "seen": 1795219734.8965354,
+    "mtime": 1795229269.3328414,
+    "seen": 1795237555.3097186,
     "ast_hash": "1dbb463e5c15341cbb3483d18081fa0c",
     "semantic_hash": ""
   },
@@ -788,8 +788,8 @@
     "semantic_hash": ""
   },
   "tests/test_notifier.py": {
-    "mtime": 1795219629.429939,
-    "seen": 1795219734.8999777,
+    "mtime": 1795229269.378841,
+    "seen": 1795237555.3178716,
     "ast_hash": "a75e7300c660917de6a6ad1154bfe65f",
     "semantic_hash": ""
   },
@@ -854,9 +854,9 @@
     "semantic_hash": ""
   },
   "tests/test_run_live.py": {
-    "mtime": 1795210758.5722907,
-    "seen": 1795218387.2575326,
-    "ast_hash": "542766672a484e193977b8c18a844d72",
+    "mtime": 1795237056.5879157,
+    "seen": 1795237555.3249133,
+    "ast_hash": "2197c33555b66f7c6742c3d710b6d188",
     "semantic_hash": ""
   },
   "tests/test_run_migrations.py": {
@@ -914,9 +914,9 @@
     "semantic_hash": ""
   },
   "tests/test_trade_service.py": {
-    "mtime": 1795210758.8392851,
-    "seen": 1795218387.2575743,
-    "ast_hash": "593ffc7d90412449b551f8d476ed28e2",
+    "mtime": 1795236532.579918,
+    "seen": 1795237555.3270593,
+    "ast_hash": "d1ec4eab9d548a60400233a71c342d03",
     "semantic_hash": ""
   },
   "tests/test_weekend_review.py": {
@@ -974,9 +974,9 @@
     "semantic_hash": ""
   },
   ".github/workflows/database-smoke.yml": {
-    "mtime": 1795210757.0123236,
-    "seen": 1795218387.2562425,
-    "ast_hash": "afdb9e83f5143255a8bb3dba6eb120cb",
+    "mtime": 1795229268.0978541,
+    "seen": 1795237555.2404883,
+    "ast_hash": "c60bbaecf8ed95832709f2e9e47ad9d7",
     "semantic_hash": ""
   },
   "AGENTS.md": {
@@ -992,8 +992,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1795219679.7720728,
-    "seen": 1795219734.9194293,
+    "mtime": 1795229268.1358538,
+    "seen": 1795237555.3423483,
     "ast_hash": "d729ee56ed0021abe28bb033916bff00",
     "semantic_hash": ""
   },
@@ -1058,8 +1058,8 @@
     "semantic_hash": ""
   },
   "infra/docker-compose.yml": {
-    "mtime": 1795219487.5063646,
-    "seen": 1795219734.8861089,
+    "mtime": 1795229268.883846,
+    "seen": 1795237555.2769098,
     "ast_hash": "8ef51e630e47984b6a2fe6f07048ffed",
     "semantic_hash": ""
   },
@@ -1190,8 +1190,8 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/notify.py": {
-    "mtime": 1795219487.1583705,
-    "seen": 1795219734.8887744,
+    "mtime": 1795229269.0528443,
+    "seen": 1795237555.2849314,
     "ast_hash": "91eb2722ad95f0878ffea1e32e5ccb52",
     "semantic_hash": ""
   },
@@ -3986,9 +3986,9 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/activate.sh": {
-    "mtime": 1795210757.1063216,
-    "seen": 1795218387.2562652,
-    "ast_hash": "8a268e8af96db7267f2dfe0eee17e798",
+    "mtime": 1795236386.5396745,
+    "seen": 1795237555.2413433,
+    "ast_hash": "1d552578c9cdbe71efa36fda4be7fc2a",
     "semantic_hash": ""
   },
   "deploy/spx-live/closeout.sh": {
@@ -3998,15 +3998,15 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/common.sh": {
-    "mtime": 1795210757.1953197,
-    "seen": 1795218387.2562711,
-    "ast_hash": "748bbbcfb625762e0883b28d73b588a9",
+    "mtime": 1795236386.5166748,
+    "seen": 1795237555.2415655,
+    "ast_hash": "d7f15b48b6675946afa8ee88787d6514",
     "semantic_hash": ""
   },
   "deploy/spx-live/health.sh": {
-    "mtime": 1795210757.2403188,
-    "seen": 1795218387.2562733,
-    "ast_hash": "66e7b58f71a93c9c4e389ae093dfdc45",
+    "mtime": 1795236386.561674,
+    "seen": 1795237555.2415686,
+    "ast_hash": "bbe068ce349724192401b4ecba12db66",
     "semantic_hash": ""
   },
   "deploy/spx-live/notify.py": {
@@ -4070,8 +4070,8 @@
     "semantic_hash": ""
   },
   "infra/docker-compose.spx-live.yml": {
-    "mtime": 1795219487.594363,
-    "seen": 1795219734.8860693,
+    "mtime": 1795229268.8398464,
+    "seen": 1795237555.276719,
     "ast_hash": "cabae1ad6501b11017b3d834f1d822a0",
     "semantic_hash": ""
   },
@@ -4094,9 +4094,9 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/reports/spx_paired.py": {
-    "mtime": 1795141266.0909836,
-    "seen": 1795218387.2569976,
-    "ast_hash": "4ba843559394de242f8aa0a1479e34ea",
+    "mtime": 1795236456.31236,
+    "seen": 1795237555.287835,
+    "ast_hash": "088d02d05bdb81730c67011d71cdb952",
     "semantic_hash": ""
   },
   "src/butterfly_guy/research/exit_pricing.py": {
@@ -4112,14 +4112,14 @@
     "semantic_hash": ""
   },
   "src/butterfly_guy/scripts/spx_live_db.py": {
-    "mtime": 1795141266.627973,
-    "seen": 1795218387.257139,
-    "ast_hash": "adad59bfd51ed778996c61a1e39e5346",
+    "mtime": 1795236369.5589936,
+    "seen": 1795237555.3008752,
+    "ast_hash": "a64690927c405a3e3cb03ec445af6bb8",
     "semantic_hash": ""
   },
   "src/butterfly_guy/services/account_monitor.py": {
-    "mtime": 1795219486.58938,
-    "seen": 1795219734.8932476,
+    "mtime": 1795229269.1638432,
+    "seen": 1795237555.300929,
     "ast_hash": "6c2648bc7103add0cf7928e00f162bbc",
     "semantic_hash": ""
   },
@@ -4148,14 +4148,14 @@
     "semantic_hash": ""
   },
   "tests/integration/test_spx_live_db.py": {
-    "mtime": 1795141267.075964,
-    "seen": 1795218387.257243,
-    "ast_hash": "94c64f7efddca85851d1ba372a385ab9",
+    "mtime": 1795237495.5411758,
+    "seen": 1795237555.3062878,
+    "ast_hash": "ba885d7bd33616f71960b41c972f8bd3",
     "semantic_hash": ""
   },
   "tests/test_account_monitor.py": {
-    "mtime": 1795219629.3399405,
-    "seen": 1795219734.895214,
+    "mtime": 1795229269.2878418,
+    "seen": 1795237555.3064606,
     "ast_hash": "18cd1d700ac011dafebf2289621a2173",
     "semantic_hash": ""
   },
@@ -4232,15 +4232,15 @@
     "semantic_hash": ""
   },
   "tests/test_spx_live_compose.py": {
-    "mtime": 1795219521.1107926,
-    "seen": 1795219734.9025254,
+    "mtime": 1795229269.4228404,
+    "seen": 1795237555.325838,
     "ast_hash": "49ac67507c3f42b0e5fb6a9f4adc9658",
     "semantic_hash": ""
   },
   "tests/test_spx_live_scripts.py": {
-    "mtime": 1795210758.6602888,
-    "seen": 1795218387.2575526,
-    "ast_hash": "6b03d516d32e90440f8288165f1ecc43",
+    "mtime": 1795237091.728241,
+    "seen": 1795237555.3258417,
+    "ast_hash": "d258edd8385b54f7514e2a8f5db47f4e",
     "semantic_hash": ""
   },
   "tests/test_spx_live_settle_expired.py": {
@@ -4250,15 +4250,15 @@
     "semantic_hash": ""
   },
   "tests/test_spx_live_test.py": {
-    "mtime": 1795210758.7832863,
-    "seen": 1795218387.2575567,
-    "ast_hash": "cbe2bcb9d07f9b7ed056058283c6ef9b",
+    "mtime": 1795236570.508199,
+    "seen": 1795237555.3260229,
+    "ast_hash": "e7661c81db8896ee434c2ab5a09bead7",
     "semantic_hash": ""
   },
   "tests/test_spx_paired_report.py": {
-    "mtime": 1795141268.4089375,
-    "seen": 1795218387.2575586,
-    "ast_hash": "354fb9d891c3aaca433bcaab5b585d25",
+    "mtime": 1795237237.0589857,
+    "seen": 1795237555.3260264,
+    "ast_hash": "61acc948c769931983d70a3e132e4b87",
     "semantic_hash": ""
   },
   "tests/test_xsp_batman.py": {
@@ -4592,9 +4592,9 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/README.md": {
-    "mtime": 1795210757.0503228,
-    "seen": 1795218387.257764,
-    "ast_hash": "0920da709ace314f17c7e86c62f802cb",
+    "mtime": 1795236397.8144624,
+    "seen": 1795237555.3429048,
+    "ast_hash": "37fbac2e30e602488660a0fb0c4d3598",
     "semantic_hash": ""
   },
   "docs/operations/concurrent-paper-live-spx-design.md": {
@@ -4724,14 +4724,14 @@
     "semantic_hash": ""
   },
   "tests/integration/test_account_monitor_db.py": {
-    "mtime": 1795219520.7537987,
-    "seen": 1795219734.894725,
+    "mtime": 1795229269.253842,
+    "seen": 1795237555.3051157,
     "ast_hash": "37101aebe03cf4b47163b4e4152cecb2",
     "semantic_hash": ""
   },
   "infra/account-monitor-alerts.yml": {
-    "mtime": 1795219487.6953614,
-    "seen": 1795219734.885882,
+    "mtime": 1795229268.7938468,
+    "seen": 1795237555.2758224,
     "ast_hash": "130b40612b8a62ecec5ff4639cbdc6cb",
     "semantic_hash": ""
   }

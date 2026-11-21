@@ -435,8 +435,12 @@ class PositionService:
         # Live bot exits run normally until the operator acts on the fly in Schwab.
         # From then on the operator owns the exit: the bot sends no exit orders,
         # records its first exit signal for comparison and adopts the closing fill.
+        # The handoff is persisted on the trade, so a restart never takes it back.
         live = self.config.execution.paper_trading is False
-        operator_exit = False
+        operator_exit = trade.operator_exit
+        if operator_exit:
+            log.warning("operator_exit_restored", trade_id=trade.trade_id)
+        unpersisted_operator_exit: str | None = None
         manual_exit_signal: dict[str, object] | None = None
         manual_close_problem: str | None = None
         manual_close_alerted = False
@@ -445,11 +449,17 @@ class PositionService:
             manual_close_due = live and polls % MANUAL_CLOSE_CHECK_POLLS == 0
             polls += 1
             try:
+                if unpersisted_operator_exit is not None and await self._persist_operator_exit(
+                    trade, unpersisted_operator_exit
+                ):
+                    unpersisted_operator_exit = None
                 if manual_close_due:
                     manual_fill, problem, operator_active = await self._manual_close_fill(trade)
                     if operator_active and not operator_exit:
                         operator_exit = True
-                        await self._announce_operator_exit(trade, "Schwab order or leg change")
+                        reason = "Schwab order or leg change"
+                        if not await self._announce_operator_exit(trade, reason):
+                            unpersisted_operator_exit = reason
                     if manual_fill is not None:
                         # A broker fill is irreversible: never resubmit or re-adopt.
                         exited = True
@@ -771,7 +781,8 @@ class PositionService:
                             "mark_at_signal": pos_state.current_value,
                             "peak_value": pos_state.peak_value,
                         }
-                        await self._announce_operator_exit(trade, str(takeover))
+                        if not await self._announce_operator_exit(trade, str(takeover)):
+                            unpersisted_operator_exit = str(takeover)
                         polls = 0  # look for the operator's fill on the next poll
                         await asyncio.sleep(poll_interval)
                         continue
@@ -1532,8 +1543,25 @@ class PositionService:
             )
         log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason="manual_close")
 
-    async def _announce_operator_exit(self, trade: TradeRecord, reason: str) -> None:
+    async def _persist_operator_exit(self, trade: TradeRecord, reason: str) -> bool:
+        """Record on the trade row that the operator owns its exit; never raises."""
+        try:
+            await self.trade_queries.merge_metadata(
+                trade.trade_id,
+                {"operator_exit": {"reason": reason, "handed_at": now_eastern().isoformat()}},
+            )
+        except Exception as error:
+            log.error(
+                "operator_exit_persist_failed", trade_id=trade.trade_id, error=str(error)
+            )
+            return False
+        trade.operator_exit = True
+        return True
+
+    async def _announce_operator_exit(self, trade: TradeRecord, reason: str) -> bool:
+        """Persist the handoff, then announce it; False while it is not yet persisted."""
         log.warning("exit_handed_to_operator", trade_id=trade.trade_id, reason=reason)
+        persisted = await self._persist_operator_exit(trade, reason)
         await self._best_effort(
             "exit_handed_to_operator_event",
             self.decision_queries.log_event(
@@ -1549,8 +1577,15 @@ class PositionService:
                     f"Trade {trade.trade_id}: manual action in Schwab ({reason}). "
                     "The bot sends no more exit orders for this trade; it will record "
                     "your closing fill."
+                    + (
+                        ""
+                        if persisted
+                        else " WARNING: the handoff is not saved yet (DB write failed, "
+                        "retrying); a restart before it saves would resume bot exits."
+                    )
                 ),
             )
+        return persisted
 
     async def _alert_manual_close_unresolved(self, trade: TradeRecord, problem: str) -> None:
         set_readiness("manual_close_unresolved")

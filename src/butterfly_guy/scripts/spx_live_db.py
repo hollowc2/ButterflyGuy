@@ -8,6 +8,8 @@ docs/operations/concurrent-paper-live-spx-design.md §4, §5, §9, §10.
         --copy-live-trade 415
     python -m butterfly_guy.scripts.spx_live_db seed-daily-bars --db butterfly_guy_spx_live
     python -m butterfly_guy.scripts.spx_live_db check --db butterfly_guy_spx_live
+    python -m butterfly_guy.scripts.spx_live_db halt-entries --db butterfly_guy_spx_live \
+        --date 2026-11-20
     python -m butterfly_guy.scripts.spx_live_db compare --date 2026-11-20 --out-dir /tmp/x
 """
 
@@ -252,6 +254,24 @@ async def check(conn: asyncpg.Connection, *, allow_paper_trades: bool = False) -
     return result
 
 
+async def halt_entries(conn: asyncpg.Connection, session: dt.date) -> dict[str, Any]:
+    """Block new SPX entries for the session through the risk gate's halted flag.
+
+    RiskEngine.can_trade reads the flag before every entry; exits and settlement never
+    read it, so a running bot keeps managing an open fly. Nothing clears it that day.
+    """
+    halted = await conn.fetchval(
+        """
+        INSERT INTO daily_risk_state (trade_date, underlying, halted)
+        VALUES ($1, 'SPX', TRUE)
+        ON CONFLICT (trade_date, underlying) DO UPDATE SET halted = TRUE
+        RETURNING halted
+        """,
+        session,
+    )
+    return {"trade_date": session, "halted": halted, "ok": halted is True}
+
+
 async def bootstrap(
     base: DatabaseSettings, name: str, source_name: str, copy_trades: list[int]
 ) -> dict[str, Any]:
@@ -326,6 +346,9 @@ async def _main(argv: list[str] | None = None) -> int:
             p.add_argument("--copy-live-trade", type=int, action="append", default=[])
         if command == "check":
             p.add_argument("--allow-paper-trades", action="store_true")
+    p = sub.add_parser("halt-entries")
+    p.add_argument("--db", required=True)
+    p.add_argument("--date", required=True, type=dt.date.fromisoformat)
     p = sub.add_parser("compare")
     p.add_argument("--date", required=True, type=dt.date.fromisoformat)
     p.add_argument("--paper-db", default=PAPER_DATABASE_NAME)
@@ -372,6 +395,13 @@ async def _main(argv: list[str] | None = None) -> int:
                 await source.close()
                 await target.close()
             ok = True
+        elif args.command == "halt-entries":
+            conn = await asyncpg.connect(dsn_for(base, name))
+            try:
+                result = await halt_entries(conn, args.date)
+            finally:
+                await conn.close()
+            ok = result["ok"]
         else:
             conn = await connect_read_only(base, name)
             try:

@@ -187,3 +187,74 @@ def test_target_name_never_allows_the_paper_database():
         spx_live_db.target_name("butterfly_guy_spx_live_rehearsal")
         == "butterfly_guy_spx_live_rehearsal"
     )
+
+
+@pytest.mark.asyncio
+async def test_halt_entries_blocks_the_risk_gate_and_keeps_the_day_counters():
+    """Review 2026-11-20 finding 2: activation's rollback blocks entries, not exits."""
+    from unittest.mock import patch
+
+    from butterfly_guy.core.config import RiskSettings
+    from butterfly_guy.db.queries import RiskQueries
+    from butterfly_guy.risk.risk_engine import RiskEngine
+
+    dsn = os.getenv("CI_DATABASE_URL")
+    if not dsn:
+        pytest.skip("CI_DATABASE_URL is only set by the real-DB workflow")
+
+    base = _settings(dsn)
+    target = f"butterfly_guy_spx_live_test_{uuid.uuid4().hex[:8]}"
+    admin = await asyncpg.connect(dsn)
+    await admin.execute(f'CREATE DATABASE "{target}"')
+    db = DatabasePool(spx_live_db.dsn_for(base, target), min_size=1, max_size=2)
+    try:
+        await db.initialize()
+        await run_migrations(db)
+        await db.pool.execute(
+            "INSERT INTO daily_risk_state (trade_date, underlying, trade_count, realized_pnl) "
+            "VALUES ($1, 'SPX', 1, -12.5)",
+            DAY,
+        )
+        conn = await asyncpg.connect(spx_live_db.dsn_for(base, target))
+        try:
+            assert (await spx_live_db.halt_entries(conn, DAY))["ok"] is True
+            # No row yet for the next day: created halted.
+            assert (await spx_live_db.halt_entries(conn, DAY + dt.timedelta(days=1)))["ok"]
+            # Idempotent.
+            assert (await spx_live_db.halt_entries(conn, DAY))["ok"] is True
+        finally:
+            await conn.close()
+        row = await db.pool.fetchrow(
+            "SELECT * FROM daily_risk_state WHERE trade_date = $1 AND underlying = 'SPX'", DAY
+        )
+        assert row["halted"] is True and row["trade_count"] == 1
+        assert float(row["realized_pnl"]) == -12.5 and row["max_loss_hit"] is False
+
+        engine = RiskEngine(RiskSettings(), RiskQueries(db), underlying="SPX")
+        with patch("butterfly_guy.risk.risk_engine.is_trading_day", return_value=True), \
+             patch("butterfly_guy.risk.risk_engine.is_market_open", return_value=True):
+            assert await engine.can_trade(trade_date=DAY) == (False, "trading_halted")
+        # A restart's syncs never clear it.
+        await engine.sync_trade_count(0, DAY)
+        await engine.sync_realized_pnl(0.0, DAY)
+        assert await db.pool.fetchval(
+            "SELECT halted FROM daily_risk_state WHERE trade_date = $1 AND underlying = 'SPX'",
+            DAY,
+        ) is True
+    finally:
+        await db.close()
+        await admin.execute(f'DROP DATABASE IF EXISTS "{target}" WITH (FORCE)')
+        await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_halt_entries_refuses_the_paper_database(capsys, monkeypatch):
+    from butterfly_guy.core.config import AppConfig
+
+    # Never load the real .env into the test process.
+    monkeypatch.setattr(spx_live_db, "load_config", lambda _path: AppConfig())
+    code = await spx_live_db._main(
+        ["halt-entries", "--db", "butterfly_guy", "--date", "2026-11-20"]
+    )
+    assert code == 2
+    assert "refusing to write" in capsys.readouterr().out
