@@ -27,9 +27,49 @@ Round-2 decisions worth a second look:
 - A failed halt plus a flat-looking bot is kept running, not stopped. That follows the
   "keep the manager when uncertain" verdict over stopping a misconfigured bot, and relies
   on the repeating alert. Say so if you would rather stop.
-- `_release_entry_lock_quietly` can leak a pooled connection if `pool.release` itself
-  fails. A halted bot exits; after a saved fill the leaked lock only blocks that
-  session's next entry (max one trade a day).
+- `_release_entry_lock_quietly` could leak a pooled connection if `pool.release` itself
+  failed. Round 3 fixes this (below): the leak could hang shutdown, not just block an entry.
+
+## Round 3: Codex review of `2a0f9b0` (one P1, one P2), addressed
+
+This section wins over the round-2 section above. Review with
+`git diff 2a0f9b0 -- src deploy tests`.
+
+| Codex finding | Change |
+|---|---|
+| P1 a failed `pool.release` leaks its lease; `pool.close()` then waits on it forever, so the safety exception never reaches the nonzero exit and restart | `TradeService._release_entry_lock`: if `pool.release` raises, `_discard_unreleased_connection` terminates the connection. asyncpg's `Connection.terminate()` frees the pool holder (`_release_on_close`) and closes the socket, so the server drops the session advisory lock too. It returns without terminating when the proxy is already detached (`InterfaceError`) or closed, which is what an ordinary failed reset leaves: asyncpg's `PoolConnectionHolder.release` already terminated and freed it. The error is still re-raised to the caller; the quiet wrapper still logs `entry_lock_release_failed` and swallows it, so `AmbiguousOrderError` and the saved-fill return are unchanged. Belt and braces: `DatabasePool.close(timeout=DEFAULT_CLOSE_TIMEOUT_SECONDS=15)` wraps `pool.close()` in `wait_for`; on timeout it calls `pool.terminate()` (asyncpg's cancelled `close()` already does) and logs `database_pool_close_timed_out`. No running position manager is touched: only the entry-lock connection is terminated, and the bound applies only at shutdown. |
+| P2 `ENTRY_HALT_FAILED` lived in the single-problem `elif` chain, so an earlier nonrepeating problem (e.g. image mismatch) suppressed its reminders | `health.sh`: the marker is out of the chain and has its own track and dedup file (`health.entry_halt.alerted`). It posts a 🚨 when first seen and every `ALERT_REPEAT_MIN` after, whatever else is wrong. A failed post records nothing and retries next run. The ordinary chain (and PR #101's unmanaged-fly repeats) runs unchanged beside it. The run exits 1 while the marker exists even if nothing else is wrong. The marker clears only by the established workflow: removing `ENTRY_HALT_FAILED` by hand (posts a one-time ✅ "live entry halt resolved") or a confirmed `stop-live.sh` (`STOPPED` silences health entirely). |
+
+Round-3 evidence:
+- Real asyncpg pool on a fresh disposable `timescale/timescaledb:2.30.1-pg16`
+  (`tests/integration/test_entry_lock_release_db.py`, 4 tests, `CI_DATABASE_URL`-gated):
+  a release that fails before returning the lease keeps the persistence halt
+  (`AmbiguousOrderError`), frees the advisory lock, and `close()` finishes within 5 s; the
+  same for a saved fill (trade returned); control: a failed reset is freed by asyncpg alone
+  (exactly one `terminate`, ours skipped); and a lease nobody returns is terminated by the
+  bounded close (no backends left on the scratch database).
+- Unit: `tests/test_trade_service.py` (terminate on a failed release, re-raise before any
+  order, never terminate a returned or already-freed lease), `tests/test_db_pool_close.py`
+  (bounded close terminates; a clean close does not), and `tests/test_spx_live_scripts.py`
+  (image mismatch plus failed halt: both reported, halt repeats on the interval and not
+  inside it, image warning posted once; failed delivery retried without recording; resolution
+  by marker removal, and `STOPPED` silences).
+- Against `2a0f9b0` (its own `src` on `PYTHONPATH`): 9 of the 13 new tests fail. The two
+  lease tests hang in `close()` until the test's 5 s bound; the terminate assertions fail;
+  the bounded-close tests fail because `close()` has no bound; the three health tests fail
+  because the image warning swallows the halt alert, and the old resolution notice is the
+  generic "health recovered". Controls pass there: the reset-failure test, the clean close,
+  and the two "never terminate a returned lease" cases.
+- Full suite 2187 passed, 56 skipped; `uv run ruff check .` clean; `tests/integration`
+  31 passed on that disposable database (container removed after).
+
+Remaining limitations:
+- If `terminate()` itself fails (not seen in asyncpg 0.31), the bounded close is the
+  backstop: shutdown still finishes within 15 s.
+- `DatabasePool.close()` is shared by every script; the 15 s bound applies to all. A
+  healthy close is far below it, so the only change is that a hang now ends.
+- The bound covers the pool only; other shutdown steps (gateway, Schwab client) keep their
+  own timeouts.
 
 ## Why this PR exists
 

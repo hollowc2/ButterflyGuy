@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import asyncpg
 import pytest
 
 from butterfly_guy.core.config import (
@@ -505,6 +506,52 @@ async def test_unlock_failure_never_masks_an_order_safety_error(error):
         await f.service.attempt_entry()
 
     f.trade_queries.insert_trade.assert_not_awaited()
+
+
+def _lock_service(release_error: Exception | None, detached: bool = False):
+    conn = MagicMock(execute=AsyncMock())
+    if detached:  # asyncpg already terminated and freed it; its proxy now refuses calls
+        conn.is_closed.side_effect = asyncpg.InterfaceError("released back to the pool")
+    else:
+        conn.is_closed.return_value = False
+    pool = MagicMock(release=AsyncMock(side_effect=release_error))
+    service = TradeService.__new__(TradeService)
+    service.trade_queries = SimpleNamespace(db=SimpleNamespace(pool=pool))
+    return service, conn
+
+
+@pytest.mark.asyncio
+async def test_a_release_that_never_returns_the_lease_terminates_the_connection():
+    """Codex review of 2a0f9b0: a leaked lease would hang pool.close() at shutdown."""
+    service, conn = _lock_service(asyncpg.InterfaceError("release failed"))
+
+    await service._release_entry_lock_quietly((conn, "lock"), trade_id=99)
+
+    conn.terminate.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_a_failed_release_still_raises_before_any_order():
+    service, conn = _lock_service(RuntimeError("release failed"))
+
+    with pytest.raises(RuntimeError, match="release failed"):
+        await service._release_entry_lock(conn, "lock")
+
+    conn.terminate.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "release_error, detached",
+    [(None, False), (ConnectionResetError("reset failed"), True)],
+    ids=["released", "reset_failure_already_freed"],
+)
+async def test_a_returned_lease_is_never_terminated_again(release_error, detached):
+    service, conn = _lock_service(release_error, detached=detached)
+
+    await service._release_entry_lock_quietly((conn, "lock"), trade_id=99)
+
+    conn.terminate.assert_not_called()
 
 
 @pytest.mark.asyncio

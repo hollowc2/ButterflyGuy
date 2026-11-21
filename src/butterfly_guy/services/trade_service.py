@@ -5,6 +5,8 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, Literal
 
+import asyncpg
+
 from butterfly_guy.backtest.data_loader import MinuteBar
 from butterfly_guy.core.config import AppConfig
 from butterfly_guy.core.entry_pricing import (
@@ -113,6 +115,20 @@ def _session_open_from_intraday_candles(
     return regular_session[0][1]
 
 
+def _discard_unreleased_connection(conn: Any) -> None:
+    """pool.release() can fail before it hands the lease back, and pool.close() then
+    waits on that lease forever. Terminating frees the lease and drops the session's
+    advisory lock server-side. A failed connection reset already terminated and freed
+    it, which leaves the proxy detached."""
+    try:
+        if conn.is_closed():
+            return
+        conn.terminate()
+    except asyncpg.InterfaceError:
+        return
+    log.error("entry_lock_connection_terminated")
+
+
 class TradeService:
     """Orchestrates the full entry/exit trading flow."""
 
@@ -180,13 +196,18 @@ class TradeService:
                 key,
             )
         finally:
-            await self.trade_queries.db.pool.release(conn)
+            try:
+                await self.trade_queries.db.pool.release(conn)
+            except Exception:
+                _discard_unreleased_connection(conn)
+                raise
 
     async def _release_entry_lock_quietly(
         self, entry_lock: tuple[Any, str], trade_id: int | None = None
     ) -> None:
         """Release once a broker order was sent: an unlock error must never replace the
-        safety exception or the saved fill. The pool's connection reset drops the lock."""
+        safety exception or the saved fill. The pool's connection reset, or the
+        termination of a connection the pool never got back, drops the lock."""
         try:
             await self._release_entry_lock(*entry_lock)
         except Exception as e:

@@ -481,6 +481,78 @@ def test_failed_entry_halt_keeps_the_bot_managed_and_alerts_until_resolved(sessi
     assert "STILL UNRESOLVED" in session.notifications().splitlines()[-1]
 
 
+def _activate_wrong_image_with_a_failed_halt(session):
+    session.state.update(image={"butterfly_spx_live_app": "sha256:" + "d" * 64}, halt_rc=1)
+    result, out = session.run("activate.sh")
+    assert result.returncode == 1, out
+    assert "live image is not" in out
+    assert (session.dir / "ENTRY_HALT_FAILED").exists()
+
+
+def _halt_posts(posts):
+    return [line for line in posts.splitlines()
+            if line.startswith("🚨") and "live entries may still be ENABLED:" in line]
+
+
+def test_entry_halt_alert_repeats_beside_an_earlier_health_problem(session):
+    """Codex review of 2a0f9b0: an image mismatch must not swallow the halt reminders."""
+    _activate_wrong_image_with_a_failed_halt(session)
+    alerted = session.dir / "health.entry_halt.alerted"
+
+    assert session.run("health.sh")[0].returncode == 1
+    posts = session.notifications()
+    assert "health: live image is not" in posts  # the other problem is still reported
+    assert len(_halt_posts(posts)) == 1
+
+    # Inside the repeat interval: nothing new.
+    assert session.run("health.sh")[0].returncode == 1
+    assert session.notifications() == posts
+
+    alerted.write_text("0\n")  # the interval has passed
+    assert session.run("health.sh")[0].returncode == 1
+    halt_posts = _halt_posts(session.notifications())
+    assert len(halt_posts) == 2 and "STILL UNRESOLVED" in halt_posts[-1]
+    assert session.notifications().count("health: live image is not") == 1
+
+
+def test_entry_halt_alert_retries_a_failed_delivery_beside_another_problem(session):
+    _activate_wrong_image_with_a_failed_halt(session)
+    before = session.notifications()
+    alerted = session.dir / "health.entry_halt.alerted"
+
+    result, out = session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    assert result.returncode == 1, out
+    assert session.notifications() == before
+    assert not alerted.exists()  # a failed post records nothing
+
+    session.run("health.sh")
+    halt_posts = _halt_posts(session.notifications())
+    assert len(halt_posts) == 1 and "STILL UNRESOLVED" not in halt_posts[0]
+    assert alerted.read_text().strip()
+
+
+def test_entry_halt_alert_clears_only_through_the_resolution_workflow(session):
+    session.state.update(health_rc=7, halt_rc=1)
+    session.run("activate.sh")
+    session.state["health_rc"] = 0  # every other check is healthy
+
+    assert session.run("health.sh")[0].returncode == 1
+    assert "live entries may still be ENABLED" in session.notifications().splitlines()[-1]
+
+    (session.dir / "ENTRY_HALT_FAILED").unlink()  # entries halted by hand
+    assert session.run("health.sh")[0].returncode == 0
+    assert "live entry halt resolved" in session.notifications().splitlines()[-1]
+    resolved = session.notifications()
+    session.run("health.sh")
+    assert session.notifications() == resolved
+
+    # A confirmed deliberate stop silences health, an unresolved halt included.
+    (session.dir / "ENTRY_HALT_FAILED").touch()
+    (session.dir / "STOPPED").touch()
+    assert session.run("health.sh", ALERT_REPEAT_MIN="0")[0].returncode == 0
+    assert session.notifications() == resolved
+
+
 def test_failed_activation_stop_leaves_health_watching(session):
     """Codex review of #103: verification fails, the bot looks flat, the stop fails."""
     session.state["health_rc"] = 7

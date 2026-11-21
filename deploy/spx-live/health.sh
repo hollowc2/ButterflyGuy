@@ -8,7 +8,9 @@
 # has halted on unknown broker state counts as down: it leaves an open fly unmanaged (live
 # 2026-11-19). It never starts, stops or execs into anything that writes. It stays silent
 # until activation has verified the container (VERIFIED) or left an unverified one running
-# to manage a fly (VERIFY_FAILED), and after a confirmed deliberate stop (STOPPED).
+# to manage a fly (VERIFY_FAILED), and after a confirmed deliberate stop (STOPPED). An entry
+# halt that activation could not apply (ENTRY_HALT_FAILED) alerts on its own track,
+# whatever else this check finds.
 set -uo pipefail
 source "$(dirname "$0")/common.sh"
 
@@ -82,8 +84,6 @@ elif [ "$(docker inspect -f '{{.Image}}' "$LIVE_C")" != "$CAND" ]; then
 elif broker_events=$(broker_state_events) \
     && [[ "$broker_events" == *"_stopped_unknown_broker_state"* ]]; then
   fail="live bot HALTED on unknown broker state; it is up but not managing exits"
-elif [ -e "$D/ENTRY_HALT_FAILED" ]; then
-  fail="live entries may still be ENABLED: activation failed verification and could not halt them"
 elif ! curl -sf --max-time 5 "http://127.0.0.1:$LIVE_PORT/health" >/dev/null; then
   fail="metrics port $LIVE_PORT not answering"
 elif ! token_match "$LIVE_C"; then
@@ -100,28 +100,46 @@ elif [[ "$(printf '%s\n' "${broker_events:-}" \
   # Last: only the latest block/create event decides; other health problems win.
   fail="live entries BLOCKED by an active intent; manual reconciliation required"
 fi
-echo "$(ts) health fail=${fail:-none}"
+halt_unresolved=0
+[ -e "$D/ENTRY_HALT_FAILED" ] && halt_unresolved=1
+echo "$(ts) health fail=${fail:-none} entry_halt_failed=$halt_unresolved"
+
+# Entries that may still be enabled stay critical whatever else is wrong, so this alert has
+# its own dedup and never yields to another problem. It repeats every ALERT_REPEAT_MIN
+# minutes until someone halts entries by hand and removes ENTRY_HALT_FAILED, or a
+# confirmed stop-live.sh writes STOPPED. A failed post records nothing and retries next run.
+halt_alerted="$D/health.entry_halt.alerted"
+if [ "$halt_unresolved" = 1 ]; then
+  halt_since=$(( $(date +%s) - $(cat "$halt_alerted" 2>/dev/null || echo 0) ))
+  if [ ! -e "$halt_alerted" ] || [ "$halt_since" -ge $(( ${ALERT_REPEAT_MIN:-15} * 60 )) ]; then
+    halt_repeat=""
+    [ -e "$halt_alerted" ] && halt_repeat=" STILL UNRESOLVED after $(( halt_since / 60 )) min."
+    if notify "🚨 $LABEL $DATE: live entries may still be ENABLED: activation failed verification and could not halt them.$halt_repeat Stop live once flat ($D/stop-live.sh), or halt entries by hand and remove $D/ENTRY_HALT_FAILED. Log: $D/health.log"; then
+      date +%s >"$halt_alerted"
+    fi
+  fi
+elif [ -e "$halt_alerted" ]; then
+  notify "✅ $LABEL $DATE: live entry halt resolved ($D/ENTRY_HALT_FAILED removed)" \
+    && rm -f "$halt_alerted"
+fi
 
 if [ -z "$fail" ]; then
   if [ -n "$last" ]; then
     notify "✅ $LABEL $DATE health recovered (was: $last)" || exit 1
   fi
   : >"$state"
-  exit 0
+  exit "$halt_unresolved"
 fi
 
 # A dead or halted bot with an open fly leaves it unmanaged, so that alert repeats every
 # ALERT_REPEAT_MIN minutes until the fly is flat or the bot recovers; one post was missed for
 # six hours on 2026-11-19. Everything else posts once per problem.
-# An entry halt that activation could not apply repeats the same way until resolved.
 unmanaged=0
 { [ "$(running "$LIVE_C")" != 1 ] || [[ "$fail" == "live bot HALTED"* ]]; } && unmanaged=1
-repeating=$unmanaged
-[[ "$fail" == "live entries may still be ENABLED"* ]] && repeating=1
 alerted="$D/health.alerted"
 repeat=""
 if [ "$fail" = "$last" ]; then
-  [ "$repeating" = 1 ] || exit 1
+  [ "$unmanaged" = 1 ] || exit 1
   since=$(( $(date +%s) - $(cat "$alerted" 2>/dev/null || echo 0) ))
   [ "$since" -ge $(( ${ALERT_REPEAT_MIN:-15} * 60 )) ] || exit 1
   repeat=" STILL UNRESOLVED after $(( since / 60 )) min."
@@ -134,9 +152,6 @@ if [ "$unmanaged" = 1 ]; then
     held="$LIVE_DB may hold an OPEN live fly that nothing is managing"
   fi
   notify "🚨 $LABEL $DATE: $fail; $held.$repeat Check ToS and Helios now. Log: $D/health.log" || exit 1
-  date +%s >"$alerted"
-elif [ "$repeating" = 1 ]; then
-  notify "🚨 $LABEL $DATE: $fail.$repeat Stop live once flat ($D/stop-live.sh), or halt entries by hand and remove $D/ENTRY_HALT_FAILED. Log: $D/health.log" || exit 1
   date +%s >"$alerted"
 else
   notify "⚠️ $LABEL $DATE health: $fail. Log: $D/health.log" || exit 1
