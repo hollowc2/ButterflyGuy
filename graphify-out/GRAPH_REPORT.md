@@ -1,17 +1,17 @@
 # Graph Report - Butterflyguy  (2026-11-21)
 
 ## Corpus Check
-- 795 files · ~1,191,246 words
+- 795 files · ~1,191,341 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 64 file(s) not represented in the graph (top: .jsonl 21, .parquet 15, (none) 10)
 
 ## Summary
-- 13233 nodes · 30862 edges · 521 communities (450 shown, 71 thin omitted)
+- 13237 nodes · 30871 edges · 515 communities (443 shown, 72 thin omitted)
 - Extraction: 89% EXTRACTED · 11% INFERRED · 0% AMBIGUOUS · INFERRED: 3362 edges (avg confidence: 0.9)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2a0f9b08`
+- Built from commit: `4a3c3515`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -22,10 +22,10 @@
 - test_order_manager.py
 - PositionService
 - exits.py
-- trade_chart.py
+- DatabasePool
 - butterfly_gateway_acceptance.py
-- datetime
-- ButterflyCandidate
+- hashlib
+- numpy
 - synthetic_chain.py
 - test_gateway_shadow_reads.py
 - r0
@@ -34,17 +34,17 @@
 - test_research_decisions.py
 - Schwab Gateway Credential Proof
 - test_research_session_ledger.py
-- protocol.py
+- test_research_protocol.py
 - schwab_gateway_session_soak.py
-- volindex.py
-- schwab_gateway_v046_readiness_soak.py
+- et_us
+- subprocess
 - export.py
 - reports/daily_report_card.py
 - ndx_baseline.py
 - ndx02-provenance-run.json
 - realization.py
 - Registry
-- .open
+- date
 - test_risk_engine.py
 - datetime
 - ProfitStateMachine
@@ -53,15 +53,15 @@
 - output_sha256
 - research/shadow.py
 - .generate_chain
-- trade_service.py
+- ButterflyCandidate
 - Codex Project State
-- run_variants
+- ndx_width_study.py
 - fidelity.py
 - Schwab Gateway Migration Plan
 - source_sha256
-- run_live.py
+- _build_collector_market_data
 - Dataset
-- entry_loop
+- test_broker_order_intents.py
 - equity_trade_chart.py
 - output_sha256
 - source_hashes
@@ -94,17 +94,17 @@
 - Branch Review and Integration Plan
 - ._retry
 - all_history_trials/manifest.json
-- services/daily_report_card.py
+- test_daily_report_card.py
 - strategy_parameters
 - execution_accounting.py
-- test_research_quality.py
+- .open
 - Architecture
 - test_research_sweep_ports.py
 - Options strategy discovery report
-- generate_live_performance.py
+- datetime
 - 9) Capture equity candles and Level II for trade review
 - Shared SPX candidate fleet
-- numpy
+- history.py
 - test_schwab_token_keepalive.py
 - dependencies
 - SimulationEngine
@@ -114,11 +114,11 @@
 - pair_report
 - Capability recorder design
 - DiscordNotifier
-- PostgresRecorder
+- test_xsp_quiet_flies.py
 - os
-- test_schwab_client.py
+- test_intent_faults_db.py
 - SimulationEngine
-- json
+- test_grafana_exit_trigger.py
 - test_xsp_batman.py
 - test_research_thetadata.py
 - ndx_recording.py
@@ -134,7 +134,7 @@
 - environment
 - Butterfly Guy
 - launch_schwab_gateway_readiness_soak_20260909.sh
-- health_monitor.py
+- thetadata_download.py
 - f2_shadow_report.py
 - test_exit_trials.py
 - Schwab gateway deployment options
@@ -155,7 +155,7 @@
 - Registration decision package: ThetaData development window (2026-09-29)
 - ndx_execution_audit.py
 - H-TR1 registration — trail armed at +75% with a breakeven floor
-- report_exit_mark_parity.py
+- Implementation prompt: run paper SPX and the live SPX pilot at the same time
 - After-Hours Schwab Gateway Credential-Proof Runbook
 - Schwab Gateway Credential-Proof Evidence Template
 - Width Selection
@@ -205,12 +205,12 @@
 - decision_rules
 - 3) Start the SPX stack in Docker
 - run_backtest_db.py
-- position_data_diagnostics.py
+- read_jsonl
 - 2026-09-21 — SPX executable-side accounting on the settlement-correct replay
 - fixture
 - 2026-09-29 — ThetaData development window: E0 baseline, drafted hypotheses, power (in-sample; nothing registered)
 - Prospective execution validation — spx-prospective-v2-2026-10-02
-- pathlib
+- digest
 - test_candidate_dashboards.py
 - monitor_replay_study.py
 - EventCalendar
@@ -221,7 +221,7 @@
 - Dataset
 - main
 - ButterflyGuy AI Review State
-- candles_to_series
+- yaml
 - quote_rules
 - ndx_postgres_recording.py
 - files
@@ -237,7 +237,7 @@
 - ndx02-run-02.json
 - sha256
 - assumptions
-- AppConfig
+- test_cron_guard.py
 - Implementation prompt: SPX Schwab recording fidelity (timing, cadence, ThetaData check)
 - endpoint
 - Window H — verification held; the deadline reminder is mistimed (2026-08-08)
@@ -250,12 +250,11 @@
 - output_sha256
 - Remaining NDX implementation gates
 - docs/README.md
-- thetadata_download.py
-- fill_models
-- FailingDirectProvider
-- test_research_catalog.py
-- live_performance.py
 - exit_limit
+- fill_models
+- report_exit_mark_parity.py
+- live_performance.py
+- entry_pricing.py
 - sessions/2026-03-19/chain.parquet
 - sessions/2026-03-19/clock.parquet
 - sessions/2026-03-26/chain.parquet
@@ -265,16 +264,16 @@
 - sessions/2026-04-16/chain.parquet
 - sessions/2026-04-16/clock.parquet
 - sessions/2026-06-12/chain.parquet
-- gates
+- report_trade_ladders.py
 - sessions/2026-06-12/clock.parquet
 - sessions/2026-07-13/clock.parquet
 - test_prospective_execution.py
 - sessions.parquet
-- config.py
+- BrokerStateGate
 - test_spx_live_settle_expired.py
-- types
+- reconcile_paper_settlements.py
 - _build_payload
-- test_research_protocol.py
+- services/daily_report_card.py
 - SPX paper-trade review — September 12, 2026
 - strategy-discovery-journal.md
 - 2026-09-25 — SPX idea sweep and low-VIX diagnosis (development data only)
@@ -283,7 +282,7 @@
 - test_research_accounting.py
 - source_sha256
 - forex_calendar.py
-- _broker_event_log
+- LiveSpread
 - spx_live_db.py
 - assert_paper_never_changed
 - parse_args
@@ -302,13 +301,13 @@
 - source_sha256
 - NDX-02 continuation import and cadence audit — 2026-10-15
 - one_dte_eod.py
-- spx-idea-sweep-2026-09-25/variants.py
+- round2.py
 - sha256
-- test_research_validate.py
+- dev_studies.py
 - 2026-07-14 — data audit and research design
 - target
 - 2026-09-28 — stage 4: housekeeping, provider-independent vendor tooling, hypothesis rules (no vendor data)
-- PriceHistoryProvider
+- providers.py
 - exit_trials/PLAN.md
 - app_ndx
 - GatewayAuthoritativeMarketDataProvider
@@ -319,10 +318,10 @@
 - manifest.json
 - parent_hashes
 - Monitor cadence, exit confirmation and leg fetch: plan and pre-registration
-- account_monitor.py
+- ndx_provenance.py
 - Observer target validation and operational review — 2026-10-15
 - timescaledb
-- .initialize
+- DailyReportCardSettings
 - butterfly-guy
 - test_xsp_independent_reversion.py
 - test_collector_cadence.py
@@ -332,19 +331,19 @@
 - observer-runtime-v1/README.md
 - INITIALIZATION-CORRECTION-3.md
 - platform
-- fly_settlement_value
+- SPX frozen baseline: cash-settlement correction
 - platform
 - Observer target validation and operational review — 2026-10-15
 - First token read, and a read-only container filesystem — 2026-08-06
 - Operator-named absolute token path
 - .status
-- batman.py
+- json
 - app_xsp
 - logging.py
 - exit_ladder_pricing_study.py
 - app_spx
 - parent_hashes
-- environment
+- Option A deployment runbook — Helios, containerized
 - AppConfig
 - DockerExecSource
 - test_xsp_settlement_data.py
@@ -352,22 +351,22 @@
 - postgres_binary_sha256
 - platform
 - run_trials.py
-- run_entry_analysis.py
+- run_export
 - ButterflyOrderBuilder
 - dependencies
 - 2026-09-25 — direction-rule tests, live/backtest selection parity, and gap-input fix (development data only)
 - test_research_tieset.py
-- run_export
+- export.py
 - 2026-10-01 — trail start and breakeven floor (Ernie @0DTE comparison; development data only)
 - CsvDataLoader
 - common.sh
 - quote_rules
 - TimescaleDB and default-off NDX observer — implementation review
-- run_all_history.py
+- canonical_hash
 - assumptions
 - Prospective cohort validation, version 2
 - endpoint
-- AccountMonitor
+- spx_live_settle_expired.py
 - continuation
 - run_gateway_minute_backfill.sh
 - fidelity
@@ -385,65 +384,65 @@
 - environment
 - render_one_dte_report.py
 - test_gateway_order_book.py
-- position_quote_recovery.py
+- GatewayAuthoritativeMarketDataProvider
 - test_xsp_fallback_review.py
 - test_xsp_batman_history.py
 - Concurrent paper + live SPX: design
 - Live exit order pricing: plan and pre-registration
-- test_collector_timing.py
+- test_ndx_entry_coverage.py
 - Exact-SHA Deployment Proof - 2026-07-15
 - XSP Manual-Flatten Evidence - 2026-07-16
-- datetime
+- chain_cache.py
 - test_xsp_fallback.py
-- SchwabGateway order-book release full-session acceptance — 2026-09-01
+- ChainDay
 - XSP improvements — sequential work record, October 6, 2026
-- strategy_page.py
+- Live exit order pricing: Phase 2 results (Step 1, Set A)
 - Critical External-Alert Delivery Proof - 2026-07-15
 - app_spx_live
 - XSP Flat-Runtime Restart Proof - 2026-07-14
 - fill_models
-- test_strategy_page.py
+- generate_live_performance.py
 - Implementation prompt: a designed position-monitor cadence, exit confirmation and leg fetch
 - run_schwab_fidelity_daily.sh
 - cli.py
 - spot_ticks.parquet
-- Butterfly Guy Code Review — 2026-09-25
+- PositionService
 - config.yaml
 - max_cost_per_width
 - runpy
 - spx_live_db_tool
-- test_research_features.py
+- test_live_entry_loop_halts_when_its_monitor_dies_of_any_error
 - test_xsp_independent_results.py
 - latency.py
-- Current Schwab Integration
+- test_gateway_minute_backfill.py
 - profit_management
 - load_report_gateway_settings
-- session_ledger.py
+- archive_cli.py
 - parametrize
 - Ernie (@0DTE) comparison — variant plan (not run)
 - grafana-sql-cpu-2026-10-06.md
-- files
-- 3. ButterflyGuy-owned TimescaleDB data
+- _StatefulRiskQueries
+- Concurrent paper + live SPX: Phase 0 verification
 - execution
 - strategy
 - Monitor cadence and exit confirmation: pilot-set results
-- argparse
+- schwab_token_keepalive.py
 - Research core
 - SPX activation filters — retrospective study, 2026-10-18
-- ThetaData durable backtesting execution — 2026-10-01
+- docs/README.md
 - late_morning
 - profitprotector
 - thresholds
 - Supervised SPX live test — October 29, 2026
 - 2026-09-27 — unified research core, cohort runner move, and stage-2 research tooling (development data only)
 - performance.js
-- DailyVol
+- RegimeFilter
 - afternoon
 - entry
 - morning
 - Supervised SPX live pilot — November 11, 2026
 - docker-compose.spx-live.yml
-- IntradayVol
+- gateway_minute_backfill.py
 - SPXW end-of-day 1-DTE study — November 12, 2026
 - 2026-09-29 (later) — owner's decisions: no registration yet; stressed exits floored at $0
 - environment
@@ -453,21 +452,21 @@
 - parse_quotes
 - risk
 - health.sh
-- Concurrent SPX live pilot scripts (v2)
+- environment
 - environment
 - activate.sh
 - closeout.sh
 - stop-live.sh
-- 1. Charles Schwab API
+- Window B Executed — gateway enabled, exercised, and rolled back (2026-08-08)
 - get_source
-- Snapshot-neighbor tie sets (2026-10-18)
-- 5. Local files and backtest inputs
+- ThetaData durable backtesting execution — 2026-10-01
+- report_selection_parity.py
 - Stage B recording preparation — isolated SQLite implementation
 - Recorded
 - OptionQuote
-- Acquisition
-- Work plan
-- Registration decision package — 2026-09 (for the owner; nothing is registered)
+- First observer capture — Monday 2026-10-19
+- .__init__
+- Phases
 - test_an_undrained_entry_keeps_even_a_flat_looking_bot_running
 - test_failed_verification_keeps_managing_a_fly_that_filled_meanwhile
 - Documentation map
@@ -478,20 +477,14 @@
 - test_failed_entry_halt_keeps_the_bot_managed_and_alerts_until_resolved
 - test_failed_activation_stop_leaves_health_watching
 - Implementation prompt: SPX session quality and exclusion ledger
-- parse_margin_equity
-- .monitor_loop
-- MemoryDatabase
-- render_activation_report.py
+- Bounded causal use of independent NDX minute evidence
+- .get_intraday_bars_for_day
+- Proposed one-shot Helios capture — not activated
+- activation_study.py
 - 2026-09-29 (later) — D4: gate 1's level calibrated on development data (Revision 4; nothing registered)
 - 2026-09-29 (later) — D9: the pre-registered holdout evaluation command (built; nothing run)
-- session
 - observer-weekend-install-v1/README.md
-- SPX prospective execution validation v2 registration
-- test_db_pool_close.py
-- F2 prospective shadow registration — 2026-10-02
-- Session handoff
 - 2026-09-28 — stage 3: event calendar, term-structure features, descriptive diagnostics, vendor readiness (development data only)
-- Data
 - 2026-09-29 (later) — D2: a pass must also make money (gate 6, Revision 5; nothing registered)
 - 2026-10-02 — edge search: hold to settlement with a VIX floor (development + validation; nothing registered)
 - test_discrepancy_metric_labels_cover_every_declared_code
@@ -499,7 +492,6 @@
 - test_entry_halt_alert_repeats_beside_an_earlier_health_problem
 - 2026-09-20 — SPX cash-settlement parity correction
 - 2026-09-29 (later) — D5: held trades settle on early closes (development re-run; nothing registered)
-- test_wait_for_fill_counts_request_latency_against_timeout
 - __getattr__
 
 ## God Nodes (most connected - your core abstractions)
@@ -515,8 +507,6 @@
 10. `Dataset` - 108 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Pinned upstream source supplement — 2026-10-15` --references--> `_age_seconds()`  [INFERRED]
-  docs/research/ndx-strategy/NDX-02-recording-upstream-review.md → src/butterfly_guy/services/trade_service.py
 - `Tests` --references--> `test_dry_run_stop_records_no_deliberate_stop()`  [INFERRED]
   docs/reviews/2026-11-20-spx-live-review-fixes-codex-handoff.md → tests/test_spx_live_scripts.py
 - `Implemented steps and remaining operator gate` --references--> `DirectSchwabMarketDataProvider`  [INFERRED]
@@ -525,6 +515,8 @@
   docs/research/history-vendor-readiness.md → src/butterfly_guy/research/thetadata.py
 - `Explicitly not established here` --references--> `ShadowComparingMarketDataProvider`  [INFERRED]
   docs/archive/schwab-gateway/architecture/schwab-gateway-deployment-options.md → src/butterfly_guy/gateway_client/shadow.py
+- `Gateway client metrics — closed (2026-08-08)` --references--> `ShadowComparingMarketDataProvider`  [INFERRED]
+  docs/archive/schwab-gateway/CODEX_STATE.md → src/butterfly_guy/gateway_client/shadow.py
 
 ## Import Cycles
 - None detected.
@@ -536,7 +528,7 @@
 - **hyperedge:logo_brand_system** — brand:butterflyguy, visual:butterfly_mark, visual:network_geometry, visual:cyan_purple_gradient, visual:dark_background [INFERRED 0.80]
 - **Monitoring Stack** — infra_prometheus_butterfly_scrapes, infra_grafana_provisioning_datasources_datasources_prometheus, infra_grafana_provisioning_datasources_datasources_timescaledb, infra_grafana_provisioning_dashboards_dashboards_butterfly_provider [INFERRED 0.86]
 
-## Communities (521 total, 71 thin omitted)
+## Communities (515 total, 72 thin omitted)
 
 ### Community 0 - "source_sha256"
 Cohesion: 0.01
@@ -551,40 +543,40 @@ Cohesion: 0.01
 Nodes (348): raw/build_report.py, raw/coverage.csv, raw/coverage.sql, raw/deployed-config.yaml, raw/describe.py, raw/descriptive.json, raw/events.csv, raw/events.sql (+340 more)
 
 ### Community 3 - "test_order_manager.py"
-Cohesion: 0.07
-Nodes (112): LiveSpread, PartialFillError, _assert_one_order_at_a_time(), broker_fill(), _exit_limits_for_bids(), _exit_limits_for_rule(), fake_clock(), filled_order() (+104 more)
+Cohesion: 0.08
+Nodes (97): PartialFillError, fake_clock(), filled_order(), live_1119_canceled_exit(), live_1119_status(), make_candidate(), make_chain_data(), make_chain_data_with_oi() (+89 more)
 
 ### Community 4 - "PositionService"
-Cohesion: 0.04
-Nodes (54): H3 — The exit decision is gated on non-critical DB writes, with no query timeout, clear_readiness(), readiness_snapshot(), set_readiness(), start_metrics_server(), BrokerCashSettlement, final_regular_session_close_from_candles(), PositionService (+46 more)
+Cohesion: 0.08
+Nodes (50): readiness_snapshot(), set_readiness(), BrokerCashSettlement, test_health_stays_live_while_ready_reports_degraded(), test_readiness_recovery_clears_only_its_own_reason(), test_readiness_tracks_degraded_reason(), _candle(), _live_fly_candidate() (+42 more)
 
 ### Community 5 - "exits.py"
-Cohesion: 0.05
-Nodes (47): Backfill candles, Equity candles and order-book recording, Historical limitation, Operational caution, Record a future BMNR session, Field dictionary and claims, AbsoluteLossStop, config_exit_rules() (+39 more)
+Cohesion: 0.06
+Nodes (40): TimeRegime, effective_drawdown_threshold(), AbsoluteLossStop, config_exit_rules(), ExitDecision, monitor(), MonitorState, Observation (+32 more)
 
-### Community 6 - "trade_chart.py"
-Cohesion: 0.09
-Nodes (36): _load_trade(), main(), build_entry_chart_png(), build_exit_chart_png(), ButterflyChartSpec, _draw_mark_panel(), _draw_spot_panel(), _draw_strike_overlays() (+28 more)
+### Community 6 - "DatabasePool"
+Cohesion: 0.04
+Nodes (63): setup_logging(), DatabasePool, run_migrations(), trade_pnl_dollars(), _load_trade(), main(), load_fly_marks(), load_spot_series() (+55 more)
 
 ### Community 7 - "butterfly_gateway_acceptance.py"
 Cohesion: 0.14
 Nodes (14): _endpoints(), test_identity_checks_paper_gateway_and_no_shadow_invariants(), test_preopen_accepts_retried_market_data_unavailable(), test_preopen_allows_documented_after_hours_strategy_readiness(), test_preopen_never_suppresses_other_endpoint_failures(), test_preopen_rejects_every_other_readiness_failure(), endpoint_violations(), http_json() (+6 more)
 
-### Community 8 - "datetime"
-Cohesion: 0.13
-Nodes (22): executable_pnl_points(), live_rule_pnl_points(), _parse_metadata(), trade_point_from_row(), _row(), test_caption_and_recap_show_live_rule_exits(), test_caption_and_recap_show_paper_and_executable_side_by_side(), test_cash_settled_exit_uses_settlement_value() (+14 more)
+### Community 8 - "hashlib"
+Cohesion: 0.07
+Nodes (41): parity_frame(), quote(), test_mixed_or_ambiguous_quote_evidence_fails_closed(), test_no_liquidation_price_is_invented_for_absent_or_undersized_body(), test_parity_recovers_known_zero_carry_forward_but_is_not_spot(), test_parity_refuses_insufficient_or_inconsistent_pairs(), test_post_expiry_grid_and_halfday_are_removed(), test_signed_payable_close_and_four_contract_cash_ledger() (+33 more)
 
-### Community 9 - "ButterflyCandidate"
-Cohesion: 0.11
-Nodes (30): StrategySettings, main(), parse_args(), print_help(), scan_entry_window(), ButterflyBuilder, ButterflySelector, DirectionFilter (+22 more)
+### Community 9 - "numpy"
+Cohesion: 0.06
+Nodes (27): block_bootstrap_indices(), Candidate, fly_quotes(), max_gap(), Outcome, path_from(), qualifies(), select() (+19 more)
 
 ### Community 10 - "synthetic_chain.py"
-Cohesion: 0.08
-Nodes (24): compute_tent_boundaries(), _resolve_iv(), bs_call_price(), bs_delta(), bs_gamma(), bs_put_price(), bs_theta(), bs_vega() (+16 more)
+Cohesion: 0.10
+Nodes (20): bs_call_price(), bs_delta(), bs_gamma(), bs_put_price(), bs_theta(), bs_vega(), _d1(), _d2() (+12 more)
 
 ### Community 11 - "test_gateway_shadow_reads.py"
-Cohesion: 0.10
-Nodes (30): chain_response(), _comparisons(), DirectProvider, _discrepancies(), RecordingGateway, spot_response(), test_a_direct_payload_that_cannot_be_summarized_is_a_parsing_discrepancy(), test_a_disabled_shadow_records_no_metrics_at_all() (+22 more)
+Cohesion: 0.09
+Nodes (34): ShadowComparingMarketDataProvider, test_shadow_failure_is_observed_without_changing_the_direct_result(), chain_response(), _comparisons(), DirectProvider, _discrepancies(), FailingDirectProvider, RecordingGateway (+26 more)
 
 ### Community 12 - "r0"
 Cohesion: 0.01
@@ -606,29 +598,29 @@ Nodes (32): Accepted runtime-baseline proof adapter, Candidate capture safety st
 Cohesion: 0.13
 Nodes (12): reconcile(), save(), test_audit_import_supporting_conflict_is_visible(), test_calendar_early_close_and_accepted_no_trade(), test_conflicts_are_visible(), test_missing_input_multiple_reasons_and_approved_exclusion(), test_non_expiration_is_independently_documented_and_eom_is_preserved(), test_normalized_acceptance_cannot_override_approved_exclusion() (+4 more)
 
-### Community 18 - "protocol.py"
-Cohesion: 0.12
-Nodes (15): _blocks(), calibrate_gate1(), check_fitted(), check_registered(), check_rerun(), describe(), prior_holdout_runs(), ProtocolError (+7 more)
+### Community 18 - "test_research_protocol.py"
+Cohesion: 0.07
+Nodes (40): Baseline, Data and split (fixed now, before any vendor data is seen), Hypotheses, Next SPX sweep on vendor history — pre-registration DRAFT (not registered), Out of scope for this sweep, Primary metric and gate, _blocks(), calibrate_gate1() (+32 more)
 
 ### Community 19 - "schwab_gateway_session_soak.py"
-Cohesion: 0.12
-Nodes (34): Prepared read-only tools, adjudicate_transient_non_200(), assert_production_identity(), background_context(), cache_consistency_result(), canonical_market_data(), _confirm_surfaces(), _filtered_gateway_logs() (+26 more)
+Cohesion: 0.05
+Nodes (72): Credential lineage, EquityScanner coexistence boundary, Post-close decision, Prepared read-only tools, SchwabGateway order-book release full-session acceptance — 2026-09-01, Scope and freeze boundary, Start the full-session harness (unattended), Tuesday preflight — final gate at 06:20-06:29 PDT (+64 more)
 
-### Community 20 - "volindex.py"
-Cohesion: 0.22
-Nodes (9): daily_table(), export_daily(), ingest_intraday(), intraday_table(), merge_intraday(), parse_cboe_csv(), _row_changes(), write_aux() (+1 more)
+### Community 20 - "et_us"
+Cohesion: 0.06
+Nodes (33): default_cache_root(), DailyVol, IntradayVol, et_us(), daily_table(), export_daily(), ingest_intraday(), intraday_table() (+25 more)
 
-### Community 21 - "schwab_gateway_v046_readiness_soak.py"
-Cohesion: 0.12
-Nodes (30): append_jsonl(), bounded_request(), candidate_observation(), diagnostic_probe(), docker_inspect(), endpoint_snapshot(), finalize(), flatness() (+22 more)
+### Community 21 - "subprocess"
+Cohesion: 0.11
+Nodes (12): main(), evaluate(), process_sample(), run(), main(), scale_body(), initialize_database(), IsolatedTarget (+4 more)
 
 ### Community 23 - "export.py"
-Cohesion: 0.20
-Nodes (14): What is wrong today (verified 2026-10-04 by reading the code), bars_changes(), _bars_key(), chain_sql(), clock_sql(), daily_bars_sql(), _git_sha(), _history_entry() (+6 more)
+Cohesion: 0.28
+Nodes (9): What is wrong today (verified 2026-10-04 by reading the code), chain_sql(), clock_sql(), daily_bars_sql(), quote_event_sql(), snapshot_count_sql(), spot_ticks_sql(), _underlying() (+1 more)
 
 ### Community 24 - "reports/daily_report_card.py"
-Cohesion: 0.13
-Nodes (27): 6. Canonical and derived analytical data types, Synthetic option-chain data, AccountBalances, ActivitySummary, CashMovement, count_rejected_orders(), detect_problems(), _extract_order_id() (+19 more)
+Cohesion: 0.14
+Nodes (27): 6. Canonical and derived analytical data types, Synthetic option-chain data, AccountBalances, ActivitySummary, build_daily_report_card(), CashMovement, count_rejected_orders(), detect_problems() (+19 more)
 
 ### Community 25 - "ndx_baseline.py"
 Cohesion: 0.10
@@ -639,16 +631,16 @@ Cohesion: 0.02
 Nodes (95): command, config_sha256, created_utc, git_sha, git_status, input_sha256, aiohappyeyeballs, aiohttp (+87 more)
 
 ### Community 27 - "realization.py"
-Cohesion: 0.10
-Nodes (39): entry(), path(), fly_path(), research_entry(), stamp(), test_accepted_entry_without_old_exit_remains_eligible_for_center_realization(), test_geometry_reports_internal_parquet_microsecond_gap_in_seconds(), test_pairing_does_not_turn_missing_baseline_or_candidate_into_zero() (+31 more)
+Cohesion: 0.14
+Nodes (26): entry(), path(), fly_path(), research_entry(), stamp(), test_accepted_entry_without_old_exit_remains_eligible_for_center_realization(), test_geometry_reports_internal_parquet_microsecond_gap_in_seconds(), test_pairing_does_not_turn_missing_baseline_or_candidate_into_zero() (+18 more)
 
 ### Community 28 - "Registry"
-Cohesion: 0.16
-Nodes (16): verify_unseal(), Registry, key(), RegistryError, finish_entry(), _register(), test_a_tampered_registry_never_unseals(), test_verify_unseal_needs_a_clean_registration_on_development_data() (+8 more)
+Cohesion: 0.12
+Nodes (22): Existing inputs, verify_unseal(), _canonical(), record_hash(), Registry, RegistryError, _append(), test_catalog_fails_on_a_broken_chain() (+14 more)
 
-### Community 29 - ".open"
-Cohesion: 0.03
-Nodes (96): Fidelity validation (`validate.py`), Modules, The adapter (`history.py`), The holdout evaluation (`protocol.py`, `holdout`; D9, built 2026-09-29), The holdout (`holdout.py`), Vendor history (ThetaData, subscribed 2026-09-28), 2026-09-28 — stage 5: corrected data decision, housekeeping, ThetaData readiness (stubbed), H-TS1 mechanism check (development window, descriptive), Data decision (corrected) (+88 more)
+### Community 29 - "date"
+Cohesion: 0.05
+Nodes (28): 2026-09-28 — stage 5: corrected data decision, housekeeping, ThetaData readiness (stubbed), H-TS1 mechanism check (development window, descriptive), Data decision (corrected), H-TS1 mechanism check (DESCRIPTIVE — development window — not a rule evaluation), Housekeeping, ThetaData readiness (stubbed, nothing bought, nothing downloaded), _age_fields(), build_session(), carry_quotes() (+20 more)
 
 ### Community 30 - "test_risk_engine.py"
 Cohesion: 0.25
@@ -659,7 +651,7 @@ Cohesion: 0.02
 Nodes (87): dependencies, aiohappyeyeballs, aiohttp, aiosignal, annotated-types, anyio, asyncpg, attrs (+79 more)
 
 ### Community 32 - "ProfitStateMachine"
-Cohesion: 0.13
+Cohesion: 0.14
 Nodes (27): QuoteQualitySettings, ExitSignal, ProfitState, ProfitStateMachine, test_xsp_candidate_protects_october_8_giveback_after_confirmation(), make_pos(), make_settings(), test_absolute_loss_stop_fires_without_profit_tent() (+19 more)
 
 ### Community 33 - "test_run_backtest_db.py"
@@ -668,7 +660,7 @@ Nodes (18): fetch_prev_close(), _fitted_density_counts(), _print_pnl_histogram()
 
 ### Community 34 - "MinuteBar"
 Cohesion: 0.07
-Nodes (9): MinuteBar, BiasScoreFilter, RegimeFilter, make_bar(), make_pre_entry_bars(), TestBiasScore, TestComputeOr, TestComputeVwap (+1 more)
+Nodes (14): day_cache_path(), load_day(), _parse_bar(), save_day(), MinuteBar, select_direction_bar(), BiasScoreFilter, make_bar() (+6 more)
 
 ### Community 35 - "output_sha256"
 Cohesion: 0.01
@@ -682,41 +674,41 @@ Nodes (20): check_records(), CohortLedger, compare_with_cohort(), default_ref(),
 Cohesion: 0.11
 Nodes (9): IVModel, SyntheticChainGenerator, make_snapshot_time(), test_atm_call_price_reasonable(), test_generate_chain_has_both_types(), test_generate_chain_strike_count(), test_otm_put_iv_higher_than_otm_call(), test_price_decreases_as_dte_shrinks() (+1 more)
 
-### Community 38 - "trade_service.py"
-Cohesion: 0.06
-Nodes (21): Architecture Map, Codex review handoff: concurrent paper/live SPX review fixes, Round 2: Codex review of `d81f887` (hold for three P1s), addressed, Round 3: Codex review of `2a0f9b0` (one P1, one P2), addressed, Tests, What to send back, Why this PR exists, entry_lock_key() (+13 more)
+### Community 38 - "ButterflyCandidate"
+Cohesion: 0.03
+Nodes (51): Models and SDK coupling, _finite_quote_side(), inspect_quote_market(), PositionDataSettings, ProfitProtectorSettings, get_logger(), _as_float(), _as_int() (+43 more)
 
 ### Community 39 - "Codex Project State"
 Cohesion: 0.05
-Nodes (38): B1 — operator chose push-and-pull, with the framing corrected, B3 executed and verified by inode and digest, B3 was not ready — the runbook asserted code that did not exist, B4/B5/B6, C3 default-off deployment and gateway hardening (2026-08-10), Candidate-feed authentication proven (2026-08-10), Candidate-feed hot reload built locally (2026-08-10, NOT deployed), Candidate-feed hot reload deployed (2026-08-10T16:54:27Z) (+30 more)
+Nodes (37): C3 default-off deployment and gateway hardening (2026-08-10), Candidate-feed authentication proven (2026-08-10), Candidate-feed hot reload built locally (2026-08-10, NOT deployed), Candidate-feed hot reload deployed (2026-08-10T16:54:27Z), Codex Project State, Correction 1 — A3 as written cannot work on Helios, Correction 2 — `easy_client` silently no-ops the re-authorization, Correction to Window H part 1 (+29 more)
 
-### Community 40 - "run_variants"
-Cohesion: 0.07
-Nodes (26): session_rows(), _session_z(), round_to_seconds(), Series, SessionLoader, restrict_view(), fit_variants(), run_variants() (+18 more)
+### Community 40 - "ndx_width_study.py"
+Cohesion: 0.11
+Nodes (16): Series, all_days(), arm_config(), base_config(), build_chain(), chunk(), file_for(), last_at_or_before() (+8 more)
 
 ### Community 41 - "fidelity.py"
 Cohesion: 0.08
-Nodes (21): Accumulator, Agreement, _bucket(), compare_session(), fly_widths(), FlyStats, _fmt(), Hist (+13 more)
+Nodes (12): Accumulator, Agreement, _bucket(), compare_session(), FlyStats, Hist, _label(), _parity_spot() (+4 more)
 
 ### Community 42 - "Schwab Gateway Migration Plan"
 Cohesion: 0.12
-Nodes (16): Current migration status, Dependency map, Phase 0 — audit and documentation, Phase 1 — provider boundary, Phase 2 — minimal read-only gateway, Phase 3 — shadow comparison, Phase 4 — read-only cutover, Phase 5 — shared streaming (+8 more)
+Nodes (15): Current migration status, Phase 0 — audit and documentation, Phase 1 — provider boundary, Phase 2 — minimal read-only gateway, Phase 3 — shadow comparison, Phase 4 — read-only cutover, Phase 5 — shared streaming, Phase 6 — account and order mediation (+7 more)
 
 ### Community 43 - "source_sha256"
 Cohesion: 0.02
 Nodes (108): source_sha256, pyproject.toml, src/butterfly_guy/backtest/_cache_utils.py, src/butterfly_guy/backtest/chain_cache.py, src/butterfly_guy/backtest/csv_loader.py, src/butterfly_guy/backtest/data_loader.py, src/butterfly_guy/backtest/db_loader.py, src/butterfly_guy/backtest/execution_accounting.py (+100 more)
 
-### Community 44 - "run_live.py"
-Cohesion: 0.06
-Nodes (28): M10 — Live settlement wait has no bound, and post-close failures surface late, 1. P1: post-fill audit failure strands a confirmed fill, 3. P1: restart forgot permanent operator exit ownership, 4. P2: failed stop permanently suppressed session health, 5. P2: position monitor outlived its supervisor during shutdown, 6. P2: paired report counted settlement fees as execution cost, The six fixes, where to look, and what to challenge, _build_collector_market_data() (+20 more)
+### Community 44 - "_build_collector_market_data"
+Cohesion: 0.15
+Nodes (9): C3 — wiring shadow reads into `run_live.py`, Implemented steps and remaining operator gate, Prerequisites, in order, Reachability and observability are resolved, The wiring point, What C3 does not do, _build_collector_market_data(), test_collector_market_data_defaults_to_direct_without_a_gateway_client() (+1 more)
 
 ### Community 45 - "Dataset"
 Cohesion: 0.02
 Nodes (97): command, config_sha256, created_utc, git_sha, git_status, input_sha256, aiohappyeyeballs, aiohttp (+89 more)
 
-### Community 46 - "entry_loop"
-Cohesion: 0.06
-Nodes (46): ActiveMonitor, broker_reconciler_loop(), BrokerStateGate, entry_loop(), _reconcile_broker_state(), token_reload_loop(), AlertmanagerNotifier, broker_fill_payload() (+38 more)
+### Community 46 - "test_broker_order_intents.py"
+Cohesion: 0.16
+Nodes (25): broker_fill_payload(), _filled_entry_without_trade(), _filled_exit_with_open_trade(), _run_reconciler_once(), test_active_monitor_reports_trade_only_while_task_runs(), test_filled_entry_intent_rejects_wrong_broker_ratio(), test_filled_entry_intent_rejects_zero_quantity(), test_filled_entry_intent_repair_can_be_disabled() (+17 more)
 
 ### Community 47 - "equity_trade_chart.py"
 Cohesion: 0.14
@@ -731,16 +723,16 @@ Cohesion: 0.05
 Nodes (40): source_hashes, pyproject.toml, src/butterfly_guy/backtest/chain_cache.py, src/butterfly_guy/backtest/data_loader.py, src/butterfly_guy/backtest/db_loader.py, src/butterfly_guy/backtest/execution_accounting.py, src/butterfly_guy/backtest/__init__.py, src/butterfly_guy/backtest/metrics.py (+32 more)
 
 ### Community 50 - "test_position_quote_recovery.py"
-Cohesion: 0.17
-Nodes (27): held_leg_evidence(), candidate(), chain_quotes(), observation(), response(), shadow(), test_completed_shadow_samples_are_rate_limited(), test_held_leg_records_the_filtered_quote_instead_of_losing_its_evidence() (+19 more)
+Cohesion: 0.18
+Nodes (26): held_leg_evidence(), candidate(), chain_quotes(), observation(), response(), shadow(), test_completed_shadow_samples_are_rate_limited(), test_held_leg_records_the_filtered_quote_instead_of_losing_its_evidence() (+18 more)
 
 ### Community 51 - "run_paper_replay.py"
-Cohesion: 0.11
-Nodes (27): _butterfly_value(), _compute_spread(), detect_complete_days(), _elapsed(), EntryDecision, _et(), find_entry_candidate(), get_prev_close() (+19 more)
+Cohesion: 0.06
+Nodes (47): fmt_candidate(), get_prev_close(), get_vix(), load_bars_from_db(), load_chains_from_db(), main(), nearest_snapshot(), parse_args() (+39 more)
 
 ### Community 52 - "Target Trading Platform"
-Cohesion: 0.13
-Nodes (15): AfterHoursLab compatibility, Architecture decisions, Boundaries, Configuration model, Deployment topology, Events and Discord, Failure policy, Foundation proof (+7 more)
+Cohesion: 0.12
+Nodes (16): AfterHoursLab compatibility, Architecture decisions, Boundaries, Configuration model, Deployment topology, Events and Discord, Failure policy, Foundation proof (+8 more)
 
 ### Community 53 - "ndx02-observer-verification.json"
 Cohesion: 0.08
@@ -751,40 +743,40 @@ Cohesion: 0.10
 Nodes (20): A0 — Snapshot (read-only), A1 — Disable the keepalive, A2 — Stop the three trading services, A3 — Re-authorize, A4 — Verify the new document, A5 — Start the three services, A6 — Restore the keepalive, A7 — Verify (+12 more)
 
 ### Community 55 - "load_config"
-Cohesion: 0.05
-Nodes (36): load_config(), _regimes(), test_account_monitor_default_owner_is_paper_spx(), test_account_monitor_defaults_and_environment_optout(), test_account_monitor_environment_optout_overrides_yaml(), test_account_monitor_explicit_owner_override(), test_account_monitor_rejects_invalid_floor(), test_allow_live_trading_requires_explicit_env() (+28 more)
+Cohesion: 0.08
+Nodes (31): load_config(), ProfitManagementSettings, _regimes(), test_account_monitor_default_owner_is_paper_spx(), test_account_monitor_defaults_and_environment_optout(), test_account_monitor_environment_optout_overrides_yaml(), test_account_monitor_explicit_owner_override(), test_account_monitor_rejects_invalid_floor() (+23 more)
 
 ### Community 56 - "strategy_parameters"
 Cohesion: 0.07
 Nodes (30): strategy_parameters, afternoon_dd, allow_late_entry_fallback, asset, bull_call_bias, csv, dd_schedule, direction (+22 more)
 
 ### Community 57 - "weekend_review.py"
-Cohesion: 0.10
-Nodes (34): trade_pnl_dollars(), TradePoint, load_fly_marks(), load_spot_series(), spot_rows_to_candles(), build_eod_chart_for_row(), calendar_month_to_date(), closed_trades_to_points() (+26 more)
+Cohesion: 0.08
+Nodes (46): trade_point_from_row(), TradePoint, calendar_month_to_date(), closed_trades_to_points(), fetch_closed_trades(), format_chart_subtitle(), format_combined_performance_caption(), format_executable_pnl() (+38 more)
 
 ### Community 58 - "source_sha256"
 Cohesion: 0.01
 Nodes (139): source_sha256, pyproject.toml, src/butterfly_guy/backtest/_cache_utils.py, src/butterfly_guy/backtest/chain_cache.py, src/butterfly_guy/backtest/csv_loader.py, src/butterfly_guy/backtest/data_loader.py, src/butterfly_guy/backtest/db_loader.py, src/butterfly_guy/backtest/execution_accounting.py (+131 more)
 
 ### Community 59 - "NDX strategy development — living research plan"
-Cohesion: 0.09
-Nodes (22): 2026-10-15 — Native gateway preservation and asyncpg research integration, 2026-10-15 — Prospective provenance contract and offline checker, 2026-10-15 — Stage B local recording implementation and source review, Accounting and replay facts to retain, Authorized disabled Helios installation — 2026-10-17 UTC, Authorized read-only broker audit — 2026-10-16 05:50 UTC, Concrete observer activation proposal — 2026-10-16 15:56 UTC, Current decision (+14 more)
+Cohesion: 0.06
+Nodes (36): 2026-10-15 — Living plan established, 2026-10-15 — Native gateway preservation and asyncpg research integration, 2026-10-15 — NDX-01 reproducible reference and coverage audit, 2026-10-15 — NDX-02 bounded execution/accounting attribution, 2026-10-15 — NDX-02 constituent fidelity and causal-use specification, 2026-10-15 — NDX-02 independent minute continuation import/cadence audit, 2026-10-15 — Prospective provenance contract and offline checker, 2026-10-15 — Stage B local recording implementation and source review (+28 more)
 
 ### Community 60 - "numpy"
-Cohesion: 0.06
-Nodes (49): test_all_losing_sample_has_no_top_winners(), test_history_is_prior_only_and_resets_across_missing_history(), test_losses_avoided_are_separate_from_winners_missed_and_no_trade_days(), test_missing_feature_keeps_trade_and_comparator_boundary_is_exact(), test_delayed_entry_after_cutoff_cannot_exit_backwards_in_time(), test_ending_data_before_setup_cutoff_is_unknown_not_no_trade(), test_timed_exit_cannot_borrow_a_quote_after_hard_cutoff(), test_trend_no_trade_requires_coverage_through_signal_deadline() (+41 more)
+Cohesion: 0.09
+Nodes (33): main(), owner_minutes(), test_all_losing_sample_has_no_top_winners(), test_history_is_prior_only_and_resets_across_missing_history(), test_losses_avoided_are_separate_from_winners_missed_and_no_trade_days(), test_missing_feature_keeps_trade_and_comparator_boundary_is_exact(), proxy_frame(), test_entry_strictly_after_signal_and_negative_liquidation_not_floored() (+25 more)
 
 ### Community 61 - "Standalone SchwabGateway Extraction Plan"
 Cohesion: 0.10
 Nodes (19): Fixed defaults, Legacy-retirement approval packet — drafted, not executable, Phase 0 — Baseline and safety record, Phase 1 — Create the standalone repository, Phase 2 — Remove program-specific coupling, Phase 3 — Package and contract parity, Phase 4 — Prepare ButterflyGuy to consume shared packages, Phase 5 — Parallel Helios candidate (+11 more)
 
 ### Community 62 - "SchwabClientWrapper"
-Cohesion: 0.11
-Nodes (8): The alternative worth costing first, The brief's proposed remedy, and why it is weaker than it looks, The questions to answer before building either, Corrections to the Window H brief, Low / Info, SchwabClientWrapper, check(), main()
+Cohesion: 0.04
+Nodes (67): Assumptions requiring verification, Authentication and token lifecycle, Configuration, secrets, and deployment assumptions, Current architecture, Current Schwab Integration, Database and messaging dependencies, Direct SDK construction and imports, Discord and operational dependencies (+59 more)
 
 ### Community 63 - "test_position_monitoring.py"
-Cohesion: 0.16
-Nodes (17): TradeRecord, broker_opening_net_from_transactions(), _candidate(), _gateway_contract(), _post_exit_service(), _quotes(), _service(), test_eod_chart_includes_the_trades_fly_marks() (+9 more)
+Cohesion: 0.17
+Nodes (15): _candidate(), _gateway_contract(), _post_exit_service(), _quotes(), _service(), test_eod_chart_includes_the_trades_fly_marks(), test_intermittent_missing_held_leg_degrades_then_recovers_without_broker_write(), get_option_chain() (+7 more)
 
 ### Community 64 - "ndx02-recording-run-01.json"
 Cohesion: 0.02
@@ -796,7 +788,7 @@ Nodes (20): acquisition-complete.json, acquisition-start.json, cohort.json, cont
 
 ### Community 66 - "RunContext"
 Cohesion: 0.03
-Nodes (94): W — widths (decided: apply live after the cohort endpoint), Evidence, What the definition hash covers, Hypothesis rules (implemented, not registered), Rules that learn, ButterflyCandidate, Costs, ATMEntry (+86 more)
+Nodes (96): Decisions only the owner can make, H-EV1 — skip pre-entry releases (`HEV1`), H-LV1 — skip low-VIX calls (`HLV1`), H-SN1 — σ-normalised selector (`HSN1`), H-TS1 — rich one-day implied (`HTS1`), Optional H-EV2 — skip FOMC statement days (not implemented), Registration decision package — 2026-09 (for the owner; nothing is registered), What the definition hash covers (+88 more)
 
 ### Community 67 - "iter_chain_options"
 Cohesion: 0.12
@@ -807,8 +799,8 @@ Cohesion: 0.02
 Nodes (96): command, config_sha256, created_utc, git_sha, git_status, input_sha256, aiohappyeyeballs, aiohttp (+88 more)
 
 ### Community 69 - "sim.py"
-Cohesion: 0.10
-Nodes (24): baseline_entry(), bucket(), main(), hma_series(), hull_rising(), main(), wma(), bs_gamma() (+16 more)
+Cohesion: 0.07
+Nodes (47): baseline_entry(), open_spot(), bucket(), main(), directions(), ema(), hma_series(), hourly_closes_before() (+39 more)
 
 ### Community 70 - "exit_trials/manifest.json"
 Cohesion: 0.07
@@ -819,8 +811,8 @@ Cohesion: 0.02
 Nodes (87): dependencies, aiohappyeyeballs, aiohttp, aiosignal, annotated-types, anyio, asyncpg, attrs (+79 more)
 
 ### Community 72 - "test_f2_shadow_report.py"
-Cohesion: 0.05
-Nodes (33): _capture_posts(), test_failure_alerts_with_job_exit_code_and_tail(), test_missing_command_binary_alerts(), test_success_passes_output_through_without_alert(), database(), vix(), row(), summary() (+25 more)
+Cohesion: 0.14
+Nodes (22): database(), vix(), row(), summary(), test_all_winning_sample_passes_profit_factor_gate(), test_cash_settlement_equals_cohort_under_every_model(), test_chronological_order_controls_drawdown_and_stop(), test_drawdown_exactly_at_limit_does_not_stop() (+14 more)
 
 ### Community 73 - "re"
 Cohesion: 0.18
@@ -846,21 +838,21 @@ Nodes (97): command, config_sha256, created_utc, git_sha, git_status, aiohappyey
 Cohesion: 0.05
 Nodes (39): account_return_sharpe_marked_drawdown, baseline_scenario_regressions, command, created_utc, dependency_lock_sha256, environment_variables, git_sha, input_hashes (+31 more)
 
-### Community 79 - "services/daily_report_card.py"
-Cohesion: 0.09
-Nodes (26): build_daily_report_card(), DailyReportCardSettings, load_daily_report_card_config(), ReportCardThresholds, archive_report(), build_report_messages(), parse_trade_transactions(), rank_trades() (+18 more)
+### Community 79 - "test_daily_report_card.py"
+Cohesion: 0.12
+Nodes (16): parse_trade_transactions(), candles_to_series(), _no_trade_card(), test_build_equity_trade_chart_png_returns_png_bytes(), test_build_report_messages_no_trades_keeps_watchlist_issues(), test_build_report_messages_no_trades_posts_short_message(), test_chartable_equity_trades_skips_options(), test_equity_chart_aggregates_to_two_minute_candles() (+8 more)
 
 ### Community 80 - "strategy_parameters"
 Cohesion: 0.06
 Nodes (31): strategy_parameters, afternoon_dd, allow_late_entry_fallback, asset, bull_call_bias, csv, dd_schedule, direction (+23 more)
 
 ### Community 81 - "execution_accounting.py"
-Cohesion: 0.10
-Nodes (23): _entry_debit(), _exit_credit(), _fill_prices(), _finite_quote_side(), inspect_quote_market(), price_frozen_trade(), QuoteMarket, snapshot_at_or_before() (+15 more)
+Cohesion: 0.14
+Nodes (16): _entry_debit(), _exit_credit(), _fill_prices(), price_frozen_trade(), QuoteMarket, snapshot_at_or_before(), snapshot_keys(), _baseline() (+8 more)
 
-### Community 82 - "test_research_quality.py"
-Cohesion: 0.20
-Nodes (12): _cboe(), _day(), test_a_clean_day_passes_every_gate(), test_a_quality_run_never_reads_the_holdout(), test_arbitrage_flags_executable_violations_only(), test_coverage_crossed_stale_and_timestamp_failures_are_caught(), test_dst_weeks_are_listed_and_the_minute_file_crosscheck_reports_differences(), test_only_a_full_window_pass_opens_earlier_pulls() (+4 more)
+### Community 82 - ".open"
+Cohesion: 0.07
+Nodes (35): HistoryPlan, quality_passed(), write_history(), FakeSource, synthetic_day(), test_a_dataset_without_recorded_closes_keeps_16_00(), test_the_loader_takes_the_scheduled_close_from_a_vendor_dataset(), _plan() (+27 more)
 
 ### Community 83 - "Architecture"
 Cohesion: 0.10
@@ -874,9 +866,9 @@ Nodes (87): dependencies, aiohappyeyeballs, aiohttp, aiosignal, annotated-types,
 Cohesion: 0.18
 Nodes (10): Best observed candidate (rejected), Bootstrap, Monte Carlo, and risk, Executive summary, Failed hypotheses and weaknesses, Future research roadmap, Options strategy discovery report, Out-of-sample and walk-forward evidence, Parameter sensitivity and rolling selection (+2 more)
 
-### Community 86 - "generate_live_performance.py"
-Cohesion: 0.08
-Nodes (33): now_pacific(), _built_at(), no_trade_payload(), no_trade_reason(), NoTradeDay, performance_script(), render_placeholder_html(), render_report_html() (+25 more)
+### Community 86 - "datetime"
+Cohesion: 0.09
+Nodes (31): _print_comparison_table(), _collector(), _daily_candle(), test_daily_bars_failure_leaves_refresh_pending_and_retries(), test_daily_bars_skip_todays_in_progress_candle(), test_daily_bars_use_eastern_session_date_not_host_date(), _capture(), _make_result() (+23 more)
 
 ### Community 87 - "9) Capture equity candles and Level II for trade review"
 Cohesion: 0.67
@@ -886,13 +878,13 @@ Nodes (3): 9) Capture equity candles and Level II for trade review, code:bash (u
 Cohesion: 0.15
 Nodes (22): 4) Run the live orchestrator directly, 5) Smoke-test the backtest from Docker, 6) Inspect a historical entry decision, 7) Run the morning equity scan, 8) Generate or compare reports, Backtesting, code:bash (uv run python src/butterfly_guy/scripts/run_live.py --config), code:bash (docker exec butterfly_spx_app python -m butterfly_guy.script) (+14 more)
 
-### Community 89 - "numpy"
-Cohesion: 0.06
-Nodes (56): 4. Metric and decision rule (fixed in advance), Fill, TradeFills, breakdowns(), cell(), coverage(), _half(), markdown() (+48 more)
+### Community 89 - "history.py"
+Cohesion: 0.03
+Nodes (66): The holdout (`holdout.py`), cmd_cache_inputs(), chain_to_table(), dataset_hash(), dense_chain_from_rows(), Manifest, session_dir(), SessionChain (+58 more)
 
 ### Community 90 - "test_schwab_token_keepalive.py"
-Cohesion: 0.09
-Nodes (15): lock_events(), OAuthError, _run_with_stub_token(), fake_open(), test_token_keepalive_alert_follows_the_refresh(), test_token_keepalive_exits_when_the_token_lock_is_held(), test_token_keepalive_honours_schwab_token_path(), fake_open() (+7 more)
+Cohesion: 0.06
+Nodes (17): _db(), test_close_does_not_terminate_a_pool_that_closes(), test_close_terminates_a_pool_that_waits_on_a_leaked_lease(), fake_db(), FakeConnection, test_changed_migration_fails_closed(), test_migration_is_recorded_and_then_skipped(), lock_events() (+9 more)
 
 ### Community 91 - "dependencies"
 Cohesion: 0.02
@@ -900,11 +892,11 @@ Nodes (87): dependencies, aiohappyeyeballs, aiohttp, aiosignal, annotated-types,
 
 ### Community 92 - "SimulationEngine"
 Cohesion: 0.07
-Nodes (29): Entry-point inventory and fate, Open owner decisions, Phase 0: land what exists, Phase 2: one exit kernel, Phase 3: commit the analysis that decisions rest on, Phase 5: data upkeep, Phases, Research workflow unification plan — 2026-09-29 (+21 more)
+Nodes (27): Entry-point inventory and fate, Open owner decisions, Phase 2: one exit kernel, Research workflow unification plan — 2026-09-29, Target workflow, What unification does not change, Why a plan is still needed, 6. Cleanup (P3) (+19 more)
 
 ### Community 93 - "argparse"
-Cohesion: 0.03
-Nodes (82): _quiet(), _quiet(), _cache(), _published_config(), _quiet(), _run(), test_full_frozen_replay_parity(), test_mini_fixture_matches_the_frozen_replay_trade_by_trade() (+74 more)
+Cohesion: 0.04
+Nodes (43): _published(), _row(), test_fitted_thresholds_match_the_published_ones(), test_learners_decide_only_from_earlier_sessions(), test_variant_reproduces_the_idea_sweep(), analyze(), main(), replay() (+35 more)
 
 ### Community 94 - "dependencies"
 Cohesion: 0.02
@@ -923,28 +915,28 @@ Cohesion: 0.25
 Nodes (7): Capability recorder design, Evidence per observation, Output, Probes, Schedule, Schwab Capability Matrix, Stop conditions
 
 ### Community 98 - "DiscordNotifier"
-Cohesion: 0.10
-Nodes (11): DiscordNotifier, test_alertmanager_payload_has_stable_redacted_fingerprint(), test_checked_discord_send_reports_http_acceptance(), test_checked_discord_send_reports_transport_failure(), test_checked_telegram_has_one_total_http_deadline(), test_notify_entry_includes_trade_stats(), capture(), test_notify_exit_formats_contract_pnl_as_dollars() (+3 more)
+Cohesion: 0.06
+Nodes (18): send_async(), send_checked_async(), gateway_market_data_readiness_loop(), DiscordNotifier, _post_with_delay(), test_alertmanager_payload_has_stable_redacted_fingerprint(), test_cancelled_checked_telegram_cannot_deliver_later_in_a_worker(), test_checked_discord_send_reports_http_acceptance() (+10 more)
 
-### Community 99 - "PostgresRecorder"
-Cohesion: 0.20
-Nodes (8): Observation, ResearchObserver, PostgresRecorder, encode(), LocalClock, sha(), fingerprint(), restore_check()
+### Community 99 - "test_xsp_quiet_flies.py"
+Cohesion: 0.15
+Nodes (19): at(), snapshot(), test_buy_wing_zero_bid_allowed_but_zero_bid_sell_rejected(), test_independent_minutes_keep_last_observation_without_filling_gaps(), test_iron_and_debit_same_effective_entry_have_identical_net_cash(), test_known_event_day_blocks_quiet_gate(), test_otm_bodies_strictly_beyond_proxy_even_after_rounding(), test_pair_shared_wing_requires_two_asks_and_pays_double_fees() (+11 more)
 
 ### Community 100 - "os"
-Cohesion: 0.06
-Nodes (27): DatabasePool, OrderIntentQueries, test_account_monitor_state_lock_and_restart_with_postgres(), test_live_runtime_queries_never_see_paper_rows(), test_intent_insert_carries_its_before_submit_evidence_atomically(), test_migrations_and_weekly_pnl_query(), test_provisional_true_up_corrects_the_trade_and_its_risk_day_atomically(), test_settle_tool_closes_the_row_and_books_risk_in_one_transaction() (+19 more)
+Cohesion: 0.10
+Nodes (17): main(), key(), test_intent_insert_carries_its_before_submit_evidence_atomically(), test_migrations_and_weekly_pnl_query(), test_provisional_true_up_corrects_the_trade_and_its_risk_day_atomically(), test_settle_tool_closes_the_row_and_books_risk_in_one_transaction(), test_startup_exit_intent_read_spans_dates_for_open_trades_only(), test_live_check_on_a_real_scratch_database() (+9 more)
 
-### Community 101 - "test_schwab_client.py"
-Cohesion: 0.12
-Nodes (33): SchwabSettings, _accessors(), factory(), _account_client(), _http_response(), _reload_harness(), _schwab_returning(), test_close_releases_both_the_live_and_retired_sessions() (+25 more)
+### Community 101 - "test_intent_faults_db.py"
+Cohesion: 0.19
+Nodes (12): inserts_blocked(), intent_count(), places(), scratch_db(), test_asyncpg_command_timeout_on_the_insert_halts_before_any_order(), test_backend_killed_mid_insert_halts_before_any_order(), test_real_unique_indexes_block_a_second_active_intent(), test_server_statement_timeout_is_definitive_and_the_retry_trades_normally() (+4 more)
 
 ### Community 102 - "SimulationEngine"
-Cohesion: 0.11
-Nodes (5): 2.1 Chain call sites (SPX), DirectSchwabMarketDataProvider, SpotObservation, test_direct_provider_delegates_without_transforming_results(), test_direct_provider_observations_are_empty()
+Cohesion: 0.19
+Nodes (3): DirectSchwabMarketDataProvider, test_direct_provider_delegates_without_transforming_results(), test_direct_provider_observations_are_empty()
 
-### Community 104 - "json"
-Cohesion: 0.04
-Nodes (57): main(), main(), result_table(), main(), money(), table(), dataset_hash(), _canonical() (+49 more)
+### Community 104 - "test_grafana_exit_trigger.py"
+Cohesion: 0.31
+Nodes (12): _deployed_policies(), _policies(), _regimes(), test_chart_exit_level_is_tool_generated_for_the_session_on_screen(), test_refresh_changes_only_value_panel_and_accepts_deployed_policies(), test_refresh_preserves_other_annotations(), test_regime_markers_match_configs_and_only_appear_on_value_chart(), _value_panel_sql() (+4 more)
 
 ### Community 105 - "test_xsp_batman.py"
 Cohesion: 0.15
@@ -955,8 +947,8 @@ Cohesion: 0.23
 Nodes (14): _cboe(), _day_quotes(), _source(), Terminal, test_a_holdout_pull_stops_before_any_terminal_request(), test_daily_bars_take_the_official_close_from_cboe_and_the_open_from_the_file(), test_describe_pins_the_inputs_and_carries_no_credential(), test_index_bars_serve_the_day_and_nothing_for_a_stale_day() (+6 more)
 
 ### Community 107 - "ndx_recording.py"
-Cohesion: 0.10
-Nodes (21): check_body(), PublicationResult, Recorder, read(), recorder(), test_append_only_tables(), test_atomic_publish_read_and_exact_bytes(), test_commit_failure_rolls_back_and_records_no_ack() (+13 more)
+Cohesion: 0.11
+Nodes (23): export_receipt(), PublicationResult, Recorder, read(), recorder(), test_append_only_tables(), test_atomic_publish_read_and_exact_bytes(), test_commit_failure_rolls_back_and_records_no_ack() (+15 more)
 
 ### Community 108 - "_send_equity_trade_charts"
 Cohesion: 0.18
@@ -971,28 +963,28 @@ Cohesion: 0.18
 Nodes (10): Preconditions — verified 2026-08-22T15:45:36Z, Re-authorization checklist — Saturday 2026-08-22, Step 1 — mint on zeus, in a real terminal, Step 2 — stage on Helios, verify byte-identical, Step 3 — move into place under the C1 lock, Step 4 — watch the reloads; restart only on a *confirmed* failure, Step 5 — verify, host against containers, Step 6 — record (+2 more)
 
 ### Community 111 - "Regime"
-Cohesion: 0.20
-Nodes (6): GapRegimeFilter, Regime, TestBullCallBias, TestDefaultsAreNoop, TestMinGapPct, TestSkipBeforeOverride
+Cohesion: 0.13
+Nodes (9): 1. Background claims: confirmed, corrected, new, classify_market_regime(), daily_reset_loop(), GapRegimeFilter, Regime, TestBullCallBias, TestDefaultsAreNoop, TestMinGapPct (+1 more)
 
 ### Community 112 - "AGENTS.md"
 Cohesion: 0.12
 Nodes (15): Architecture Map, code:bash (uv sync), code:bash (uv run pytest), code:bash (uv run ruff check .), code:bash (uv run python src/butterfly_guy/scripts/run_backtest_db.py 2), code:bash (uv run python src/butterfly_guy/scripts/inspect_entry.py 202), code:bash (uv run python src/butterfly_guy/scripts/refresh_equity_unive), code:bash (docker compose -f infra/docker-compose.yml --profile spx up ) (+7 more)
 
 ### Community 113 - "test_run_live.py"
-Cohesion: 0.05
-Nodes (62): _assert_broker_state_matches_db(), _entry_intent(), _exit_intent(), _IntentTable, _never_awaited(), _run_daily_reset_once(), _synthetic_butterfly_snapshot(), _synthetic_position() (+54 more)
+Cohesion: 0.07
+Nodes (57): _assert_broker_state_matches_db(), _entry_intent(), _exit_intent(), _IntentTable, _run_daily_reset_once(), _synthetic_butterfly_snapshot(), _synthetic_position(), test_a_second_cancel_waits_for_the_monitor_cleanup() (+49 more)
 
 ### Community 114 - "NDX prospective provenance v1 — offline specification"
 Cohesion: 0.50
 Nodes (4): Feasibility and gap ledger, NDX prospective provenance v1 — offline specification, Offline checker and interpretation, Storage and failure semantics
 
 ### Community 115 - "ButterflyGuy data sources and data types"
-Cohesion: 0.11
-Nodes (19): 10. Repository evidence map, 2.1 Yahoo Finance (`yfinance`), 2.2 S&P 500 constituent dataset on GitHub, 2.3 Wikipedia Nasdaq-100 page, 2.4 Nasdaq Trader symbol directories, 2.5 SEC company ticker map and submissions, 2.6 Alpha Vantage earnings calendar and news sentiment, 2.7 Forex Factory economic calendar (+11 more)
+Cohesion: 0.04
+Nodes (48): 10. Repository evidence map, 1.1 Account-number resolution, 1.2 Option chains, 1.3 Single-symbol spot/index quotes, 1.4 Batched equity quotes, 1.5 Price-history candles, 1.6 Market movers, 1.7 Account snapshot, balances, and positions (+40 more)
 
 ### Community 116 - "SPX 0-DTE history vendors: readiness comparison, adapter spec and validation plan"
-Cohesion: 0.14
-Nodes (14): Option A Live Serving (built offline, never deployed), Access, credential and timestamps, Assessment, `DataSource` adapter spec, Endpoints and request plan, Licence (individual plans), Plans and prices (as read), Purchase checklist (+6 more)
+Cohesion: 0.12
+Nodes (16): Option A Live Serving (built offline, never deployed), Access, credential and timestamps, Assessment, `DataSource` adapter spec, Endpoints and request plan, Licence (individual plans), Plans and prices (as read), Purchase checklist (+8 more)
 
 ### Community 118 - "environment"
 Cohesion: 0.26
@@ -1006,13 +998,13 @@ Nodes (15): Gap Regime Filter, Charles Schwab API, Architecture at a glance, But
 Cohesion: 0.20
 Nodes (10): die(), EVIDENCE_DIR, LAUNCHER, LOG, MONITOR, SESSION_DATE, launch_schwab_gateway_readiness_soak_20260909.sh script, TARGET_EPOCH (+2 more)
 
-### Community 121 - "health_monitor.py"
-Cohesion: 0.14
-Nodes (8): check_endpoint(), extract_service_name(), load_config(), main(), _now_et(), run_check_cycle(), send_discord_alert(), signal_handler()
+### Community 121 - "thetadata_download.py"
+Cohesion: 0.08
+Nodes (19): check_endpoint(), extract_service_name(), load_config(), main(), _now_et(), run_check_cycle(), send_discord_alert(), signal_handler() (+11 more)
 
 ### Community 122 - "f2_shadow_report.py"
-Cohesion: 0.23
-Nodes (8): _candidate(), check_previous(), completed_sample(), input_hashes(), load_cohort(), score(), _stats(), summarize()
+Cohesion: 0.25
+Nodes (9): _candidate(), check_previous(), completed_sample(), input_hashes(), load_cohort(), main(), score(), _stats() (+1 more)
 
 ### Community 123 - "test_exit_trials.py"
 Cohesion: 0.27
@@ -1023,24 +1015,24 @@ Cohesion: 0.20
 Nodes (9): Explicitly not established here, Option A — Helios, containerized, Option B — zeus, containerized, Option C — a separate/new host, Option D — Helios, as a `systemd --user` service, not containerized, Reading, Schwab gateway deployment options, The one bounded read-only check to ask for next (+1 more)
 
 ### Community 125 - "test_ndx_postgres_recording.py"
-Cohesion: 0.17
-Nodes (18): capture(), read(), test_backend_termination_before_commit_rolls_back(), test_commit_reply_loss_stays_unknown_until_inventory(), __init__(), transaction(), test_deferred_server_commit_failure_is_known_rollback(), test_duplicate_and_parent_link_refuse_overwrite() (+10 more)
+Cohesion: 0.14
+Nodes (20): install_empty_schema(), capture(), pg(), read(), test_backend_termination_before_commit_rolls_back(), test_commit_reply_loss_stays_unknown_until_inventory(), __init__(), transaction() (+12 more)
 
 ### Community 126 - "ThetaDataSource"
-Cohesion: 0.20
-Nodes (5): ThetaDataSource, _ymd(), test_after_the_files_end_spx_and_vix_come_from_the_recorded_dataset(), test_source_satisfies_the_history_source_interface(), test_thetadata_is_registered_and_needs_the_minute_files()
+Cohesion: 0.17
+Nodes (7): is_sealed(), parse_cboe(), ThetaDataSource, _ymd(), test_after_the_files_end_spx_and_vix_come_from_the_recorded_dataset(), test_source_satisfies_the_history_source_interface(), test_thetadata_is_registered_and_needs_the_minute_files()
 
 ### Community 127 - "prospective_execution.py"
 Cohesion: 0.07
-Nodes (33): Shadow on the open cohort, Phase 4: link the stages, ExecutableTrade, append_jsonl(), append_unique(), _breakdown(), build_daily_run_record(), build_trade_record() (+25 more)
+Nodes (29): ExecutableTrade, max_drawdown(), append_jsonl(), append_unique(), _breakdown(), build_manifest(), _comparable(), evaluate_endpoint() (+21 more)
 
 ### Community 128 - "direction_compare.py"
 Cohesion: 0.15
 Nodes (13): bootstrap(), confine(), _f(), fetch_spx(), frame_sha256(), _group(), markdown(), parse_spx_csv() (+5 more)
 
 ### Community 129 - "send_realized_vs_implied.py"
-Cohesion: 0.12
-Nodes (21): atm_straddle(), _fmt(), format_message(), MoveSummary, SessionMove, summarize(), _summary_line(), verdict() (+13 more)
+Cohesion: 0.16
+Nodes (16): atm_straddle(), _fmt(), format_message(), MoveSummary, SessionMove, summarize(), _summary_line(), verdict() (+8 more)
 
 ### Community 130 - "Schwab gateway current status"
 Cohesion: 0.25
@@ -1059,8 +1051,8 @@ Cohesion: 0.12
 Nodes (17): Credential-proof gate, Fake-only readiness and operator checklist, Prerequisites and ownership, Prohibited in this slice, Readiness gates, Rollback triggers and evidence, Fake-only verification, Integration gate (+9 more)
 
 ### Community 134 - "ShadowComparingMarketDataProvider"
-Cohesion: 0.18
-Nodes (5): _error_code(), _mismatch_code(), _numbers_agree(), ShadowComparingMarketDataProvider, test_non_shadowed_reads_are_pure_delegation()
+Cohesion: 0.22
+Nodes (3): _error_code(), _mismatch_code(), _numbers_agree()
 
 ### Community 135 - "Strategy Settings"
 Cohesion: 0.25
@@ -1071,8 +1063,8 @@ Cohesion: 0.11
 Nodes (18): archive_path, archive_run_sha256, model, sha256, broker-audit.json, compose.disabled.yaml, compose.yaml, contract.json (+10 more)
 
 ### Community 137 - "test_account_monitor.py"
-Cohesion: 0.15
-Nodes (27): at(), harness(), snapshot(), test_broker_failure_is_retried_and_sensitive_error_is_not_in_alert(), test_broker_timeout_alerts_unknown(), test_busy_account_lock_skips_without_touching_broker(), test_cancelled_check_releases_account_lock(), test_database_failure_and_stuck_lock_do_not_refresh_heartbeat() (+19 more)
+Cohesion: 0.07
+Nodes (46): AccountMonitorSettings, AccountMonitor, next_session(), parse_margin_equity(), test_account_monitor_state_lock_and_restart_with_postgres(), at(), harness(), MemoryDatabase (+38 more)
 
 ### Community 138 - "Window G — SIGTERM handled, exit 137 eliminated (2026-08-08)"
 Cohesion: 0.12
@@ -1083,16 +1075,16 @@ Cohesion: 0.11
 Nodes (18): 1. Data and integrity, 2. Baseline E0 (descriptive; do not tune on it), 3. The hypotheses on the development window (in-sample), 4. Holdout size and power, 5. VIX-smoothing sensitivity, 6.1 Stressed exits below zero: decided, now floored (D3, draft Revision 1), 6.2 Gate 1 passed skip filters too often under the null: decided, now calibrated (D4, draft Revision 4), 6.3 A paired pass against a losing baseline: decided, gate 6 added (D2, draft Revision 5) (+10 more)
 
 ### Community 140 - "ndx_execution_audit.py"
-Cohesion: 0.21
-Nodes (14): ledger_row(), side_audit(), event(), test_cash_settlement_precision_and_no_close_fee(), test_entry_diagnostic_is_not_selection_signal(), test_independent_dollars_and_no_double_fee(), test_mark_fallback_194_hand_example(), test_missing_signal_is_not_reconstructed() (+6 more)
+Cohesion: 0.13
+Nodes (19): ledger_row(), side_audit(), event(), test_cash_settlement_precision_and_no_close_fee(), test_entry_diagnostic_is_not_selection_signal(), test_independent_dollars_and_no_double_fee(), test_mark_fallback_194_hand_example(), test_missing_signal_is_not_reconstructed() (+11 more)
 
 ### Community 141 - "H-TR1 registration — trail armed at +75% with a breakeven floor"
-Cohesion: 0.13
-Nodes (11): Data, Entries (frozen, unchanged from the 09-25 harness replica), H-TR1 registration — trail armed at +75% with a breakeven floor, Hypothesis, Pass criteria (all must hold; stressed accounting; per one-lot), Reported but not gating, Result (run once, 2026-10-01, at b0b7215), Run (+3 more)
+Cohesion: 0.08
+Nodes (18): Data, Entries (frozen, unchanged from the 09-25 harness replica), H-TR1 registration — trail armed at +75% with a breakeven floor, Hypothesis, Pass criteria (all must hold; stressed accounting; per one-lot), Reported but not gating, Result (run once, 2026-10-01, at b0b7215), Run (+10 more)
 
-### Community 142 - "report_exit_mark_parity.py"
-Cohesion: 0.06
-Nodes (40): Background (verified 2026-11-17 on `origin/main` and Helios; re-verify in Phase 0), Capacity on Helios (2026-11-17), Goal, Hard constraints, How the live pilot runs today, Implementation prompt: run paper SPX and the live SPX pilot at the same time, Other collisions, Phase 0: verify (read-only) (+32 more)
+### Community 142 - "Implementation prompt: run paper SPX and the live SPX pilot at the same time"
+Cohesion: 0.11
+Nodes (18): Background (verified 2026-11-17 on `origin/main` and Helios; re-verify in Phase 0), Capacity on Helios (2026-11-17), Goal, Hard constraints, How the live pilot runs today, Implementation prompt: run paper SPX and the live SPX pilot at the same time, Other collisions, Phase 0: verify (read-only) (+10 more)
 
 ### Community 143 - "After-Hours Schwab Gateway Credential-Proof Runbook"
 Cohesion: 0.25
@@ -1107,8 +1099,8 @@ Cohesion: 0.26
 Nodes (13): Width Selection, NDX Runtime Configuration, SPX Runtime Configuration, SPX VIX Width Buckets, XSP Runtime Configuration, NDX App Container, SPX App Container, XSP App Container (+5 more)
 
 ### Community 146 - "position_service.py"
-Cohesion: 0.03
-Nodes (63): Primary options runtime, Phase 3 Shadow Surfaces (unwired, default off), Collector, Part A: timing metadata (PR 2), Provider, Research export, Schema (migration `011_snapshot_timing.sql`, idempotent like 004), Tests (+55 more)
+Cohesion: 0.04
+Nodes (53): M7 — Regime names are unvalidated and regime time bounds are ignored, M8 — Early closes are hard-coded for 2026 only, _easter_sunday(), get_0dte_expiration(), get_time_regime(), get_us_market_early_closes(), get_us_market_holidays(), is_market_open() (+45 more)
 
 ### Community 147 - "Stage-named proof failure and an unpaused restoration — 2026-08-06"
 Cohesion: 0.29
@@ -1119,12 +1111,12 @@ Cohesion: 0.29
 Nodes (6): ButterflyGuy-first admission policy, Historical evidence classification, Ownership and contracts, Schwab Gateway Multi-Consumer Foundation, Status and safety boundary, Trust model
 
 ### Community 149 - "GatewayMarketDataError"
-Cohesion: 0.14
-Nodes (10): canonicalize_schwab_chain_symbol(), ContractTiming, _finite_number(), GatewayMarketDataError, _nonnegative_integer(), _now_eastern(), OmittedContract, _optional_number() (+2 more)
+Cohesion: 0.26
+Nodes (6): _finite_number(), GatewayMarketDataError, _nonnegative_integer(), _optional_number(), _require_usable_observation(), _same_symbol()
 
 ### Community 150 - "RiskEngine"
-Cohesion: 0.08
-Nodes (9): 1. High — reconcile risk accounting before trusting risk dashboards, RiskSettings, ConsecutiveLossNotifier, RiskEngine, _sync_startup_risk_pnl(), _StatefulRiskQueries, test_restart_open_trade_exposure_blocks_entry_until_closed(), test_restart_with_open_trade_does_not_double_count_entry_cost() (+1 more)
+Cohesion: 0.13
+Nodes (7): RiskSettings, ConsecutiveLossNotifier, RiskEngine, _sync_startup_risk_pnl(), test_restart_open_trade_exposure_blocks_entry_until_closed(), test_restart_with_open_trade_does_not_double_count_entry_cost(), test_xsp_restart_then_worthless_settlement_books_one_loss()
 
 ### Community 151 - "Helios PAPER gateway cutover — 2026-08-25"
 Cohesion: 0.29
@@ -1143,8 +1135,8 @@ Cohesion: 0.14
 Nodes (13): 1. Match the center and width to remaining-session movement, 2. Rank by expected net payoff rather than target reward/risk, 3. Require persistent evidence for discretionary profit exits, 4. Exit on deteriorating butterfly geometry, not just a percentage of the peak, 5. Add an execution-cost entry gate, 6. Condition entry on scheduled events and observed directional conviction, 7. Normalize risk without increasing the position limit, 8. Diversify only after finding a second net-positive component (+5 more)
 
 ### Community 155 - "test_ndx_observer.py"
-Cohesion: 0.14
-Nodes (21): ObserverLimits, acquisition(), observer(), test_acquisition_requires_explicit_identity(), test_cancelled_publication_recovers_without_invented_ack(), test_clean_success_and_restart_inventory(), handle(), test_concurrent_publication_out_of_order_and_lock_timeout() (+13 more)
+Cohesion: 0.10
+Nodes (25): Concrete consumer and identities, Acquisition, main(), create_observer(), ObserverLimits, acquisition(), observer(), test_acquisition_requires_explicit_identity() (+17 more)
 
 ### Community 156 - "launch_schwab_gateway_session_soak_20260901.sh"
 Cohesion: 0.33
@@ -1203,8 +1195,8 @@ Cohesion: 0.14
 Nodes (26): increment_callback(), manager(), _process_refresh(), delayed_increment(), test_callback_failure_preserves_original_and_redacts_error_and_logs(), test_concurrent_managers_serialize_the_entire_refresh_callback(), first_refresh(), second_refresh() (+18 more)
 
 ### Community 171 - "test_intent_faults_db.py"
-Cohesion: 0.09
-Nodes (21): inserts_blocked(), intent_count(), places(), scratch_db(), test_asyncpg_command_timeout_on_the_insert_halts_before_any_order(), test_backend_killed_mid_insert_halts_before_any_order(), test_real_unique_indexes_block_a_second_active_intent(), test_server_statement_timeout_is_definitive_and_the_retry_trades_normally() (+13 more)
+Cohesion: 0.12
+Nodes (9): Clock, IntentDB, _one_order_at_a_time(), _restart(), test_1119_exit_replayed_settles_the_pending_cancel_and_fills_the_next_step(), test_cancel_that_never_settles_halts_restarts_and_resumes_only_once_final(), test_entry_the_operator_replaced_halts_and_startup_waits_for_the_runbook(), attempt_entry() (+1 more)
 
 ### Community 172 - "Host-executed proof step"
 Cohesion: 0.67
@@ -1215,16 +1207,16 @@ Cohesion: 0.08
 Nodes (25): files, 01-direct-complete-response.json, 02-db-complete-publication.json, 02-db-complete-response.json, 03-events-during-pass-response.json, 04-fetch-without-receipt-response.json, 05-partial-null-and-zero-response.json, 06-old-zero-size-response.json (+17 more)
 
 ### Community 174 - "SchwabDataLoader"
-Cohesion: 0.07
-Nodes (7): day_cache_path(), load_day(), _parse_bar(), save_day(), SchwabDataLoader, date_range(), main()
+Cohesion: 0.13
+Nodes (3): SchwabDataLoader, date_range(), main()
 
 ### Community 175 - "inputs"
-Cohesion: 0.12
-Nodes (16): container-source.tar.gz, continuation-inventory.sql, extract.csv, repository-hashes.txt, inputs, /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/evidence/2026-10-15/continuation-inventory-manifest.json, /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/evidence/2026-10-15/runtime-source-manifest.json, /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/evidence/2026-10-15/snapshot.json (+8 more)
+Cohesion: 0.08
+Nodes (24): container-source.tar.gz, continuation-inventory.sql, extract.csv, repository-hashes.txt, supplement.csv, supplement.sql, trade-222-events.csv, trade-222-events.sql (+16 more)
 
 ### Community 177 - "position_manager.py"
 Cohesion: 0.12
-Nodes (19): PeakTrackingSettings, fly_bid_value(), _max_leg_spread_to_mark_ratio(), PositionManager, PositionQuotesUnavailableError, _quote_quality_ok(), replay_trade(), make_quote() (+11 more)
+Nodes (21): PeakTrackingSettings, PositionManager, PositionQuotesUnavailableError, _quote_quality_ok(), replay_trade(), make_candidate(), make_quote(), make_xsp_candidate() (+13 more)
 
 ### Community 179 - "snapshots"
 Cohesion: 0.12
@@ -1248,7 +1240,7 @@ Nodes (6): BUTTERFLYGUY, Dark navy background, Futuristic uppercase wordmark, Ge
 
 ### Community 184 - "test_spx_live_test.py"
 Cohesion: 0.08
-Nodes (45): assert_manual_close_recorded(), _critical_texts(), _IntentStore, live_service(), manual_close_order(), _open_row(), _persisted_metadata(), _recording_manager() (+37 more)
+Nodes (43): assert_manual_close_recorded(), _critical_texts(), _IntentStore, live_service(), manual_close_order(), _open_row(), _persisted_metadata(), _recording_manager() (+35 more)
 
 ### Community 185 - "Next-session prompt: remaining NDX implementation"
 Cohesion: 0.11
@@ -1259,8 +1251,8 @@ Cohesion: 0.14
 Nodes (14): 2026-07-14 — diminishing returns checkpoint, 2026-09-29/30 — Package review, provenance, D7, D10, 2026-09-29 (later) — D6: no Indices month, 2026-09-30 — H-TS1 registered and evaluated on the holdout: FAIL, 2026-10-01 — direction: gap rule vs Ernie's trend indicators (development data only), 2026-10-01 — entry trigger: GEX-wall bounce vs our 10:00 entry (development data only), 2026-10-01 — H-TR1 registered test: FAIL, 2026-10-01 — strike placement: VIX-sigma anchor vs Ernie's price rule (development data only) (+6 more)
 
 ### Community 187 - "2026-09-21 — prospective execution-validation cohort (pre-registration)"
-Cohesion: 0.18
-Nodes (11): 2026-09-21 — prospective execution-validation cohort (pre-registration), Checkpoint results, Dry-run rehearsal, Exact commands, Implementation fingerprints at pre-registration, Ledgers and integrity, Pre-registered hypothesis, Quote-handling rules (+3 more)
+Cohesion: 0.20
+Nodes (10): 2026-09-21 — prospective execution-validation cohort (pre-registration), Checkpoint results, Dry-run rehearsal, Exact commands, Implementation fingerprints at pre-registration, Ledgers and integrity, Pre-registered hypothesis, Quote-handling rules (+2 more)
 
 ### Community 188 - "mini_spx/manifest.json"
 Cohesion: 0.20
@@ -1276,19 +1268,19 @@ Nodes (7): 3) Start the SPX stack in Docker, code:bash (docker compose -f infra/
 
 ### Community 192 - "run_backtest_db.py"
 Cohesion: 0.05
-Nodes (59): ChainDay, DrawdownWindow, _accounting_comparison_rows(), backtest_entry_price(), candidate_from_trade_row(), day_with_monitoring_bars(), _dd_schedule_label(), discover_dates() (+51 more)
+Nodes (57): max_consecutive_losses(), profit_factor(), sharpe(), DrawdownWindow, _accounting_comparison_rows(), _accounting_metrics(), backtest_entry_price(), candidate_from_trade_row() (+49 more)
 
-### Community 193 - "position_data_diagnostics.py"
-Cohesion: 0.22
-Nodes (5): PositionDataSettings, ChainObservation, DecisionQueries, _fly_mark(), PositionQuoteShadow
+### Community 193 - "read_jsonl"
+Cohesion: 0.24
+Nodes (22): daily_runs_path(), read_jsonl(), record_session(), summarize_cohort(), trades_path(), current_summary(), _mock_cohort_update(), _recorded_cohort() (+14 more)
 
 ### Community 194 - "2026-09-21 — SPX executable-side accounting on the settlement-correct replay"
 Cohesion: 0.29
 Nodes (7): 2026-09-21 — SPX executable-side accounting on the settlement-correct replay, Accounting models and deterministic data rules, Data provenance and coverage, Exact commands and implementation fingerprints, Frozen result, Pre-registered drawdown limit, Reproduction under the roll-forward exit rule
 
 ### Community 195 - "fixture"
-Cohesion: 0.08
-Nodes (34): config(), at(), audit(), cadence(), historical_inventory_group(), normalize_group(), number(), stats() (+26 more)
+Cohesion: 0.07
+Nodes (42): config(), at(), audit(), cadence(), historical_inventory_group(), normalize_group(), number(), stats() (+34 more)
 
 ### Community 196 - "2026-09-29 — ThetaData development window: E0 baseline, drafted hypotheses, power (in-sample; nothing registered)"
 Cohesion: 0.25
@@ -1298,21 +1290,21 @@ Nodes (8): 2026-09-29 — ThetaData development window: E0 baseline, drafted hyp
 Cohesion: 0.17
 Nodes (11): Accounting models, Coverage, Decision gates, Prospective execution validation — spx-prospective-v2-2026-10-02, Registered endpoint, Sessions, stressed_marketable by direction, stressed_marketable by exit_reason (+3 more)
 
-### Community 198 - "pathlib"
-Cohesion: 0.04
-Nodes (72): _artifact(), main(), run(), verify_parent(), digest(), extract(), main(), new_directory() (+64 more)
+### Community 198 - "digest"
+Cohesion: 0.09
+Nodes (37): run(), verify_parent(), digest(), extract(), main(), new_directory(), read_json(), verify() (+29 more)
 
 ### Community 199 - "test_candidate_dashboards.py"
 Cohesion: 0.26
 Nodes (15): _dashboard(), _expressions(), _panels(), visit(), test_live_marks_check_eligible_trades_before_monitoring_history(), test_performance_trade_links_pin_the_main_strategy_datasource(), test_retired_experimental_runtime_is_absent_from_dashboards(), test_trade_detail_charts_follow_the_selected_trade_window() (+7 more)
 
 ### Community 200 - "monitor_replay_study.py"
-Cohesion: 0.09
-Nodes (31): run(), _summary(), test_causal_median_uses_only_the_trailing_window(), test_confirmation_rule(), test_current_rule_exits_on_first_breach(), test_exit_is_priced_at_the_raw_mark_not_the_smoothed_value(), test_ladder_price_is_natural_plus_offset_capped_at_mid(), test_post_exit_coverage_rejects_gaps_and_early_stops() (+23 more)
+Cohesion: 0.10
+Nodes (32): run(), _summary(), test_causal_median_uses_only_the_trailing_window(), test_confirmation_rule(), test_current_rule_exits_on_first_breach(), test_exit_is_priced_at_the_raw_mark_not_the_smoothed_value(), test_ladder_price_is_natural_plus_offset_capped_at_mid(), test_post_exit_coverage_rejects_gaps_and_early_stops() (+24 more)
 
 ### Community 201 - "EventCalendar"
-Cohesion: 0.07
-Nodes (29): 1. The internal keys file — Phase 3 dependency 4, 2. The token directory, 3. Credentials, Known limitations — accept or fix before a real shadow period, Option A deployment runbook — Helios, containerized, Preflight — read-only, no mutation, Prerequisites, Recorded preflight — 2026-08-06, read-only (+21 more)
+Cohesion: 0.09
+Nodes (19): Field dictionary and claims, _date(), EventCalendar, MarketEvent, parse_row(), failure(), _row(), test_committed_calendar_has_a_scheduled_event_of_each_type_every_year() (+11 more)
 
 ### Community 202 - "Next-session prompt: NDX-02 constituent quote fidelity"
 Cohesion: 0.15
@@ -1323,36 +1315,36 @@ Cohesion: 0.18
 Nodes (10): command, config_sha256, created_utc, model, parent_hashes, baseline, continuation, execution (+2 more)
 
 ### Community 204 - "discover_options_strategy.py"
-Cohesion: 0.15
-Nodes (33): atm_pair(), bootstrap_report(), butterfly(), candidate_charts(), closest_delta(), credit_spread(), drawdown(), entry_cost() (+25 more)
+Cohesion: 0.13
+Nodes (35): atm_pair(), bootstrap_report(), butterfly(), candidate_charts(), closest_delta(), credit_spread(), drawdown(), entry_cost() (+27 more)
 
 ### Community 205 - "._spawn_background"
-Cohesion: 0.09
-Nodes (18): 1. The latency claim is stale — the comparator does *not* add gateway latency, 2. The no-shadow-surface set is larger than "just history", C3 — wiring shadow reads into `run_live.py`, Implemented steps and remaining operator gate, Prerequisites, in order, Reachability and observability are resolved, The wiring point, Two corrections to the received design points (+10 more)
+Cohesion: 0.13
+Nodes (12): 1. The latency claim is stale — the comparator does *not* add gateway latency, 2. The no-shadow-surface set is larger than "just history", Two corrections to the received design points, C1 — the operator chose the shared lock, C3 plan produced, and a stale design point corrected, Durability decided, monitoring still open, Housekeeping, Multi-Agent Review Remediation (offline, still unwired) (+4 more)
 
 ### Community 206 - "Dataset"
 Cohesion: 0.04
-Nodes (61): Build on what exists, Dataset, dense_chain_from_rows(), SessionChain, SessionClock, table_to_chain(), DecisionProfile, SessionFeatures (+53 more)
+Nodes (53): Build on what exists, Dataset, SessionClock, DecisionProfile, round_to_seconds(), SessionFeatures, fly_widths(), run() (+45 more)
 
 ### Community 207 - "main"
 Cohesion: 0.04
-Nodes (21): 1. Background claims: confirmed, corrected, new, 2. Query inventory, 3. Entry and exit dependencies on DB data, 4. Risk-check finding (today's behavior), 5. Load and storage (Helios), 6. Pilot script assumptions (template `b06cdb7` + 11-17 local copy), 7. Consumers of `butterfly_guy` SPX rows, 8. Helios state (2026-11-17 ~10:15 PT) (+13 more)
+Nodes (23): 6. Decision 4: instance role guard (new, opt-in), 2. Query inventory, Intended consumer and demonstrated boundary, CandidateQueries, ChainQueries, MonitoringLegQueries, OrderIntentQueries, RiskQueries (+15 more)
 
 ### Community 208 - "ButterflyGuy AI Review State"
 Cohesion: 0.20
 Nodes (9): Active Work Item, ButterflyGuy AI Review State, Current Objective, Important Files Reviewed, Next Session Launch Prompt, Non-Negotiable Rules, Ranked Issues, Remaining Risks (+1 more)
 
-### Community 209 - "candles_to_series"
-Cohesion: 0.29
-Nodes (6): candles_to_series(), test_equity_chart_aggregates_to_two_minute_candles(), test_equity_chart_window_keeps_6am_premarket_and_regular_session(), test_equity_chart_window_rejects_prior_day_same_times(), test_candles_to_series_sorts_and_converts_timezone(), _ts_et()
+### Community 209 - "yaml"
+Cohesion: 0.10
+Nodes (7): test_default_compose_binds_the_token_directory_never_the_document(), test_default_compose_token_binds_require_the_shared_token_directory(), test_each_strategy_has_an_independent_default_direct_gateway_toggle(), test_live_configs_leave_token_path_to_the_environment(), _ResetLoader, test_live_service_is_its_own_project_and_identity(), test_mid_walk_overlay_sets_only_the_exit_rule()
 
 ### Community 210 - "quote_rules"
 Cohesion: 0.29
 Nodes (7): quote_rules, crossed_market, entry_gap, exit_gap, missing_market, selection, substitution
 
 ### Community 211 - "ndx_postgres_recording.py"
-Cohesion: 0.11
-Nodes (21): assess_native(), decode_body(), NativeCapture, preserve_buffered_response(), validate_capture(), _NativeClient, PublishResult, ResearchGatewayHTTPClient (+13 more)
+Cohesion: 0.07
+Nodes (30): assess_native(), decode_body(), NativeCapture, preserve_buffered_response(), validate_capture(), _NativeClient, Observation, ResearchObserver (+22 more)
 
 ### Community 212 - "files"
 Cohesion: 0.29
@@ -1375,8 +1367,8 @@ Cohesion: 0.20
 Nodes (8): Baseline and exposure, Commands, Lifecycles, accounting and limits, Mapping and access, Offline ThetaData research, Verification artifacts, Real private artifacts, ThetaData local implementation verification
 
 ### Community 218 - "daily_report_card_format.py"
-Cohesion: 0.26
-Nodes (14): DailyReportCard, effective_pnl(), effective_pnl_pct(), effective_start_balance(), _direction_emoji(), _fmt_money(), _fmt_pct(), _fmt_signed() (+6 more)
+Cohesion: 0.23
+Nodes (16): DailyReportCard, effective_pnl(), effective_pnl_pct(), effective_start_balance(), build_report_messages(), _direction_emoji(), _fmt_money(), _fmt_pct() (+8 more)
 
 ### Community 220 - "decision_rules"
 Cohesion: 0.22
@@ -1394,13 +1386,13 @@ Nodes (6): Check on it, Cohort automation, Install, Known limitation: the SSH ke
 Cohesion: 0.33
 Nodes (6): assumptions, commission_per_contract, contract_multiplier, contracts_per_butterfly, quantity, stressed_leg_slippage
 
-### Community 225 - "AppConfig"
-Cohesion: 0.22
-Nodes (9): Canonical normalized datasets, Current inventory, Historical data management, Next milestones, Refresh and verify, Session quality and exclusion ledger, Sources and ownership, Storage and cleaning conventions (+1 more)
+### Community 225 - "test_cron_guard.py"
+Cohesion: 0.11
+Nodes (5): _capture_posts(), test_failure_alerts_with_job_exit_code_and_tail(), test_missing_command_binary_alerts(), test_success_passes_output_through_without_alert(), test_early_close_expiry_timestamp_and_zero_direction_exclusions()
 
 ### Community 226 - "Implementation prompt: SPX Schwab recording fidelity (timing, cadence, ThetaData check)"
-Cohesion: 0.17
-Nodes (12): Baseline (required in PR 1), Behavior, Check the impact on live reads, Deliver, Goal, Implementation prompt: SPX Schwab recording fidelity (timing, cadence, ThetaData check), Out of scope, Part B: fixed minute cadence (PR 3) (+4 more)
+Cohesion: 0.15
+Nodes (13): Baseline (required in PR 1), Behavior, Check the impact on live reads, Deliver, Goal, Hard constraints, Implementation prompt: SPX Schwab recording fidelity (timing, cadence, ThetaData check), Out of scope (+5 more)
 
 ### Community 227 - "endpoint"
 Cohesion: 0.40
@@ -1415,8 +1407,8 @@ Cohesion: 0.40
 Nodes (5): export, min_session_snapshots, spot_underlyings, strike_margin, underlying
 
 ### Community 230 - "replay.py"
-Cohesion: 0.16
-Nodes (5): _source(), test_compose_keeps_each_strategy_default_direct_with_staged_gateway_opt_in(), test_default_settings_construct_no_gateway_client(), test_shadow_failure_is_observed_without_changing_the_direct_result(), test_standalone_packages_remain_pinned_and_consumers_import_them_directly()
+Cohesion: 0.20
+Nodes (4): _source(), test_compose_keeps_each_strategy_default_direct_with_staged_gateway_opt_in(), test_default_settings_construct_no_gateway_client(), test_standalone_packages_remain_pinned_and_consumers_import_them_directly()
 
 ### Community 231 - "NDX-02 execution/accounting audit — 2026-10-15"
 Cohesion: 0.25
@@ -1443,28 +1435,28 @@ Cohesion: 0.25
 Nodes (8): Exact next bounded action, Remaining NDX implementation gates, Stage B — Implement prospective recording, then separately approve activation, Stage C — Finish NDX-02 evidence and liquidity calibration, Stage D — NDX-03 entry-liquidity comparison, Stage E — NDX-04 late-session protection, Stage F — NDX-05 volatility and width, Stage G — NDX-06 integrated replay and fresh observation
 
 ### Community 237 - "docs/README.md"
-Cohesion: 0.09
-Nodes (14): Canonical research datasets, Conventions, Layout, Reading, Sets, The spent holdout (2024-07-01 to 2026-03-12), ThetaData option history (raw), Live WebSocket (+6 more)
+Cohesion: 0.08
+Nodes (20): Canonical research datasets, Conventions, Layout, Reading, Sets, The spent holdout (2024-07-01 to 2026-03-12), ThetaData option history (raw), Canonical normalized datasets (+12 more)
 
-### Community 238 - "thetadata_download.py"
-Cohesion: 0.21
-Nodes (11): cboe_sessions(), expirations(), fetch(), file_path(), _get(), LargeRequestError, load_no_data(), main() (+3 more)
+### Community 238 - "exit_limit"
+Cohesion: 0.17
+Nodes (12): _credit(), exit_limit(), static_quote_estimate(), test_bid_ladder_reproduces_todays_limits_including_the_restart(), test_crossed_anchors_never_price_below_the_bid(), test_limits_are_valid_increments_and_never_below_the_bid(), test_mid_capped_never_exceeds_the_rounded_mid_and_equals_today_on_wide_spreads(), test_mid_walk_walks_from_mid_to_bid_then_holds() (+4 more)
 
 ### Community 239 - "fill_models"
 Cohesion: 0.50
 Nodes (4): fill_models, corrected_midpoint, marketable, stressed_marketable
 
-### Community 241 - "test_research_catalog.py"
-Cohesion: 0.31
-Nodes (6): Existing inputs, _append(), test_catalog_fails_on_a_broken_chain(), test_catalog_lists_hashes_registries_and_counts(), test_history_counts_events_for_the_exact_definition(), test_history_of_a_port_includes_its_placeholder()
+### Community 241 - "report_exit_mark_parity.py"
+Cohesion: 0.27
+Nodes (11): analyze_manual(), analyze_trade(), _compare_snapshots(), _fly_from_rows(), _leg_rows_at_snapshot(), main(), _nearest_snapshot_time(), parse_args() (+3 more)
 
 ### Community 242 - "live_performance.py"
-Cohesion: 0.08
-Nodes (28): Phase 1: one command surface, max_consecutive_losses(), max_drawdown(), profit_factor(), sharpe(), win_pct(), chart_payload(), compute_stats() (+20 more)
+Cohesion: 0.11
+Nodes (26): _built_at(), chart_payload(), compute_stats(), cumulative_equity(), drawdown_series(), DrawdownPoint, duration_minutes(), executable_pnl_points() (+18 more)
 
-### Community 243 - "exit_limit"
-Cohesion: 0.05
-Nodes (46): Background (verified 2026-11-16; re-verify every claim in Phase 0), Constraints, Goal, Implementation prompt: how the live exit order is priced, Other evidence, Phase 0: verify (read-only), Phase 1: plan and pre-registration, Phase 2: analysis and design decision (+38 more)
+### Community 243 - "entry_pricing.py"
+Cohesion: 0.09
+Nodes (23): Background (verified 2026-11-16; re-verify every claim in Phase 0), Constraints, Goal, Implementation prompt: how the live exit order is priced, Other evidence, Phase 0: verify (read-only), Phase 1: plan and pre-registration, Phase 2: analysis and design decision (+15 more)
 
 ### Community 244 - "sessions/2026-03-19/chain.parquet"
 Cohesion: 0.67
@@ -1502,9 +1494,9 @@ Nodes (3): sessions/2026-04-16/clock.parquet, rows, sha256
 Cohesion: 0.67
 Nodes (3): sessions/2026-06-12/chain.parquet, rows, sha256
 
-### Community 253 - "gates"
-Cohesion: 0.12
-Nodes (14): Baseline, Data and split (fixed now, before any vendor data is seen), Hypotheses, Next SPX sweep on vendor history — pre-registration DRAFT (not registered), Out of scope for this sweep, Primary metric and gate, gates(), _gates() (+6 more)
+### Community 253 - "report_trade_ladders.py"
+Cohesion: 0.20
+Nodes (10): _coerce_json(), _docker_postgres_password(), _load_trace_event(), _load_trade_rows(), main(), parse_args(), _pretty(), _print_trace_block() (+2 more)
 
 ### Community 254 - "sessions/2026-06-12/clock.parquet"
 Cohesion: 0.67
@@ -1515,40 +1507,40 @@ Cohesion: 0.67
 Nodes (3): sessions/2026-07-13/clock.parquet, rows, sha256
 
 ### Community 256 - "test_prospective_execution.py"
-Cohesion: 0.12
-Nodes (49): daily_runs_path(), leg_provenance(), manifest_drift(), read_jsonl(), trades_path(), current_summary(), _baseline(), _candidate() (+41 more)
+Cohesion: 0.14
+Nodes (29): executable_side(), leg_provenance(), _baseline(), _candidate(), _cohort(), _quotes(), _record(), _repo() (+21 more)
 
 ### Community 257 - "sessions.parquet"
 Cohesion: 0.67
 Nodes (3): sessions.parquet, rows, sha256
 
-### Community 258 - "config.py"
-Cohesion: 0.09
-Nodes (16): M7 — Regime names are unvalidated and regime time bounds are ignored, CollectorSettings, ConfigModel, MonitoringSettings, ProfitProtectorSettings, TimeRegime, get_time_regime(), effective_drawdown_threshold() (+8 more)
+### Community 258 - "BrokerStateGate"
+Cohesion: 0.18
+Nodes (8): BrokerStateGate, test_broker_state_gate_records_unsafe_reason(), test_failed_token_reload_blocks_new_entries(), test_runtime_reconciliation_resolution_rearms_alert(), test_token_lock_timeout_recovery_validates_unchanged_token(), test_token_reload_loop_survives_a_failed_reload(), reload_if_reauthorized(), calls()
 
 ### Community 259 - "test_spx_live_settle_expired.py"
-Cohesion: 0.14
-Nodes (17): _bar(), test_an_operator_settlement_before_schwab_posts_stays_provisional(), test_close_near_or_inside_the_strikes_waits_for_schwab(), test_posted_expiration_transactions_settle_like_the_bot(), test_refuses_a_closed_row_and_a_partly_closed_fly(), test_refuses_a_trade_that_is_not_spx(), test_refuses_opening_legs_that_are_not_the_fly(), test_spx_close_comes_only_from_the_final_session_bar() (+9 more)
+Cohesion: 0.28
+Nodes (12): _bar(), test_an_operator_settlement_before_schwab_posts_stays_provisional(), test_close_near_or_inside_the_strikes_waits_for_schwab(), test_posted_expiration_transactions_settle_like_the_bot(), test_refuses_a_closed_row_and_a_partly_closed_fly(), test_refuses_a_trade_that_is_not_spx(), test_refuses_opening_legs_that_are_not_the_fly(), test_spx_close_comes_only_from_the_final_session_bar() (+4 more)
 
-### Community 260 - "types"
-Cohesion: 0.12
-Nodes (11): main(), official_settlement(), reconcile(), _run(), test_no_change_when_provisional_value_already_matches(), test_revalues_settlement_at_official_close_and_keeps_originals(), _trade(), fake_db() (+3 more)
+### Community 260 - "reconcile_paper_settlements.py"
+Cohesion: 0.26
+Nodes (7): main(), official_settlement(), reconcile(), _run(), test_no_change_when_provisional_value_already_matches(), test_revalues_settlement_at_official_close_and_keeps_originals(), _trade()
 
 ### Community 261 - "_build_payload"
-Cohesion: 0.27
-Nodes (12): _allowed_roots(), _build_payload(), main(), _order_symbols(), _status_category(), _summarize(), test_payload_counts_parent_and_descendant_statuses(), test_payload_excludes_non_spx_orders() (+4 more)
+Cohesion: 0.29
+Nodes (11): _allowed_roots(), _build_payload(), _order_symbols(), _status_category(), _summarize(), test_payload_counts_parent_and_descendant_statuses(), test_payload_excludes_non_spx_orders(), test_payload_filters_explicit_ndx_underlying() (+3 more)
 
-### Community 262 - "test_research_protocol.py"
-Cohesion: 0.35
-Nodes (11): _cli(), _holdout(), _no_replay(), _pull_holdout(), _records(), test_a_fitted_rule_is_registered_with_its_value_and_checked_at_the_holdout(), test_evaluates_the_registered_set_once_and_records_every_look(), test_h_sn1_is_refused_until_gate_5_has_a_statistic() (+3 more)
+### Community 262 - "services/daily_report_card.py"
+Cohesion: 0.22
+Nodes (7): PriceHistoryProvider, archive_report(), chartable_equity_trades(), format_equity_trade_chart_caption(), ReportCardResult, send_daily_report_card(), _send_equity_trade_charts()
 
 ### Community 263 - "SPX paper-trade review — September 12, 2026"
 Cohesion: 0.33
 Nodes (5): Evidence and scope, Findings, Mechanism worth testing, Research pipeline and proposed experiment, SPX paper-trade review — September 12, 2026
 
 ### Community 264 - "strategy-discovery-journal.md"
-Cohesion: 0.08
-Nodes (23): F2 draft scorer review — 2026-10-03, Evidence and verification, Frozen matrix and lifecycle, Results and decisions, Scope and genuinely new work, XSP quiet iron and mixed Batman — bounded study, November 12, 2026, Batman XSP — expanded history, November 13, 2026, Complete frozen matrix (+15 more)
+Cohesion: 0.06
+Nodes (29): Definition, Endpoint and gates (fixed now, judged only at the endpoint), Evidence that motivated it (all in-sample or partly used), F2 prospective shadow registration — 2026-10-02, How it is scored, Operation, F2 draft scorer review — 2026-10-03, Evidence and verification (+21 more)
 
 ### Community 265 - "2026-09-25 — SPX idea sweep and low-VIX diagnosis (development data only)"
 Cohesion: 0.33
@@ -1560,7 +1552,7 @@ Nodes (13): description, summary, groups, name, rules, notify, project, severity
 
 ### Community 268 - "test_research_accounting.py"
 Cohesion: 0.06
-Nodes (48): Reproducibility and limits, price_trade(), PeakTrailer, DayMarket, fly_quotes(), make_chain(), minute(), _blown_out() (+40 more)
+Nodes (45): Reproducibility and limits, price_trade(), PeakTrailer, DayMarket, fly_quotes(), make_chain(), minute(), _blown_out() (+37 more)
 
 ### Community 269 - "source_sha256"
 Cohesion: 0.18
@@ -1570,9 +1562,13 @@ Nodes (11): source_sha256, docs/research/ndx-strategy/NDX-02-recording-implement
 Cohesion: 0.14
 Nodes (16): _cell_text(), _fetch_calendar_html(), fetch_usd_events(), ForexEvent, _format_event_line(), format_usd_calendar_text(), _impact_from_row(), _parse_day_label() (+8 more)
 
+### Community 271 - "LiveSpread"
+Cohesion: 0.10
+Nodes (21): LiveSpread, _assert_one_order_at_a_time(), _broker_event_log(), place(), broker_fill(), _exit_limits_for_bids(), _exit_limits_for_rule(), test_bid_ladder_never_overlaps_orders_across_a_restart_cycle() (+13 more)
+
 ### Community 272 - "spx_live_db.py"
-Cohesion: 0.09
-Nodes (23): 6. Decision 4: instance role guard (new, opt-in), Hard constraints, 2. P1: activation rollback stopped an open position's manager, DatabaseSettings, run_migrations(), bootstrap(), check(), compare() (+15 more)
+Cohesion: 0.12
+Nodes (20): 2. P1: activation rollback stopped an open position's manager, DatabaseSettings, bootstrap(), check(), compare(), connect_read_only(), copy_live_trade(), _copy_rows() (+12 more)
 
 ### Community 273 - "assert_paper_never_changed"
 Cohesion: 0.13
@@ -1580,15 +1576,15 @@ Nodes (14): assert_paper_never_changed(), test_activation_starts_live_and_proves
 
 ### Community 274 - "parse_args"
 Cohesion: 0.11
-Nodes (22): _asset_drawdowns(), _floatlist(), _intlist(), parse_args(), select_direction_bar(), _sim_parity_fields(), _strlist(), _parse_for_asset() (+14 more)
+Nodes (22): 5. Live/backtest parity (P2), _asset_drawdowns(), _floatlist(), _intlist(), parse_args(), _sim_parity_fields(), spx_sweep_retired_message(), _strlist() (+14 more)
 
 ### Community 275 - "source_sha256"
 Cohesion: 0.13
 Nodes (15): source_sha256, docs/research/ndx-strategy/NDX-02-prospective-provenance.md, docs/research/ndx-strategy/NDX-remaining-roadmap.md, pyproject.toml, src/butterfly_guy/data/collector.py, src/butterfly_guy/data/providers.py, src/butterfly_guy/data/schwab_client.py, src/butterfly_guy/db/migrations/001_initial.sql (+7 more)
 
 ### Community 276 - "_redacted_order_audit"
-Cohesion: 0.16
-Nodes (11): Bounded causal use of independent NDX minute evidence, Evidence needed and present feasibility, Provisional requirements for a future contract, Supported observations, What the distinct times establish, Clocks, source behavior and unresolved causes, Evidence and identity, NDX-02 constituent quote fidelity — 2026-10-15 (+3 more)
+Cohesion: 0.33
+Nodes (6): Clocks, source behavior and unresolved causes, Evidence and identity, NDX-02 constituent quote fidelity — 2026-10-15, Observed arithmetic and overlap, Traceable examples, Verification and next action
 
 ### Community 277 - "output_sha256"
 Cohesion: 0.20
@@ -1603,28 +1599,28 @@ Cohesion: 0.15
 Nodes (13): path, sha256, path, sha256, path, sha256, path, sha256 (+5 more)
 
 ### Community 280 - "ndx-strategy-development.md"
-Cohesion: 0.12
-Nodes (9): Reproduce the NDX minute-continuation audit, Read-only broker flatness audit — 2026-10-16 UTC, Reproduce NDX-provenance-v1 offline checks, Reproduce the NDX constituent fidelity audit, Pinned upstream source supplement — 2026-10-15, Offline NDX-02 execution/accounting audit, Initialized template extension — revision 4, Exact-target resources and restore — registered mechanisms (+1 more)
+Cohesion: 0.10
+Nodes (11): Reproduce the NDX minute-continuation audit, Read-only broker flatness audit — 2026-10-16 UTC, Reproduce NDX-provenance-v1 offline checks, Reproduce the NDX constituent fidelity audit, Pinned upstream source supplement — 2026-10-15, Offline NDX-02 execution/accounting audit, Initialized template extension — revision 4, Exact-target resources and restore — registered mechanisms (+3 more)
 
 ### Community 281 - "PositionState"
-Cohesion: 0.09
+Cohesion: 0.08
 Nodes (17): 2026-09-09 runtime follow-up, Cache TTL is hard-capped at 4s in code, not just config, Chain size correlation, Recommendation, Request path (cache miss), SchwabGateway option-chain latency investigation (2026-09-04), Where the time actually goes: scheduler queueing, not the Schwab call itself, XSP held-leg event-age correction (2026-09-11) (+9 more)
 
 ### Community 282 - "Recorded"
-Cohesion: 0.13
-Nodes (8): Acquisition actually performed, Conditional end-to-end confirmation, Offline reproduction, Output map, Replay rules and costs, Reproduce the SPX exit-policy experiment, SPX exit-policy research — September 12, 2026, ProfitManagementSettings
+Cohesion: 0.22
+Nodes (7): Acquisition actually performed, Conditional end-to-end confirmation, Offline reproduction, Output map, Replay rules and costs, Reproduce the SPX exit-policy experiment, SPX exit-policy research — September 12, 2026
 
 ### Community 283 - "pytest"
 Cohesion: 0.09
-Nodes (29): _static(), test_candidates_offer_the_natural_no_later_than_today(), first_natural_seconds(), test_fly_quotes_and_stand_in_signals(), test_later_bid_rise_fills_a_resting_limit(), test_partial_probability_compounds_across_steps(), test_replay_on_a_static_quote_equals_the_paper_live_rule_estimate(), test_static_narrow_spread_today_waits_forty_seconds_for_mid() (+21 more)
+Nodes (22): sealed_holdout(), _static(), test_candidates_offer_the_natural_no_later_than_today(), first_natural_seconds(), test_fly_quotes_and_stand_in_signals(), test_later_bid_rise_fills_a_resting_limit(), test_partial_probability_compounds_across_steps(), test_replay_on_a_static_quote_equals_the_paper_live_rule_estimate() (+14 more)
 
 ### Community 284 - "NDX-01 reproducible baseline"
 Cohesion: 0.29
 Nodes (7): Approved weekend Helios preparation — October 17 UTC, Coverage and validation outputs, Evidence and recovery, Extraction is separate, NDX-01 reproducible baseline, Offline reproduction, One-shot activation proposal — October 16
 
 ### Community 285 - "Window F — the refresh token re-authorized, six days early (2026-08-08)"
-Cohesion: 0.08
-Nodes (22): Candidate-feed reload follow-up (2026-08-10), Deployment addendum (2026-08-10), Production marker-change proof (2026-08-10), Recommendation, Reducing the weekly re-authorization cost — a scoping question, Stale-writer follow-up (2026-08-10), Status, The cost being attacked (+14 more)
+Cohesion: 0.17
+Nodes (12): Correction — the deadline recurs weekly; it was moved, not removed (2026-08-08), Execution, Incidental, Result, Still unproven, The correction that forced the restarts, The exit-137 finding, correctly diagnosed (2026-08-08), The scheduling finding (+4 more)
 
 ### Community 286 - "platform"
 Cohesion: 0.50
@@ -1639,20 +1635,20 @@ Cohesion: 0.29
 Nodes (7): Cadence and source boundaries, Eligibility decision and exact next task, Evidence and declared contract, NDX-02 continuation import and cadence audit — 2026-10-15, Normalization and inventory reconciliation, Price and timestamp findings, Reproduction and verification
 
 ### Community 289 - "one_dte_eod.py"
-Cohesion: 0.17
+Cohesion: 0.16
 Nodes (17): allowed(), cashflow(), cells(), fly(), metrics(), next_session(), payoff(), proxy() (+9 more)
 
-### Community 290 - "spx-idea-sweep-2026-09-25/variants.py"
-Cohesion: 0.06
-Nodes (32): open_spot(), directions(), ema(), hourly_closes_before(), ev_rank_factory(), fn(), r1(), r2() (+24 more)
+### Community 290 - "round2.py"
+Cohesion: 0.33
+Nodes (8): ev_rank_factory(), r1(), r2(), r5(), ratio_at(), ror(), e0(), k1()
 
 ### Community 291 - "sha256"
 Cohesion: 0.20
 Nodes (9): model, sha256, capture-policy.json, compose.yaml, context.json, helios-context-observation.json, README.md, readonly-context-probe.py.txt (+1 more)
 
-### Community 292 - "test_research_validate.py"
-Cohesion: 0.12
-Nodes (14): _cboe(), _dates(), _perturbed(), test_a_close_that_differs_from_cboe_fails_step_4(), test_a_dataset_validated_against_itself_passes_steps_1_2_and_4(), test_criteria_are_verbatim_from_the_readiness_doc(), test_perturbed_quotes_fail_step_1_and_every_step_2_difference_is_explained(), test_step_3_band_check_and_report_format() (+6 more)
+### Community 292 - "dev_studies.py"
+Cohesion: 0.26
+Nodes (6): cmd_calibrate(), cmd_check(), cmd_power(), cmd_random_skip(), load(), main()
 
 ### Community 293 - "2026-07-14 — data audit and research design"
 Cohesion: 0.29
@@ -1666,9 +1662,9 @@ Nodes (8): target, archived_runs, executed_tests, extension_tested, gate, image_
 Cohesion: 0.29
 Nodes (7): 2026-09-28 — stage 4: housekeeping, provider-independent vendor tooling, hypothesis rules (no vendor data), Built (provider-independent, tested on synthetic data), Development coverage and in-sample E0, Housekeeping, Hypothesis rules (implemented, not registered), Validation results (readiness doc steps 1–4), What this means for the evidence plan
 
-### Community 296 - "PriceHistoryProvider"
-Cohesion: 0.18
-Nodes (7): Interfaces and contracts, Current Phase, EquityQuoteProvider, MarketMoversProvider, OptionChainProvider, PriceHistoryProvider, SpotPriceProvider
+### Community 296 - "providers.py"
+Cohesion: 0.04
+Nodes (34): Interfaces and contracts, Equity and research paths, Market-data flow, Primary options runtime, Phase 3 Shadow Surfaces (unwired, default off), Collector, Part A: timing metadata (PR 2), Provider (+26 more)
 
 ### Community 297 - "exit_trials/PLAN.md"
 Cohesion: 0.40
@@ -1679,8 +1675,8 @@ Cohesion: 0.15
 Nodes (13): cap_drop, command, container_name, env_file, networks, ports, profiles, read_only (+5 more)
 
 ### Community 299 - "GatewayAuthoritativeMarketDataProvider"
-Cohesion: 0.17
-Nodes (28): GatewayAuthoritativeMarketDataProvider, gateway_market_data_readiness_loop(), _bar(), _contract(), _observation(), test_empty_extended_session_is_allowed_but_other_flags_remain_fatal(), test_gateway_provider_adapts_history_and_combines_sessions(), test_gateway_provider_adapts_typed_spot_and_full_chain() (+20 more)
+Cohesion: 0.25
+Nodes (22): _bar(), _contract(), _observation(), test_empty_extended_session_is_allowed_but_other_flags_remain_fatal(), test_gateway_provider_adapts_typed_spot_and_full_chain(), test_gateway_provider_canonicalizes_chain_symbol_at_client_boundary(), test_gateway_provider_defaults_normalized_null_time_value_to_zero(), test_gateway_provider_does_not_retry_deterministic_response_error() (+14 more)
 
 ### Community 300 - "platform"
 Cohesion: 0.50
@@ -1710,33 +1706,33 @@ Nodes (3): parent_hashes, /mnt/Repos/Trading/Butterflyguy/reports/research/ndx-0
 Cohesion: 0.09
 Nodes (22): 1. Data and split, 2. Candidate grid, 3. Exit pricing, 4. Primary metric and decision rule (fixed in advance), 5. Secondary diagnostics (per arm, descriptive), 6. Fetch design: three leg quotes vs full chain, 7. Backtest implications, Amendment 1 (owner-approved 2026-11-16, before any post-exit trade existed) (+14 more)
 
-### Community 308 - "account_monitor.py"
-Cohesion: 0.10
-Nodes (9): M9 — The chain cache rewrites the whole day's JSON on the event loop, send(), send_alertmanager(), send_async(), send_checked_async(), next_session(), test_next_session_skips_holiday_and_weekend(), test_cancelled_checked_telegram_cannot_deliver_later_in_a_worker() (+1 more)
+### Community 308 - "ndx_provenance.py"
+Cohesion: 0.20
+Nodes (9): Clock, Consumer, Leg, main(), Model, Payload, Publication, Record (+1 more)
 
 ### Community 309 - "Observer target validation and operational review — 2026-10-15"
-Cohesion: 0.39
-Nodes (7): _order_symbols(), _order(), test_redacted_audit_excludes_other_underlyings(), test_redacted_audit_reports_active_unknown_missing_and_duplicate_nodes(), test_redacted_audit_treats_replaced_as_historical_terminal(), test_order_symbols_walks_child_orders(), _redacted_order_audit()
+Cohesion: 0.57
+Nodes (5): _order(), test_redacted_audit_excludes_other_underlyings(), test_redacted_audit_reports_active_unknown_missing_and_duplicate_nodes(), test_redacted_audit_treats_replaced_as_historical_terminal(), _redacted_order_audit()
 
 ### Community 310 - "timescaledb"
 Cohesion: 0.09
 Nodes (22): CI_DATABASE_URL, POSTGRES_DB, POSTGRES_PASSWORD, POSTGRES_USER, jobs, timescaledb, name, on (+14 more)
 
-### Community 311 - ".initialize"
-Cohesion: 0.09
-Nodes (13): Authentication and token lifecycle, Order and account flow, Shared-token risk, Correction to Window H part 1, Item 1 — the warnings now fire before the deadline (deployed), Item 3 built — the token reload (2026-08-09, NOT deployed), Item 3 — the deciding question is answered: the swap is safe, Window H correction — the restart arithmetic was wrong, and the gateway never needed restarting (+5 more)
+### Community 311 - "DailyReportCardSettings"
+Cohesion: 0.16
+Nodes (6): DailyReportCardSettings, load_daily_report_card_config(), ReportCardThresholds, test_build_daily_report_card_detects_problems(), test_build_report_messages_format(), main()
 
 ### Community 314 - "test_xsp_independent_reversion.py"
-Cohesion: 0.20
-Nodes (14): proxy(), test_excursion_needs_full_range_from_midpoint_and_later_reversal(), test_execution_is_strictly_after_signal_and_bounded_to_two_minutes(), test_failed_breakout_waits_for_completed_reentry_bar(), test_future_changes_cannot_change_first_signal(), test_future_proxy_gap_does_not_erase_existing_signal(), test_missing_prefix_is_excluded_instead_of_no_trade(), test_signed_negative_exit_cash_is_not_floored_and_fees_count_four_contracts() (+6 more)
+Cohesion: 0.15
+Nodes (19): proxy(), test_excursion_needs_full_range_from_midpoint_and_later_reversal(), test_execution_is_strictly_after_signal_and_bounded_to_two_minutes(), test_failed_breakout_waits_for_completed_reentry_bar(), test_future_changes_cannot_change_first_signal(), test_future_proxy_gap_does_not_erase_existing_signal(), test_missing_prefix_is_excluded_instead_of_no_trade(), test_signed_negative_exit_cash_is_not_floored_and_fees_count_four_contracts() (+11 more)
 
 ### Community 315 - "test_collector_cadence.py"
-Cohesion: 0.14
-Nodes (13): et(), FakeClock, _run(), StopLoopError, test_a_stall_alerts_once_and_never_catches_up(), test_first_tick_is_the_open_and_last_is_before_the_early_close(), test_next_tick(), test_offset_shifts_the_grid() (+5 more)
+Cohesion: 0.09
+Nodes (22): et(), FakeClock, _run(), StopLoopError, test_a_stall_alerts_once_and_never_catches_up(), test_first_tick_is_the_open_and_last_is_before_the_early_close(), test_next_tick(), test_offset_shifts_the_grid() (+14 more)
 
 ### Community 324 - "Butterfly Guy Research and Backtest Pipeline Review — 2026-09-27"
-Cohesion: 0.15
-Nodes (12): 1. The prospective cohort's daily update was failing (P0), 2. Statistical power (P0 for research planning), 3.1 Consolidate the simulators, 3.2 Sweeps rank on the wrong accounting and the wrong metric, 3.3 Make fly-choice robustness a standard output, 3. Research infrastructure (P1), 4. Data and features known before entry (P1), 5. Live/backtest parity (P2) (+4 more)
+Cohesion: 0.17
+Nodes (11): 1. The prospective cohort's daily update was failing (P0), 2. Statistical power (P0 for research planning), 3.1 Consolidate the simulators, 3.2 Sweeps rank on the wrong accounting and the wrong metric, 3.3 Make fly-choice robustness a standard output, 3. Research infrastructure (P1), 4. Data and features known before entry (P1), Butterfly Guy Research and Backtest Pipeline Review — 2026-09-27 (+3 more)
 
 ### Community 325 - "Gap direction, VIX agreement and VIX regime — out-of-sample pre-registration"
 Cohesion: 0.17
@@ -1750,9 +1746,9 @@ Nodes (4): platform, machine, release, system
 Cohesion: 0.50
 Nodes (4): platform, machine, release, system
 
-### Community 330 - "fly_settlement_value"
-Cohesion: 0.18
-Nodes (11): Assumptions, Corrected implementation fingerprints, Reproduction commands, Result, Settlement evidence and reconciliation, SPX frozen baseline: cash-settlement correction, fly_settlement_value(), make_candidate() (+3 more)
+### Community 330 - "SPX frozen baseline: cash-settlement correction"
+Cohesion: 0.29
+Nodes (6): Assumptions, Corrected implementation fingerprints, Reproduction commands, Result, Settlement evidence and reconciliation, SPX frozen baseline: cash-settlement correction
 
 ### Community 331 - "platform"
 Cohesion: 0.50
@@ -1762,21 +1758,21 @@ Nodes (4): platform, machine, release, system
 Cohesion: 0.33
 Nodes (6): Concrete default-off runtime artifact, Corrected exact-image verification, Dated read-only Helios review, Observer target validation and operational review — 2026-10-15, Remaining activation decisions and rollback, Target resources and restore
 
-### Community 336 - "batman.py"
-Cohesion: 0.05
-Nodes (81): Path, parity_frame(), quote(), test_mixed_or_ambiguous_quote_evidence_fails_closed(), test_no_liquidation_price_is_invented_for_absent_or_undersized_body(), test_parity_recovers_known_zero_carry_forward_but_is_not_spot(), test_parity_refuses_insufficient_or_inconsistent_pairs(), test_post_expiry_grid_and_halfday_are_removed() (+73 more)
+### Community 336 - "json"
+Cohesion: 0.04
+Nodes (82): main(), main(), result_table(), main(), money(), table(), Path, main() (+74 more)
 
 ### Community 337 - "app_xsp"
 Cohesion: 0.15
 Nodes (13): cap_drop, command, container_name, env_file, networks, ports, profiles, read_only (+5 more)
 
 ### Community 338 - "logging.py"
-Cohesion: 0.06
-Nodes (25): Streaming, Reusable components, Streaming flow, get_logger(), setup_logging(), JsonlStreamRecorder, symbol_directory(), utc_now() (+17 more)
+Cohesion: 0.08
+Nodes (13): Reusable components, Streaming flow, JsonlStreamRecorder, symbol_directory(), utc_now(), write_candle_snapshot(), async_main(), main() (+5 more)
 
 ### Community 339 - "exit_ladder_pricing_study.py"
-Cohesion: 0.08
-Nodes (23): Candidate, fly_quotes(), max_gap(), Outcome, path_from(), qualifies(), select(), simulate() (+15 more)
+Cohesion: 0.13
+Nodes (14): PostgresSource, build_exits(), cmd_extract(), cmd_run(), _csv(), main(), _polls_sql(), _read() (+6 more)
 
 ### Community 340 - "app_spx"
 Cohesion: 0.18
@@ -1786,17 +1782,17 @@ Nodes (11): cap_drop, container_name, env_file, networks, ports, read_only, rest
 Cohesion: 0.29
 Nodes (7): parent_hashes, provenance, recording, path, run_sha256, path, run_sha256
 
-### Community 342 - "environment"
-Cohesion: 0.09
-Nodes (21): build, command, environment, image, pull_policy, restart, ALLOW_LIVE_TRADING, EXECUTION__ALLOW_LIVE_TRADING (+13 more)
+### Community 342 - "Option A deployment runbook — Helios, containerized"
+Cohesion: 0.14
+Nodes (13): 1. The internal keys file — Phase 3 dependency 4, 2. The token directory, 3. Credentials, Known limitations — accept or fix before a real shadow period, Option A deployment runbook — Helios, containerized, Preflight — read-only, no mutation, Prerequisites, Recorded preflight — 2026-08-06, read-only (+5 more)
 
 ### Community 343 - "AppConfig"
-Cohesion: 0.07
-Nodes (49): AppConfig, EntrySettings, ExecutionSettings, VixWidthBucket, _assert_live_config_supported(), _session_open_from_intraday_candles(), _quote(), test_entry_selection_config_applies_only_explicit_overrides() (+41 more)
+Cohesion: 0.03
+Nodes (92): Architecture Map, Decision profiles, Round 3: Codex review of `2a0f9b0` (one P1, one P2), addressed, AppConfig, CollectorSettings, ConfigModel, EntrySettings, ExecutionSettings (+84 more)
 
 ### Community 345 - "test_xsp_settlement_data.py"
-Cohesion: 0.14
-Nodes (17): test_cash_settlement_has_opening_fee_and_entry_stress_only(), test_symmetric_tent_matches_both_three_leg_intrinsic_ledgers(), test_unconfirmed_two_vs_three_decimal_rounding_changes_intrinsic_at_most_half_dollar(), native(), raw_files(), test_conflicting_native_sources_fail_and_identical_overlap_is_attributed(), test_duplicate_source_date_refused(), test_exact_native_identity_excludes_binary_nanos_and_spx() (+9 more)
+Cohesion: 0.17
+Nodes (14): test_cash_settlement_has_opening_fee_and_entry_stress_only(), native(), raw_files(), test_conflicting_native_sources_fail_and_identical_overlap_is_attributed(), test_duplicate_source_date_refused(), test_exact_native_identity_excludes_binary_nanos_and_spx(), test_exact_scaling_is_labeled_diagnostic_and_has_no_effective_date_assumption(), test_expiry_cash_ledger_has_only_opening_fee_and_opening_stress() (+6 more)
 
 ### Community 346 - "Implementation prompt: finish local ThetaData backtesting support"
 Cohesion: 0.15
@@ -1811,15 +1807,15 @@ Cohesion: 0.50
 Nodes (4): platform, machine, release, system
 
 ### Community 349 - "run_trials.py"
-Cohesion: 0.14
-Nodes (24): main(), bootstrap_mean_delta(), compare(), main(), sha(), stats(), write_csv(), test_pairing_never_presents_missing_winner_as_zero() (+16 more)
+Cohesion: 0.10
+Nodes (37): all_stresses(), assert_prior_result(), ledger_parity(), main(), paired_comparison(), select_sources(), points(), test_all_scenarios_equal_original_replays() (+29 more)
 
-### Community 350 - "run_entry_analysis.py"
-Cohesion: 0.16
-Nodes (17): fmt_candidate(), get_prev_close(), get_vix(), load_bars_from_db(), load_chains_from_db(), main(), nearest_snapshot(), parse_args() (+9 more)
+### Community 350 - "run_export"
+Cohesion: 0.20
+Nodes (5): ExportPlan, run_export(), FakeSource, test_recorded_quote_ages_and_event_times_are_exported(), test_sessions_without_quote_ages_export_exactly_as_before()
 
 ### Community 351 - "ButterflyOrderBuilder"
-Cohesion: 0.17
+Cohesion: 0.16
 Nodes (12): ButterflyOrderBuilder, make_spx_candidate(), test_close_order_credit(), test_order_has_required_schwab_fields(), test_order_leg_has_required_fields(), test_order_session_and_duration(), test_price_format_is_string(), make_candidate() (+4 more)
 
 ### Community 352 - "dependencies"
@@ -1831,36 +1827,36 @@ Cohesion: 0.29
 Nodes (7): 2026-09-25 — direction-rule tests, live/backtest selection parity, and gap-input fix (development data only), Call-only entry filters, Moving-average direction versus the gap rule, Reproduction, Robustness to fly choice (near-tied flies), Setup and accounting, Why the backtest and live paper disagree
 
 ### Community 354 - "test_research_tieset.py"
-Cohesion: 0.11
-Nodes (15): draw_keys(), two_stage_pick(), _cand(), _entry(), _session(), test_draws_are_keyed_by_session_and_direction(), test_neighbor_entry_needs_a_vix_and_clamps_spot_before_the_first_clock_tick(), test_neighbor_entry_uses_the_neighbor_snapshot_spot_and_vix() (+7 more)
+Cohesion: 0.09
+Nodes (18): Evidence, draw_keys(), promotion_shift(), selector_pool(), two_stage_pick(), _cand(), _entry(), _session() (+10 more)
 
-### Community 355 - "run_export"
-Cohesion: 0.22
-Nodes (6): DataSource, export_session(), has_timing_columns(), _read_csv(), run_export(), _ts_us()
+### Community 355 - "export.py"
+Cohesion: 0.25
+Nodes (9): bars_changes(), _bars_key(), export_session(), _git_sha(), has_timing_columns(), _history_entry(), _read_csv(), _spx_closes() (+1 more)
 
 ### Community 356 - "2026-10-01 — trail start and breakeven floor (Ernie @0DTE comparison; development data only)"
 Cohesion: 0.33
 Nodes (6): 2026-10-01 — trail start and breakeven floor (Ernie @0DTE comparison; development data only), Data and harness, Hypothesis for a future test (not applied), Post-hoc middle ground (defined after the table above), Pre-declared variants (written before running), Reproduction
 
 ### Community 357 - "CsvDataLoader"
-Cohesion: 0.17
-Nodes (6): ButterflyGuy data sources — representative samples, External sources, Local durable data, Not data inputs, Repository and runtime inputs, CsvDataLoader
+Cohesion: 0.09
+Nodes (17): ButterflyGuy data sources — representative samples, External sources, Local durable data, Not data inputs, Repository and runtime inputs, CsvDataLoader, win_pct(), main() (+9 more)
 
 ### Community 358 - "common.sh"
 Cohesion: 0.14
-Nodes (11): act(), compose(), container_env(), db_tool(), notify(), paired_report(), paper_is_paper(), common.sh script (+3 more)
+Nodes (13): act(), broker_flat(), compose(), container_env(), db_tool(), live_flat_for_stop(), notify(), paired_report() (+5 more)
 
 ### Community 359 - "quote_rules"
 Cohesion: 0.29
 Nodes (7): quote_rules, crossed_market, entry_gap, exit_gap, missing_market, selection, substitution
 
 ### Community 360 - "TimescaleDB and default-off NDX observer — implementation review"
-Cohesion: 0.20
-Nodes (8): Activation and rollback review — pending facts, Ledger units, drops and recovery, Lifecycle, bounds and permissions, Proposed capture, retention and restore — not activated, Registered verification and reproduction, TimescaleDB and default-off NDX observer — implementation review, Upstream ownership and unchanged research gates, Observer resource runner correction — revision 2
+Cohesion: 0.29
+Nodes (7): Activation and rollback review — pending facts, Ledger units, drops and recovery, Lifecycle, bounds and permissions, Proposed capture, retention and restore — not activated, Registered verification and reproduction, TimescaleDB and default-off NDX observer — implementation review, Upstream ownership and unchanged research gates
 
-### Community 361 - "run_all_history.py"
-Cohesion: 0.21
-Nodes (13): all_stresses(), assert_prior_result(), ledger_parity(), main(), paired_comparison(), select_sources(), points(), test_all_scenarios_equal_original_replays() (+5 more)
+### Community 361 - "canonical_hash"
+Cohesion: 0.22
+Nodes (7): Shadow on the open cohort, build_daily_run_record(), build_trade_record(), canonical_hash(), SessionOutcome, sha256_text(), trade_key()
 
 ### Community 362 - "assumptions"
 Cohesion: 0.33
@@ -1874,9 +1870,9 @@ Nodes (4): Corrections for newly registered cohorts, Keep the original experimen
 Cohesion: 0.40
 Nodes (5): endpoint, min_cash_settlements, min_stressed_winners, rule, target_trades
 
-### Community 365 - "AccountMonitor"
-Cohesion: 0.25
-Nodes (9): AccountMonitorSettings, AccountMonitor, test_account_lock_prevents_concurrent_balance_requests(), pending_snapshot(), test_failed_channel_only_is_retried_after_restart(), test_last_success_metric_restored_from_state_after_restart(), test_same_account_same_database_has_one_daily_warning_across_runtimes(), test_state_and_lock_keys_have_no_account_number_derivation() (+1 more)
+### Community 365 - "spx_live_settle_expired.py"
+Cohesion: 0.26
+Nodes (5): apply_settlement(), main(), _opening_net(), SettleRefusedError, spx_session_close()
 
 ### Community 366 - "continuation"
 Cohesion: 0.50
@@ -1895,8 +1891,8 @@ Cohesion: 0.50
 Nodes (4): resource_run, path, run_sha256, summary_sha256
 
 ### Community 371 - "run_live.py"
-Cohesion: 0.05
-Nodes (28): Historical Cycle Checkpoints, What the recorded prices measure, M2 — Ambiguity handlers can mask `AmbiguousOrderError` with a DB error, Strengths worth keeping, now_utc(), OrderRejectedError, AmbiguousOrderError, _assert_entry_fill_within_limit() (+20 more)
+Cohesion: 0.04
+Nodes (49): Historical Cycle Checkpoints, 2.1 Chain call sites (SPX), What the recorded prices measure, M2 — Ambiguity handlers can mask `AmbiguousOrderError` with a DB error, Strengths worth keeping, 1. P1: post-fill audit failure strands a confirmed fill, 3. P1: restart forgot permanent operator exit ownership, 4. P2: failed stop permanently suppressed session health (+41 more)
 
 ### Community 372 - "supplement"
 Cohesion: 0.50
@@ -1915,8 +1911,8 @@ Cohesion: 0.18
 Nodes (13): _inputs(), _sessions(), _synthetic(), test_bootstrap_is_deterministic(), test_cboe_spx_parser(), test_decision_rule_on_planted_and_null_effects(), test_first_session_uses_the_prior_development_session(), test_prior_values_come_from_the_previous_spx_session() (+5 more)
 
 ### Community 376 - "run_prospective_execution.py"
-Cohesion: 0.09
-Nodes (28): build_manifest(), CohortError, CohortSpec, deferred_runs_path(), git_state(), load_manifest(), manifest_path(), sha256_path() (+20 more)
+Cohesion: 0.11
+Nodes (23): Start-date correction before the first cohort, CohortError, CohortSpec, deferred_runs_path(), load_manifest(), verify_cohort(), write_reports(), cohort_dir_for() (+15 more)
 
 ### Community 377 - "environment"
 Cohesion: 0.11
@@ -1927,12 +1923,16 @@ Cohesion: 0.11
 Nodes (17): environment, volumes, ALLOW_LIVE_TRADING, BUTTERFLY_INSTANCE_ROLE, DATABASE__NAME, EXECUTION__ALLOW_LIVE_TRADING, EXECUTION__LIVE_TEST_DATE, EXECUTION__LIVE_TEST_MAX_DEBIT (+9 more)
 
 ### Community 381 - "render_one_dte_report.py"
-Cohesion: 0.22
-Nodes (12): aggregate(), esc(), load_evidence(), main(), metric_row(), money(), number(), percent() (+4 more)
+Cohesion: 0.19
+Nodes (14): col(), aggregate(), esc(), load_evidence(), f(), main(), metric_row(), money() (+6 more)
 
 ### Community 382 - "test_gateway_order_book.py"
 Cohesion: 0.19
 Nodes (11): _recent_payload(), _snapshot(), test_client_rejects_unsafe_or_ambiguous_inputs(), test_recent_authenticates_and_validates_fresh_contract(), recent(), test_recent_fails_closed_when_gateway_reports_stale_feed(), test_recent_rejects_mismatched_snapshot(), test_stream_authenticates_and_yields_only_requested_contracts() (+3 more)
+
+### Community 383 - "GatewayAuthoritativeMarketDataProvider"
+Cohesion: 0.14
+Nodes (4): GatewayAuthoritativeMarketDataProvider, test_gateway_provider_does_not_retry_authentication_failure(), test_gateway_provider_fails_closed_on_unusable_spot(), test_gateway_provider_rejects_invalid_retry_settings()
 
 ### Community 384 - "test_xsp_fallback_review.py"
 Cohesion: 0.51
@@ -1943,16 +1943,16 @@ Cohesion: 0.19
 Nodes (11): bars(), record(), test_central_bar_end_is_available_at_end_not_one_minute_earlier(), test_extension_preserves_economic_rules_and_original_eight_cells(), test_invalid_ohlc_causes_causal_quarantine_and_resets_next_session(), test_overlapping_native_sources_must_agree_and_no_source_can_duplicate_a_date(), test_settlement_requires_exact_native_instrument_and_missing_is_missing(), test_stale_signal_detection_preserves_earlier_entries_without_future_censoring() (+3 more)
 
 ### Community 386 - "Concurrent paper + live SPX: design"
-Cohesion: 0.12
-Nodes (15): 10. Pilot scripts v2, 11. Compose for the live service (PR 2), 12. Paired comparison report, 13. Decisions for the owner, 14. Rollout and rollback, 15. PR plan (Phase 2), 16. Downstream notes, 1. Summary (+7 more)
+Cohesion: 0.09
+Nodes (19): 10. Pilot scripts v2, 11. Compose for the live service (PR 2), 12. Paired comparison report, 13. Decisions for the owner, 14. Rollout and rollback, 15. PR plan (Phase 2), 16. Downstream notes, 1. Summary (+11 more)
 
 ### Community 387 - "Live exit order pricing: plan and pre-registration"
-Cohesion: 0.14
-Nodes (13): 1. Candidate rules, 2. Fill model, 3. Data, 5. Live evidence needed, and a proposed supervised protocol, 6. Paper reporting (review item L8), 7. Phase 2 deliverables (after approval), Amendment 1 (owner, 2026-11-16, after Step 1, before any Set B trade existed), Live exit order pricing: plan and pre-registration (+5 more)
+Cohesion: 0.13
+Nodes (14): 1. Candidate rules, 2. Fill model, 3. Data, 4. Metric and decision rule (fixed in advance), 5. Live evidence needed, and a proposed supervised protocol, 6. Paper reporting (review item L8), 7. Phase 2 deliverables (after approval), Amendment 1 (owner, 2026-11-16, after Step 1, before any Set B trade existed) (+6 more)
 
-### Community 388 - "test_collector_timing.py"
-Cohesion: 0.30
-Nodes (8): _collector(), _provider(), test_aligned_pass_fetches_the_chain_first_and_records_the_tick(), test_all_paper_strategy_configs_record_timing(), test_default_config_keeps_the_untimed_path(), test_meta_write_failure_does_not_block_the_chain_insert(), test_provider_without_observations_records_unobserved_meta(), test_timed_snapshot_records_quote_times_and_meta()
+### Community 388 - "test_ndx_entry_coverage.py"
+Cohesion: 0.40
+Nodes (8): fly(), select(), settings(), test_baseline_can_select_a_center_inside_existing_range(), test_complete_target_recovers_center_beyond_fixed_scan_without_mutating_settings(), test_complete_target_still_enforces_price_and_target_constraints(), test_filter_before_ranking_selects_affordable_alternative(), test_no_fallback_to_over_cap_candidate_and_cap_boundary_is_inclusive()
 
 ### Community 389 - "Exact-SHA Deployment Proof - 2026-07-15"
 Cohesion: 0.33
@@ -1962,25 +1962,25 @@ Nodes (5): Deployment and verification, Exact-SHA Deployment Proof - 2026-07-15,
 Cohesion: 0.33
 Nodes (5): Fail-closed proof, Post-action reconciliation and paper restore, Redacted evidence, Result, XSP Manual-Flatten Evidence - 2026-07-16
 
-### Community 391 - "datetime"
-Cohesion: 0.09
-Nodes (30): main(), chain_cache_path(), chain_journal_path(), load_chain_day(), nearest_snapshot(), _read_snapshots(), save_snapshot(), test_chain_cache_path_is_partitioned_by_underlying() (+22 more)
+### Community 391 - "chain_cache.py"
+Cohesion: 0.19
+Nodes (14): chain_cache_path(), chain_journal_path(), load_chain_day(), nearest_snapshot(), _read_snapshots(), save_snapshot(), test_chain_cache_path_is_partitioned_by_underlying(), test_load_chain_day_falls_back_to_partitioned_spx_cache() (+6 more)
 
 ### Community 392 - "test_xsp_fallback.py"
 Cohesion: 0.32
 Nodes (11): stamp(), test_fill_window_is_capped_at_last_scheduled_liquidation(), test_gap_is_known_on_scheduled_third_minute_not_future_recovery(), test_missing_entry_proxy_locks_at_entry_without_future_data(), test_missing_trigger_fill_window_expires_once_and_never_retries(), test_native_settlement_has_opening_fee_and_stress_only(), test_timed_fill_failure_and_cutoff_failure_have_different_known_times(), test_unknown_failure_status_fails_closed_instead_of_imputing_pnl() (+3 more)
 
-### Community 393 - "SchwabGateway order-book release full-session acceptance — 2026-09-01"
-Cohesion: 0.22
-Nodes (8): Credential lineage, EquityScanner coexistence boundary, Post-close decision, SchwabGateway order-book release full-session acceptance — 2026-09-01, Scope and freeze boundary, Start the full-session harness (unattended), Tuesday preflight — final gate at 06:20-06:29 PDT, Work allowed only after a full PASS
+### Community 393 - "ChainDay"
+Cohesion: 0.29
+Nodes (5): ChainDay, day_with_monitoring_bars(), _bar(), test_day_with_monitoring_bars_adds_live_poll_timestamps(), test_day_with_monitoring_bars_keeps_existing_bar_for_same_timestamp()
 
 ### Community 394 - "XSP improvements — sequential work record, October 6, 2026"
 Cohesion: 0.10
 Nodes (18): 1. Risk accounting — existing fix verified, 2. XSP exit replay — baseline established before tuning, 3. Earlier trailer — experiment fixed before execution, 4. Independent width policy — no recent behavioral difference, 5. Execution and settlement evidence — proxy discrepancy measured, Reproduce, Result: refine; do not activate this candidate, XSP improvements — sequential work record, October 6, 2026 (+10 more)
 
-### Community 395 - "strategy_page.py"
-Cohesion: 0.26
-Nodes (12): _json_data_block(), _case_study(), _clock(), _entry_window_et(), _et_after_open(), _minutes_between(), _pct(), _regime_bar() (+4 more)
+### Community 395 - "Live exit order pricing: Phase 2 results (Step 1, Set A)"
+Cohesion: 0.18
+Nodes (10): Caveats, Data, Decision, Live exit order pricing: Phase 2 results (Step 1, Set A), Proposed design (Phase 3, pending owner approval), Results: paired difference against R0, $ per exit, Speed: expected fill time after the signal, The 10 signals most affected (R3 − R0, mid50) (+2 more)
 
 ### Community 396 - "Critical External-Alert Delivery Proof - 2026-07-15"
 Cohesion: 0.40
@@ -1998,9 +1998,9 @@ Nodes (4): Preconditions, Restart and verification, Scope, XSP Flat-Runtime Rest
 Cohesion: 0.50
 Nodes (4): fill_models, corrected_midpoint, marketable, stressed_marketable
 
-### Community 400 - "test_strategy_page.py"
-Cohesion: 0.17
-Nodes (10): _params(), test_generate_refuses_missing_strategy_config(), test_generate_writes_strategy_page_beside_report(), fake_build_report(), fake_connect(), test_page_has_no_inline_executable_script(), test_page_renders_config_values_and_no_leftover_tokens(), test_params_follow_the_spx_config() (+2 more)
+### Community 400 - "generate_live_performance.py"
+Cohesion: 0.08
+Nodes (31): best_trade(), _case_study(), _clock(), _entry_window_et(), _et_after_open(), _minutes_between(), _pct(), reference_spot() (+23 more)
 
 ### Community 401 - "Implementation prompt: a designed position-monitor cadence, exit confirmation and leg fetch"
 Cohesion: 0.15
@@ -2011,16 +2011,16 @@ Cohesion: 0.67
 Nodes (3): BUTTERFLY_RESEARCH_CACHE, research(), run_schwab_fidelity_daily.sh script
 
 ### Community 403 - "cli.py"
-Cohesion: 0.06
-Nodes (60): build_parser(), evaluation_args(), _calibrate_for_registration(), cmd_calibrate(), cmd_catalog(), cmd_coverage(), cmd_diagnose(), cmd_exclude_sessions() (+52 more)
+Cohesion: 0.03
+Nodes (117): Costs, Fill, TradeFills, build_parser(), evaluation_args(), _calibrate_for_registration(), cmd_calibrate(), cmd_catalog() (+109 more)
 
 ### Community 404 - "spot_ticks.parquet"
 Cohesion: 0.67
 Nodes (3): spot_ticks.parquet, rows, sha256
 
-### Community 405 - "Butterfly Guy Code Review — 2026-09-25"
-Cohesion: 0.18
-Nodes (10): Baseline, Butterfly Guy Code Review — 2026-09-25, Executive summary, Findings index, H1 — Public repository with a self-hosted runner that reaches production, H2 — Previous close silently falls back to the current spot price, High, Method (+2 more)
+### Community 405 - "PositionService"
+Cohesion: 0.04
+Nodes (34): Dependency map, Baseline, Butterfly Guy Code Review — 2026-09-25, Executive summary, Findings index, H1 — Public repository with a self-hosted runner that reaches production, H2 — Previous close silently falls back to the current spot price, H3 — The exit decision is gated on non-critical DB writes, with no query timeout (+26 more)
 
 ### Community 406 - "config.yaml"
 Cohesion: 0.18
@@ -2038,9 +2038,9 @@ Nodes (5): test_auth_init_honours_schwab_token_path(), _held(), order(), test_cl
 Cohesion: 0.18
 Nodes (11): spx_live_db_tool, cap_drop, env_file, image, networks, profiles, pull_policy, read_only (+3 more)
 
-### Community 411 - "test_research_features.py"
-Cohesion: 0.26
-Nodes (11): _bars(), _copy_fixture(), _dump(), test_aux_write_refuses_to_remove_rows_when_asked(), test_intraday_ingest_converts_a_pre_merge_source(), test_intraday_ingest_keeps_adds_and_revises(), test_intraday_reingest_of_the_same_dump_changes_nothing(), test_merge_never_removes_and_rejects_a_bar_size_clash() (+3 more)
+### Community 411 - "test_live_entry_loop_halts_when_its_monitor_dies_of_any_error"
+Cohesion: 0.20
+Nodes (5): LiveTradingHaltedError, _never_awaited(), create_task(), test_entry_loop_alerts_monitor_failure_after_market_close(), test_live_entry_loop_halts_when_its_monitor_dies_of_any_error()
 
 ### Community 412 - "test_xsp_independent_results.py"
 Cohesion: 0.22
@@ -2050,9 +2050,9 @@ Nodes (12): test_paired_no_signal_is_zero_but_missing_execution_is_excluded(), t
 Cohesion: 0.31
 Nodes (6): _weekdays(), collect(), _csv(), polls_sql(), trades_sql(), _us()
 
-### Community 414 - "Current Schwab Integration"
-Cohesion: 0.14
-Nodes (13): Assumptions requiring verification, Configuration, secrets, and deployment assumptions, Current architecture, Current Schwab Integration, Database and messaging dependencies, Direct SDK construction and imports, Discord and operational dependencies, Equity and research paths (+5 more)
+### Community 414 - "test_gateway_minute_backfill.py"
+Cohesion: 0.24
+Nodes (6): FakeClient, no_sleep(), rec(), test_days_before_retention_and_holidays_are_not_problems(), test_dump_writes_one_research_format_record_per_symbol_and_weekday(), test_holes_errors_and_empty_symbols_are_problems()
 
 ### Community 415 - "profit_management"
 Cohesion: 0.22
@@ -2062,25 +2062,21 @@ Nodes (9): profit_management, exit_before_close_minutes, max_loss_from_cost, quo
 Cohesion: 0.38
 Nodes (3): test_report_gateway_process_values_override_infra_env(), test_report_gateway_settings_load_host_values_from_infra_env(), load_report_gateway_settings()
 
-### Community 417 - "session_ledger.py"
-Cohesion: 0.19
-Nodes (10): add_command(), build(), canonical(), cmd_ledger(), Evidence, gate_status(), indexed(), publish() (+2 more)
+### Community 417 - "archive_cli.py"
+Cohesion: 0.06
+Nodes (33): Fidelity validation (`validate.py`), The adapter (`history.py`), The holdout evaluation (`protocol.py`, `holdout`; D9, built 2026-09-29), Vendor history (ThetaData, subscribed 2026-09-28), add_commands(), _artifact(), _clean(), cmd_audit() (+25 more)
 
 ### Community 418 - "parametrize"
-Cohesion: 0.18
-Nodes (10): test_bad_exit_pricing_aborts_before_anything_starts(), test_failed_gate_starts_nothing(), test_failed_verification_stops_only_the_live_container(), test_health_alerts_when_the_live_bot_halts_or_entries_are_blocked(), test_health_halt_stays_sticky_despite_entry_intent_recovery(), test_health_ready_ignores_lifecycle_reasons(), test_health_ready_never_masks_a_halt_or_a_paper_change(), test_health_ready_requires_consecutive_valid_not_ready_observations() (+2 more)
+Cohesion: 0.17
+Nodes (11): test_bad_exit_pricing_aborts_before_anything_starts(), test_failed_gate_starts_nothing(), test_failed_verification_stops_only_the_live_container(), test_health_alerts_when_the_live_bot_halts_or_entries_are_blocked(), test_health_halt_stays_sticky_despite_entry_intent_recovery(), test_health_ready_ignores_lifecycle_reasons(), test_health_ready_never_masks_a_halt_or_a_paper_change(), test_health_ready_requires_consecutive_valid_not_ready_observations() (+3 more)
 
 ### Community 419 - "Ernie (@0DTE) comparison — variant plan (not run)"
-Cohesion: 0.17
-Nodes (12): Constraints, D — direction, Data route (pending owner decision), E — entry trigger (structural levels), Ernie (@0DTE) comparison — variant plan (not run), Ernie's rules, as stated, Order, P — strike placement (+4 more)
+Cohesion: 0.13
+Nodes (14): Constraints, D — direction, Data route (pending owner decision), E — entry trigger (structural levels), Ernie (@0DTE) comparison — variant plan (not run), Ernie's rules, as stated, Order, P — strike placement (+6 more)
 
-### Community 421 - "files"
+### Community 422 - "Concurrent paper + live SPX: Phase 0 verification"
 Cohesion: 0.25
-Nodes (8): supplement.csv, supplement.sql, trade-222-events.csv, trade-222-events.sql, /mnt/Repos/Trading/Butterflyguy/docs/research/ndx-strategy/evidence/2026-10-15/supplement-manifest.json, files, root, sha256
-
-### Community 422 - "3. ButterflyGuy-owned TimescaleDB data"
-Cohesion: 0.18
-Nodes (11): 3.10 `broker_order_intents`, 3.1 `option_chain_snapshots`, 3.2 `spot_prices`, 3.3 `butterfly_candidates`, 3.4 `butterfly_trades`, 3.5 `decision_log`, 3.6 `daily_risk_state`, 3.7 `daily_bars` (+3 more)
+Nodes (7): 3. Entry and exit dependencies on DB data, 4. Risk-check finding (today's behavior), 5. Load and storage (Helios), 6. Pilot script assumptions (template `b06cdb7` + 11-17 local copy), 7. Consumers of `butterfly_guy` SPX rows, 8. Helios state (2026-11-17 ~10:15 PT), Concurrent paper + live SPX: Phase 0 verification
 
 ### Community 423 - "execution"
 Cohesion: 0.25
@@ -2094,21 +2090,17 @@ Nodes (8): strategy, rr_min, spot_range, underlying, vix_width_buckets, wing_wid
 Cohesion: 0.25
 Nodes (7): Data, Decision (owner, 2026-11-16), Monitor cadence and exit confirmation: pilot-set results, Outcome under the registered rule, Results, Trades the arms change, Why the development set cannot score these arms
 
-### Community 426 - "argparse"
-Cohesion: 0.04
-Nodes (21): main(), owner_minutes(), main(), parse_args(), run(), format_alert(), main(), post() (+13 more)
-
 ### Community 427 - "Research core"
-Cohesion: 0.18
-Nodes (9): Accounting and evaluation, Decision profiles, Diagnostics (descriptive only), Known differences, Mechanism check for H-TS1 (descriptive only), Parity with the frozen replay, Registry, Reproducing the idea sweep (+1 more)
+Cohesion: 0.11
+Nodes (15): Accounting and evaluation, Auxiliary inputs (manifest schema 2), Data, Diagnostics (descriptive only), Event calendar, Known differences, Mechanism check for H-TS1 (descriptive only), Modules (+7 more)
 
 ### Community 428 - "SPX activation filters — retrospective study, 2026-10-18"
 Cohesion: 0.25
 Nodes (7): Conditions worth refining, Coverage and baseline, Filters that sacrifice the desired upside, Periods and exit diagnostic, Procedure and limitations, Reproduce, SPX activation filters — retrospective study, 2026-10-18
 
-### Community 429 - "ThetaData durable backtesting execution — 2026-10-01"
-Cohesion: 0.09
-Nodes (20): Completed decision, Distinct datasets and source versions, Ernie comparison reconciliation — 2026-10-02, Provenance and access limits, Reproduce, SPX idea sweep — 2026-09-25, Code and experiment freeze, Full development eligibility audit (+12 more)
+### Community 429 - "docs/README.md"
+Cohesion: 0.06
+Nodes (27): Backfill candles, Equity candles and order-book recording, Historical limitation, Operational caution, Record a future BMNR session, Live WebSocket, Recent snapshots, SchwabGateway order books (+19 more)
 
 ### Community 430 - "late_morning"
 Cohesion: 0.29
@@ -2134,10 +2126,6 @@ Nodes (7): 2026-09-27 — unified research core, cohort runner move, and stage-2
 Cohesion: 0.38
 Nodes (4): externalTip(), jumpToTrade(), renderLog(), showTip()
 
-### Community 436 - "DailyVol"
-Cohesion: 0.29
-Nodes (5): DailyVol, _daily(), test_daily_features_use_the_prior_session_close_never_the_session_row(), test_holiday_vix_print_is_not_the_prior_session(), test_stale_or_missing_prior_close_stays_missing()
-
 ### Community 437 - "afternoon"
 Cohesion: 0.33
 Nodes (6): confirmation_polls, drawdown_threshold, end_minutes_after_open, min_peak_profit_ratio, start_minutes_after_open, afternoon
@@ -2158,9 +2146,9 @@ Nodes (5): Completion, Morning activation, Prepared release, Session, Supervised
 Cohesion: 0.33
 Nodes (5): external, name, networks, monitoring_net, services
 
-### Community 442 - "IntradayVol"
-Cohesion: 0.27
-Nodes (4): IntradayVol, test_intraday_bar_timestamped_one_second_late_is_rejected(), test_intraday_uses_only_bars_complete_at_the_decision(), test_intraday_value_too_old_is_missing()
+### Community 442 - "gateway_minute_backfill.py"
+Cohesion: 0.32
+Nodes (3): check(), dump(), main()
 
 ### Community 443 - "SPXW end-of-day 1-DTE study — November 12, 2026"
 Cohesion: 0.40
@@ -2187,7 +2175,7 @@ Cohesion: 0.60
 Nodes (5): build, build, build, context, dockerfile
 
 ### Community 449 - "parse_quotes"
-Cohesion: 0.20
+Cohesion: 0.19
 Nodes (6): _et_to_utc_us(), parse_quotes(), ThetaDataError, _quote_csv(), test_millisecond_timestamps_with_trimmed_zeros_parse(), test_quotes_map_to_utc_and_types_and_a_0_0_row_is_no_quote()
 
 ### Community 450 - "risk"
@@ -2198,49 +2186,45 @@ Nodes (4): risk, max_daily_loss, max_position_size, max_trades_per_day
 Cohesion: 0.83
 Nodes (3): broker_state_events(), ready_problem(), health.sh script
 
-### Community 452 - "Concurrent SPX live pilot scripts (v2)"
-Cohesion: 0.50
-Nodes (3): Concurrent SPX live pilot scripts (v2), Per session, Prerequisites on Helios (one-time, each needs approval)
+### Community 452 - "environment"
+Cohesion: 0.08
+Nodes (24): Concurrent SPX live pilot scripts (v2), Per session, Prerequisites on Helios (one-time, each needs approval), build, command, environment, image, pull_policy (+16 more)
 
 ### Community 453 - "environment"
 Cohesion: 0.50
 Nodes (4): DATABASE__HOST, DATABASE__PORT, DATABASE__USER, environment
 
-### Community 469 - "1. Charles Schwab API"
-Cohesion: 0.20
-Nodes (10): 1.1 Account-number resolution, 1.2 Option chains, 1.3 Single-symbol spot/index quotes, 1.4 Batched equity quotes, 1.5 Price-history candles, 1.6 Market movers, 1.7 Account snapshot, balances, and positions, 1.8 Orders and order status (+2 more)
+### Community 469 - "Window B Executed — gateway enabled, exercised, and rolled back (2026-08-08)"
+Cohesion: 0.29
+Nodes (7): B1 — operator chose push-and-pull, with the framing corrected, B3 executed and verified by inode and digest, B3 was not ready — the runbook asserted code that did not exist, B4/B5/B6, Finding — the containers were reading the host's token path, Follow-ups, none blocking, Window B Executed — gateway enabled, exercised, and rolled back (2026-08-08)
 
 ### Community 471 - "get_source"
 Cohesion: 0.50
 Nodes (4): 2026-09-28 — stage 6: forward housekeeping and the registration decision package (no vendor data), Housekeeping, Registration decision package (nothing registered), Tooling hygiene
 
-### Community 472 - "Snapshot-neighbor tie sets (2026-10-18)"
-Cohesion: 0.22
-Nodes (7): Caveats, First results (2026-10-18), Problem, Proposal, Snapshot-neighbor tie sets (2026-10-18), Verification plan, What it does not change
+### Community 472 - "ThetaData durable backtesting execution — 2026-10-01"
+Cohesion: 0.29
+Nodes (7): Code and experiment freeze, Full development eligibility audit, Normalization and frozen baseline — completed, Persistent inputs and provenance, Preserved research boundaries, Reproduce from durable inputs, ThetaData durable backtesting execution — 2026-10-01
 
-### Community 473 - "5. Local files and backtest inputs"
-Cohesion: 0.25
-Nodes (8): 5.1 Application YAML configuration, 5.2 Environment variables and `.env`, 5.3 `tokens.json`, 5.4 Universe and metadata files, 5.5 Historical minute CSVs, 5.6 Local daily bar cache, 5.7 Local option-chain cache, 5. Local files and backtest inputs
+### Community 473 - "report_selection_parity.py"
+Cohesion: 0.38
+Nodes (3): main(), parse_args(), run()
 
 ### Community 474 - "Stage B recording preparation — isolated SQLite implementation"
 Cohesion: 0.33
 Nodes (6): Activation, validation and rollback checklist — pending scope, Atomic writes, failure and consumer protocol, Contract review and implementation choice, Exact reproduction and retention, Isolated verification and resource scope, Stage B recording preparation — isolated SQLite implementation
 
 ### Community 476 - "OptionQuote"
-Cohesion: 0.08
-Nodes (24): _is_pm_settled(), select_pm_settled_rows(), select_strike_contract(), _as_float(), _as_int(), rows_to_option_quotes(), fly_mark_value(), build_exit_mark_parity() (+16 more)
+Cohesion: 0.15
+Nodes (17): _is_pm_settled(), select_pm_settled_rows(), select_strike_contract(), _chain(), _row(), _symbols(), test_ambiguous_snapshot_rows_are_dropped(), test_custom_key_fields_group_rows() (+9 more)
 
-### Community 477 - "Acquisition"
-Cohesion: 0.14
-Nodes (12): Concrete consumer and identities, Admission and execution after separately scoped approval, Concrete release proposal, Proposed one-shot Helios capture — not activated, Verification performed, Capture checks and acceptance, First observer capture — Monday 2026-10-19, Not covered (+4 more)
+### Community 477 - "First observer capture — Monday 2026-10-19"
+Cohesion: 0.29
+Nodes (6): Capture checks and acceptance, First observer capture — Monday 2026-10-19, Not covered, Outcome 2026-10-19, Prepare checks (any failure → `not_prepared`, nothing built), Timeline (UTC, PDT in effect)
 
-### Community 478 - "Work plan"
-Cohesion: 0.25
-Nodes (8): NDX-00 — Initial audit: complete, with limitations, NDX-01 — Reproducible baseline and usable data: complete, qualified, NDX-02 — Execution calibration and liquidity: accounting portion complete, NDX-03 — Entry liquidity experiment: pending NDX-01/02, NDX-04 — Late-session profit protection: hypothesis only, NDX-05 — NDX-specific volatility and width: deferred, NDX-06 — Integrated replay and fresh observation: pending candidates, Work plan
-
-### Community 479 - "Registration decision package — 2026-09 (for the owner; nothing is registered)"
-Cohesion: 0.25
-Nodes (7): Decisions only the owner can make, H-EV1 — skip pre-entry releases (`HEV1`), H-LV1 — skip low-VIX calls (`HLV1`), H-SN1 — σ-normalised selector (`HSN1`), H-TS1 — rich one-day implied (`HTS1`), Optional H-EV2 — skip FOMC statement days (not implemented), Registration decision package — 2026-09 (for the owner; nothing is registered)
+### Community 479 - "Phases"
+Cohesion: 0.33
+Nodes (6): Phase 0: land what exists, Phase 1: one command surface, Phase 3: commit the analysis that decisions rest on, Phase 4: link the stages, Phase 5: data upkeep, Phases
 
 ### Community 481 - "test_failed_verification_keeps_managing_a_fly_that_filled_meanwhile"
 Cohesion: 0.50
@@ -2266,17 +2250,17 @@ Nodes (6): Drill findings fixed, Follow-up — 2026-07-14, Offline safety-drill 
 Cohesion: 0.25
 Nodes (7): Boundaries, Deliverable and scope, Implementation prompt: SPX session quality and exclusion ledger, Ledger behavior, Read first and establish the checkout, Reconciliation targets, Verification and completion criteria
 
-### Community 495 - "parse_margin_equity"
-Cohesion: 0.32
-Nodes (6): parse_margin_equity(), test_invalid_equity_is_unknown_not_zero(), test_margin_equity_uses_current_equity_not_buying_power_or_liquidation(), test_missing_equity_or_nonmargin_account_is_unknown(), test_required_check_metric_tracks_sessions_including_early_closes(), test_unresolved_local_trades_do_not_create_broker_equity_alerts()
+### Community 495 - "Bounded causal use of independent NDX minute evidence"
+Cohesion: 0.40
+Nodes (5): Bounded causal use of independent NDX minute evidence, Evidence needed and present feasibility, Provisional requirements for a future contract, Supported observations, What the distinct times establish
 
-### Community 496 - ".monitor_loop"
-Cohesion: 0.25
-Nodes (6): M11 — A restart with an open trade double-counts the entry cost in daily P&L, M3 — Runtime reconciler repair leaves an unmonitored, uncounted trade, M4 — Price-increment rounding is $0.01; SPX complex orders likely require $0.05 (Needs verification), M5 — Chain parser takes `options[0]` per strike with no root filter (Needs verification), M6 — A restart forgets `_ever_in_profit`, suppressing drawdown exits, Medium
+### Community 497 - "Proposed one-shot Helios capture — not activated"
+Cohesion: 0.50
+Nodes (4): Admission and execution after separately scoped approval, Concrete release proposal, Proposed one-shot Helios capture — not activated, Verification performed
 
-### Community 498 - "render_activation_report.py"
-Cohesion: 0.43
-Nodes (3): chart_image(), money(), render()
+### Community 498 - "activation_study.py"
+Cohesion: 0.18
+Nodes (11): add_history(), analyze(), dump(), eligible(), load_rows(), main(), skip_mask(), summary() (+3 more)
 
 ### Community 499 - "2026-09-29 (later) — D4: gate 1's level calibrated on development data (Revision 4; nothing registered)"
 Cohesion: 0.33
@@ -2286,37 +2270,13 @@ Nodes (6): 2026-09-29 (later) — D4: gate 1's level calibrated on development d
 Cohesion: 0.33
 Nodes (6): 2026-09-29 (later) — D9: the pre-registered holdout evaluation command (built; nothing run), Also changed, Readings the draft left open, now fixed in code, for the owner to review before registering, Refusals, all before any holdout session is replayed, Tests, The command
 
-### Community 501 - "session"
-Cohesion: 0.33
-Nodes (4): 8. Decision 6: metrics, alerts, Discord (**OWNER**: Discord), session(), env_file(), __init__()
-
 ### Community 502 - "observer-weekend-install-v1/README.md"
-Cohesion: 0.29
-Nodes (5): Remaining separate gateway change, Helios weekend preparation — October 17 UTC, Installed and verified, Preflight, storage and preservation, Remaining work and rollback
-
-### Community 503 - "SPX prospective execution validation v2 registration"
-Cohesion: 0.29
-Nodes (6): Activation and paper deployment evidence, Completed development baseline, Operational checks, Registered experiment, Retiring v1, SPX prospective execution validation v2 registration
-
-### Community 504 - "test_db_pool_close.py"
-Cohesion: 0.48
-Nodes (3): _db(), test_close_does_not_terminate_a_pool_that_closes(), test_close_terminates_a_pool_that_waits_on_a_leaked_lease()
-
-### Community 505 - "F2 prospective shadow registration — 2026-10-02"
-Cohesion: 0.33
-Nodes (6): Definition, Endpoint and gates (fixed now, judged only at the endpoint), Evidence that motivated it (all in-sample or partly used), F2 prospective shadow registration — 2026-10-02, How it is scored, Operation
-
-### Community 506 - "Session handoff"
-Cohesion: 0.33
-Nodes (6): 2026-10-15 — Living plan established, 2026-10-15 — NDX-01 reproducible reference and coverage audit, 2026-10-15 — NDX-02 bounded execution/accounting attribution, 2026-10-15 — NDX-02 constituent fidelity and causal-use specification, 2026-10-15 — NDX-02 independent minute continuation import/cadence audit, Session handoff
+Cohesion: 0.50
+Nodes (4): Helios weekend preparation — October 17 UTC, Installed and verified, Preflight, storage and preservation, Remaining work and rollback
 
 ### Community 507 - "2026-09-28 — stage 3: event calendar, term-structure features, descriptive diagnostics, vendor readiness (development data only)"
 Cohesion: 0.33
 Nodes (6): 2026-09-28 — stage 3: event calendar, term-structure features, descriptive diagnostics, vendor readiness (development data only), Descriptive E0 breakdowns (not evidence), Feature sources and coverage, Housekeeping, Pre-registration draft (not registered), Vendor readiness
-
-### Community 508 - "Data"
-Cohesion: 0.40
-Nodes (5): Auxiliary inputs (manifest schema 2), Data, Event calendar, Overnight futures (ES): audit only, Volatility term structure
 
 ### Community 509 - "2026-09-29 (later) — D2: a pass must also make money (gate 6, Revision 5; nothing registered)"
 Cohesion: 0.40
@@ -2338,30 +2298,34 @@ Nodes (4): 2026-09-20 — SPX cash-settlement parity correction, Evidence, assum
 Cohesion: 0.50
 Nodes (4): 2026-09-29 (later) — D5: held trades settle on early closes (development re-run; nothing registered), Decision and change, Results, Still open
 
+### Community 519 - "__getattr__"
+Cohesion: 0.50
+Nodes (3): Standalone reviewed-subset correction — 2026-08-06, Current Phase, __getattr__()
+
 ## Ambiguous Edges - Review These
 - `central cyan glow` → `technology visual association`  [AMBIGUOUS]
   data/images/butterflyguy_logo2.png · relation: suggests
 
 ## Knowledge Gaps
 - **557 isolated node(s):** `EVIDENCE_DIR`, `LAUNCHER`, `LOG`, `MONITOR`, `SESSION_DATE` (+552 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 6995 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **71 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 6994 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **72 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `SchwabClientWrapper` connect `SchwabClientWrapper` to `test_spx_live_settle_expired.py`, `_build_payload`, `ButterflyCandidate`, `Window G — SIGTERM handled, exit 137 eliminated (2026-08-08)`, `Implementation prompt: a designed position-monitor cadence, exit confirmation and leg fetch`, `position_service.py`, `GatewayMarketDataError`, `Window F — the refresh token re-authorized, six days early (2026-08-08)`, `Current Schwab Integration`, `trade_service.py`, `Codex Project State`, `Schwab Gateway Migration Plan`, `run_live.py`, `entry_loop`, `.initialize`, `Branch Review and Integration Plan`, `main`, `services/daily_report_card.py`, `logging.py`, `AppConfig`, `Capability recorder design`, `test_schwab_client.py`, `SimulationEngine`, `test_run_live.py`, `run_live.py`, `2. Phase A: evidence`?**
-  _High betweenness centrality (0.019) - this node is a cross-community bridge._
+- **Why does `SchwabClientWrapper` connect `SchwabClientWrapper` to `BrokerStateGate`, `_build_payload`, `services/daily_report_card.py`, `Window G — SIGTERM handled, exit 137 eliminated (2026-08-08)`, `Implementation prompt: a designed position-monitor cadence, exit confirmation and leg fetch`, `position_service.py`, `ButterflyCandidate`, `Codex Project State`, `providers.py`, `Schwab Gateway Migration Plan`, `_build_collector_market_data`, `Branch Review and Integration Plan`, `main`, `json`, `logging.py`, `ButterflyOrderBuilder`, `Capability recorder design`, `SimulationEngine`, `spx_live_settle_expired.py`, `Regime`, `test_run_live.py`, `run_live.py`, `2. Phase A: evidence`?**
+  _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **What connects `EVIDENCE_DIR`, `LAUNCHER`, `LOG` to the rest of the system?**
   _557 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `source_sha256` be split into smaller, more focused modules?**
   _Cohesion score 0.013986013986013986 - nodes in this community are weakly interconnected._
-- **Why does `ButterflyCandidate` connect `RunContext` to `test_prospective_execution.py`, `config.py`, `test_order_manager.py`, `PositionService`, `trade_chart.py`, `position_quote_recovery.py`, `datetime`, `ButterflyCandidate`, `synthetic_chain.py`, `test_research_accounting.py`, `position_service.py`, `reports/daily_report_card.py`, `Current Schwab Integration`, `trade_service.py`, `run_live.py`, `entry_loop`, `position_manager.py`, `test_position_quote_recovery.py`, `run_paper_replay.py`, `test_position_monitoring.py`, `run_backtest_db.py`, `position_data_diagnostics.py`, `fly_settlement_value`, `main`, `execution_accounting.py`, `SimulationEngine`, `OptionQuote`, `ButterflyOrderBuilder`, `test_research_tieset.py`, `json`, `.monitor_loop`, `run_live.py`, `f2_shadow_report.py`, `prospective_execution.py`?**
-  _High betweenness centrality (0.016) - this node is a cross-community bridge._
+- **Why does `GatewayAuthoritativeMarketDataProvider` connect `GatewayAuthoritativeMarketDataProvider` to `Schwab gateway current status`, `DiscordNotifier`, `ButterflyCandidate`, `providers.py`, `GatewayAuthoritativeMarketDataProvider`, `_build_collector_market_data`, `.get_intraday_bars_for_day`, `test_position_quote_recovery.py`, `run_live.py`, `position_service.py`, `GatewayMarketDataError`, `test_position_monitoring.py`?**
+  _High betweenness centrality (0.013) - this node is a cross-community bridge._
 - **Should `files` be split into smaller, more focused modules?**
   _Cohesion score 0.005747126436781609 - nodes in this community are weakly interconnected._
-- **Why does `AppConfig` connect `AppConfig` to `config.py`, `test_order_manager.py`, `test_collector_timing.py`, `exits.py`, `datetime`, `ButterflyCandidate`, `strategy_page.py`, `test_research_accounting.py`, `position_service.py`, `cli.py`, `parse_args`, `Recorded`, `trade_service.py`, `run_variants`, `Research core`, `run_live.py`, `position_manager.py`, `load_config`, `test_spx_live_test.py`, `test_collector_cadence.py`, `run_backtest_db.py`, `RunContext`, `iter_chain_options`, `Dataset`, `main`, `test_instance_role.py`, `argparse`, `os`, `json`, `test_run_live.py`?**
-  _High betweenness centrality (0.013) - this node is a cross-community bridge._
+- **Why does `ButterflyCandidate` connect `ButterflyCandidate` to `test_prospective_execution.py`, `test_order_manager.py`, `DatabasePool`, `test_research_accounting.py`, `position_service.py`, `cli.py`, `PositionService`, `reports/daily_report_card.py`, `position_manager.py`, `test_position_quote_recovery.py`, `run_paper_replay.py`, `test_position_monitoring.py`, `run_backtest_db.py`, `RunContext`, `main`, `execution_accounting.py`, `datetime`, `AppConfig`, `history.py`, `SimulationEngine`, `ButterflyOrderBuilder`, `test_research_tieset.py`, `canonical_hash`, `run_live.py`, `f2_shadow_report.py`, `prospective_execution.py`?**
+  _High betweenness centrality (0.012) - this node is a cross-community bridge._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._

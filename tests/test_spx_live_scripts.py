@@ -695,11 +695,43 @@ def test_activation_message_quotes_the_session_closeout_time(session):
     assert "Close-out 13:15 PT" in session.notifications()
 
 
-def test_health_is_silent_before_activation_is_verified(session):
+def test_health_is_silent_before_activation_attempts_to_start_live(session):
     result, _ = session.run("health.sh")
     assert result.returncode == 0
     assert session.calls() == []
     assert session.notifications() == ""
+
+
+def test_health_allows_the_normal_activation_wait(session):
+    (session.dir / "ACTIVATED").touch()
+
+    result, _ = session.run("health.sh", WAIT_SECONDS="120")
+
+    assert result.returncode == 0
+    assert session.calls() == []
+    assert session.notifications() == ""
+
+
+@pytest.mark.parametrize("running", [True, False], ids=["running", "down"])
+def test_health_reports_an_interrupted_activation(session, running):
+    marker = session.dir / "ACTIVATED"
+    marker.touch()
+    started = dt.datetime.now().timestamp() - 240
+    os.utime(marker, (started, started))
+    session.state["running"]["butterfly_spx_live_app"] = running
+    session.state["check_rc"] = 1
+
+    result, out = session.run("health.sh", WAIT_SECONDS="120")
+
+    assert result.returncode == 1, out
+    alert = session.notifications()
+    assert "activation did not finish verification" in alert
+    if running:
+        assert "confirm whether live entries are enabled" in alert
+    else:
+        assert "NOT running" in alert
+        assert "may hold an OPEN live fly" in alert
+    assert_paper_never_changed(session)
 
 
 def test_health_is_silent_on_a_healthy_session(session):

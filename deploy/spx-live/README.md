@@ -2,12 +2,14 @@
 
 Run the real-money SPX pilot **beside** paper, not instead of it. Design and rollout:
 `docs/operations/concurrent-paper-live-spx-design.md`.
+The [original pilot overlay](../../docs/archive/spx-live/docker-compose.spx-live-test.yml)
+is archived with the historical deployment records.
 
 | Script | When | Does |
 |---|---|---|
-| `activate.sh` | 06:35 PT, or by hand with Corey present | Gates, tops up `daily_bars`, starts `butterfly_spx_live_app`, verifies it, and checks that paper is unchanged. Refuses an image without `spx_live_db halt-entries`. On a failed verification it halts new entries and waits out any entry already admitted (`halt-entries`), then stops live only if that succeeded and the broker and live DB are flat; otherwise it leaves live running to manage any position, `health.sh` keeps watching it (`VERIFY_FAILED`), and a failed halt alerts every 15 min (`ENTRY_HALT_FAILED`) |
+| `activate.sh` | 06:35 PT, or by hand with Corey present | Runs the startup gates, tops up `daily_bars`, starts `butterfly_spx_live_app`, and verifies it and paper's fingerprint. Requires an image with `spx_live_db halt-entries`. On failed verification it tries to halt and drain new entries. It stops live only after a successful drain and flatness checks. Otherwise it keeps the bot running to manage any position. |
 | `closeout.sh` | 13:45 PT | Exports evidence and the paired paper/live report; stops live only when the broker and live DB are flat |
-| `health.sh` | every 5 min while live runs | Read-only. Alerts the live channel if the live container is down or has halted on unknown broker state, its metrics port or token is wrong, or paper changed; says whether the live DB still holds an open fly, and repeats that alert every 15 min (`ALERT_REPEAT_MIN`) until it is flat or the bot recovers. While `ENTRY_HALT_FAILED` exists it also posts a separate critical alert every 15 min, whatever else is wrong, until the marker is removed by hand (entries halted) or live is stopped. Silent before activation is verified (or failed verification, `VERIFY_FAILED`) and after a confirmed deliberate stop |
+| `health.sh` | every 5 min | Watches from `ACTIVATED` through a confirmed `STOPPED`. Alerts if verification has no outcome after `WAIT_SECONDS` plus one minute. Also alerts on a stopped or halted bot, failed metrics or token checks, or a changed paper container. Alerts for a potentially unmanaged fly or an unresolved `ENTRY_HALT_FAILED` repeat every 15 min (`ALERT_REPEAT_MIN`). |
 | `stop-live.sh` | manual rollback | Stops live once flat. `FORCE=1` stops it anyway, which leaves any open position **unmanaged** |
 
 None of them creates, recreates, restarts or stops `butterfly_spx_app`.
