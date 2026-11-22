@@ -95,6 +95,7 @@ elif cmd == "logs":
 elif cmd == "compose":
     if "up" in args:
         state["running"]["butterfly_spx_live_app"] = True
+        state.update(state.get("after_up", {}))  # e.g. a fill during the verification wait
         if state.get("paper_changes_on_up"):
             state["fingerprint"]["butterfly_spx_app"] = "changed"
         save()
@@ -105,6 +106,10 @@ elif cmd == "compose":
         sub = args[args.index("butterfly_guy.scripts.spx_live_db") + 1]
         if sub == "compare":
             print("# paired report")
+        if sub == "halt-entries":
+            if "--help" in args:  # activation's capability preflight
+                sys.exit(state.get("halt_help_rc", 0))
+            sys.exit(state.get("halt_rc", 0))
         sys.exit(state["check_rc"] if sub == "check" else 0)
 '''
 
@@ -364,6 +369,246 @@ def test_failed_verification_stops_only_the_live_container(session, change, reas
     assert (session.dir / "STOPPED").exists()
     assert not (session.dir / "VERIFIED").exists()
     assert_paper_never_changed(session)
+
+
+def _db_tool_calls(session, sub):
+    return [
+        c for c in session.calls()
+        if c[0] == "compose" and "butterfly_guy.scripts.spx_live_db" in c
+        and c[c.index("butterfly_guy.scripts.spx_live_db") + 1] == sub and "--help" not in c
+    ]
+
+
+def test_activation_refuses_an_image_without_halt_entries(session):
+    session.state["halt_help_rc"] = 2  # argparse: invalid choice
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1
+    assert "lacks spx_live_db halt-entries" in out
+    assert not any("up" in call for call in session.calls() if call[0] == "compose")
+    assert "NOT started" in session.notifications()
+
+
+def test_failed_verification_halts_and_drains_entries_before_stopping_a_flat_bot(session):
+    session.state["health_rc"] = 7
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1, out
+    halts = _db_tool_calls(session, "halt-entries")
+    assert len(halts) == 1 and halts[0][-4:] == [
+        "--db", "butterfly_guy_spx_live", "--date", TODAY,
+    ]
+    calls = session.calls()
+    halt = calls.index(halts[0])
+    # Flatness is read after the drain, then the stop.
+    broker = max(i for i, c in enumerate(calls) if c[0] == "exec" and "--ignore-expired" in c)
+    check = max(i for i, c in enumerate(calls) if c in _db_tool_calls(session, "check"))
+    stop = next(i for i, c in enumerate(calls) if c[0] == "compose" and "stop" in c)
+    assert halt < broker < check < stop
+    assert session.state["running"]["butterfly_spx_live_app"] is False
+    assert (session.dir / "STOPPED").exists()
+    assert not (session.dir / "ENTRY_HALT_FAILED").exists()
+    assert_paper_never_changed(session)
+
+    # A confirmed stop still silences health.
+    before = session.notifications()
+    session.run("health.sh")
+    assert session.notifications() == before
+
+
+@pytest.mark.parametrize(
+    "after_up",
+    [{"broker_rc": 1}, {"check_rc": 1}, {"broker_rc": 1, "check_rc": 1}],
+    ids=["broker-holds-fly", "db-open-trade", "both"],
+)
+def test_failed_verification_keeps_managing_a_fly_that_filled_meanwhile(session, after_up):
+    """Review 2026-11-20 finding 2: never stop the manager of a position it may hold."""
+    session.state.update(health_rc=7, after_up=after_up)
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1, out
+    assert "metrics port 8002 not answering" in out
+    assert session.state["running"]["butterfly_spx_live_app"] is True
+    assert not any(c[0] == "compose" and "stop" in c for c in session.calls())
+    assert len(_db_tool_calls(session, "halt-entries")) == 1
+    assert (session.dir / "VERIFY_FAILED").exists()
+    assert not (session.dir / "VERIFIED").exists()
+    assert not (session.dir / "STOPPED").exists()
+    last = session.notifications().splitlines()[-1]
+    assert "LEFT RUNNING to manage any position; new entries halted" in last
+    assert_paper_never_changed(session)
+
+    # Health watches the unverified bot: a later crash with the fly open alerts.
+    session.state["running"]["butterfly_spx_live_app"] = False
+    session.state["check_rc"] = 1
+    session.run("health.sh")
+    assert "may hold an OPEN live fly" in session.notifications().splitlines()[-1]
+
+
+def test_an_undrained_entry_keeps_even_a_flat_looking_bot_running(session):
+    """Codex review of #103: an admitted entry can fill after the flatness reads."""
+    session.state.update(health_rc=7, halt_rc=3)
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1, out
+    assert session.state["running"]["butterfly_spx_live_app"] is True
+    assert not any(c[0] == "compose" and "stop" in c for c in session.calls())
+    assert "admitted entry did not finish" in session.notifications().splitlines()[-1]
+    assert not (session.dir / "ENTRY_HALT_FAILED").exists()  # the halt itself holds
+
+
+def test_failed_entry_halt_keeps_the_bot_managed_and_alerts_until_resolved(session):
+    """Codex review of #103: a failed halt never trusts the unverified config."""
+    session.state.update(health_rc=7, halt_rc=1)
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1, out
+    assert session.state["running"]["butterfly_spx_live_app"] is True
+    assert (session.dir / "ENTRY_HALT_FAILED").exists()
+    assert "entry halt FAILED, new entries may still be ENABLED" in session.notifications()
+
+    session.state["health_rc"] = 0
+    session.run("health.sh")
+    first = session.notifications().splitlines()[-1]
+    assert "live entries may still be ENABLED" in first
+    # The same problem repeats on the repeat interval, unlike ordinary warnings.
+    session.run("health.sh", ALERT_REPEAT_MIN="0")
+    assert "STILL UNRESOLVED" in session.notifications().splitlines()[-1]
+
+
+def _activate_wrong_image_with_a_failed_halt(session):
+    session.state.update(image={"butterfly_spx_live_app": "sha256:" + "d" * 64}, halt_rc=1)
+    result, out = session.run("activate.sh")
+    assert result.returncode == 1, out
+    assert "live image is not" in out
+    assert (session.dir / "ENTRY_HALT_FAILED").exists()
+
+
+def _halt_posts(posts):
+    return [line for line in posts.splitlines()
+            if line.startswith("🚨") and "live entries may still be ENABLED:" in line]
+
+
+def test_entry_halt_alert_repeats_beside_an_earlier_health_problem(session):
+    """Codex review of 2a0f9b0: an image mismatch must not swallow the halt reminders."""
+    _activate_wrong_image_with_a_failed_halt(session)
+    alerted = session.dir / "health.entry_halt.alerted"
+
+    assert session.run("health.sh")[0].returncode == 1
+    posts = session.notifications()
+    assert "health: live image is not" in posts  # the other problem is still reported
+    assert len(_halt_posts(posts)) == 1
+
+    # Inside the repeat interval: nothing new.
+    assert session.run("health.sh")[0].returncode == 1
+    assert session.notifications() == posts
+
+    alerted.write_text("0\n")  # the interval has passed
+    assert session.run("health.sh")[0].returncode == 1
+    halt_posts = _halt_posts(session.notifications())
+    assert len(halt_posts) == 2 and "STILL UNRESOLVED" in halt_posts[-1]
+    assert session.notifications().count("health: live image is not") == 1
+
+
+def test_entry_halt_alert_retries_a_failed_delivery_beside_another_problem(session):
+    _activate_wrong_image_with_a_failed_halt(session)
+    before = session.notifications()
+    alerted = session.dir / "health.entry_halt.alerted"
+
+    result, out = session.run("health.sh", FAKE_NOTIFY_FAIL="1")
+    assert result.returncode == 1, out
+    assert session.notifications() == before
+    assert not alerted.exists()  # a failed post records nothing
+
+    session.run("health.sh")
+    halt_posts = _halt_posts(session.notifications())
+    assert len(halt_posts) == 1 and "STILL UNRESOLVED" not in halt_posts[0]
+    assert alerted.read_text().strip()
+
+
+def test_entry_halt_alert_clears_only_through_the_resolution_workflow(session):
+    session.state.update(health_rc=7, halt_rc=1)
+    session.run("activate.sh")
+    session.state["health_rc"] = 0  # every other check is healthy
+
+    assert session.run("health.sh")[0].returncode == 1
+    assert "live entries may still be ENABLED" in session.notifications().splitlines()[-1]
+
+    (session.dir / "ENTRY_HALT_FAILED").unlink()  # entries halted by hand
+    assert session.run("health.sh")[0].returncode == 0
+    assert "live entry halt resolved" in session.notifications().splitlines()[-1]
+    resolved = session.notifications()
+    session.run("health.sh")
+    assert session.notifications() == resolved
+
+    # A confirmed deliberate stop silences health, an unresolved halt included.
+    (session.dir / "ENTRY_HALT_FAILED").touch()
+    (session.dir / "STOPPED").touch()
+    assert session.run("health.sh", ALERT_REPEAT_MIN="0")[0].returncode == 0
+    assert session.notifications() == resolved
+
+
+def test_failed_activation_stop_leaves_health_watching(session):
+    """Codex review of #103: verification fails, the bot looks flat, the stop fails."""
+    session.state["health_rc"] = 7
+    fake = session.dir.parent / "bin" / "docker"
+    fake.write_text(fake.read_text().replace(
+        '    elif "stop" in args:\n',
+        '    elif "stop" in args:\n        sys.exit(1)\n',
+    ))
+
+    result, out = session.run("activate.sh")
+
+    assert result.returncode == 1, out
+    assert session.state["running"]["butterfly_spx_live_app"] is True
+    assert (session.dir / "VERIFY_FAILED").exists()
+    assert not (session.dir / "STOPPED").exists()
+    assert "did not stop" in session.notifications()
+
+    session.state["running"]["butterfly_spx_live_app"] = False
+    session.state["check_rc"] = 1
+    session.run("health.sh")
+    assert "may hold an OPEN live fly" in session.notifications().splitlines()[-1]
+
+
+def test_failed_stop_keeps_health_monitoring_on(session):
+    """Review 2026-11-20 finding 4: STOPPED is written only after a confirmed stop."""
+    session.run("activate.sh")
+    fake = session.dir.parent / "bin" / "docker"
+    fake.write_text(fake.read_text().replace(
+        '    elif "stop" in args:\n',
+        '    elif "stop" in args:\n        sys.exit(1)\n',
+    ))
+
+    result, out = session.run("stop-live.sh")
+
+    assert result.returncode == 1, out
+    assert session.state["running"]["butterfly_spx_live_app"] is True
+    assert not (session.dir / "STOPPED").exists()
+    assert "did not stop the live container" in session.notifications()
+
+    before = session.notifications()
+    session.state["running"]["butterfly_spx_live_app"] = False
+    session.state["check_rc"] = 1
+    session.run("health.sh")
+    assert session.notifications() != before
+    assert "may hold an OPEN live fly" in session.notifications().splitlines()[-1]
+
+
+def test_dry_run_stop_records_no_deliberate_stop(session):
+    session.state["running"]["butterfly_spx_live_app"] = True
+
+    result, out = session.run("stop-live.sh", dry_run=True)
+
+    assert result.returncode == 0, out
+    assert "DRY_RUN: touch" in out and "STOPPED" in out
+    assert not (session.dir / "STOPPED").exists()
+    assert session.state["running"]["butterfly_spx_live_app"] is True
 
 
 def test_closeout_when_flat_exports_reports_and_stops_live(session):

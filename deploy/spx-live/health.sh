@@ -7,12 +7,15 @@
 # restart is posted once, because a restarted bot otherwise looks healthy. A bot that is up but
 # has halted on unknown broker state counts as down: it leaves an open fly unmanaged (live
 # 2026-11-19). It never starts, stops or execs into anything that writes. It stays silent
-# until activation has verified the container (VERIFIED) and after a deliberate stop (STOPPED).
+# until activation has verified the container (VERIFIED) or left an unverified one running
+# to manage a fly (VERIFY_FAILED), and after a confirmed deliberate stop (STOPPED). An entry
+# halt that activation could not apply (ENTRY_HALT_FAILED) alerts on its own track,
+# whatever else this check finds.
 set -uo pipefail
 source "$(dirname "$0")/common.sh"
 
 [ "$(date -u +%F)" = "$DATE" ] || exit 0
-[ -e "$D/VERIFIED" ] || exit 0
+[ -e "$D/VERIFIED" ] || [ -e "$D/VERIFY_FAILED" ] || exit 0
 [ -e "$D/STOPPED" ] && exit 0
 open_log health
 
@@ -97,14 +100,35 @@ elif [[ "$(printf '%s\n' "${broker_events:-}" \
   # Last: only the latest block/create event decides; other health problems win.
   fail="live entries BLOCKED by an active intent; manual reconciliation required"
 fi
-echo "$(ts) health fail=${fail:-none}"
+halt_unresolved=0
+[ -e "$D/ENTRY_HALT_FAILED" ] && halt_unresolved=1
+echo "$(ts) health fail=${fail:-none} entry_halt_failed=$halt_unresolved"
+
+# Entries that may still be enabled stay critical whatever else is wrong, so this alert has
+# its own dedup and never yields to another problem. It repeats every ALERT_REPEAT_MIN
+# minutes until someone halts entries by hand and removes ENTRY_HALT_FAILED, or a
+# confirmed stop-live.sh writes STOPPED. A failed post records nothing and retries next run.
+halt_alerted="$D/health.entry_halt.alerted"
+if [ "$halt_unresolved" = 1 ]; then
+  halt_since=$(( $(date +%s) - $(cat "$halt_alerted" 2>/dev/null || echo 0) ))
+  if [ ! -e "$halt_alerted" ] || [ "$halt_since" -ge $(( ${ALERT_REPEAT_MIN:-15} * 60 )) ]; then
+    halt_repeat=""
+    [ -e "$halt_alerted" ] && halt_repeat=" STILL UNRESOLVED after $(( halt_since / 60 )) min."
+    if notify "🚨 $LABEL $DATE: live entries may still be ENABLED: activation failed verification and could not halt them.$halt_repeat Stop live once flat ($D/stop-live.sh), or halt entries by hand and remove $D/ENTRY_HALT_FAILED. Log: $D/health.log"; then
+      date +%s >"$halt_alerted"
+    fi
+  fi
+elif [ -e "$halt_alerted" ]; then
+  notify "✅ $LABEL $DATE: live entry halt resolved ($D/ENTRY_HALT_FAILED removed)" \
+    && rm -f "$halt_alerted"
+fi
 
 if [ -z "$fail" ]; then
   if [ -n "$last" ]; then
     notify "✅ $LABEL $DATE health recovered (was: $last)" || exit 1
   fi
   : >"$state"
-  exit 0
+  exit "$halt_unresolved"
 fi
 
 # A dead or halted bot with an open fly leaves it unmanaged, so that alert repeats every

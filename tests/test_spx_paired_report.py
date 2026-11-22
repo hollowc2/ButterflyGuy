@@ -3,6 +3,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 
+import pytest
+
 from butterfly_guy.reports.spx_paired import (
     intent_order_marks,
     pair_report,
@@ -266,3 +268,62 @@ def test_monitor_polls_and_rate_limits_are_shown_per_bot():
 def test_rate_limit_row_is_omitted_when_counts_are_unknown():
     report = pair_report(DAY, [_trade(418, paper=True)], [_trade(100_000)], [], [])
     assert "Schwab 429s" not in render_markdown(report)
+
+
+def _settled_live(*, exit_price, net_pnl_dollars, **settlement_meta):
+    """A live cash settlement: Schwab's net P&L (fees included) is the stored pnl."""
+    live = _trade(100_000, entry=3.75, mark=3.72, exit_price=exit_price,
+                  exit_mark=exit_price, reason="cash_settled")
+    live["intent_order_marks"] = {"ENTRY": 3.72}
+    live["pnl"] = net_pnl_dollars / 100
+    meta = json.loads(live["metadata"])
+    meta.update(net_pnl_dollars=net_pnl_dollars, **settlement_meta)
+    live["metadata"] = json.dumps(meta)
+    return live
+
+
+SETTLEMENTS = {
+    # Trade 100000 on 2026-11-19, closed by the settle tool: gross -375.00, net -379.79.
+    "settle_tool": dict(exit_price=0.0, net_pnl_dollars=-379.79,
+                        gross_pnl_dollars=-375.0, operator_settlement={"by": "operator"}),
+    "provisional": dict(exit_price=0.0, net_pnl_dollars=-379.79,
+                        gross_pnl_dollars=-375.0, settlement_provisional=True),
+    # Schwab posted a 0.05 settlement; the provisional's gross_pnl_dollars is now stale.
+    "finalized": dict(exit_price=0.05, net_pnl_dollars=-374.79,
+                      gross_pnl_dollars=-375.0, settlement_provisional=False,
+                      provisional_net_pnl_dollars=-379.79),
+}
+
+
+@pytest.mark.parametrize("path", SETTLEMENTS)
+def test_live_settlement_fees_are_not_counted_as_fill_cost(path):
+    """Review 2026-11-20 finding 6: live settlements store net P&L; fills are gross."""
+    live = _settled_live(**SETTLEMENTS[path])
+    gross = round((live["exit_price"] - 3.75) * 100, 2)
+
+    report = pair_report(DAY, [], [live], [], [])
+    q = report["live"][0]
+
+    assert q["pnl_usd"] == gross
+    assert q["live_fees_in_db_pnl_usd"] == 4.79
+    check = report["live_fill_check"]
+    assert check["actual_pnl_usd"] == gross
+    assert check["entry_fill_usd"] == -3.0 and check["exit_fill_usd"] == 0.0
+    assert check["fill_cost_usd"] == -3.0  # only the entry fill, no fees
+    assert "| live fees in DB P&L $ | — | 4.79 |" in render_markdown(report)
+
+
+def test_live_exit_fill_pnl_is_unchanged_and_shows_no_db_fees():
+    q = pair_report(DAY, [], [_trade(100_000)], [], [])["live"][0]
+
+    assert q["pnl_usd"] == -70.0
+    assert q["live_fees_in_db_pnl_usd"] == 0.0
+
+
+def test_paper_rows_never_report_live_db_fees():
+    paper = _trade(418, entry=1.90, exit_price=1.60, paper=True)
+
+    p = pair_report(DAY, [paper], [], [], [], paper_commission_per_contract=1.15)["paper"][0]
+
+    assert p["pnl_usd"] == -20.8  # fee normalization unchanged
+    assert p["live_fees_in_db_pnl_usd"] is None

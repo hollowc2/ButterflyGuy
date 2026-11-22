@@ -1273,34 +1273,29 @@ async def test_live_entry_loop_halts_when_its_monitor_dies_of_any_error(
 
 @pytest.mark.asyncio
 async def test_entry_loop_registers_recovered_monitor_for_reconciler(monkeypatch):
-    position_service = Mock()
-    position_service.monitor_loop.return_value = _never_awaited()
-    monitor_task = Mock()
-    monitor_task.done.return_value = False
+    started = asyncio.Event()
 
-    def create_task(coro, **_kwargs):
-        coro.close()
-        return monitor_task
+    async def monitor_loop(*_args, **_kwargs):
+        started.set()
+        await asyncio.Event().wait()
 
-    async def stop(_):
-        raise asyncio.CancelledError
-
-    monkeypatch.setattr(asyncio, "create_task", create_task)
-    monkeypatch.setattr(asyncio, "sleep", stop)
     monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: False)
 
     active_monitor = ActiveMonitor()
-    with pytest.raises(asyncio.CancelledError):
-        await entry_loop(
-            Mock(attempt_entry=AsyncMock()),
-            position_service,
-            recovered_trade=Mock(trade_id=7),
-            recovered_candidate=Mock(),
-            active_monitor=active_monitor,
-        )
-
+    loop = asyncio.create_task(entry_loop(
+        Mock(attempt_entry=AsyncMock()),
+        Mock(monitor_loop=monitor_loop),
+        recovered_trade=Mock(trade_id=7),
+        recovered_candidate=Mock(),
+        active_monitor=active_monitor,
+    ))
+    await asyncio.wait_for(started.wait(), timeout=1)
     assert active_monitor.trade_id == 7
-    monitor_task.done.return_value = True
+
+    loop.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await loop
+    # The monitor stopped with its supervisor.
     assert active_monitor.trade_id is None
 
 
@@ -1508,6 +1503,133 @@ async def test_sigterm_cancels_supervised_loops_and_task_group_exits_cleanly():
     # Reaching here at all means the group raised no ExceptionGroup.
     assert cleanup_ran
     assert all(task.cancelled() for task in supervised)
+
+
+@pytest.mark.asyncio
+async def test_sigterm_stops_a_recovered_monitor_before_resource_cleanup(monkeypatch):
+    """Review 2026-11-20 finding 5: the monitor runs outside the TaskGroup, so entry_loop
+    must cancel and await it before main() closes the broker client and DB."""
+    order: list[str] = []
+    started = asyncio.Event()
+
+    async def monitor_loop(*_args, **_kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            order.append("monitor_stopped")
+
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: False)
+    position_service = Mock(monitor_loop=monitor_loop)
+    try:
+        async with asyncio.TaskGroup() as tg:
+            supervised = [tg.create_task(entry_loop(
+                Mock(), position_service, recovered_trade=Mock(trade_id=7),
+                recovered_candidate=Mock(),
+            ), name="entry_loop")]
+            install_shutdown_handler(supervised)
+            await asyncio.wait_for(started.wait(), timeout=1)
+            os.kill(os.getpid(), signal.SIGTERM)
+    finally:
+        order.append("cleanup")
+        asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM)
+
+    assert order == ["monitor_stopped", "cleanup"]
+    assert supervised[0].cancelled()
+
+
+@pytest.mark.asyncio
+async def test_sibling_failure_stops_a_new_trade_monitor_and_still_propagates(monkeypatch):
+    order: list[str] = []
+    started = asyncio.Event()
+
+    async def monitor_loop(*_args, **_kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            order.append("monitor_stopped")
+
+    async def failing_sibling() -> None:
+        await started.wait()
+        raise RuntimeError("collector died")
+
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: True)
+    trade_service = Mock(
+        attempt_entry=AsyncMock(return_value=(Mock(trade_id=8), Mock())),
+        config=AppConfig(),
+    )
+    position_service = Mock(monitor_loop=monitor_loop, config=AppConfig())
+    with pytest.raises(ExceptionGroup) as group:
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(entry_loop(trade_service, position_service))
+            tg.create_task(failing_sibling())
+    order.append("cleanup")
+
+    assert [str(e) for e in group.value.exceptions] == ["collector died"]
+    assert order == ["monitor_stopped", "cleanup"]
+    trade_service.attempt_entry.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_a_second_cancel_waits_for_the_monitor_cleanup(monkeypatch):
+    """Codex review of #103: a repeated cancel must not end entry_loop mid-cleanup."""
+    started, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    monitor: asyncio.Task | None = None
+
+    async def monitor_loop(*_args, **_kwargs):
+        nonlocal monitor
+        monitor = asyncio.current_task()
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await release.wait()
+
+    monkeypatch.setattr("butterfly_guy.scripts.run_live.is_market_open", lambda: False)
+    loop = asyncio.create_task(entry_loop(
+        Mock(), Mock(monitor_loop=monitor_loop),
+        recovered_trade=Mock(trade_id=7), recovered_candidate=Mock(),
+    ))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    loop.cancel()
+    await asyncio.wait_for(cleaning.wait(), timeout=1)
+    loop.cancel()
+    await asyncio.sleep(0.05)
+    assert not loop.done()  # still draining
+
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await loop
+    assert monitor is not None and monitor.done()
+
+
+@pytest.mark.asyncio
+async def test_position_background_tasks_are_joined_before_cleanup():
+    """Codex review of #103: detached pending-exit and post-exit work is joined."""
+    from butterfly_guy.services.position_service import PositionService
+
+    stopped: list[str] = []
+
+    async def work(name: str) -> None:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.append(name)
+
+    service = PositionService.__new__(PositionService)
+    pending = asyncio.create_task(work("pending_exit"))
+    service._background_tasks = {pending}
+    service._post_exit_task = asyncio.create_task(work("post_exit"))
+    await asyncio.sleep(0)
+
+    await service.stop_background_tasks()
+
+    assert sorted(stopped) == ["pending_exit", "post_exit"]
+    assert pending.cancelled() and service._post_exit_task.cancelled()
+    # Nothing started yet (no monitor ran) is a no-op.
+    await PositionService.__new__(PositionService).stop_background_tasks()
 
 
 @pytest.mark.asyncio

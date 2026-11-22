@@ -91,3 +91,5 @@ class TradeRecord:
     upper_symbol: str = ""
     quantity: int = 1
     status: str = "OPEN"
+    # Restored from metadata.operator_exit: the operator owns this trade's exit.
+    operator_exit: bool = False

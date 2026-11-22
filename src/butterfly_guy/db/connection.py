@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import asyncpg
 from prometheus_client import Gauge
 
@@ -11,6 +13,9 @@ log = get_logger(__name__)
 # Fail a hung query fast instead of stalling the caller (e.g. the position
 # monitor) indefinitely on a lock wait or a starved server.
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 10.0
+# pool.close() waits for every checked-out connection; a leaked lease would otherwise
+# hang shutdown and block the nonzero exit a restart policy depends on.
+DEFAULT_CLOSE_TIMEOUT_SECONDS = 15.0
 
 database_pool_size = Gauge(
     "butterfly_database_pool_size",
@@ -69,8 +74,14 @@ class DatabasePool:
             raise RuntimeError("Database pool not initialized. Call initialize() first.")
         return self._pool
 
-    async def close(self) -> None:
+    async def close(self, timeout: float = DEFAULT_CLOSE_TIMEOUT_SECONDS) -> None:
         if self._pool is not None:
-            await self._pool.close()
-            self._pool = None
+            pool, self._pool = self._pool, None
+            try:
+                await asyncio.wait_for(pool.close(), timeout)
+            except TimeoutError:
+                # The cancelled close() already terminates; this is idempotent.
+                pool.terminate()
+                log.error("database_pool_close_timed_out", timeout_s=timeout)
+                return
             log.info("database_pool_closed")

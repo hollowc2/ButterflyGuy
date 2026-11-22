@@ -266,6 +266,27 @@ def _json_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _recovered_trade_record(row: dict[str, Any]) -> TradeRecord:
+    """The OPEN trade row as the monitor resumes it, including operator exit ownership."""
+    return TradeRecord(
+        trade_id=row["id"],
+        trade_date=row["trade_date"],
+        direction=row["direction"],
+        wing_width=row["wing_width"],
+        center_strike=float(row["center_strike"]),
+        lower_strike=float(row["lower_strike"]),
+        upper_strike=float(row["upper_strike"]),
+        entry_price=float(row["entry_price"]),
+        entry_time=row["entry_time"],
+        lower_symbol=row.get("lower_symbol") or "",
+        center_symbol=row.get("center_symbol") or "",
+        upper_symbol=row.get("upper_symbol") or "",
+        quantity=row.get("quantity") or 1,
+        status=row.get("status") or "OPEN",
+        operator_exit=bool(_json_dict(row.get("metadata")).get("operator_exit")),
+    )
+
+
 def _explicit_fill_details(
     order: dict[str, Any], requested_quantity: int | float
 ) -> BrokerFill | None:
@@ -856,119 +877,143 @@ async def entry_loop(
     monitor_task: asyncio.Task | None = None
     consecutive_errors = 0
 
-    if recovered_trade is not None and recovered_candidate is not None:
-        log.info("resuming_monitor_for_recovered_trade", trade_id=recovered_trade.trade_id)
-        monitor_task = asyncio.create_task(
-            position_service.monitor_loop(
-                recovered_trade,
-                recovered_candidate,
-                recovered_peak=recovered_peak,
-            ),
-            name=f"monitor_{recovered_trade.trade_id}",
-        )
-        if active_monitor is not None:
-            active_monitor.track(recovered_trade.trade_id, monitor_task)
+    try:
+        if recovered_trade is not None and recovered_candidate is not None:
+            log.info("resuming_monitor_for_recovered_trade", trade_id=recovered_trade.trade_id)
+            monitor_task = asyncio.create_task(
+                position_service.monitor_loop(
+                    recovered_trade,
+                    recovered_candidate,
+                    recovered_peak=recovered_peak,
+                ),
+                name=f"monitor_{recovered_trade.trade_id}",
+            )
+            if active_monitor is not None:
+                active_monitor.track(recovered_trade.trade_id, monitor_task)
 
-    while True:
-        # Check if monitor task has finished — reset active_trade so we can re-enter.
-        # This runs before the market-hours gate so a failure raised after the
-        # close (e.g. missing settlement evidence) alerts now, not at the next open.
-        if monitor_task is not None and monitor_task.done():
-            exc = monitor_task.exception()
-            if exc:
-                log.error("monitor_task_error", error=str(exc))
-                # A live monitor that died for any reason may leave its fly open at the
-                # broker; re-arming would only drop it silently (one trade a day).
-                live = position_service.config.execution.paper_trading is False
-                if live or isinstance(
-                    exc,
-                    (
-                        BrokerFillError,
-                        AmbiguousOrderError,
-                        PartialFillError,
-                        SettlementEvidenceError,
-                        TerminalOrderError,
-                    ),
-                ):
-                    set_readiness("broker_order_state_unsafe")
-                    log.error("entry_loop_stopped_unknown_broker_state")
-                    if critical_notifier:
-                        condition = (
-                            "settlement_failure"
-                            if isinstance(exc, SettlementEvidenceError)
-                            else "broker_ambiguity"
-                        )
-                        await critical_notifier.notify_critical(condition)
-                    if live:
-                        raise LiveTradingHaltedError(f"monitor stopped: {exc}") from exc
-                    return
-            active_trade = None
-            monitor_task = None
+        while True:
+            # Check if monitor task has finished — reset active_trade so we can re-enter.
+            # This runs before the market-hours gate so a failure raised after the
+            # close (e.g. missing settlement evidence) alerts now, not at the next open.
+            if monitor_task is not None and monitor_task.done():
+                exc = monitor_task.exception()
+                if exc:
+                    log.error("monitor_task_error", error=str(exc))
+                    # A live monitor that died for any reason may leave its fly open at the
+                    # broker; re-arming would only drop it silently (one trade a day).
+                    live = position_service.config.execution.paper_trading is False
+                    if live or isinstance(
+                        exc,
+                        (
+                            BrokerFillError,
+                            AmbiguousOrderError,
+                            PartialFillError,
+                            SettlementEvidenceError,
+                            TerminalOrderError,
+                        ),
+                    ):
+                        set_readiness("broker_order_state_unsafe")
+                        log.error("entry_loop_stopped_unknown_broker_state")
+                        if critical_notifier:
+                            condition = (
+                                "settlement_failure"
+                                if isinstance(exc, SettlementEvidenceError)
+                                else "broker_ambiguity"
+                            )
+                            await critical_notifier.notify_critical(condition)
+                        if live:
+                            raise LiveTradingHaltedError(f"monitor stopped: {exc}") from exc
+                        return
+                active_trade = None
+                monitor_task = None
 
-        if not is_market_open():
-            await asyncio.sleep(30)
-            continue
-
-        # If no active position, try entry
-        if active_trade is None:
-            if broker_gate is not None and broker_gate.unsafe:
-                log.error("entry_blocked_broker_state_unsafe", reason=broker_gate.reason)
-                await asyncio.sleep(15)
+            if not is_market_open():
+                await asyncio.sleep(30)
                 continue
-            if token_reload_gate is not None and token_reload_gate.unsafe:
-                log.error("entry_blocked_token_reload_unsafe", reason=token_reload_gate.reason)
-                await asyncio.sleep(15)
-                continue
-            try:
-                result = await trade_service.attempt_entry()
-                if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
-                    clear_readiness("entry_loop_repeated_failures")
-                    log.info("entry_loop_recovered")
-                consecutive_errors = 0
-                if result:
-                    active_trade, candidate = result
-                    log.info("entry_loop_got_trade", trade_id=active_trade.trade_id)
-                    monitor_task = asyncio.create_task(
-                        position_service.monitor_loop(active_trade, candidate),
-                        name=f"monitor_{active_trade.trade_id}",
-                    )
-                    if active_monitor is not None:
-                        active_monitor.track(active_trade.trade_id, monitor_task)
-            except Exception as e:
-                log.error("entry_loop_error", error=str(e))
-                if isinstance(
-                    e,
-                    (
-                        AmbiguousOrderError,
-                        BrokerFillError,
-                        EntryOrderReplacedError,
-                        IntentPersistenceError,
-                        PartialFillError,
-                        TerminalOrderError,
-                    ),
-                ):
-                    set_readiness("broker_order_state_unsafe")
-                    log.error("entry_loop_stopped_unknown_broker_state")
-                    if critical_notifier:
-                        await critical_notifier.notify_critical("broker_ambiguity")
-                    if position_service.config.execution.paper_trading is False:
-                        raise LiveTradingHaltedError(f"entry stopped: {e}") from e
-                    return
-                consecutive_errors += 1
-                underlying = trade_service.config.strategy.underlying
-                entry_loop_errors.labels(underlying=underlying).inc()
-                if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
-                    set_readiness("entry_loop_repeated_failures")
+
+            # If no active position, try entry
+            if active_trade is None:
+                if broker_gate is not None and broker_gate.unsafe:
+                    log.error("entry_blocked_broker_state_unsafe", reason=broker_gate.reason)
+                    await asyncio.sleep(15)
+                    continue
+                if token_reload_gate is not None and token_reload_gate.unsafe:
+                    log.error("entry_blocked_token_reload_unsafe", reason=token_reload_gate.reason)
+                    await asyncio.sleep(15)
+                    continue
                 try:
-                    await trade_service.decision_queries.log_event(
-                        "entry_loop_error",
-                        {"error": str(e), "consecutive_failures": consecutive_errors},
-                        underlying=underlying,
-                    )
-                except Exception as audit_error:
-                    log.error("entry_loop_audit_error", error=str(audit_error))
+                    result = await trade_service.attempt_entry()
+                    if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
+                        clear_readiness("entry_loop_repeated_failures")
+                        log.info("entry_loop_recovered")
+                    consecutive_errors = 0
+                    if result:
+                        active_trade, candidate = result
+                        log.info("entry_loop_got_trade", trade_id=active_trade.trade_id)
+                        monitor_task = asyncio.create_task(
+                            position_service.monitor_loop(active_trade, candidate),
+                            name=f"monitor_{active_trade.trade_id}",
+                        )
+                        if active_monitor is not None:
+                            active_monitor.track(active_trade.trade_id, monitor_task)
+                except Exception as e:
+                    log.error("entry_loop_error", error=str(e))
+                    if isinstance(
+                        e,
+                        (
+                            AmbiguousOrderError,
+                            BrokerFillError,
+                            EntryOrderReplacedError,
+                            IntentPersistenceError,
+                            PartialFillError,
+                            TerminalOrderError,
+                        ),
+                    ):
+                        set_readiness("broker_order_state_unsafe")
+                        log.error("entry_loop_stopped_unknown_broker_state")
+                        if critical_notifier:
+                            await critical_notifier.notify_critical("broker_ambiguity")
+                        if position_service.config.execution.paper_trading is False:
+                            raise LiveTradingHaltedError(f"entry stopped: {e}") from e
+                        return
+                    consecutive_errors += 1
+                    underlying = trade_service.config.strategy.underlying
+                    entry_loop_errors.labels(underlying=underlying).inc()
+                    if consecutive_errors >= ENTRY_LOOP_ERROR_THRESHOLD:
+                        set_readiness("entry_loop_repeated_failures")
+                    try:
+                        await trade_service.decision_queries.log_event(
+                            "entry_loop_error",
+                            {"error": str(e), "consecutive_failures": consecutive_errors},
+                            underlying=underlying,
+                        )
+                    except Exception as audit_error:
+                        log.error("entry_loop_audit_error", error=str(audit_error))
 
-        await asyncio.sleep(15)
+            await asyncio.sleep(15)
+    finally:
+        # The monitor runs outside main()'s TaskGroup: stop it before main() closes
+        # the broker client and DB it uses.
+        await _drain_monitor(monitor_task)
+
+
+async def _drain_monitor(monitor_task: asyncio.Task | None) -> None:
+    """Cancel the monitor and wait until it has finished, however often we are cancelled.
+
+    A repeated cancel (a second SIGTERM, the TaskGroup) is deferred until the monitor's
+    own cleanup is done, then re-raised, so shared resources never close under it.
+    """
+    if monitor_task is None or monitor_task.done():
+        return
+    monitor_task.cancel()
+    interrupted = False
+    while not monitor_task.done():
+        try:
+            await asyncio.wait([monitor_task])
+        except asyncio.CancelledError:
+            interrupted = True
+    if interrupted:
+        raise asyncio.CancelledError
 
 
 EOD_CHART_DELAY_MINUTES = 5
@@ -1156,6 +1201,7 @@ async def main() -> None:
     schwab: SchwabClientWrapper | None = None
     shadow_market_data: ShadowComparingMarketDataProvider | None = None
     gateway_client: GatewayMarketDataClient | None = None
+    position_service: PositionService | None = None
     task_group_failed = False
     try:
         await db.initialize()
@@ -1318,22 +1364,7 @@ async def main() -> None:
 
         if open_rows:
             row = open_rows[0]
-            recovered_trade = TradeRecord(
-                trade_id=row["id"],
-                trade_date=row["trade_date"],
-                direction=row["direction"],
-                wing_width=row["wing_width"],
-                center_strike=float(row["center_strike"]),
-                lower_strike=float(row["lower_strike"]),
-                upper_strike=float(row["upper_strike"]),
-                entry_price=float(row["entry_price"]),
-                entry_time=row["entry_time"],
-                lower_symbol=row.get("lower_symbol") or "",
-                center_symbol=row.get("center_symbol") or "",
-                upper_symbol=row.get("upper_symbol") or "",
-                quantity=row.get("quantity") or 1,
-                status=row.get("status") or "OPEN",
-            )
+            recovered_trade = _recovered_trade_record(row)
             recovered_candidate = ButterflyCandidate(
                 direction=recovered_trade.direction,
                 wing_width=recovered_trade.wing_width,
@@ -1486,12 +1517,17 @@ async def main() -> None:
                     await notifier.notify_error(str(exc), context="TaskGroup")
     finally:
         set_readiness("shutting_down")
-        await _close_runtime_resources(
-            shadow_market_data,
-            gateway_client,
-            schwab,
-            db,
-        )
+        try:
+            # entry_loop has already drained the monitor; this joins its detached work.
+            if position_service is not None:
+                await position_service.stop_background_tasks()
+        finally:
+            await _close_runtime_resources(
+                shadow_market_data,
+                gateway_client,
+                schwab,
+                db,
+            )
     if task_group_failed:
         # Non-zero so a restart policy (live: on-failure:3) sees a failure, not a clean stop.
         raise SystemExit(1)
