@@ -244,3 +244,22 @@ Do not request or schedule it until all these have current evidence:
    once: a lost acknowledgment/receipt may duplicate a message, never an exit order.
 6. Separate explicit owner approval for the named **dated supervised session**.
    Keep one contract; do not raise limits or relax criteria to obtain a fill.
+
+
+## Execution receipt, November 23 after close
+
+The owner resumed the reviewed release after its hold. PR #104 merged as
+`b7ee64a`; both checks passed on the merge. Migration 013 completed after actual
+backup/restore verification. Only regular paper SPX was recreated; health/ready
+are 200, all 165 packaged Python/SQL files match, and paper/live guards remain
+unchanged. The live/rehearsal container remains stopped with its original
+fingerprint; NDX/XSP were untouched. No dated live session is authorized.
+
+The regular paper rollout's exact source/image, Compose argv, environment/mount/
+port preservation checks and rollback argv are in the
+[prepared deployment](../../data/rehearsals/SPX/2026-11-23/release-20261123T2205Z/prepared-deployment.json).
+Its rollback pins the prior `6da4141…` image and targets only `infra/app_spx`.
+Keep migration 013 when rolling the application back. The
+[release receipt](../../data/rehearsals/SPX/2026-11-23/release-20261123T2205Z/release-receipt.json)
+records validation and the remaining canary gates. The earlier procedure remains
+a historical plan; future real-money activation still needs its own dated approval.

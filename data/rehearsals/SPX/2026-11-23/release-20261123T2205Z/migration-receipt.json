@@ -1,0 +1,30 @@
+{
+  "completed_utc": "2026-11-23T22:47:10.636564+00:00",
+  "database": "butterfly_guy_spx_live",
+  "applied": "013_account_monitor.sql",
+  "checksum": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+  "schema_check": {
+    "schema_at_head": true,
+    "open_spx_trades": 0,
+    "nonterminal_spx_intents": 0,
+    "unlinked_filled_spx_entries": 0,
+    "paper_trades": 0,
+    "ok": true
+  },
+  "ledger": {
+    "001_initial.sql": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+    "002_fix_greeks_precision.sql": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+    "003_add_underlying.sql": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+    "004_add_chain_fields.sql": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+    "005_add_daily_bars.sql": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+    "006_tent_boundaries.sql": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+    "007_monitoring_leg_quotes.sql": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+    "008_one_open_trade_per_underlying_day.sql": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+    "009_broker_order_intents.sql": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+    "010_add_decision_log_underlying.sql": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+    "011_snapshot_timing.sql": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+    "012_post_exit_leg_quotes.sql": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+    "013_account_monitor.sql": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277"
+  },
+  "table_column_count": 3
+}

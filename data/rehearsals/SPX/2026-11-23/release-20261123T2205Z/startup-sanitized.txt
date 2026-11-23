@@ -1,0 +1,7 @@
+{"underlying": "SPX", "config_path": "configs/config.yaml", "strike_selection_method": "VIX", "wing_widths": [10, 20, 30], "vix_width_buckets": [{"vix_max": 17.0, "widths": [20, 25, 30]}, {"vix_max": 24.5, "widths": [20, 30, 40]}, {"vix_max": 32.0, "widths": [40, 45, 50]}, {"vix_max": 9999.0, "widths": [50, 55, 65]}], "rr_min": 8.0, "rr_max": 12.0, "rr_target": 10.0, "center_tolerance": 15.0, "event": "live_trading_starting", "level": "info", "logger": "run_live", "timestamp": "2026-11-23T22:52:34.362924Z"}
+{"dsn": "timescaledb:5432/butterfly_guy", "event": "database_pool_initialized", "level": "info", "logger": "butterfly_guy.db.connection", "timestamp": "2026-11-23T22:52:34.454499Z"}
+{"event": "schwab_client_initialized", "level": "info", "logger": "butterfly_guy.data.schwab_client", "timestamp": "2026-11-23T22:52:35.518994Z"}
+{"regime": "BEAR", "spx_bars": 10, "vix": 35.89, "event": "regime_classified", "level": "info", "logger": "run_live", "timestamp": "2026-11-23T22:52:35.547985Z"}
+{"pnl": 0, "underlying": "SPX", "event": "synced_realized_pnl", "level": "info", "logger": "butterfly_guy.risk.risk_engine", "timestamp": "2026-11-23T22:52:35.569950Z"}
+{"aligned": true, "offset_seconds": 0.0, "event": "collector_starting", "level": "info", "logger": "butterfly_guy.data.collector", "timestamp": "2026-11-23T22:52:36.349764Z"}
+{"event": "market_closed_waiting", "level": "info", "logger": "butterfly_guy.data.collector", "timestamp": "2026-11-23T22:53:00.019205Z"}
