@@ -1,0 +1,15 @@
+import datetime as dt,json,pathlib,subprocess
+root=pathlib.Path('/opt/butterflyguy-releases/spx-live-20261123-fe051d6')
+props=['Id','ActiveState','SubState','Result','ExecMainCode','ExecMainStatus','ExecMainStartTimestamp','ExecMainExitTimestamp','NextElapseUSecRealtime','LastTriggerUSec']
+units={}
+for base in ('spx-live-activate-20261123','spx-live-closeout-20261123','spx-rehearsal-evidence-20261123','spx-rehearsal-postclose-audit-20261123'):
+ for typ in ('service','timer'):
+  unit=base+'.'+typ
+  result=subprocess.run(['systemctl','--user','show',unit]+[arg for p in props for arg in ('-p',p)],text=True,capture_output=True)
+  units[unit]={k:v for line in result.stdout.splitlines() if '=' in line for k,v in [line.split('=',1)]}
+containers={}
+for name in ('butterfly_spx_app','butterfly_spx_live_app'):
+ val=subprocess.check_output(['docker','inspect','--format','{{.Id}} {{.Image}} {{.State.StartedAt}} {{.RestartCount}} {{.State.Running}}',name],text=True).strip()
+ containers[name]=val
+record={'observed_utc':dt.datetime.now(dt.timezone.utc).isoformat(),'units':units,'containers':containers,'paper_fingerprint_matches_session_baseline':containers['butterfly_spx_app']==(root/'paper.fingerprint').read_text().strip(),'markers':{s:(root/s).exists() for s in ('ACTIVATED','VERIFIED','STOPPED','VERIFY_FAILED','ENTRY_HALT_FAILED')},'capture_directories':sorted(p.name for p in (root/'paper-entry-20261123T075056').glob('capture-*') if p.is_dir())}
+print(json.dumps(record,indent=2))

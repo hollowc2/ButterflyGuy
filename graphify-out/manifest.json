@@ -3986,27 +3986,27 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/activate.sh": {
-    "mtime": 1795239090.8642962,
-    "seen": 1795239469.4914074,
-    "ast_hash": "2bc4a672802a1aa6196cb387e4f6ba8b",
+    "mtime": 1795322903.018879,
+    "seen": 1795322975.0833845,
+    "ast_hash": "68e44242732e6117bc6f66d1fff3aa83",
     "semantic_hash": ""
   },
   "deploy/spx-live/closeout.sh": {
-    "mtime": 1795210757.1503205,
-    "seen": 1795218387.2562683,
-    "ast_hash": "e23c1f249e582d905edf65239856a977",
+    "mtime": 1795322903.227875,
+    "seen": 1795322975.0833883,
+    "ast_hash": "4612bea8c847df06ffd5804dbc1229e5",
     "semantic_hash": ""
   },
   "deploy/spx-live/common.sh": {
-    "mtime": 1795236386.5166748,
-    "seen": 1795237555.2415655,
-    "ast_hash": "d7f15b48b6675946afa8ee88787d6514",
+    "mtime": 1795322903.1148772,
+    "seen": 1795322975.083391,
+    "ast_hash": "691014c8048caabf63a14e3e7961ada1",
     "semantic_hash": ""
   },
   "deploy/spx-live/health.sh": {
-    "mtime": 1795285897.9376361,
-    "seen": 1795286567.979178,
-    "ast_hash": "c6c59dce4cf31369da6c3cc58030c3d0",
+    "mtime": 1795322929.4644008,
+    "seen": 1795322975.0833933,
+    "ast_hash": "333dd7addd852b33d94b2ce7376c5958",
     "semantic_hash": ""
   },
   "deploy/spx-live/notify.py": {
@@ -4016,9 +4016,9 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/stop-live.sh": {
-    "mtime": 1795210757.559312,
-    "seen": 1795218387.2562773,
-    "ast_hash": "d815b198cd1ca33687c712004182b858",
+    "mtime": 1795322903.340873,
+    "seen": 1795322975.083442,
+    "ast_hash": "fa01b15bae725d80cd141a3a627cc513",
     "semantic_hash": ""
   },
   "docs/research/xsp-batman-2026-11-12.summary.json": {
@@ -4061,12 +4061,6 @@
     "mtime": 1795141265.0160053,
     "seen": 1795218387.2567675,
     "ast_hash": "c13c9f07ee2fb08d55469ceba4a04055",
-    "semantic_hash": ""
-  },
-  "infra/docker-compose.spx-live-test.yml": {
-    "mtime": 1795141265.0490046,
-    "seen": 1795218387.2567701,
-    "ast_hash": "685f411f20e20dcc4706969bdc934b7c",
     "semantic_hash": ""
   },
   "infra/docker-compose.spx-live.yml": {
@@ -4238,9 +4232,9 @@
     "semantic_hash": ""
   },
   "tests/test_spx_live_scripts.py": {
-    "mtime": 1795285973.968236,
-    "seen": 1795286568.0485084,
-    "ast_hash": "89cda6a67c8ad91d3e109174ed7b7fac",
+    "mtime": 1795322929.621398,
+    "seen": 1795322975.1810765,
+    "ast_hash": "b4b0097f92c20f2d3ddd6dc97727d822",
     "semantic_hash": ""
   },
   "tests/test_spx_live_settle_expired.py": {
@@ -4592,9 +4586,9 @@
     "semantic_hash": ""
   },
   "deploy/spx-live/README.md": {
-    "mtime": 1795286546.3238022,
-    "seen": 1795286568.0723987,
-    "ast_hash": "6a98bf216f7947097a0aa6b46195b8a2",
+    "mtime": 1795322943.6831436,
+    "seen": 1795322975.2000277,
+    "ast_hash": "f39dbe1107d1540b1a2a30da4711cdaa",
     "semantic_hash": ""
   },
   "docs/operations/concurrent-paper-live-spx-design.md": {
@@ -4622,8 +4616,8 @@
     "semantic_hash": ""
   },
   "docs/operations/spx-live-test-2026-10-29.md": {
-    "mtime": 1795141263.0170453,
-    "seen": 1795218387.2578514,
+    "mtime": 1795322930.169388,
+    "seen": 1795322975.2089393,
     "ast_hash": "9e3c547dc9a308fe4e047da4d0e06aaf",
     "semantic_hash": ""
   },
@@ -4751,6 +4745,12 @@
     "mtime": 1795286232.4734745,
     "seen": 1795286568.0267994,
     "ast_hash": "a6a8b3c6fc601b3ed7c2dfe1b9e49c64",
+    "semantic_hash": ""
+  },
+  "docs/archive/spx-live/docker-compose.spx-live-test.yml": {
+    "mtime": 1795322929.9233925,
+    "seen": 1795322975.083783,
+    "ast_hash": "e795993174a84e62c151bbca2279e612",
     "semantic_hash": ""
   }
 }

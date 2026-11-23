@@ -1,0 +1,85 @@
+import asyncio
+import collections
+import datetime as dt
+import hashlib
+import json
+from pathlib import Path
+
+import asyncpg
+from butterfly_guy.core.config import load_config
+from butterfly_guy.data.schwab_client import SchwabClientWrapper
+from butterfly_guy.db.migrations.run_migrations import MIGRATIONS_DIR
+from butterfly_guy.execution.order_manager import (
+    WORKING_ORDER_STATUSES, PARTIAL_FILL_STATUSES, CANCEL_PENDING_STATUSES,
+    TERMINAL_ORDER_STATUSES, walk_orders,
+)
+from butterfly_guy.scripts.run_live import _broker_option_positions, _order_symbols, _matches_underlying
+
+async def main():
+    cfg = load_config('configs/config.yaml')
+    result = {'observed_utc': dt.datetime.now(dt.timezone.utc).isoformat(), 'read_only': True}
+    result['image_migration_hashes'] = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                         for p in sorted(MIGRATIONS_DIR.glob('*.sql'))}
+    result['databases'] = {}
+    owned_ids = set()
+    bot_symbols = set()
+    for name in ('butterfly_guy_spx_live', 'butterfly_guy_spx_live_rehearsal', 'butterfly_guy'):
+        conn = await asyncpg.connect(cfg.database.model_copy(update={'name': name}).dsn)
+        try:
+            async with conn.transaction(isolation='repeatable_read', readonly=True):
+                ledger = [dict(r) for r in await conn.fetch('SELECT version,checksum FROM schema_migrations ORDER BY version')]
+                columns = [dict(r) for r in await conn.fetch("SELECT table_name,column_name,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position")]
+                intents = await conn.fetch('SELECT broker_order_id,status FROM broker_order_intents')
+                trades = await conn.fetch("SELECT id,status,lower_symbol,center_symbol,upper_symbol FROM butterfly_trades WHERE status='OPEN'")
+                # Rehearsal is simulated and does not establish broker ownership.
+                if name == 'butterfly_guy_spx_live':
+                    owned_ids.update(str(r['broker_order_id']) for r in intents if r['broker_order_id'])
+                    bot_symbols.update(r[k] for r in trades for k in ('lower_symbol','center_symbol','upper_symbol') if r[k])
+                risk = [dict(r) for r in await conn.fetch("SELECT trade_date,underlying,trade_count,realized_pnl,halted FROM daily_risk_state WHERE trade_date='2026-11-23'")]
+                pnl = [dict(r) for r in await conn.fetch("SELECT underlying,status,count(*),sum(pnl * 100 * quantity) AS pnl_dollars FROM butterfly_trades WHERE trade_date='2026-11-23' GROUP BY underlying,status")]
+                result['databases'][name] = {'ledger': ledger, 'columns': columns,
+                    'indexes':[dict(r) for r in await conn.fetch("SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public' ORDER BY tablename,indexname")],
+                    'open_trades': len(trades), 'open_spx_trades':sum(r.get('lower_symbol','').startswith('SPX') for r in trades if r.get('lower_symbol')),
+                    'intent_status_counts':dict(collections.Counter(r['status'] for r in intents)), 'daily_risk':risk,'day_trade_totals':pnl,
+                    'timescale_version':await conn.fetchval("SELECT extversion FROM pg_extension WHERE extname='timescaledb'")}
+        finally:
+            await conn.close()
+    broker = SchwabClientWrapper(cfg.schwab)
+    try:
+        await broker.initialize()
+        account = await broker.get_account_snapshot()
+        response = await broker._retry(
+            broker.client.get_orders_for_account, broker.account_hash,
+            from_entered_datetime=dt.datetime(2026,9,25),
+            to_entered_datetime=dt.datetime(2026,11,23,23,59,59),
+            endpoint='readiness_readonly_order_audit',
+        )
+        orders = response.json()
+        if not isinstance(orders, list):
+            raise RuntimeError('unusable order history')
+        positions = _broker_option_positions(account, 'SPX')
+        relevant = [n for o in orders if any(_matches_underlying(s, 'SPX') for s in _order_symbols(o)) for n in walk_orders(o)]
+        active = WORKING_ORDER_STATUSES | PARTIAL_FILL_STATUSES | CANCEL_PENDING_STATUSES
+        known = active | TERMINAL_ORDER_STATUSES | {'REPLACED'}
+        result['broker_reconciliation'] = {
+            'position_legs': [{'symbol':s, 'signed_quantity':q, 'ownership':'bot_owned' if s in bot_symbols else 'external_unattributed_operator_confirmation_required'} for s,q in sorted(positions.items())],
+            'order_status_counts':dict(collections.Counter(n.get('status','MISSING') for n in relevant)),
+            'active_bot_owned':sum(n.get('status') in active and str(n.get('orderId')) in owned_ids for n in relevant),
+            'active_external_unattributed':sum(n.get('status') in active and str(n.get('orderId')) not in owned_ids for n in relevant),
+            'unknown_or_missing_status_nodes':sum(n.get('status') not in known for n in relevant),
+            'spx_broker_flat':not positions and not any(n.get('status') in active or n.get('status') not in known for n in relevant),
+            'order_history_start':'2026-09-25',
+            'all_account_position_count':sum(
+                abs(float(p.get('longQuantity',0))) + abs(float(p.get('shortQuantity',0))) > 0
+                for p in account.get('securitiesAccount',{}).get('positions',[])),
+            'all_account_active_order_nodes':sum(n.get('status') in active for o in orders for n in walk_orders(o)),
+            'all_account_unknown_status_nodes':sum(n.get('status') not in known for o in orders for n in walk_orders(o)),
+            'manual_position_adopted_or_modified':False,
+        }
+    except Exception as error:
+        result['broker_reconciliation']={'verified':False,'error_type':type(error).__name__}
+    finally:
+        await broker.close()
+    print('READINESS_JSON='+json.dumps(result,default=str,sort_keys=True))
+
+asyncio.run(main())

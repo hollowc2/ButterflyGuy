@@ -21,6 +21,9 @@ authority for active strategy parameters and runtime behavior.
 - [`data-management.md`](data-management.md): historical storage ownership,
   canonical datasets, inventory evidence, and verification commands.
 - [`live-runbook.md`](live-runbook.md): paper/live guards and operational recovery.
+- [SPX paper rehearsal on November 23 2026](operations/spx-paper-rehearsal-2026-11-23.md):
+  simulated entry/exit evidence, tested exit-alert and fee fixes, and verified
+  end-of-day export, guarded close-out and accounting.
 - [`gateway-order-books.md`](gateway-order-books.md): Level II order-book capture.
 - [`equity-market-data.md`](equity-market-data.md): equity candle and depth recording.
 - [`data-sources-inventory.md`](data-sources-inventory.md): data-source and schema

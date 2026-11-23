@@ -1,0 +1,21 @@
+{
+  "broker_access": false,
+  "network": "none",
+  "python": "3.12.15 (main, Oct  6 2026, 02:02:22) [GCC 14.2.0]",
+  "source_sha256": {
+    "src/butterfly_guy/db/migrations/013_account_monitor.sql": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+    "src/butterfly_guy/db/queries.py": "9cd671fa3e32188ba87e0980259820e20dc756088ebd9b47d2e09e2817f78f00",
+    "src/butterfly_guy/execution/order_manager.py": "400f325d28577fa575e8effa70d777c20a47e7331ee87ade61ae21ac744b75eb",
+    "src/butterfly_guy/scripts/run_live.py": "a1475eb99cb8e26101729570b985bc3423eeb5b32fe55931eb7a50ad96450cfb",
+    "src/butterfly_guy/services/exit_notifications.py": "d6fd647feba4776fd9165ec1393d3002602e68f9778d46a198f2def9626e6bce",
+    "src/butterfly_guy/services/notifier.py": "05fb268f1fdd57f5a5178bc82b96dcc3d4191f359dbbb9a93f940a2ed4ce1acf",
+    "src/butterfly_guy/services/position_service.py": "10bc9044c414a15c2439f054f5771495d1df1999ebeead53deb6f87b2af5b5f6"
+  },
+  "image_id": "sha256:568eb8a15a58b6587f6e5e8312ea7aed68421887db0794adbc501825683448b1",
+  "tag": "butterflyguy:spx-readiness-20261123",
+  "source_hashes_match_workspace": true,
+  "deployed": false,
+  "config_sha256": {
+    "configs/config.yaml": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25"
+  }
+}

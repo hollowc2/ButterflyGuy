@@ -1,5 +1,5 @@
-# Apply LAST, only for the supervised session. No account identifier is stored here.
-# Requires a reviewed release image and an explicit date. Other services stay paper.
+# Historical overlay from the supervised pilot that replaced paper SPX.
+# Current sessions use the dedicated service documented in deploy/spx-live/README.md.
 services:
   app_spx:
     build: !reset null

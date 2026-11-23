@@ -11,9 +11,9 @@ if [ "$(running "$LIVE_C")" = 0 ]; then
   echo "$(ts) live container not running"
   exit 0
 fi
-if [ "${FORCE:-0}" != 1 ]; then
-  broker_flat --ignore-expired || { echo "$(ts) REFUSED: broker not flat (FORCE=1 to override)"; exit 1; }
-  db_tool check "${CHECK_ARGS[@]}" || { echo "$(ts) REFUSED: $LIVE_DB not flat (FORCE=1 to override)"; exit 1; }
+if [ "${FORCE:-0}" != 1 ] && ! live_flat_for_stop; then
+  echo "$(ts) REFUSED: could not confirm flatness (FORCE=1 to override)"
+  exit 1
 fi
 act save_logs "$D" || echo "$(ts) saving container logs FAILED"
 if stop_live; then

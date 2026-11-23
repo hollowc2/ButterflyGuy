@@ -6,17 +6,23 @@
 # is down or unhealthy, again when the problem changes, and once on recovery. Each Docker
 # restart is posted once, because a restarted bot otherwise looks healthy. A bot that is up but
 # has halted on unknown broker state counts as down: it leaves an open fly unmanaged (live
-# 2026-11-19). It never starts, stops or execs into anything that writes. It stays silent
-# until activation has verified the container (VERIFIED) or left an unverified one running
-# to manage a fly (VERIFY_FAILED), and after a confirmed deliberate stop (STOPPED). An entry
-# halt that activation could not apply (ENTRY_HALT_FAILED) alerts on its own track,
-# whatever else this check finds.
+# 2026-11-19). It never starts or stops containers. Health covers the activation attempt
+# from ACTIVATED through STOPPED. It allows time for startup verification to finish.
+# ENTRY_HALT_FAILED alerts independently of other health problems.
 set -uo pipefail
 source "$(dirname "$0")/common.sh"
 
 [ "$(date -u +%F)" = "$DATE" ] || exit 0
-[ -e "$D/VERIFIED" ] || [ -e "$D/VERIFY_FAILED" ] || exit 0
+[ -e "$D/ACTIVATED" ] || exit 0
 [ -e "$D/STOPPED" ] && exit 0
+
+verification_overdue=0
+if [ ! -e "$D/VERIFIED" ] && [ ! -e "$D/VERIFY_FAILED" ]; then
+  # Allow the configured wait plus a minute for Compose and the verification checks.
+  activation_time=$(stat -c %Y "$D/ACTIVATED") || exit 1
+  [ "$(( $(date +%s) - activation_time ))" -ge "$(( WAIT_SECONDS + 60 ))" ] || exit 0
+  verification_overdue=1
+fi
 open_log health
 
 restarts=$(docker inspect -f '{{.RestartCount}}' "$LIVE_C" 2>/dev/null || echo 0)
@@ -99,6 +105,9 @@ elif [[ "$(printf '%s\n' "${broker_events:-}" \
     | tail -n 1)" == *'"entry_blocked_active_intent"'* ]]; then
   # Last: only the latest block/create event decides; other health problems win.
   fail="live entries BLOCKED by an active intent; manual reconciliation required"
+fi
+if [ "$verification_overdue" = 1 ]; then
+  fail="${fail:+$fail. }activation did not finish verification. Check Helios and confirm whether live entries are enabled"
 fi
 halt_unresolved=0
 [ -e "$D/ENTRY_HALT_FAILED" ] && halt_unresolved=1

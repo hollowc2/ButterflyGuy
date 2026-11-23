@@ -1,0 +1,62 @@
+{
+  "input": "three observed SPX leg quotes; one leg deliberately removed",
+  "missing_strike": 7360.0,
+  "readiness": [
+    {
+      "poll": 1,
+      "readiness": [
+        true,
+        null
+      ]
+    },
+    {
+      "poll": 2,
+      "readiness": [
+        true,
+        null
+      ]
+    },
+    {
+      "poll": 3,
+      "readiness": [
+        true,
+        null
+      ]
+    },
+    {
+      "poll": 4,
+      "readiness": [
+        true,
+        null
+      ]
+    },
+    {
+      "poll": 5,
+      "readiness": [
+        false,
+        "market_data_unavailable"
+      ]
+    },
+    {
+      "poll": 6,
+      "readiness": [
+        false,
+        "market_data_unavailable"
+      ]
+    },
+    {
+      "poll": 7,
+      "readiness": [
+        true,
+        null
+      ]
+    }
+  ],
+  "events": [
+    "profit_state_transition",
+    "position_market_data_unavailable",
+    "position_market_data_recovered"
+  ],
+  "valid_valuation_polls": 2,
+  "real_broker_submits": 0
+}

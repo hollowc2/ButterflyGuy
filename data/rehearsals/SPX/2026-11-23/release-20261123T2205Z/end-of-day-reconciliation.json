@@ -1,0 +1,76 @@
+{
+  "capture-20261123T211012Z": {
+    "manifest_hashes_verified": 13,
+    "trade_100001_closed": true,
+    "pnl_dollars": -37,
+    "risk_reconciled": true,
+    "session_status": {
+      "running": true,
+      "status": "running",
+      "finished_at": "0001-01-01T00:00:00Z",
+      "session_STOPPED_marker": false,
+      "trade_closed": true,
+      "phase": "post_close",
+      "deliberate_closeout_verified": false
+    },
+    "coverage": {
+      "monitoring_leg_quotes": {
+        "rows": 432,
+        "observations": 144,
+        "incomplete_observations": 0,
+        "first": "2026-11-23T16:00:31.536915+00:00",
+        "last": "2026-11-23T16:07:28.449015+00:00",
+        "max_gap_seconds": 10.767226,
+        "gaps_over_5_seconds": 2,
+        "gaps_over_10_seconds": 2
+      },
+      "post_exit_leg_quotes": {
+        "rows": 19248,
+        "observations": 6416,
+        "incomplete_observations": 0,
+        "first": "2026-11-23T16:07:30.240518+00:00",
+        "last": "2026-11-23T20:59:59.650018+00:00",
+        "max_gap_seconds": 6.224491,
+        "gaps_over_5_seconds": 3,
+        "gaps_over_10_seconds": 0
+      }
+    }
+  },
+  "capture-20261123T212008Z": {
+    "manifest_hashes_verified": 13,
+    "trade_100001_closed": true,
+    "pnl_dollars": -37,
+    "risk_reconciled": true,
+    "session_status": {
+      "running": false,
+      "status": "exited",
+      "finished_at": "2026-11-23T21:15:29.164642527Z",
+      "session_STOPPED_marker": true,
+      "trade_closed": true,
+      "phase": "post_close",
+      "deliberate_closeout_verified": true
+    },
+    "coverage": {
+      "monitoring_leg_quotes": {
+        "rows": 432,
+        "observations": 144,
+        "incomplete_observations": 0,
+        "first": "2026-11-23T16:00:31.536915+00:00",
+        "last": "2026-11-23T16:07:28.449015+00:00",
+        "max_gap_seconds": 10.767226,
+        "gaps_over_5_seconds": 2,
+        "gaps_over_10_seconds": 2
+      },
+      "post_exit_leg_quotes": {
+        "rows": 19248,
+        "observations": 6416,
+        "incomplete_observations": 0,
+        "first": "2026-11-23T16:07:30.240518+00:00",
+        "last": "2026-11-23T20:59:59.650018+00:00",
+        "max_gap_seconds": 6.224491,
+        "gaps_over_5_seconds": 3,
+        "gaps_over_10_seconds": 0
+      }
+    }
+  }
+}

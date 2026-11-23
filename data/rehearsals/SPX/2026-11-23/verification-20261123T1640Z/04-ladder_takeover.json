@@ -1,0 +1,38 @@
+{
+  "mode": "isolated broker/account fixtures; no network and no real orders",
+  "trigger": "ladder_takeover",
+  "persisted_operator_exit": {
+    "reason": "simulated operator canceled bot order",
+    "handed_at": "2026-11-23T11:43:57.251282-05:00"
+  },
+  "phases": [
+    {
+      "phase": "takeover",
+      "events": [
+        "exit_handed_to_operator",
+        "profit_state_transition"
+      ],
+      "simulated_exit_attempts": 1,
+      "simulated_close_trade_calls": 0
+    },
+    {
+      "phase": "restart_after_cancel",
+      "events": [
+        "manual_exit_signal_suppressed",
+        "profit_state_transition"
+      ],
+      "simulated_exit_attempts": 0,
+      "simulated_close_trade_calls": 0
+    },
+    {
+      "phase": "manual_fill_adopted",
+      "events": [
+        "manual_exit_signal_suppressed",
+        "profit_state_transition",
+        "trade_exited"
+      ],
+      "simulated_exit_attempts": 0,
+      "simulated_close_trade_calls": 1
+    }
+  ]
+}

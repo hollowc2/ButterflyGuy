@@ -472,20 +472,19 @@ class OrderManager:
                 raise
             log.error("execution_observation_write_failed", phase=phase)
 
-    def _commission(self, quantity: int) -> float:
-        """Paper trading commission: 4 legs × quantity × rate."""
+    def _commission(self) -> float:
+        """One side's fee in option points per spread (not aggregate dollars)."""
         legs = 4
-        return legs * quantity * self.settings.paper_commission_per_contract / 100
+        return legs * self.settings.paper_commission_per_contract / 100
 
     def _mark_paper_fill(
         self,
         side: str,
         mark: float,
-        quantity: int,
         spread: LiveSpread | None,
     ) -> dict[str, object]:
         """Return canonical strategy P&L at mark, with execution drag as metadata."""
-        commission = self._commission(quantity)
+        commission = self._commission()
         if side == "entry":
             fill_price = round(mark + commission, 2)
             marketable = round(
@@ -730,7 +729,7 @@ class OrderManager:
             if spread is None:
                 log.warning("paper_entry_no_spread", center=candidate.center_strike)
                 return None
-            result = self._mark_paper_fill("entry", spread.mark, quantity, spread)
+            result = self._mark_paper_fill("entry", spread.mark, spread)
             if not entry_fill_within_limit(
                 float(result["fill_price"]),
                 limit_price,
@@ -874,7 +873,7 @@ class OrderManager:
 
         if self.settings.paper_trading:
             spread = await self._fetch_live_spread(candidate)
-            result = self._mark_paper_fill("exit", current_value, quantity, spread)
+            result = self._mark_paper_fill("exit", current_value, spread)
             log.info(
                 "paper_exit_filled_at_mark",
                 fill_price=result["fill_price"],

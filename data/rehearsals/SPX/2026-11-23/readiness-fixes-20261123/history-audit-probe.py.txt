@@ -1,0 +1,14 @@
+import asyncio,datetime as dt,json
+import asyncpg
+from butterfly_guy.core.config import load_config
+async def main():
+ cfg=load_config('configs/config.yaml');records={}
+ for name in ('butterfly_guy','butterfly_guy_spx_live'):
+  c=await asyncpg.connect(cfg.database.model_copy(update={'name':name}).dsn)
+  try:
+   async with c.transaction(readonly=True):
+    row=await c.fetchrow('SELECT id,trade_date,status,entry_price,exit_price,pnl,quantity,entry_time,exit_time FROM butterfly_trades WHERE id=415')
+    records[name]=dict(row) if row else None
+  finally:await c.close()
+ print('HISTORY_JSON='+json.dumps({'observed_utc':dt.datetime.now(dt.timezone.utc).isoformat(),'copied_trade_id':415,'economic_fields_match':records['butterfly_guy']==records['butterfly_guy_spx_live'],'live_trade':records['butterfly_guy_spx_live'],'bootstrap_function':'copy_live_trade copies trade/intents/quotes/decisions, not daily_risk_state','records_modified':False},default=str))
+asyncio.run(main())

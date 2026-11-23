@@ -1,0 +1,447 @@
+{
+  "created_utc": "2026-11-23T18:18:52.326861+00:00",
+  "base_git_sha": "b3150ad75fdc01a7080e6bad42b9445bbc4c3a89",
+  "assessment": "NO_GO_for_supervised_live_canary",
+  "scope": "Local code fixes, isolated tests and read-only runtime/broker investigation; session still open",
+  "source_config_test_sha256": {
+    "configs/config.yaml": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25",
+    "deploy/spx-live/closeout.sh": "38c157e110b535bedd5d4f3ba80fc67ae6f55affaccf2112176c0528012b492a",
+    "deploy/spx-live/common.sh": "f83c47021808a3aa7d62b19060da5dab953dfb7331d95beea6202f974f2d9202",
+    "src/butterfly_guy/db/queries.py": "9cd671fa3e32188ba87e0980259820e20dc756088ebd9b47d2e09e2817f78f00",
+    "src/butterfly_guy/execution/order_manager.py": "400f325d28577fa575e8effa70d777c20a47e7331ee87ade61ae21ac744b75eb",
+    "src/butterfly_guy/position/position_manager.py": "91252c2b7f26eabf080c9deb0f3e22dda1f20e96030779ebab8764a12ff3870e",
+    "src/butterfly_guy/position/state_machine.py": "ae80343fb0fcbb60fd0102c02e29ae3ba82df8f9e7a50d1d41576bf592f95521",
+    "src/butterfly_guy/scripts/run_live.py": "a1475eb99cb8e26101729570b985bc3423eeb5b32fe55931eb7a50ad96450cfb",
+    "src/butterfly_guy/services/exit_notifications.py": "d6fd647feba4776fd9165ec1393d3002602e68f9778d46a198f2def9626e6bce",
+    "src/butterfly_guy/services/notifier.py": "05fb268f1fdd57f5a5178bc82b96dcc3d4191f359dbbb9a93f940a2ed4ce1acf",
+    "src/butterfly_guy/services/position_service.py": "10bc9044c414a15c2439f054f5771495d1df1999ebeead53deb6f87b2af5b5f6",
+    "tests/fixtures/spx_rehearsal_20261123_quotes.json": "dbf44844b40abb14f313cdb658435ccf48276ae0370e4265abf92e8419964020",
+    "tests/integration/test_exit_notifications_db.py": "7a4328672fd3a1c57eb56a913eb55d9792a748f5011da9e871923e5ad2c05675",
+    "tests/test_exit_notifications.py": "d0421804a30b23811ba386dd248f2432dbbb7442cb2b4543a1fd7719c706c38d",
+    "tests/test_paper_fee_units.py": "11f0f1165771221c9ece53bb8999c62ec1771227ba27461607110fa38f24696b",
+    "tests/test_spx_live_test.py": "31844471ec5373114d86395ee3353140ba4b7f902e7bb9092f117cda9a9196f8",
+    "tests/test_spx_rehearsal_regressions.py": "99664455af04d272acd548763efdb55484b9a28b20c93c961fbafe70911b0966"
+  },
+  "config_sha256": {
+    "configs/daily_report_card.yaml": "24a0a389c572523c594dccad9e7c74232f507e4cc92b21bf9e59994a180c02b4",
+    "configs/config_xsp.yaml": "4a86961fde27abb7b03b6d98aaa7eba9d464e19696f0f75c8e22365afc16f7aa",
+    "configs/config_ndx.yaml": "e3c7319043c9be4a206f26ac1894163a54e34f72ef4cdbabbb6752e0bc963da6",
+    "configs/config.yaml": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25"
+  },
+  "candidate_image": {
+    "broker_access": false,
+    "network": "none",
+    "python": "3.12.15 (main, Oct  6 2026, 02:02:22) [GCC 14.2.0]",
+    "source_sha256": {
+      "src/butterfly_guy/db/migrations/013_account_monitor.sql": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+      "src/butterfly_guy/db/queries.py": "9cd671fa3e32188ba87e0980259820e20dc756088ebd9b47d2e09e2817f78f00",
+      "src/butterfly_guy/execution/order_manager.py": "400f325d28577fa575e8effa70d777c20a47e7331ee87ade61ae21ac744b75eb",
+      "src/butterfly_guy/scripts/run_live.py": "a1475eb99cb8e26101729570b985bc3423eeb5b32fe55931eb7a50ad96450cfb",
+      "src/butterfly_guy/services/exit_notifications.py": "d6fd647feba4776fd9165ec1393d3002602e68f9778d46a198f2def9626e6bce",
+      "src/butterfly_guy/services/notifier.py": "05fb268f1fdd57f5a5178bc82b96dcc3d4191f359dbbb9a93f940a2ed4ce1acf",
+      "src/butterfly_guy/services/position_service.py": "10bc9044c414a15c2439f054f5771495d1df1999ebeead53deb6f87b2af5b5f6"
+    },
+    "image_id": "sha256:568eb8a15a58b6587f6e5e8312ea7aed68421887db0794adbc501825683448b1",
+    "tag": "butterflyguy:spx-readiness-20261123",
+    "source_hashes_match_workspace": true,
+    "deployed": false,
+    "config_sha256": {
+      "configs/config.yaml": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25"
+    }
+  },
+  "migration_sha256": {
+    "005_add_daily_bars.sql": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+    "004_add_chain_fields.sql": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+    "013_account_monitor.sql": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+    "009_broker_order_intents.sql": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+    "012_post_exit_leg_quotes.sql": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+    "008_one_open_trade_per_underlying_day.sql": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+    "006_tent_boundaries.sql": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+    "002_fix_greeks_precision.sql": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+    "010_add_decision_log_underlying.sql": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+    "003_add_underlying.sql": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+    "011_snapshot_timing.sql": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+    "007_monitoring_leg_quotes.sql": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+    "001_initial.sql": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699"
+  },
+  "original_verification_packet": {
+    "path": "data/rehearsals/SPX/2026-11-23/verification-20261123T1640Z",
+    "verified_artifact_hashes": 28,
+    "preserved": true
+  },
+  "test_suites": [
+    {
+      "artifact": "before/probes.xml",
+      "classification": "intentional pre-fix reproductions",
+      "tests": 11,
+      "failures": 2,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "artifact": "after/narrow-final.xml",
+      "classification": "focused core regression checks before final routing addition",
+      "tests": 28,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "artifact": "after/shared-regressions.xml",
+      "classification": "guarded shared/scenario checks; overlapping coverage",
+      "tests": 335,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "artifact": "after/final-routing.xml",
+      "classification": "final routing and per-spread fee checks",
+      "tests": 15,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "artifact": "after/exit-notifications-final.xml",
+      "classification": "final real-Postgres exit receipt checks",
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "artifact": "after/full-pytest-final.xml",
+      "classification": "intermediate invalid rerun: reused seeded scratch DB",
+      "tests": 2306,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 36
+    },
+    {
+      "artifact": "after/full-pytest-fresh.xml",
+      "classification": "authoritative final full suite on a fresh scratch DB",
+      "tests": 2306,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 36
+    }
+  ],
+  "authoritative_final_tests": {
+    "passed": 2270,
+    "skipped": 36,
+    "failures": 0,
+    "real_db_integration_passed": 45,
+    "python": "3.13.13",
+    "postgres": "16.11",
+    "timescaledb": "2.25.2",
+    "CI_DATABASE_URL_scope": "fresh local disposable database on 127.0.0.1:55440, never runtime databases"
+  },
+  "other_checks": {
+    "ruff": "passed",
+    "runtime_config_validation": "passed",
+    "compose_rehearsal_config_with_dummy_environment": "passed",
+    "patch_applies_to_clean_base": "passed",
+    "image_python312_network_disabled_import_hashes": "passed",
+    "graphify_AST_update": "passed; SQL parser unavailable, no SQL changed; no semantic relabel"
+  },
+  "fixed": [
+    {
+      "id": "EXIT_ALERT_NOT_RETRIED",
+      "status": "fixed_locally_not_deployed",
+      "evidence": [
+        "before/probes.xml",
+        "after/exit-notifications-final.xml",
+        "after/final-routing.xml"
+      ],
+      "delivery_semantics": "at_least_once; lost acknowledgment or receipt commit may duplicate a message"
+    },
+    {
+      "id": "PAPER_MULTI_LOT_FEE_SCALING",
+      "status": "fixed_locally_not_deployed",
+      "evidence": [
+        "before/05-quantity-fee-scaling.json",
+        "after/05-quantity-fee-scaling.json",
+        "after/final-routing.xml"
+      ],
+      "per_spread_entry_exit": [
+        3.75,
+        3.38
+      ],
+      "quantity_pnl_dollars": {
+        "1": -37,
+        "2": -74,
+        "3": -111
+      }
+    }
+  ],
+  "remaining_gates": [
+    "Actual 21:10 UTC export, 21:15 guarded close-out and 21:20 post-close audit: not run yet",
+    "Live DB migration 013: missing; explicit approval and real backup/restore validation required",
+    "Exact reviewed release commit CI/Database Smoke and approved fixed-image paper rollout with real channel acceptance",
+    "Fresh broker/DB/intent reconciliation and one intended instance immediately before activation",
+    "Normal strategy/risk settings with rehearsal nudges removed; original limits retained",
+    "Monitoring/halt/stop/rollback plan and explicit approval of a dated supervised one-contract canary"
+  ],
+  "runtime_snapshot": {
+    "broker_observed_utc": "2026-11-23T18:01:44.251945+00:00",
+    "broker_reconciliation": {
+      "active_bot_owned": 0,
+      "active_external_unattributed": 0,
+      "all_account_active_order_nodes": 0,
+      "all_account_position_count": 0,
+      "all_account_unknown_status_nodes": 0,
+      "manual_position_adopted_or_modified": false,
+      "order_history_start": "2026-09-25",
+      "order_status_counts": {
+        "CANCELED": 3,
+        "FILLED": 11,
+        "REPLACED": 9
+      },
+      "position_legs": [],
+      "spx_broker_flat": true,
+      "unknown_or_missing_status_nodes": 0
+    },
+    "live_schema_head": "012_post_exit_leg_quotes.sql",
+    "rehearsal_schema_head": "013_account_monitor.sql",
+    "actual_postclose_verified": false
+  },
+  "limitations": [
+    "Runtime code remains the old image; new behavior has not been exercised on a running service",
+    "Broker observations are point in time, not proof for a future session",
+    "Observed-quote replay is a counterfactual hold-through after the induced exit; synthetic scenarios are separate",
+    "Official November 23 close/settlement and actual scheduled-stop results were unavailable while the session remained open",
+    "Scratch dump/restore did not include populated/compressed production chunks",
+    "Exit worker retries only while its runtime is running; a deliberate stop retains the backlog until the next authorized start",
+    "This fix scopes durable delivery to exit receipts, not every existing entry/chart/settlement-correction notification",
+    "36 skipped tests require private NDX evidence or NDX_POSTGRES_BIN; full pytest used Python 3.13, image smoke used Python 3.12",
+    "No inference about strategy profitability or human receipt of Discord messages"
+  ],
+  "safety": {
+    "live_broker_order_writes": 0,
+    "manual_position_adopted_or_managed": false,
+    "runtime_deployment_or_restart": false,
+    "production_migration": false,
+    "live_mode_enabled": false,
+    "runtime_trade_limits_changed": false,
+    "new_session_scheduled": false
+  },
+  "documentation_sha256": {
+    "docs/operations/spx-paper-rehearsal-2026-11-23.md": "ffb9b4d819feeef45fb09cab6c901222183c05f220f1e5bde081ab9505b596a6",
+    "docs/operations/spx-readiness-deployment-2026-11-23.md": "eda407d88cc8787cd68b0478a49ab344d442faaf6b3c59c8090f050cba31eb3c"
+  },
+  "files": {
+    "README.md": {
+      "sha256": "940f9e3eaf2e7928720c85d2e160c03d932cdc01eade22264e7f1885cdf173f0",
+      "bytes": 3080
+    },
+    "after/02-induced-profit-exit.json": {
+      "sha256": "4a0b18893ce825fa0bc14d5b997fd6e16f6a8276fdb50f9837aef4be2dbbaf11",
+      "bytes": 1212
+    },
+    "after/02-observed-market-replay.json": {
+      "sha256": "c72be0f2b977b11e6ac2b4eea5816fbacf171cafd8177ce5a65695fdee81060f",
+      "bytes": 454011
+    },
+    "after/03-missing-leg-7320.json": {
+      "sha256": "0dc34b39f014ab51bb739869cc6e33f6c15cbb4295d1ba80b26af9b0a50c3863",
+      "bytes": 956
+    },
+    "after/03-missing-leg-7360.json": {
+      "sha256": "f4d5e39de30d275e1dced3c8372ddc3caad6ff13dd7cb2ec21c506f6c68c90a6",
+      "bytes": 956
+    },
+    "after/03-missing-leg-7400.json": {
+      "sha256": "54c436438e5879b627192b4938624346a9257e4edaae0223d0cdf5a65ec219ef",
+      "bytes": 956
+    },
+    "after/04-ladder_takeover.json": {
+      "sha256": "170322c13166a67f942f44bf4ed3580cf6cca264ce34ebdfbe49db7fe0cf2922",
+      "bytes": 964
+    },
+    "after/04-operator_order.json": {
+      "sha256": "ab829a9297c180cbc9744b8c27b46080c325dd3d490e754164fde05ba423fdef",
+      "bytes": 993
+    },
+    "after/05-hypothetical-settlement-grid.json": {
+      "sha256": "b1622125ddd03c2d7175f008d15d522d1e3ee01a5249b91a6d9fb1cd86566969",
+      "bytes": 1244
+    },
+    "after/05-observed-accounting.json": {
+      "sha256": "c856f6e98ca2c08a8c326c654216b3890373a8110031cc5e0480056c1037503f",
+      "bytes": 461
+    },
+    "after/05-quantity-fee-scaling.json": {
+      "sha256": "1e9bb82e8f80050f78320348c97a5e0ff2f3ca17447c522b9c721d7abc8d04af",
+      "bytes": 329
+    },
+    "after/compose-check.txt": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "after/config-check-final.txt": {
+      "sha256": "b889b5d908a521ff1f302a1f65b26a282a6d363b349284e01cb554fe28f2c8d2",
+      "bytes": 87
+    },
+    "after/entry-lock-repeat.xml": {
+      "sha256": "e51722523584519e2bb8593fb05b077645e6c2f40ba4a9efc1f3af95fff7dac4",
+      "bytes": 844
+    },
+    "after/exit-notifications-final.xml": {
+      "sha256": "af05e449d3d398bdcf6377cbea09aa2229f08233974b8241465ce5985ad3390b",
+      "bytes": 2477
+    },
+    "after/final-routing.xml": {
+      "sha256": "93d901672126def3f181df20a0eea6439fe700a561cb32ae46d15cd9a4257b40",
+      "bytes": 2091
+    },
+    "after/full-pytest-final.log": {
+      "sha256": "8eee7b0cdfd2626610f6bca0ccc22e52721271b711e2b76bf8dc600634b8ac79",
+      "bytes": 5820
+    },
+    "after/full-pytest-final.xml": {
+      "sha256": "f27579480ec1c39f52db751a6d1935b4e986ee8007f6ef68a7808231cde3fba5",
+      "bytes": 316487
+    },
+    "after/full-pytest-fresh.log": {
+      "sha256": "8f2bddc5e5980134b647a63e45c5a983d04aae506a3faca89071780a1d99a49d",
+      "bytes": 3670
+    },
+    "after/full-pytest-fresh.xml": {
+      "sha256": "7532a6e244799695fda8c437c5a728b2f1fe9db21410437459c818fb89ee5615",
+      "bytes": 314617
+    },
+    "after/full-pytest.log": {
+      "sha256": "0f798474dcc2f805a6ec5b25d07d0adac4c4574c1aca8c71592a35acee7e5861",
+      "bytes": 3670
+    },
+    "after/full-pytest.xml": {
+      "sha256": "95d098d94a517b460a48fddfcf8f3c3ee712858cba2fb089c38efba592b0501d",
+      "bytes": 314482
+    },
+    "after/graphify-update-final.log": {
+      "sha256": "cf609444a77bd993b6c29b4895083da2971189a15c58cbff6df77415e6f24461",
+      "bytes": 1365
+    },
+    "after/graphify-update.log": {
+      "sha256": "da421ea2f85d8437f33043ff6bd7397b3d5d1f71082a9e3d4309893665e6395b",
+      "bytes": 1567
+    },
+    "after/image-build-final.log": {
+      "sha256": "8f220c6d8a915fa6f0cbdcec4e7751ecc23f4e36ba2a497a09fd8c819a9b9bb1",
+      "bytes": 2508
+    },
+    "after/image-build.log": {
+      "sha256": "8ae3f12c60f103dcbecc63148102df8545cdb7411d51eaec9e81cf32832596c9",
+      "bytes": 23603
+    },
+    "after/narrow-final.xml": {
+      "sha256": "d1a133c8b7fd9657a0650514920adce2612f43e3002e41173014e07313ef2245",
+      "bytes": 4192
+    },
+    "after/network.json": {
+      "sha256": "279952f0f39c9a038f4d37e7643acedb0995b12eab4cb4c5711b9a76ef85d41f",
+      "bytes": 94
+    },
+    "after/ruff-final.txt": {
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "bytes": 19
+    },
+    "after/shared-regressions.log": {
+      "sha256": "24bea95d75ffd6a6e2455d4390a1e08c8a9210953b4aed3f735896328539b11e",
+      "bytes": 432
+    },
+    "after/shared-regressions.xml": {
+      "sha256": "bbeae36d425315479529c1bd781a6e21a7d69cdd3c5f9218c8235214b0052f14",
+      "bytes": 46344
+    },
+    "archived-probes-after.tar.gz": {
+      "sha256": "58b449f37bc1872e764375ac8ecf9bebc13368ad829e0ca25a9788f4597c1157",
+      "bytes": 4922
+    },
+    "before/05-quantity-fee-scaling.json": {
+      "sha256": "7e84b81e83d5d3484ffcf24b9b8c674e7d0bb8db2fc078bc49c50b44264ed145",
+      "bytes": 329
+    },
+    "before/network.json": {
+      "sha256": "b22507f19739a8eec1251f402e432c68123674fc9eb39b260c00e6862ac81c83",
+      "bytes": 94
+    },
+    "before/probes.xml": {
+      "sha256": "59f40bc139bb8ebeaef4cbeb493c10cba77de40d34771ff2102a655656de980e",
+      "bytes": 5455
+    },
+    "candidate-release.json": {
+      "sha256": "e5c8db925008f2f6562568e32ffe048e23c90bc411ecf27dacd04925c214750b",
+      "bytes": 1925
+    },
+    "capture-reconciliation.json": {
+      "sha256": "f29fc350ee5d0f1c1823e2ef8c657c186f14472a43d383bee71ad84aad6017f4",
+      "bytes": 1598
+    },
+    "graphify-before-update.tar.gz": {
+      "sha256": "a11d6b62c92fa52be1d3846c57ba5db55700531654783be091e97708dcab0e85",
+      "bytes": 25106843
+    },
+    "history-audit-probe.py.txt": {
+      "sha256": "ff25a31e7a4ee29d921a56f71b729577b29fef6508e8132d749b557f5cc8a251",
+      "bytes": 980
+    },
+    "history-copy-audit.json": {
+      "sha256": "500489ce3b80e9af201d7a8bba359f8f7eb75b600d386838ce2e3fe62ada50e1",
+      "bytes": 532
+    },
+    "image-receipt.json": {
+      "sha256": "6095dc04ff2d568a0cab984a30c6be728fbdf747a132c59a151bba4c8f17b90c",
+      "bytes": 1291
+    },
+    "ledger-audit-probe.py.txt": {
+      "sha256": "03c28a0d2fb8574ef9e6b805f5015456cb32ee5ad3b607d1773a774f58f48310",
+      "bytes": 1865
+    },
+    "ledger-audit.json": {
+      "sha256": "268a705e71c0db6dbfc939feac7a39ddc85e89cb4560ec9f1dcfbfd24fcaf3ac",
+      "bytes": 1352
+    },
+    "runtime-and-schema-probes.tar.gz": {
+      "sha256": "2d9f96a2fcf5d3c201593bf7b495e78aebed7334987ecbb10b9f4f3a18005f9a",
+      "bytes": 5371
+    },
+    "runtime-audit-extended.json": {
+      "sha256": "3cd865c7fd225ab15d316180ea3ab851a9f86bf171cb1b2b7b08272f16c4f05d",
+      "bytes": 155367
+    },
+    "runtime-audit-probe.py.txt": {
+      "sha256": "44273bc59a90f830979b2927017583fea4872bd82976a62207e7466a50103b7b",
+      "bytes": 5979
+    },
+    "runtime-audit.json": {
+      "sha256": "ca2c1f9ffbc18efa1053146e26048476e60091650f2b2901bce491965186aac0",
+      "bytes": 127353
+    },
+    "runtime-services-final.json": {
+      "sha256": "d011f2a0ceb10d0fd5abaf0dfed4a334783b5aa945b6767be90d04443806b7f1",
+      "bytes": 3346
+    },
+    "runtime-services-probe.py.txt": {
+      "sha256": "bd0095bdaec8acf299cfb3cd2d3536ce09291a4ee727cd1e5dc045079220539d",
+      "bytes": 1491
+    },
+    "runtime-services.json": {
+      "sha256": "2727b447a1601feea98bc139a47ea9b96a22b815443c09e3f006d887f6fdd63e",
+      "bytes": 3346
+    },
+    "schema-validation-probe.py.txt": {
+      "sha256": "3bc72988d26b8ece61078ba8d5dd5cf0750fa926e9d4b0f926f3eb6e78a7145a",
+      "bytes": 4376
+    },
+    "schema-validation.json": {
+      "sha256": "1b6365346b7ad68ec92cada4bf748eb4086df07ef0ef109a76fe72a2c4b19f15",
+      "bytes": 22078
+    },
+    "source-changes.patch": {
+      "sha256": "f53c8ca31709c96b70e46a0188fe8efb48475ddb18a96b9cfd24a364b1990ca1",
+      "bytes": 45924
+    }
+  }
+}

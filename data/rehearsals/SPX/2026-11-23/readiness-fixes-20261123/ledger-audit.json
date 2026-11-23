@@ -1,0 +1,51 @@
+{
+  "observed_utc": "2026-11-23T18:14:51.206851+00:00",
+  "databases": {
+    "butterfly_guy_spx_live": {
+      "provisional_settlements": [],
+      "unlinked_filled_entries": 0,
+      "unresolved_intents": 0,
+      "recent_risk_reconciliation": [
+        {
+          "trade_date": "2026-11-16",
+          "closed_pnl_dollars": "-70.0000",
+          "open_count": 0,
+          "realized_pnl": null,
+          "trade_count": null,
+          "halted": null
+        },
+        {
+          "trade_date": "2026-11-19",
+          "closed_pnl_dollars": "-379.7900",
+          "open_count": 0,
+          "realized_pnl": "-379.7900",
+          "trade_count": 1,
+          "halted": false
+        }
+      ]
+    },
+    "butterfly_guy_spx_live_rehearsal": {
+      "provisional_settlements": [],
+      "unlinked_filled_entries": 0,
+      "unresolved_intents": 0,
+      "recent_risk_reconciliation": [
+        {
+          "trade_date": "2026-11-18",
+          "closed_pnl_dollars": "-199.0000",
+          "open_count": 0,
+          "realized_pnl": "-199.0000",
+          "trade_count": 1,
+          "halted": false
+        },
+        {
+          "trade_date": "2026-11-23",
+          "closed_pnl_dollars": "-37.0000",
+          "open_count": 0,
+          "realized_pnl": "-37.0000",
+          "trade_count": 1,
+          "halted": false
+        }
+      ]
+    }
+  }
+}

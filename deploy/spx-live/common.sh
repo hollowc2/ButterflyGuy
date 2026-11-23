@@ -185,8 +185,13 @@ token_match() {
 
 broker_flat() {
   # Read-only and account-wide (SPX, NDX, XSP), so the paper container is a valid host.
-  # Close-out and stop pass --ignore-expired: Schwab lists expired 0DTE legs until overnight.
   docker exec -i "$PAPER_C" python - "$@" <"$REL/tools/deploy_broker_flat_check.py"
+}
+
+live_flat_for_stop() {
+  # Schwab can still list expired 0DTE legs after the session ends.
+  broker_flat --ignore-expired || { echo "$(ts) broker flatness check failed"; return 1; }
+  db_tool check "${CHECK_ARGS[@]}" || { echo "$(ts) $LIVE_DB flatness check failed"; return 1; }
 }
 
 verify_live() {

@@ -1,0 +1,324 @@
+{
+  "created_utc": "2026-11-23T16:49:03.291166+00:00",
+  "session": "2026-11-23",
+  "scope": "Six requested verification areas; paper executions and isolated fixtures only",
+  "git_sha": "b3150ad75fdc01a7080e6bad42b9445bbc4c3a89",
+  "runtime_image": "sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739",
+  "runtime_release_sha": "4a3c3515637a0d5346c49d640d386da3e678c27d",
+  "python_source_matches_runtime_release": true,
+  "source_sha256": {
+    "src/butterfly_guy/services/notifier.py": "cdee57187d2bcfce2b384934b9a36cc5a95c7f0b254d87f5fccd2afe96bff220",
+    "src/butterfly_guy/services/position_service.py": "db30a2abc4bceade9be23be9d8a78054d99ccb8ca89dd9730d0114526af56652",
+    "src/butterfly_guy/execution/order_manager.py": "f2c5b30609f783c867b4b6312942066aec1e794ab273e71ff6849cfcf953913e",
+    "src/butterfly_guy/position/state_machine.py": "ae80343fb0fcbb60fd0102c02e29ae3ba82df8f9e7a50d1d41576bf592f95521",
+    "src/butterfly_guy/position/position_manager.py": "91252c2b7f26eabf080c9deb0f3e22dda1f20e96030779ebab8764a12ff3870e",
+    "src/butterfly_guy/scripts/run_live.py": "54d7c341be6bc9ad6565f47c16462cf14bf9cddd860246e6155ecea3f7a9d74c",
+    "deploy/spx-live/closeout.sh": "38c157e110b535bedd5d4f3ba80fc67ae6f55affaccf2112176c0528012b492a",
+    "deploy/spx-live/common.sh": "f83c47021808a3aa7d62b19060da5dab953dfb7331d95beea6202f974f2d9202",
+    "configs/config.yaml": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25"
+  },
+  "suites": [
+    {
+      "file": "01-alert-delivery.xml",
+      "checks": 26,
+      "passed": 25,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 4.396
+    },
+    {
+      "file": "02-profit-exits.xml",
+      "checks": 54,
+      "passed": 54,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 3.883
+    },
+    {
+      "file": "02-profit-fill-confirmation.xml",
+      "checks": 1,
+      "passed": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.604
+    },
+    {
+      "file": "03-entry-freshness.xml",
+      "checks": 2,
+      "passed": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 3.408
+    },
+    {
+      "file": "03-quote-outages.xml",
+      "checks": 39,
+      "passed": 39,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.525
+    },
+    {
+      "file": "04-manual-takeover.xml",
+      "checks": 22,
+      "passed": 22,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 8.351
+    },
+    {
+      "file": "05-settlement-accounting.xml",
+      "checks": 63,
+      "passed": 62,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.733
+    },
+    {
+      "file": "06-closeout.xml",
+      "checks": 25,
+      "passed": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 20.131
+    }
+  ],
+  "executed_checks": 232,
+  "passed_checks": 230,
+  "failed_regression_probes": 2,
+  "unique_cases": 196,
+  "note": "Counts include intentional repeat baseline cases across suites. The two failures are confirmed defects, not successful checks.",
+  "network_guards": {
+    "03-entry-freshness-network-guard.json": {
+      "real_network_enabled": false,
+      "blocked_network_attempts": 0,
+      "pytest_exit_code": 0
+    },
+    "05-network-guard.json": {
+      "real_network_enabled": false,
+      "blocked_network_attempts": 0,
+      "pytest_exit_code": 1
+    },
+    "02-network-guard.json": {
+      "real_network_enabled": false,
+      "blocked_network_attempts": 0,
+      "pytest_exit_code": 0
+    },
+    "03-network-guard.json": {
+      "real_network_enabled": false,
+      "blocked_network_attempts": 0,
+      "pytest_exit_code": 0
+    },
+    "04-network-guard.json": {
+      "real_network_enabled": false,
+      "blocked_network_attempts": 0,
+      "pytest_exit_code": 0
+    },
+    "01-network-guard.json": {
+      "real_network_enabled": false,
+      "blocked_network_attempts": 0,
+      "pytest_exit_code": 1
+    },
+    "02-profit-fill-network-guard.json": {
+      "real_network_enabled": false,
+      "blocked_network_attempts": 0,
+      "pytest_exit_code": 0
+    },
+    "06-network-guard.json": {
+      "real_network_enabled": false,
+      "blocked_network_attempts": 0,
+      "pytest_exit_code": 0
+    }
+  },
+  "observed_data_source": "../capture-20261123T163928Z",
+  "latest_market_capture": "../capture-20261123T164731Z",
+  "areas": [
+    {
+      "number": 1,
+      "area": "Exit-alert failure handling",
+      "result": "defect confirmed",
+      "artifact": "01-alert-delivery.xml"
+    },
+    {
+      "number": 2,
+      "area": "Profit exits",
+      "result": "pass in simulation; no natural profit-exit signal in observed sample",
+      "artifact": "02-observed-market-replay.json"
+    },
+    {
+      "number": 3,
+      "area": "Quote outages and recovery",
+      "result": "pass for missing each observed SPX leg and isolated stale/outage cases",
+      "artifact": "03-quote-outages.xml"
+    },
+    {
+      "number": 4,
+      "area": "Manual takeover and restart",
+      "result": "pass using isolated broker fixtures, no real manual-trade reads",
+      "artifact": "04-manual-takeover.xml"
+    },
+    {
+      "number": 5,
+      "area": "Settlement and accounting",
+      "result": "one-lot actual ledger and hypothetical intrinsic settlement passed; multi-lot fee defect confirmed",
+      "artifact": "05-settlement-accounting.xml"
+    },
+    {
+      "number": 6,
+      "area": "Session close-out",
+      "result": "isolated close-out and cleanup passed; actual after-close result pending",
+      "artifact": "06-closeout.xml"
+    }
+  ],
+  "scheduled_evidence": [
+    {
+      "time_pt": "2026-11-23 13:10",
+      "action": "full-session evidence export"
+    },
+    {
+      "time_pt": "2026-11-23 13:15",
+      "action": "existing guarded close-out"
+    },
+    {
+      "time_pt": "2026-11-23 13:20",
+      "action": "read-only post-close audit, even if HTTP endpoint is stopped"
+    }
+  ],
+  "safety": {
+    "live_orders_authorized": false,
+    "live_order_calls_in_verification": 0,
+    "running_paper_trade_limit": 1,
+    "new_runtime_code_deployed": false,
+    "production_strategy_configs_changed": false,
+    "manual_position_touched": false
+  },
+  "limitations": [
+    "Profit drawdown path was synthetic; normal market sample produced no such exit.",
+    "Manual broker states and settlement payloads were fixtures, not live order experiments.",
+    "Today official closing price and actual scheduled stop are not available yet.",
+    "Discord accepted the actual paper exit alert, but that does not prove a human read it.",
+    "Replay uses recorded fly marks with the baseline profit state machine; it is not a performance backtest."
+  ],
+  "files": {
+    "03-entry-freshness.xml": {
+      "sha256": "c50a0bc82ed762bc88f42f2e273ee248bfd7a0391a5c787dfa1cb70e6ca8daaa",
+      "bytes": 503
+    },
+    "reproduction-probes.tar.gz": {
+      "sha256": "3efa7de659e4bacb4d47f2dd2d4d81d688119fad0b0ba836beef78a57d66917d",
+      "bytes": 5269
+    },
+    "05-settlement-accounting.xml": {
+      "sha256": "e3f769bb0d917bc18b4e1f93b87c67fa8770654ed363e9d4e5dba3132eb7105c",
+      "bytes": 10129
+    },
+    "05-hypothetical-settlement-grid.json": {
+      "sha256": "b1622125ddd03c2d7175f008d15d522d1e3ee01a5249b91a6d9fb1cd86566969",
+      "bytes": 1244
+    },
+    "01-alert-delivery.xml": {
+      "sha256": "b5553a73bc507690f9ced7462e4018cb9912673cb2061d9edb5a5a9cb6c66649",
+      "bytes": 5855
+    },
+    "02-observed-market-replay.json": {
+      "sha256": "4fa0e362152ad69e18e300568cde47ad69a79a89822c6607fbe55a4cf8a1be91",
+      "bytes": 153894
+    },
+    "03-entry-freshness-network-guard.json": {
+      "sha256": "279952f0f39c9a038f4d37e7643acedb0995b12eab4cb4c5711b9a76ef85d41f",
+      "bytes": 94
+    },
+    "findings.json": {
+      "sha256": "1bac190219e548970d113d21010e74b34d96ec6e49aa421424bcab9ee5d89d3d",
+      "bytes": 1193
+    },
+    "05-network-guard.json": {
+      "sha256": "b22507f19739a8eec1251f402e432c68123674fc9eb39b260c00e6862ac81c83",
+      "bytes": 94
+    },
+    "03-missing-leg-7320.json": {
+      "sha256": "0dc34b39f014ab51bb739869cc6e33f6c15cbb4295d1ba80b26af9b0a50c3863",
+      "bytes": 956
+    },
+    "04-operator_order.json": {
+      "sha256": "c4ce181586fc9de3a6bf48c188e901cd7a4fa2b8a0b1889e658c2e0fdee1e327",
+      "bytes": 993
+    },
+    "04-ladder_takeover.json": {
+      "sha256": "c990835f0d85ccddddb734c7b3404785635b140452af8840d7b7aed728390235",
+      "bytes": 964
+    },
+    "05-quantity-fee-scaling.json": {
+      "sha256": "7e84b81e83d5d3484ffcf24b9b8c674e7d0bb8db2fc078bc49c50b44264ed145",
+      "bytes": 329
+    },
+    "02-network-guard.json": {
+      "sha256": "279952f0f39c9a038f4d37e7643acedb0995b12eab4cb4c5711b9a76ef85d41f",
+      "bytes": 94
+    },
+    "04-manual-takeover.xml": {
+      "sha256": "23f343edfe2470c9a837eec76cbfb80a2554194446afbfc0ede68bdb42a262e5",
+      "bytes": 3167
+    },
+    "03-network-guard.json": {
+      "sha256": "279952f0f39c9a038f4d37e7643acedb0995b12eab4cb4c5711b9a76ef85d41f",
+      "bytes": 94
+    },
+    "02-profit-exits.xml": {
+      "sha256": "3f2986aec16f2041564ea472f1e9df24dd7d9333b96fc565cc3759e93bd278e3",
+      "bytes": 7396
+    },
+    "05-observed-accounting.json": {
+      "sha256": "c856f6e98ca2c08a8c326c654216b3890373a8110031cc5e0480056c1037503f",
+      "bytes": 461
+    },
+    "04-network-guard.json": {
+      "sha256": "279952f0f39c9a038f4d37e7643acedb0995b12eab4cb4c5711b9a76ef85d41f",
+      "bytes": 94
+    },
+    "03-missing-leg-7400.json": {
+      "sha256": "54c436438e5879b627192b4938624346a9257e4edaae0223d0cdf5a65ec219ef",
+      "bytes": 956
+    },
+    "02-profit-fill-confirmation.xml": {
+      "sha256": "74cf8573cae440bacaaac64fe0dae35555bfa12c7ce4b17e3cd00d57ea34fe1d",
+      "bytes": 354
+    },
+    "06-closeout.xml": {
+      "sha256": "afbd13b46ce8970895d5c351d3b40d38e710bae4f88bd5b5eeefe193c89bb974",
+      "bytes": 3715
+    },
+    "01-network-guard.json": {
+      "sha256": "b22507f19739a8eec1251f402e432c68123674fc9eb39b260c00e6862ac81c83",
+      "bytes": 94
+    },
+    "03-missing-leg-7360.json": {
+      "sha256": "f4d5e39de30d275e1dced3c8372ddc3caad6ff13dd7cb2ec21c506f6c68c90a6",
+      "bytes": 956
+    },
+    "02-profit-fill-network-guard.json": {
+      "sha256": "279952f0f39c9a038f4d37e7643acedb0995b12eab4cb4c5711b9a76ef85d41f",
+      "bytes": 94
+    },
+    "06-network-guard.json": {
+      "sha256": "279952f0f39c9a038f4d37e7643acedb0995b12eab4cb4c5711b9a76ef85d41f",
+      "bytes": 94
+    },
+    "03-quote-outages.xml": {
+      "sha256": "5f3eac0f63855c72557f09d33fdfe97074e9893587ac9729073b42f731183687",
+      "bytes": 5878
+    },
+    "02-induced-profit-exit.json": {
+      "sha256": "8377dfd28127320c9254899b05f99b4cf0a515db52c6f04103625c359ae8c2a1",
+      "bytes": 1212
+    }
+  }
+}

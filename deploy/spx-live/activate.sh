@@ -32,8 +32,10 @@ db_tool halt-entries --date "$DATE" --help >/dev/null \
   || abort "live image $CAND lacks spx_live_db halt-entries"
 
 echo "$(ts) gates passed; starting $LIVE_C"
-act touch "$D/ACTIVATED"
-[ "$DRY_RUN" = 1 ] || echo "$p0" >"$D/paper.fingerprint"
+if [ "$DRY_RUN" != 1 ]; then
+  echo "$p0" >"$D/paper.fingerprint" || abort "could not save the paper fingerprint"
+fi
+act touch "$D/ACTIVATED" || abort "could not record the activation attempt"
 act compose up -d --no-build --pull never app_spx_live
 up_rc=$?
 if [ "$DRY_RUN" = 1 ]; then
@@ -50,8 +52,6 @@ container_env "$LIVE_C" | grep -E '^(BUTTERFLY_INSTANCE_ROLE|DATABASE__NAME|EXEC
 
 if [ -n "$fail" ]; then
   # The bot ran with orders enabled for WAIT_SECONDS and may hold a fly or be mid-entry.
-  # VERIFY_FAILED first, so health.sh watches every outcome below except a confirmed stop.
-  act touch "$D/VERIFY_FAILED"
   # Halt new entries (the risk gate's halted flag; exits are unaffected) and drain any
   # entry already admitted. Stop only once that is proven and the broker and the live DB
   # are flat, checked after the drain. Anything uncertain keeps the bot managing.
@@ -63,7 +63,9 @@ if [ -n "$fail" ]; then
     *) entries="entry halt FAILED, new entries may still be ENABLED"
        act touch "$D/ENTRY_HALT_FAILED" ;;
   esac
-  if [ "$halt_rc" = 0 ] && broker_flat --ignore-expired && db_tool check "${CHECK_ARGS[@]}"; then
+  # Record the outcome after the halt attempt so health can detect an interruption before it.
+  act touch "$D/VERIFY_FAILED"
+  if [ "$halt_rc" = 0 ] && live_flat_for_stop; then
     if stop_live; then
       notify "🛑 $LABEL $DATE failed verification ($fail). Live container stopped; paper untouched. Log: $D/activation.log"
     else
@@ -74,10 +76,10 @@ if [ -n "$fail" ]; then
   fi
   exit 1
 fi
+act touch "$D/VERIFIED"
 if [ "$OBSERVE" = 1 ]; then
   notify "✅ $LABEL $DATE RUNNING beside paper: entries BLOCKED (live-test date $OBSERVE_DATE), no orders; startup reconcile, broker checks and health only. DB $LIVE_DB. Close-out $CLOSEOUT_PT PT."
 else
   notify "✅ $LABEL $DATE RUNNING beside paper: 1 fly max, ≤4.00 debit, $EXITS, entries 07:00–07:45 PT, DB $LIVE_DB. Close-out $CLOSEOUT_PT PT."
 fi
-act touch "$D/VERIFIED"
 echo "=== $(ts) activation done"

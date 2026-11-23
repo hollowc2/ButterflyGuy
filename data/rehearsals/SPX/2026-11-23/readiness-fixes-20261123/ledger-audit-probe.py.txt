@@ -1,0 +1,18 @@
+import asyncio,datetime as dt,json
+import asyncpg
+from butterfly_guy.core.config import load_config
+async def main():
+ cfg=load_config('configs/config.yaml')
+ result={'observed_utc':dt.datetime.now(dt.timezone.utc).isoformat(),'databases':{}}
+ for name in ('butterfly_guy_spx_live','butterfly_guy_spx_live_rehearsal'):
+  conn=await asyncpg.connect(cfg.database.model_copy(update={'name':name}).dsn)
+  try:
+   async with conn.transaction(readonly=True,isolation='repeatable_read'):
+    provisional=[dict(r) for r in await conn.fetch("SELECT id,trade_date,exit_reason,pnl,quantity FROM butterfly_trades WHERE metadata->>'settlement_provisional'='true' ORDER BY trade_date")]
+    unlinked=await conn.fetchval("SELECT count(*) FROM broker_order_intents WHERE underlying='SPX' AND side='ENTRY' AND status='FILLED' AND trade_id IS NULL")
+    unresolved=await conn.fetchval("SELECT count(*) FROM broker_order_intents WHERE underlying='SPX' AND status NOT IN ('FILLED','CANCELED','REJECTED','EXPIRED')")
+    recent=[dict(r) for r in await conn.fetch("WITH totals AS (SELECT trade_date,sum(pnl*100*quantity) FILTER (WHERE status='CLOSED') AS closed_pnl_dollars,count(*) FILTER(WHERE status='OPEN') AS open_count FROM butterfly_trades WHERE underlying='SPX' AND trade_date >= '2026-11-16' GROUP BY trade_date) SELECT COALESCE(t.trade_date,r.trade_date) AS trade_date,t.closed_pnl_dollars,t.open_count,r.realized_pnl,r.trade_count,r.halted FROM totals t FULL OUTER JOIN (SELECT * FROM daily_risk_state WHERE underlying='SPX' AND trade_date >= '2026-11-16') r USING(trade_date) ORDER BY trade_date")]
+    result['databases'][name]={'provisional_settlements':provisional,'unlinked_filled_entries':unlinked,'unresolved_intents':unresolved,'recent_risk_reconciliation':recent}
+  finally:await conn.close()
+ print('LEDGER_JSON='+json.dumps(result,default=str))
+asyncio.run(main())

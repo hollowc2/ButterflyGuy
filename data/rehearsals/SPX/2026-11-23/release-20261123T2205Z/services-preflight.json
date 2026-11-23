@@ -1,0 +1,98 @@
+{
+  "observed_utc": "2026-11-23T22:06:33.353027+00:00",
+  "units": {
+    "spx-live-activate-20261123.service": {
+      "Result": "exit-code",
+      "ExecMainStartTimestamp": "Mon 2026-11-23 14:35:01 UTC",
+      "ExecMainExitTimestamp": "Mon 2026-11-23 14:36:06 UTC",
+      "ExecMainCode": "1",
+      "ExecMainStatus": "1",
+      "Id": "spx-live-activate-20261123.service",
+      "ActiveState": "failed",
+      "SubState": "failed"
+    },
+    "spx-live-activate-20261123.timer": {
+      "NextElapseUSecRealtime": "",
+      "LastTriggerUSec": "",
+      "Result": "success",
+      "Id": "spx-live-activate-20261123.timer",
+      "ActiveState": "inactive",
+      "SubState": "dead"
+    },
+    "spx-live-closeout-20261123.service": {
+      "Result": "success",
+      "ExecMainStartTimestamp": "",
+      "ExecMainExitTimestamp": "",
+      "ExecMainCode": "0",
+      "ExecMainStatus": "0",
+      "Id": "spx-live-closeout-20261123.service",
+      "ActiveState": "inactive",
+      "SubState": "dead"
+    },
+    "spx-live-closeout-20261123.timer": {
+      "NextElapseUSecRealtime": "",
+      "LastTriggerUSec": "",
+      "Result": "success",
+      "Id": "spx-live-closeout-20261123.timer",
+      "ActiveState": "inactive",
+      "SubState": "dead"
+    },
+    "spx-rehearsal-evidence-20261123.service": {
+      "Result": "success",
+      "ExecMainStartTimestamp": "",
+      "ExecMainExitTimestamp": "",
+      "ExecMainCode": "0",
+      "ExecMainStatus": "0",
+      "Id": "spx-rehearsal-evidence-20261123.service",
+      "ActiveState": "inactive",
+      "SubState": "dead"
+    },
+    "spx-rehearsal-evidence-20261123.timer": {
+      "NextElapseUSecRealtime": "",
+      "LastTriggerUSec": "",
+      "Result": "success",
+      "Id": "spx-rehearsal-evidence-20261123.timer",
+      "ActiveState": "inactive",
+      "SubState": "dead"
+    },
+    "spx-rehearsal-postclose-audit-20261123.service": {
+      "Result": "success",
+      "ExecMainStartTimestamp": "",
+      "ExecMainExitTimestamp": "",
+      "ExecMainCode": "0",
+      "ExecMainStatus": "0",
+      "Id": "spx-rehearsal-postclose-audit-20261123.service",
+      "ActiveState": "inactive",
+      "SubState": "dead"
+    },
+    "spx-rehearsal-postclose-audit-20261123.timer": {
+      "NextElapseUSecRealtime": "",
+      "LastTriggerUSec": "",
+      "Result": "success",
+      "Id": "spx-rehearsal-postclose-audit-20261123.timer",
+      "ActiveState": "inactive",
+      "SubState": "dead"
+    }
+  },
+  "containers": {
+    "butterfly_spx_app": "b57d3f6553556c0159eded36a90f0bb2732c04a2405b600a8b59091152f12f07 sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739 2026-11-22T01:15:35.728449794Z 0 true",
+    "butterfly_spx_live_app": "1651c7891cacacd0220d164d0cc2d5e80339aa092a2ad3a6b25b24807d242749 sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739 2026-11-23T16:07:20.009148725Z 0 false"
+  },
+  "paper_fingerprint_matches_session_baseline": true,
+  "markers": {
+    "ACTIVATED": true,
+    "VERIFIED": true,
+    "STOPPED": true,
+    "VERIFY_FAILED": false,
+    "ENTRY_HALT_FAILED": false
+  },
+  "capture_directories": [
+    "capture-20261123T160919Z",
+    "capture-20261123T163928Z",
+    "capture-20261123T164528Z",
+    "capture-20261123T164731Z",
+    "capture-20261123T175437Z",
+    "capture-20261123T211012Z",
+    "capture-20261123T212008Z"
+  ]
+}

@@ -294,8 +294,9 @@ def entry_lock_key(underlying: str, trade_date: dt.date) -> str:
 class TradeQueries:
     """Queries for trades table."""
 
-    def __init__(self, db: DatabasePool) -> None:
+    def __init__(self, db: DatabasePool, instance_role: str | None = None) -> None:
         self.db = db
+        self.instance_role = instance_role
 
     async def insert_trade(self, trade: dict[str, Any]) -> int:
         return await self.db.pool.fetchval(
@@ -331,7 +332,12 @@ class TradeQueries:
             WHERE id = $1 AND status = 'OPEN'
             """,
             trade_id, exit_price, exit_time, exit_reason, pnl, peak_value,
-            json.dumps(metadata or {}),
+            json.dumps({
+                **(metadata or {}),
+                # Enqueue with the guarded close, before any best-effort work.
+                "exit_notification_status": "pending",
+                "exit_notification_role": self.instance_role,
+            }),
         )
         return result == "UPDATE 1"
 

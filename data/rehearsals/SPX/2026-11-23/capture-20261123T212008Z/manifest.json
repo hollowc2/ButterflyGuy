@@ -1,0 +1,104 @@
+{
+  "retrieved_utc": "2026-11-23T21:20:08.336166+00:00",
+  "provider": "Schwab direct market data; ButterflyGuy mark_v1 simulated executions",
+  "database": "butterfly_guy_spx_live_rehearsal",
+  "host": "helios",
+  "session": "2026-11-23",
+  "trade_id": 100001,
+  "timezone": "timestamps include their source UTC/offset; display America/Los_Angeles",
+  "files": {
+    "trade.jsonl": {
+      "rows": 1,
+      "first_timestamp": "2026-11-23 16:00:29.888841+00:00",
+      "last_timestamp": "2026-11-23 16:00:29.888841+00:00",
+      "sha256": "52b42c3c64c1bde0549bce2af3f6845c11297a68157ba162f48f8586bb22c71b"
+    },
+    "decisions.jsonl": {
+      "rows": 187,
+      "first_timestamp": "2026-11-23 15:53:09.062354+00:00",
+      "last_timestamp": "2026-11-23 16:29:58.021632+00:00",
+      "sha256": "2e94aa06f7b401703d769975de20e8c47d80e2443ce01d32065eeef7b10c9e59"
+    },
+    "monitoring_leg_quotes.jsonl": {
+      "rows": 432,
+      "first_timestamp": "2026-11-23 16:00:31.536915+00:00",
+      "last_timestamp": "2026-11-23 16:07:28.449015+00:00",
+      "sha256": "00c54c36ae2590cae481a7b3a65b760418dad4cb4343bb724ca15b2a83bfae32"
+    },
+    "post_exit_leg_quotes.jsonl": {
+      "rows": 19248,
+      "first_timestamp": "2026-11-23 16:07:30.240518+00:00",
+      "last_timestamp": "2026-11-23 20:59:59.650018+00:00",
+      "sha256": "7c9c6b9ecc7e82e9e2c75b85c9b669d1f15657870fbd8508f4e80867c26aeddd"
+    },
+    "chains.jsonl": {
+      "rows": 216918,
+      "first_timestamp": "2026-11-23 15:49:00.007550+00:00",
+      "last_timestamp": "2026-11-23 20:59:00.002594+00:00",
+      "sha256": "fef27c670e0e7b38b872b155e86335a555877c5ecb7f063359561f6c1308c2ea"
+    },
+    "spot_prices.jsonl": {
+      "rows": 618,
+      "first_timestamp": "2026-11-23 15:49:00.007550+00:00",
+      "last_timestamp": "2026-11-23 20:59:00.002594+00:00",
+      "sha256": "16fb7f595093af52a969255262cae730bd92df55b333609a4222f69d5794aace"
+    },
+    "risk_state.jsonl": {
+      "rows": 1,
+      "first_timestamp": null,
+      "last_timestamp": null,
+      "sha256": "88e0de8c7b0c9c65bb936c4a509b31b958270332770ed1ef365a270271bc236b"
+    },
+    "broker_intent_counts.jsonl": {
+      "rows": 0,
+      "first_timestamp": null,
+      "last_timestamp": null,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "config-on-disk.yaml": {
+      "sha256": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25"
+    },
+    "container-sanitized.log": {
+      "sha256": "7aba68c97ff9382ca38713c7b4a65f80c754ef7832c65bdaea96e6c646ccc01d"
+    },
+    "ready.json": {
+      "sha256": "0a8d8e7d659ffde0394a5fb65d036b62287ddbec5d113b993df7ee20f0ff8259"
+    },
+    "health.json": {
+      "sha256": "0a8d8e7d659ffde0394a5fb65d036b62287ddbec5d113b993df7ee20f0ff8259"
+    },
+    "session-status.json": {
+      "sha256": "bd5bfbeca21adad75b4c330524344311e458a35f595301793018b87e0583fe16"
+    }
+  },
+  "discord_receipts": [
+    {
+      "event": "rehearsal_discord_receipt",
+      "timestamp": "2026-11-23T16:07:29.524402+00:00",
+      "kind": "exit",
+      "accepted": true,
+      "paper_only": true
+    },
+    {
+      "event": "rehearsal_discord_receipt",
+      "timestamp": "2026-11-23T21:05:35.961793+00:00",
+      "kind": "other",
+      "accepted": true,
+      "paper_only": true
+    }
+  ],
+  "induced_events": [
+    "entry window 07:45 -> 08:30 PT",
+    "center tolerance 15 -> 100 points",
+    "exit_before_close_minutes 0 -> 300"
+  ],
+  "limitations": [
+    "No live broker order was submitted",
+    "Exit intentionally induced using end_of_day signal early",
+    "Discord acceptance does not establish human receipt",
+    "Failure-path tests use isolated test harnesses, not a production fault",
+    "Capture is point-in-time; post-exit quote recording continues until close",
+    "After the induced exit, the on-disk rehearsal config was restored to normal settings; the existing process retains its loaded test settings until stopped"
+  ],
+  "source_image": "sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739"
+}

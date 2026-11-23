@@ -1,0 +1,9 @@
+{
+  "running": true,
+  "status": "running",
+  "finished_at": "0001-01-01T00:00:00Z",
+  "session_STOPPED_marker": false,
+  "trade_closed": true,
+  "phase": "intraday",
+  "deliberate_closeout_verified": false
+}

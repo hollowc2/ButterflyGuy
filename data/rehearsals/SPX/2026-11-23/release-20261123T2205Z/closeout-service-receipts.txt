@@ -1,0 +1,24 @@
+=== 2026-11-23T21:15:02Z close-out start: SPX live REHEARSAL (paper mode) 2026-11-23
+2026-11-23 21:15:08 [info     ] schwab_client_initialized
+2026-11-23 21:15:09 [info     ] schwab_client_closed
+/tmp/spx-live-evidence
+ Container butterfly-spx-live-spx_live_db_tool-run-204aaab456f0 Creating 
+ Container butterfly-spx-live-spx_live_db_tool-run-204aaab456f0 Created 
+2026-11-23T21:15:13Z evidence saved to /opt/butterflyguy-releases/spx-live-20261123-fe051d6/evidence-20261123T211502Z
+2026-11-23 21:15:22 [info     ] schwab_client_initialized
+2026-11-23 21:15:25 [info     ] schwab_client_closed
+ Container butterfly-spx-live-spx_live_db_tool-run-db8d1b75a51d Creating 
+ Container butterfly-spx-live-spx_live_db_tool-run-db8d1b75a51d Created 
+{"nonterminal_spx_intents": 0, "ok": true, "open_spx_trades": 0, "paper_trades": 2, "schema_at_head": true, "unlinked_filled_spx_entries": 0}
+2026-11-23T21:15:28Z stopping butterfly_spx_live_app
+ Container butterfly_spx_live_app Stopping 
+ Container butterfly_spx_live_app Stopped 
+=== 2026-11-23T21:15:30Z close-out done
+Nov 23 21:10:12 helios systemd[893]: Started spx-rehearsal-evidence-20261123.service - /usr/bin/python3 /opt/butterflyguy-releases/spx-live-20261123-fe051d6/paper-entry-20261123T075056/capture-evidence.py.
+Nov 23 21:10:56 helios python3[3515224]: {"capture": "/opt/butterflyguy-releases/spx-live-20261123-fe051d6/paper-entry-20261123T075056/capture-20261123T211012Z", "rows": {"trade": 1, "decisions": 187, "monitoring_leg_quotes": 432, "post_exit_leg_quotes": 19248, "chains": 216918, "spot_prices": 618, "risk_state": 1, "broker_intent_counts": 0}, "discord_exit_accepted": true}
+Nov 23 21:10:56 helios systemd[893]: spx-rehearsal-evidence-20261123.service: Consumed 12.873s CPU time.
+Nov 23 21:15:02 helios systemd[893]: Started spx-live-closeout-20261123.service - /opt/butterflyguy-releases/spx-live-20261123-fe051d6/closeout.sh.
+Nov 23 21:15:30 helios systemd[893]: spx-live-closeout-20261123.service: Consumed 1.545s CPU time.
+Nov 23 21:20:08 helios systemd[893]: Started spx-rehearsal-postclose-audit-20261123.service - /usr/bin/python3 /opt/butterflyguy-releases/spx-live-20261123-fe051d6/paper-entry-20261123T075056/capture-evidence.py.
+Nov 23 21:20:26 helios python3[3525168]: {"capture": "/opt/butterflyguy-releases/spx-live-20261123-fe051d6/paper-entry-20261123T075056/capture-20261123T212008Z", "rows": {"trade": 1, "decisions": 187, "monitoring_leg_quotes": 432, "post_exit_leg_quotes": 19248, "chains": 216918, "spot_prices": 618, "risk_state": 1, "broker_intent_counts": 0}, "discord_exit_accepted": true}
+Nov 23 21:20:27 helios systemd[893]: spx-rehearsal-postclose-audit-20261123.service: Consumed 6.942s CPU time.

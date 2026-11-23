@@ -1,0 +1,4800 @@
+{
+  "broker_reconciliation": {
+    "active_bot_owned": 0,
+    "active_external_unattributed": 0,
+    "all_account_active_order_nodes": 0,
+    "all_account_position_count": 0,
+    "all_account_unknown_status_nodes": 0,
+    "manual_position_adopted_or_modified": false,
+    "order_history_start": "2026-09-25",
+    "order_status_counts": {
+      "CANCELED": 3,
+      "FILLED": 11,
+      "REPLACED": 9
+    },
+    "position_legs": [],
+    "spx_broker_flat": true,
+    "unknown_or_missing_status_nodes": 0
+  },
+  "databases": {
+    "butterfly_guy": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "account_key",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "account_monitor_state"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "state",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "account_monitor_state"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "account_monitor_state"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "bars_1m"
+        },
+        {
+          "column_default": null,
+          "column_name": "coin",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "bars_1m"
+        },
+        {
+          "column_default": null,
+          "column_name": "open",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "bars_1m"
+        },
+        {
+          "column_default": null,
+          "column_name": "high",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "bars_1m"
+        },
+        {
+          "column_default": null,
+          "column_name": "low",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "bars_1m"
+        },
+        {
+          "column_default": null,
+          "column_name": "close",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "bars_1m"
+        },
+        {
+          "column_default": null,
+          "column_name": "volume",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "bars_1m"
+        },
+        {
+          "column_default": "nextval('broker_order_intents_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "side",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "broker_order_id",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "limit_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "1",
+          "column_name": "quantity",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "order_spec",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "candidate_snapshot",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "last_broker_status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "raw_broker_payload",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "scan_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "direction",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "wing_width",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "cost",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "max_profit",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "reward_risk",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_be",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_be",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "distance_from_spot",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "false",
+          "column_name": "selected",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "nextval('butterfly_trades_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "direction",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "wing_width",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "entry_price",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "entry_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_reason",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "pnl",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "peak_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "1",
+          "column_name": "quantity",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'OPEN'::text",
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "metadata",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "snapshot_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "scheduled_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_gateway_received_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_source",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_flags",
+          "data_type": "ARRAY",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_delivered",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_stored",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_omitted",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "omitted",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "strikes_within_spot_range",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "open",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "high",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "low",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "close",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": "0",
+          "column_name": "volume",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "0",
+          "column_name": "trade_count",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "0",
+          "column_name": "realized_pnl",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "false",
+          "column_name": "max_loss_hit",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "false",
+          "column_name": "halted",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "nextval('decision_log_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "event_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "data",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "l2_book"
+        },
+        {
+          "column_default": null,
+          "column_name": "coin",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "l2_book"
+        },
+        {
+          "column_default": null,
+          "column_name": "side",
+          "data_type": "character",
+          "is_nullable": "NO",
+          "table_name": "l2_book"
+        },
+        {
+          "column_default": null,
+          "column_name": "level",
+          "data_type": "smallint",
+          "is_nullable": "NO",
+          "table_name": "l2_book"
+        },
+        {
+          "column_default": null,
+          "column_name": "price",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "l2_book"
+        },
+        {
+          "column_default": null,
+          "column_name": "size",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "l2_book"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "fly_mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "peak_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "drawdown_pct",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "snapshot_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "last",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": "0",
+          "column_name": "volume",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": "0",
+          "column_name": "open_interest",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "iv",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "delta",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "gamma",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "theta",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "vega",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid_size",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask_size",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "rho",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "intrinsic_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "time_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "in_the_money",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "days_to_expiration",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "multiplier",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "theoretical_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "quote_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "quote_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "asset",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "timeframe",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "market",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "open",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "high",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "low",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "close",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "volume",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "source_file",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "inserted_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "polymarket_ohlcv"
+        },
+        {
+          "column_default": null,
+          "column_name": "id",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "strategy",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "asset",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "timeframe",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "direction",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "amount",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "entry_price",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "fill_price",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "confidence",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "outcome",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "pnl",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "won",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "paper",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "market_slug",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "gate_name",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "gate_boosted",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "slippage_pct",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "spread",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "fill_pct",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "best_bid",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "best_ask",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "price_movement_pct",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "session_trade_n",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "hour_utc",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "day_of_week",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "consecutive_wins",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "consecutive_losses",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "bankroll_before",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "settlement_status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "raw_json",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "source_file",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "inserted_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trade_archive"
+        },
+        {
+          "column_default": null,
+          "column_name": "id",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "strategy",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "asset",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "timeframe",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "direction",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "amount",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "entry_price",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "confidence",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "outcome",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "pnl",
+          "data_type": "double precision",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "won",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "paper",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "polymarket_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "fly_mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "version",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": null,
+          "column_name": "checksum",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "applied_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "price",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": "'schwab'::text",
+          "column_name": "source",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "name",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "strategies"
+        },
+        {
+          "column_default": "true",
+          "column_name": "is_active",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "table_name": "strategies"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_tent",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_tent",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "coin",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "price",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "size",
+          "data_type": "double precision",
+          "is_nullable": "NO",
+          "table_name": "trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "side",
+          "data_type": "character",
+          "is_nullable": "NO",
+          "table_name": "trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "trades"
+        }
+      ],
+      "daily_risk": [
+        {
+          "halted": false,
+          "realized_pnl": "0.0000",
+          "trade_count": 1,
+          "trade_date": "2026-11-23",
+          "underlying": "NDX"
+        },
+        {
+          "halted": false,
+          "realized_pnl": "0.0000",
+          "trade_count": 0,
+          "trade_date": "2026-11-23",
+          "underlying": "SPX"
+        },
+        {
+          "halted": false,
+          "realized_pnl": "0.0000",
+          "trade_count": 0,
+          "trade_date": "2026-11-23",
+          "underlying": "XSP"
+        }
+      ],
+      "day_trade_totals": [
+        {
+          "count": 1,
+          "pnl_dollars": null,
+          "status": "OPEN",
+          "underlying": "NDX"
+        }
+      ],
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX account_monitor_state_pkey ON public.account_monitor_state USING btree (account_key)",
+          "indexname": "account_monitor_state_pkey",
+          "tablename": "account_monitor_state"
+        },
+        {
+          "indexdef": "CREATE INDEX bars_1m_ts_idx ON public.bars_1m USING btree (ts DESC)",
+          "indexname": "bars_1m_ts_idx",
+          "tablename": "bars_1m"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_bars_coin ON public.bars_1m USING btree (coin, ts DESC)",
+          "indexname": "idx_bars_coin",
+          "tablename": "bars_1m"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX broker_order_intents_pkey ON public.broker_order_intents USING btree (id)",
+          "indexname": "broker_order_intents_pkey",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_broker_order_intents_active ON public.broker_order_intents USING btree (underlying, trade_date, status)",
+          "indexname": "idx_broker_order_intents_active",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_broker_order_intents_active_entry ON public.broker_order_intents USING btree (underlying, trade_date) WHERE ((side = 'ENTRY'::text) AND (status <> ALL (ARRAY['FILLED'::text, 'CANCELED'::text, 'REJECTED'::text, 'EXPIRED'::text])))",
+          "indexname": "idx_broker_order_intents_active_entry",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_broker_order_intents_active_exit ON public.broker_order_intents USING btree (trade_id) WHERE ((side = 'EXIT'::text) AND (trade_id IS NOT NULL) AND (status <> ALL (ARRAY['FILLED'::text, 'CANCELED'::text, 'REJECTED'::text, 'EXPIRED'::text])))",
+          "indexname": "idx_broker_order_intents_active_exit",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_broker_order_intents_order_id ON public.broker_order_intents USING btree (broker_order_id) WHERE (broker_order_id IS NOT NULL)",
+          "indexname": "idx_broker_order_intents_order_id",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX butterfly_candidates_scan_time_idx ON public.butterfly_candidates USING btree (scan_time DESC)",
+          "indexname": "butterfly_candidates_scan_time_idx",
+          "tablename": "butterfly_candidates"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_candidates_underlying ON public.butterfly_candidates USING btree (underlying)",
+          "indexname": "idx_candidates_underlying",
+          "tablename": "butterfly_candidates"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX butterfly_trades_pkey ON public.butterfly_trades USING btree (id)",
+          "indexname": "butterfly_trades_pkey",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_date ON public.butterfly_trades USING btree (trade_date)",
+          "indexname": "idx_butterfly_trades_date",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_butterfly_trades_one_open_per_underlying_day ON public.butterfly_trades USING btree (underlying, trade_date) WHERE (status = 'OPEN'::text)",
+          "indexname": "idx_butterfly_trades_one_open_per_underlying_day",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_status ON public.butterfly_trades USING btree (status)",
+          "indexname": "idx_butterfly_trades_status",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_underlying ON public.butterfly_trades USING btree (underlying)",
+          "indexname": "idx_butterfly_trades_underlying",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX chain_snapshot_meta_pkey ON public.chain_snapshot_meta USING btree (snapshot_time, underlying, expiration)",
+          "indexname": "chain_snapshot_meta_pkey",
+          "tablename": "chain_snapshot_meta"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX daily_bars_pkey ON public.daily_bars USING btree (date, underlying)",
+          "indexname": "daily_bars_pkey",
+          "tablename": "daily_bars"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX daily_risk_state_pkey ON public.daily_risk_state USING btree (trade_date, underlying)",
+          "indexname": "daily_risk_state_pkey",
+          "tablename": "daily_risk_state"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX decision_log_pkey ON public.decision_log USING btree (id)",
+          "indexname": "decision_log_pkey",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_ts ON public.decision_log USING btree (ts DESC)",
+          "indexname": "idx_decision_ts",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_type ON public.decision_log USING btree (event_type)",
+          "indexname": "idx_decision_type",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_underlying_ts ON public.decision_log USING btree (underlying, ts DESC)",
+          "indexname": "idx_decision_underlying_ts",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_l2_coin ON public.l2_book USING btree (coin, ts DESC)",
+          "indexname": "idx_l2_coin",
+          "tablename": "l2_book"
+        },
+        {
+          "indexdef": "CREATE INDEX l2_book_ts_idx ON public.l2_book USING btree (ts DESC)",
+          "indexname": "l2_book_ts_idx",
+          "tablename": "l2_book"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_monitoring_leg_quotes_lookup ON public.monitoring_leg_quotes USING btree (underlying, expiration, strike, option_type, ts DESC)",
+          "indexname": "idx_monitoring_leg_quotes_lookup",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_monitoring_leg_quotes_trade ON public.monitoring_leg_quotes USING btree (trade_id, ts DESC)",
+          "indexname": "idx_monitoring_leg_quotes_trade",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX monitoring_leg_quotes_ts_idx ON public.monitoring_leg_quotes USING btree (ts DESC)",
+          "indexname": "monitoring_leg_quotes_ts_idx",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_chain_strike_type ON public.option_chain_snapshots USING btree (strike, option_type, snapshot_time DESC)",
+          "indexname": "idx_chain_strike_type",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_chain_underlying_exp ON public.option_chain_snapshots USING btree (underlying, expiration, snapshot_time DESC)",
+          "indexname": "idx_chain_underlying_exp",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX option_chain_snapshots_snapshot_time_idx ON public.option_chain_snapshots USING btree (snapshot_time DESC)",
+          "indexname": "option_chain_snapshots_snapshot_time_idx",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX polymarket_ohlcv_lookup_idx ON public.polymarket_ohlcv USING btree (asset, timeframe, market, ts)",
+          "indexname": "polymarket_ohlcv_lookup_idx",
+          "tablename": "polymarket_ohlcv"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX polymarket_ohlcv_pkey ON public.polymarket_ohlcv USING btree (asset, timeframe, market, ts)",
+          "indexname": "polymarket_ohlcv_pkey",
+          "tablename": "polymarket_ohlcv"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX polymarket_trade_archive_pkey ON public.polymarket_trade_archive USING btree (id, ts)",
+          "indexname": "polymarket_trade_archive_pkey",
+          "tablename": "polymarket_trade_archive"
+        },
+        {
+          "indexdef": "CREATE INDEX polymarket_trade_archive_strategy_ts_idx ON public.polymarket_trade_archive USING btree (strategy, ts DESC)",
+          "indexname": "polymarket_trade_archive_strategy_ts_idx",
+          "tablename": "polymarket_trade_archive"
+        },
+        {
+          "indexdef": "CREATE INDEX polymarket_trade_archive_time_idx ON public.polymarket_trade_archive USING btree (ts DESC)",
+          "indexname": "polymarket_trade_archive_time_idx",
+          "tablename": "polymarket_trade_archive"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX polymarket_trades_pkey ON public.polymarket_trades USING btree (id, ts)",
+          "indexname": "polymarket_trades_pkey",
+          "tablename": "polymarket_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX polymarket_trades_ts_idx ON public.polymarket_trades USING btree (ts DESC)",
+          "indexname": "polymarket_trades_ts_idx",
+          "tablename": "polymarket_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_post_exit_leg_quotes_trade ON public.post_exit_leg_quotes USING btree (trade_id, ts)",
+          "indexname": "idx_post_exit_leg_quotes_trade",
+          "tablename": "post_exit_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX post_exit_leg_quotes_ts_idx ON public.post_exit_leg_quotes USING btree (ts DESC)",
+          "indexname": "post_exit_leg_quotes_ts_idx",
+          "tablename": "post_exit_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX schema_migrations_pkey ON public.schema_migrations USING btree (version)",
+          "indexname": "schema_migrations_pkey",
+          "tablename": "schema_migrations"
+        },
+        {
+          "indexdef": "CREATE INDEX spot_prices_ts_idx ON public.spot_prices USING btree (ts DESC)",
+          "indexname": "spot_prices_ts_idx",
+          "tablename": "spot_prices"
+        },
+        {
+          "indexdef": "CREATE INDEX spot_prices_underlying_ts_idx ON public.spot_prices USING btree (underlying, ts DESC)",
+          "indexname": "spot_prices_underlying_ts_idx",
+          "tablename": "spot_prices"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX strategies_pkey ON public.strategies USING btree (name)",
+          "indexname": "strategies_pkey",
+          "tablename": "strategies"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_tent_underlying ON public.tent_boundaries USING btree (underlying, ts DESC)",
+          "indexname": "idx_tent_underlying",
+          "tablename": "tent_boundaries"
+        },
+        {
+          "indexdef": "CREATE INDEX tent_boundaries_ts_idx ON public.tent_boundaries USING btree (ts DESC)",
+          "indexname": "tent_boundaries_ts_idx",
+          "tablename": "tent_boundaries"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_trades_coin ON public.trades USING btree (coin, ts DESC)",
+          "indexname": "idx_trades_coin",
+          "tablename": "trades"
+        },
+        {
+          "indexdef": "CREATE INDEX trades_ts_idx ON public.trades USING btree (ts DESC)",
+          "indexname": "trades_ts_idx",
+          "tablename": "trades"
+        }
+      ],
+      "intent_status_counts": {
+        "FILLED": 4
+      },
+      "ledger": [
+        {
+          "checksum": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+          "version": "001_initial.sql"
+        },
+        {
+          "checksum": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+          "version": "002_fix_greeks_precision.sql"
+        },
+        {
+          "checksum": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+          "version": "003_add_underlying.sql"
+        },
+        {
+          "checksum": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+          "version": "004_add_chain_fields.sql"
+        },
+        {
+          "checksum": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+          "version": "005_add_daily_bars.sql"
+        },
+        {
+          "checksum": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+          "version": "006_tent_boundaries.sql"
+        },
+        {
+          "checksum": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+          "version": "007_monitoring_leg_quotes.sql"
+        },
+        {
+          "checksum": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+          "version": "008_one_open_trade_per_underlying_day.sql"
+        },
+        {
+          "checksum": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+          "version": "009_broker_order_intents.sql"
+        },
+        {
+          "checksum": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+          "version": "010_add_decision_log_underlying.sql"
+        },
+        {
+          "checksum": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+          "version": "011_snapshot_timing.sql"
+        },
+        {
+          "checksum": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+          "version": "012_post_exit_leg_quotes.sql"
+        },
+        {
+          "checksum": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+          "version": "013_account_monitor.sql"
+        }
+      ],
+      "open_spx_trades": 0,
+      "open_trades": 1,
+      "timescale_version": "2.25.2"
+    },
+    "butterfly_guy_spx_live": {
+      "columns": [
+        {
+          "column_default": "nextval('broker_order_intents_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "side",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "broker_order_id",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "limit_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "1",
+          "column_name": "quantity",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "order_spec",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "candidate_snapshot",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "last_broker_status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "raw_broker_payload",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "scan_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "direction",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "wing_width",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "cost",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "max_profit",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "reward_risk",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_be",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_be",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "distance_from_spot",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "false",
+          "column_name": "selected",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "nextval('butterfly_trades_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "direction",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "wing_width",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "entry_price",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "entry_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_reason",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "pnl",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "peak_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "1",
+          "column_name": "quantity",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'OPEN'::text",
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "metadata",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "snapshot_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "scheduled_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_gateway_received_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_source",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_flags",
+          "data_type": "ARRAY",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_delivered",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_stored",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_omitted",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "omitted",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "strikes_within_spot_range",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "open",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "high",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "low",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "close",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": "0",
+          "column_name": "volume",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "0",
+          "column_name": "trade_count",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "0",
+          "column_name": "realized_pnl",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "false",
+          "column_name": "max_loss_hit",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "false",
+          "column_name": "halted",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "nextval('decision_log_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "event_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "data",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "fly_mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "peak_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "drawdown_pct",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "snapshot_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "last",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": "0",
+          "column_name": "volume",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": "0",
+          "column_name": "open_interest",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "iv",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "delta",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "gamma",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "theta",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "vega",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid_size",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask_size",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "rho",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "intrinsic_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "time_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "in_the_money",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "days_to_expiration",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "multiplier",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "theoretical_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "quote_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "quote_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "fly_mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "version",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": null,
+          "column_name": "checksum",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "applied_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "price",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": "'schwab'::text",
+          "column_name": "source",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_tent",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_tent",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "tent_boundaries"
+        }
+      ],
+      "daily_risk": [],
+      "day_trade_totals": [],
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX broker_order_intents_pkey ON public.broker_order_intents USING btree (id)",
+          "indexname": "broker_order_intents_pkey",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_broker_order_intents_active ON public.broker_order_intents USING btree (underlying, trade_date, status)",
+          "indexname": "idx_broker_order_intents_active",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_broker_order_intents_active_entry ON public.broker_order_intents USING btree (underlying, trade_date) WHERE ((side = 'ENTRY'::text) AND (status <> ALL (ARRAY['FILLED'::text, 'CANCELED'::text, 'REJECTED'::text, 'EXPIRED'::text])))",
+          "indexname": "idx_broker_order_intents_active_entry",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_broker_order_intents_active_exit ON public.broker_order_intents USING btree (trade_id) WHERE ((side = 'EXIT'::text) AND (trade_id IS NOT NULL) AND (status <> ALL (ARRAY['FILLED'::text, 'CANCELED'::text, 'REJECTED'::text, 'EXPIRED'::text])))",
+          "indexname": "idx_broker_order_intents_active_exit",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_broker_order_intents_order_id ON public.broker_order_intents USING btree (broker_order_id) WHERE (broker_order_id IS NOT NULL)",
+          "indexname": "idx_broker_order_intents_order_id",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX butterfly_candidates_scan_time_idx ON public.butterfly_candidates USING btree (scan_time DESC)",
+          "indexname": "butterfly_candidates_scan_time_idx",
+          "tablename": "butterfly_candidates"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_candidates_underlying ON public.butterfly_candidates USING btree (underlying)",
+          "indexname": "idx_candidates_underlying",
+          "tablename": "butterfly_candidates"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX butterfly_trades_pkey ON public.butterfly_trades USING btree (id)",
+          "indexname": "butterfly_trades_pkey",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_date ON public.butterfly_trades USING btree (trade_date)",
+          "indexname": "idx_butterfly_trades_date",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_butterfly_trades_one_open_per_underlying_day ON public.butterfly_trades USING btree (underlying, trade_date) WHERE (status = 'OPEN'::text)",
+          "indexname": "idx_butterfly_trades_one_open_per_underlying_day",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_status ON public.butterfly_trades USING btree (status)",
+          "indexname": "idx_butterfly_trades_status",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_underlying ON public.butterfly_trades USING btree (underlying)",
+          "indexname": "idx_butterfly_trades_underlying",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX chain_snapshot_meta_pkey ON public.chain_snapshot_meta USING btree (snapshot_time, underlying, expiration)",
+          "indexname": "chain_snapshot_meta_pkey",
+          "tablename": "chain_snapshot_meta"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX daily_bars_pkey ON public.daily_bars USING btree (date, underlying)",
+          "indexname": "daily_bars_pkey",
+          "tablename": "daily_bars"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX daily_risk_state_pkey ON public.daily_risk_state USING btree (trade_date, underlying)",
+          "indexname": "daily_risk_state_pkey",
+          "tablename": "daily_risk_state"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX decision_log_pkey ON public.decision_log USING btree (id)",
+          "indexname": "decision_log_pkey",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_ts ON public.decision_log USING btree (ts DESC)",
+          "indexname": "idx_decision_ts",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_type ON public.decision_log USING btree (event_type)",
+          "indexname": "idx_decision_type",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_underlying_ts ON public.decision_log USING btree (underlying, ts DESC)",
+          "indexname": "idx_decision_underlying_ts",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_monitoring_leg_quotes_lookup ON public.monitoring_leg_quotes USING btree (underlying, expiration, strike, option_type, ts DESC)",
+          "indexname": "idx_monitoring_leg_quotes_lookup",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_monitoring_leg_quotes_trade ON public.monitoring_leg_quotes USING btree (trade_id, ts DESC)",
+          "indexname": "idx_monitoring_leg_quotes_trade",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX monitoring_leg_quotes_ts_idx ON public.monitoring_leg_quotes USING btree (ts DESC)",
+          "indexname": "monitoring_leg_quotes_ts_idx",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_chain_strike_type ON public.option_chain_snapshots USING btree (strike, option_type, snapshot_time DESC)",
+          "indexname": "idx_chain_strike_type",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_chain_underlying_exp ON public.option_chain_snapshots USING btree (underlying, expiration, snapshot_time DESC)",
+          "indexname": "idx_chain_underlying_exp",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX option_chain_snapshots_snapshot_time_idx ON public.option_chain_snapshots USING btree (snapshot_time DESC)",
+          "indexname": "option_chain_snapshots_snapshot_time_idx",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_post_exit_leg_quotes_trade ON public.post_exit_leg_quotes USING btree (trade_id, ts)",
+          "indexname": "idx_post_exit_leg_quotes_trade",
+          "tablename": "post_exit_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX post_exit_leg_quotes_ts_idx ON public.post_exit_leg_quotes USING btree (ts DESC)",
+          "indexname": "post_exit_leg_quotes_ts_idx",
+          "tablename": "post_exit_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX schema_migrations_pkey ON public.schema_migrations USING btree (version)",
+          "indexname": "schema_migrations_pkey",
+          "tablename": "schema_migrations"
+        },
+        {
+          "indexdef": "CREATE INDEX spot_prices_ts_idx ON public.spot_prices USING btree (ts DESC)",
+          "indexname": "spot_prices_ts_idx",
+          "tablename": "spot_prices"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_tent_underlying ON public.tent_boundaries USING btree (underlying, ts DESC)",
+          "indexname": "idx_tent_underlying",
+          "tablename": "tent_boundaries"
+        },
+        {
+          "indexdef": "CREATE INDEX tent_boundaries_ts_idx ON public.tent_boundaries USING btree (ts DESC)",
+          "indexname": "tent_boundaries_ts_idx",
+          "tablename": "tent_boundaries"
+        }
+      ],
+      "intent_status_counts": {
+        "CANCELED": 1,
+        "FILLED": 3
+      },
+      "ledger": [
+        {
+          "checksum": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+          "version": "001_initial.sql"
+        },
+        {
+          "checksum": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+          "version": "002_fix_greeks_precision.sql"
+        },
+        {
+          "checksum": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+          "version": "003_add_underlying.sql"
+        },
+        {
+          "checksum": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+          "version": "004_add_chain_fields.sql"
+        },
+        {
+          "checksum": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+          "version": "005_add_daily_bars.sql"
+        },
+        {
+          "checksum": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+          "version": "006_tent_boundaries.sql"
+        },
+        {
+          "checksum": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+          "version": "007_monitoring_leg_quotes.sql"
+        },
+        {
+          "checksum": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+          "version": "008_one_open_trade_per_underlying_day.sql"
+        },
+        {
+          "checksum": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+          "version": "009_broker_order_intents.sql"
+        },
+        {
+          "checksum": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+          "version": "010_add_decision_log_underlying.sql"
+        },
+        {
+          "checksum": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+          "version": "011_snapshot_timing.sql"
+        },
+        {
+          "checksum": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+          "version": "012_post_exit_leg_quotes.sql"
+        }
+      ],
+      "open_spx_trades": 0,
+      "open_trades": 0,
+      "timescale_version": "2.25.2"
+    },
+    "butterfly_guy_spx_live_rehearsal": {
+      "columns": [
+        {
+          "column_default": null,
+          "column_name": "account_key",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "account_monitor_state"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "state",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "account_monitor_state"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "account_monitor_state"
+        },
+        {
+          "column_default": "nextval('broker_order_intents_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "side",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "broker_order_id",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "limit_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "1",
+          "column_name": "quantity",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "order_spec",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "candidate_snapshot",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "last_broker_status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "raw_broker_payload",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "broker_order_intents"
+        },
+        {
+          "column_default": null,
+          "column_name": "scan_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "direction",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "wing_width",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "cost",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "max_profit",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "reward_risk",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_be",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_be",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "distance_from_spot",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "false",
+          "column_name": "selected",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_candidates"
+        },
+        {
+          "column_default": "nextval('butterfly_trades_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "direction",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "wing_width",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "entry_price",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "entry_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "exit_reason",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "pnl",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "peak_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "center_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "1",
+          "column_name": "quantity",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'OPEN'::text",
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "metadata",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "butterfly_trades"
+        },
+        {
+          "column_default": null,
+          "column_name": "snapshot_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "scheduled_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_fetch_started_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_fetch_completed_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_gateway_received_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_source",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "chain_flags",
+          "data_type": "ARRAY",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "vix_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_delivered",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_stored",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "contracts_omitted",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "omitted",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "strikes_within_spot_range",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "chain_snapshot_meta"
+        },
+        {
+          "column_default": null,
+          "column_name": "date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "open",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "high",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "low",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "close",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": "0",
+          "column_name": "volume",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "table_name": "daily_bars"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_date",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "0",
+          "column_name": "trade_count",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "0",
+          "column_name": "realized_pnl",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "false",
+          "column_name": "max_loss_hit",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "false",
+          "column_name": "halted",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "'SPX'::text",
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "daily_risk_state"
+        },
+        {
+          "column_default": "nextval('decision_log_id_seq'::regclass)",
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "event_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": "'{}'::jsonb",
+          "column_name": "data",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "decision_log"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "fly_mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "peak_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "drawdown_pct",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "monitoring_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "snapshot_time",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "last",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": "0",
+          "column_name": "volume",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": "0",
+          "column_name": "open_interest",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "iv",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "delta",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "gamma",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "theta",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "vega",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid_size",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask_size",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "rho",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "intrinsic_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "time_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "in_the_money",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "days_to_expiration",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "multiplier",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "theoretical_value",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "quote_event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "quote_age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "option_chain_snapshots"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "trade_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "expiration",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "strike",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "option_type",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "bid",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "ask",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "symbol",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "spot_price",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "fly_mark",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "post_exit_leg_quotes"
+        },
+        {
+          "column_default": null,
+          "column_name": "version",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": null,
+          "column_name": "checksum",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": "now()",
+          "column_name": "applied_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "schema_migrations"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "price",
+          "data_type": "numeric",
+          "is_nullable": "NO",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": "'schwab'::text",
+          "column_name": "source",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "event_ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "age_s",
+          "data_type": "real",
+          "is_nullable": "YES",
+          "table_name": "spot_prices"
+        },
+        {
+          "column_default": null,
+          "column_name": "ts",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "underlying",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "lower_tent",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "tent_boundaries"
+        },
+        {
+          "column_default": null,
+          "column_name": "upper_tent",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "table_name": "tent_boundaries"
+        }
+      ],
+      "daily_risk": [
+        {
+          "halted": false,
+          "realized_pnl": "-37.0000",
+          "trade_count": 1,
+          "trade_date": "2026-11-23",
+          "underlying": "SPX"
+        }
+      ],
+      "day_trade_totals": [
+        {
+          "count": 1,
+          "pnl_dollars": "-37.0000",
+          "status": "CLOSED",
+          "underlying": "SPX"
+        }
+      ],
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX account_monitor_state_pkey ON public.account_monitor_state USING btree (account_key)",
+          "indexname": "account_monitor_state_pkey",
+          "tablename": "account_monitor_state"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX broker_order_intents_pkey ON public.broker_order_intents USING btree (id)",
+          "indexname": "broker_order_intents_pkey",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_broker_order_intents_active ON public.broker_order_intents USING btree (underlying, trade_date, status)",
+          "indexname": "idx_broker_order_intents_active",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_broker_order_intents_active_entry ON public.broker_order_intents USING btree (underlying, trade_date) WHERE ((side = 'ENTRY'::text) AND (status <> ALL (ARRAY['FILLED'::text, 'CANCELED'::text, 'REJECTED'::text, 'EXPIRED'::text])))",
+          "indexname": "idx_broker_order_intents_active_entry",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_broker_order_intents_active_exit ON public.broker_order_intents USING btree (trade_id) WHERE ((side = 'EXIT'::text) AND (trade_id IS NOT NULL) AND (status <> ALL (ARRAY['FILLED'::text, 'CANCELED'::text, 'REJECTED'::text, 'EXPIRED'::text])))",
+          "indexname": "idx_broker_order_intents_active_exit",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_broker_order_intents_order_id ON public.broker_order_intents USING btree (broker_order_id) WHERE (broker_order_id IS NOT NULL)",
+          "indexname": "idx_broker_order_intents_order_id",
+          "tablename": "broker_order_intents"
+        },
+        {
+          "indexdef": "CREATE INDEX butterfly_candidates_scan_time_idx ON public.butterfly_candidates USING btree (scan_time DESC)",
+          "indexname": "butterfly_candidates_scan_time_idx",
+          "tablename": "butterfly_candidates"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_candidates_underlying ON public.butterfly_candidates USING btree (underlying)",
+          "indexname": "idx_candidates_underlying",
+          "tablename": "butterfly_candidates"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX butterfly_trades_pkey ON public.butterfly_trades USING btree (id)",
+          "indexname": "butterfly_trades_pkey",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_date ON public.butterfly_trades USING btree (trade_date)",
+          "indexname": "idx_butterfly_trades_date",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX idx_butterfly_trades_one_open_per_underlying_day ON public.butterfly_trades USING btree (underlying, trade_date) WHERE (status = 'OPEN'::text)",
+          "indexname": "idx_butterfly_trades_one_open_per_underlying_day",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_status ON public.butterfly_trades USING btree (status)",
+          "indexname": "idx_butterfly_trades_status",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_butterfly_trades_underlying ON public.butterfly_trades USING btree (underlying)",
+          "indexname": "idx_butterfly_trades_underlying",
+          "tablename": "butterfly_trades"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX chain_snapshot_meta_pkey ON public.chain_snapshot_meta USING btree (snapshot_time, underlying, expiration)",
+          "indexname": "chain_snapshot_meta_pkey",
+          "tablename": "chain_snapshot_meta"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX daily_bars_pkey ON public.daily_bars USING btree (date, underlying)",
+          "indexname": "daily_bars_pkey",
+          "tablename": "daily_bars"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX daily_risk_state_pkey ON public.daily_risk_state USING btree (trade_date, underlying)",
+          "indexname": "daily_risk_state_pkey",
+          "tablename": "daily_risk_state"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX decision_log_pkey ON public.decision_log USING btree (id)",
+          "indexname": "decision_log_pkey",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_ts ON public.decision_log USING btree (ts DESC)",
+          "indexname": "idx_decision_ts",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_type ON public.decision_log USING btree (event_type)",
+          "indexname": "idx_decision_type",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_decision_underlying_ts ON public.decision_log USING btree (underlying, ts DESC)",
+          "indexname": "idx_decision_underlying_ts",
+          "tablename": "decision_log"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_monitoring_leg_quotes_lookup ON public.monitoring_leg_quotes USING btree (underlying, expiration, strike, option_type, ts DESC)",
+          "indexname": "idx_monitoring_leg_quotes_lookup",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_monitoring_leg_quotes_trade ON public.monitoring_leg_quotes USING btree (trade_id, ts DESC)",
+          "indexname": "idx_monitoring_leg_quotes_trade",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX monitoring_leg_quotes_ts_idx ON public.monitoring_leg_quotes USING btree (ts DESC)",
+          "indexname": "monitoring_leg_quotes_ts_idx",
+          "tablename": "monitoring_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_chain_strike_type ON public.option_chain_snapshots USING btree (strike, option_type, snapshot_time DESC)",
+          "indexname": "idx_chain_strike_type",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_chain_underlying_exp ON public.option_chain_snapshots USING btree (underlying, expiration, snapshot_time DESC)",
+          "indexname": "idx_chain_underlying_exp",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX option_chain_snapshots_snapshot_time_idx ON public.option_chain_snapshots USING btree (snapshot_time DESC)",
+          "indexname": "option_chain_snapshots_snapshot_time_idx",
+          "tablename": "option_chain_snapshots"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_post_exit_leg_quotes_trade ON public.post_exit_leg_quotes USING btree (trade_id, ts)",
+          "indexname": "idx_post_exit_leg_quotes_trade",
+          "tablename": "post_exit_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE INDEX post_exit_leg_quotes_ts_idx ON public.post_exit_leg_quotes USING btree (ts DESC)",
+          "indexname": "post_exit_leg_quotes_ts_idx",
+          "tablename": "post_exit_leg_quotes"
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX schema_migrations_pkey ON public.schema_migrations USING btree (version)",
+          "indexname": "schema_migrations_pkey",
+          "tablename": "schema_migrations"
+        },
+        {
+          "indexdef": "CREATE INDEX spot_prices_ts_idx ON public.spot_prices USING btree (ts DESC)",
+          "indexname": "spot_prices_ts_idx",
+          "tablename": "spot_prices"
+        },
+        {
+          "indexdef": "CREATE INDEX idx_tent_underlying ON public.tent_boundaries USING btree (underlying, ts DESC)",
+          "indexname": "idx_tent_underlying",
+          "tablename": "tent_boundaries"
+        },
+        {
+          "indexdef": "CREATE INDEX tent_boundaries_ts_idx ON public.tent_boundaries USING btree (ts DESC)",
+          "indexname": "tent_boundaries_ts_idx",
+          "tablename": "tent_boundaries"
+        }
+      ],
+      "intent_status_counts": {},
+      "ledger": [
+        {
+          "checksum": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+          "version": "001_initial.sql"
+        },
+        {
+          "checksum": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+          "version": "002_fix_greeks_precision.sql"
+        },
+        {
+          "checksum": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+          "version": "003_add_underlying.sql"
+        },
+        {
+          "checksum": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+          "version": "004_add_chain_fields.sql"
+        },
+        {
+          "checksum": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+          "version": "005_add_daily_bars.sql"
+        },
+        {
+          "checksum": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+          "version": "006_tent_boundaries.sql"
+        },
+        {
+          "checksum": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+          "version": "007_monitoring_leg_quotes.sql"
+        },
+        {
+          "checksum": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+          "version": "008_one_open_trade_per_underlying_day.sql"
+        },
+        {
+          "checksum": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+          "version": "009_broker_order_intents.sql"
+        },
+        {
+          "checksum": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+          "version": "010_add_decision_log_underlying.sql"
+        },
+        {
+          "checksum": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+          "version": "011_snapshot_timing.sql"
+        },
+        {
+          "checksum": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+          "version": "012_post_exit_leg_quotes.sql"
+        },
+        {
+          "checksum": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+          "version": "013_account_monitor.sql"
+        }
+      ],
+      "open_spx_trades": 0,
+      "open_trades": 0,
+      "timescale_version": "2.25.2"
+    }
+  },
+  "image_migration_hashes": {
+    "001_initial.sql": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+    "002_fix_greeks_precision.sql": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+    "003_add_underlying.sql": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+    "004_add_chain_fields.sql": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+    "005_add_daily_bars.sql": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+    "006_tent_boundaries.sql": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+    "007_monitoring_leg_quotes.sql": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+    "008_one_open_trade_per_underlying_day.sql": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+    "009_broker_order_intents.sql": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+    "010_add_decision_log_underlying.sql": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+    "011_snapshot_timing.sql": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+    "012_post_exit_leg_quotes.sql": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+    "013_account_monitor.sql": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277"
+  },
+  "observed_utc": "2026-11-23T18:01:44.251945+00:00",
+  "read_only": true
+}

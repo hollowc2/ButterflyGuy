@@ -1,0 +1,24 @@
+{
+  "base_git_sha": "b3150ad75fdc01a7080e6bad42b9445bbc4c3a89",
+  "overlay_sha256": {
+    "src/butterfly_guy/db/queries.py": "9cd671fa3e32188ba87e0980259820e20dc756088ebd9b47d2e09e2817f78f00",
+    "src/butterfly_guy/execution/order_manager.py": "400f325d28577fa575e8effa70d777c20a47e7331ee87ade61ae21ac744b75eb",
+    "src/butterfly_guy/scripts/run_live.py": "a1475eb99cb8e26101729570b985bc3423eeb5b32fe55931eb7a50ad96450cfb",
+    "src/butterfly_guy/services/notifier.py": "05fb268f1fdd57f5a5178bc82b96dcc3d4191f359dbbb9a93f940a2ed4ce1acf",
+    "src/butterfly_guy/services/position_service.py": "10bc9044c414a15c2439f054f5771495d1df1999ebeead53deb6f87b2af5b5f6",
+    "src/butterfly_guy/services/exit_notifications.py": "d6fd647feba4776fd9165ec1393d3002602e68f9778d46a198f2def9626e6bce",
+    "tests/test_spx_live_test.py": "31844471ec5373114d86395ee3353140ba4b7f902e7bb9092f117cda9a9196f8",
+    "tests/test_exit_notifications.py": "d0421804a30b23811ba386dd248f2432dbbb7442cb2b4543a1fd7719c706c38d",
+    "tests/test_paper_fee_units.py": "11f0f1165771221c9ece53bb8999c62ec1771227ba27461607110fa38f24696b",
+    "tests/test_spx_rehearsal_regressions.py": "99664455af04d272acd548763efdb55484b9a28b20c93c961fbafe70911b0966",
+    "tests/integration/test_exit_notifications_db.py": "7a4328672fd3a1c57eb56a913eb55d9792a748f5011da9e871923e5ad2c05675",
+    "tests/fixtures/spx_rehearsal_20261123_quotes.json": "dbf44844b40abb14f313cdb658435ccf48276ae0370e4265abf92e8419964020"
+  },
+  "config_sha256": {
+    "configs/daily_report_card.yaml": "24a0a389c572523c594dccad9e7c74232f507e4cc92b21bf9e59994a180c02b4",
+    "configs/config_xsp.yaml": "4a86961fde27abb7b03b6d98aaa7eba9d464e19696f0f75c8e22365afc16f7aa",
+    "configs/config_ndx.yaml": "e3c7319043c9be4a206f26ac1894163a54e34f72ef4cdbabbb6752e0bc963da6",
+    "configs/config.yaml": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25"
+  },
+  "runtime_not_changed": true
+}
