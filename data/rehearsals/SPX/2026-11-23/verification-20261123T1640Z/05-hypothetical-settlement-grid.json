@@ -1,0 +1,49 @@
+{
+  "synthetic": true,
+  "official_close_observed": false,
+  "exit_commission_at_cash_settlement": 0,
+  "grid": [
+    {
+      "hypothetical_final_spot": 7200,
+      "expected_intrinsic": 0,
+      "actual_intrinsic": 0.0,
+      "pnl_dollars_at_recorded_entry": -375.0
+    },
+    {
+      "hypothetical_final_spot": 7320,
+      "expected_intrinsic": 0,
+      "actual_intrinsic": 0.0,
+      "pnl_dollars_at_recorded_entry": -375.0
+    },
+    {
+      "hypothetical_final_spot": 7340,
+      "expected_intrinsic": 20,
+      "actual_intrinsic": 20.0,
+      "pnl_dollars_at_recorded_entry": 1625.0
+    },
+    {
+      "hypothetical_final_spot": 7360,
+      "expected_intrinsic": 40,
+      "actual_intrinsic": 40.0,
+      "pnl_dollars_at_recorded_entry": 3625.0
+    },
+    {
+      "hypothetical_final_spot": 7380,
+      "expected_intrinsic": 20,
+      "actual_intrinsic": 20.0,
+      "pnl_dollars_at_recorded_entry": 1625.0
+    },
+    {
+      "hypothetical_final_spot": 7400,
+      "expected_intrinsic": 0,
+      "actual_intrinsic": 0.0,
+      "pnl_dollars_at_recorded_entry": -375.0
+    },
+    {
+      "hypothetical_final_spot": 7500,
+      "expected_intrinsic": 0,
+      "actual_intrinsic": 0.0,
+      "pnl_dollars_at_recorded_entry": -375.0
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="11" time="12.958" timestamp="2026-11-23T09:52:10.194342-08:00" hostname="zeus"><testcase classname="test_step1_alert_delivery" name="test_failed_exit_alert_is_not_marked_complete" time="0.012"><failure message="AssertionError: Confirmed gap: rejected Discord exit alert was marked complete without retry&#10;assert not [call(100001, {'exit_secondary_work_pending': False})]">@pytest.mark.asyncio
+    async def test_failed_exit_alert_is_not_marked_complete():
+        service=_telemetry_service(None)
+        service.config.execution.paper_trading=True
+        service.position_manager.update_position_value.return_value=_pos_state(3.43,3.83,entry=3.75)
+        service.state_machine=MagicMock()
+        service.state_machine.state.name='LOSS'
+        service.state_machine.evaluate.return_value=MagicMock(reason='end_of_day',urgency='immediate')
+        service._record_exit_metrics=AsyncMock()
+        service._exit_mark_parity_report=AsyncMock(return_value={})
+        service._start_post_exit_recording=MagicMock()
+        service.trade_queries.close_trade=AsyncMock(return_value=True)
+        service.order_manager.execute_exit.return_value={'fill_price':3.38,'fill_time':dt.datetime(2026,11,23,16,7,29,tzinfo=dt.timezone.utc),'paper_fill_model':'mark_v1','execution_diagnostics':{}}
+        service.notifier=DiscordNotifier('https://invalid.example/no-network')
+        service.notifier._post=AsyncMock(return_value=False)
+        trade=TradeRecord(trade_id=100001,trade_date=dt.date(2026,11,23),direction='CALL',entry_price=3.75,quantity=1)
+        p=_monitor_patches(trade,AsyncMock())
+        with p[0],p[1],p[2],p[3],p[4]:
+            await service.monitor_loop(trade,MagicMock())
+        service.order_manager.execute_exit.assert_awaited_once()
+        service.trade_queries.close_trade.assert_awaited_once()
+        service.notifier._post.assert_awaited_once()
+        completed=[call for call in service.trade_queries.merge_metadata.await_args_list if call.args==(100001,{'exit_secondary_work_pending':False})]
+&gt;       assert not completed,'Confirmed gap: rejected Discord exit alert was marked complete without retry'
+E       AssertionError: Confirmed gap: rejected Discord exit alert was marked complete without retry
+E       assert not [call(100001, {'exit_secondary_work_pending': False})]
+
+/tmp/spx-readiness-probes/test_step1_alert_delivery.py:31: AssertionError</failure></testcase><testcase classname="test_step2_profit_exits" name="test_replay_actual_captured_marks_through_unchanged_profit_rules" time="0.054" /><testcase classname="test_step2_profit_exits" name="test_induced_profit_drawdown_reaches_paper_fill_without_broker_write" time="0.004" /><testcase classname="test_step3_quote_outages" name="test_spx_observed_held_leg_missing_then_recovers_without_trading[7320.0]" time="0.041" /><testcase classname="test_step3_quote_outages" name="test_spx_observed_held_leg_missing_then_recovers_without_trading[7360.0]" time="0.028" /><testcase classname="test_step3_quote_outages" name="test_spx_observed_held_leg_missing_then_recovers_without_trading[7400.0]" time="0.029" /><testcase classname="test_step4_manual_takeover" name="test_isolated_takeover_survives_restart_then_adopts_simulated_manual_close[operator_order]" time="0.329" /><testcase classname="test_step4_manual_takeover" name="test_isolated_takeover_survives_restart_then_adopts_simulated_manual_close[ladder_takeover]" time="0.099" /><testcase classname="test_step5_settlement_accounting" name="test_observed_paper_accounting_agrees_with_fee_model_and_risk_ledger" time="0.025" /><testcase classname="test_step5_settlement_accounting" name="test_intrinsic_settlement_grid_for_the_actual_spx_strikes" time="0.000" /><testcase classname="test_step5_settlement_accounting" name="test_paper_per_spread_fee_is_invariant_to_simulated_quantity" time="0.003"><failure message="AssertionError: Paper per-spread commission changes with quantity, then PnL multiplies by quantity again&#10;assert 3.38 == 3.34">@pytest.mark.asyncio
+    async def test_paper_per_spread_fee_is_invariant_to_simulated_quantity():
+        manager,broker=make_order_manager(ExecutionSettings.model_validate(BASE['execution']),underlying='SPX')
+        assert manager.settings.paper_trading
+        fills=[]
+        with patch.object(manager,'_fetch_live_spread',new=AsyncMock(return_value=None)):
+            for quantity in (1,2):
+                fill=await manager.execute_exit(CANDIDATE,current_value=3.43,quantity=quantity)
+                fills.append({'quantity':quantity,'per_spread_fill':fill['fill_price'],'total_dollars':round(fill['fill_price']*100*quantity,2)})
+        broker.place_order.assert_not_awaited()
+        (OUT/'05-quantity-fee-scaling.json').write_text(json.dumps({'mode':'isolated paper executions; running bot quantity unchanged','signal_mark':3.43,'fills':fills,'real_broker_submits':0},indent=2))
+&gt;       assert fills[0]['per_spread_fill']==fills[1]['per_spread_fill'],'Paper per-spread commission changes with quantity, then PnL multiplies by quantity again'
+E       AssertionError: Paper per-spread commission changes with quantity, then PnL multiplies by quantity again
+E       assert 3.38 == 3.34
+
+/tmp/spx-readiness-probes/test_step5_settlement_accounting.py:47: AssertionError</failure></testcase></testsuite></testsuites>

@@ -90,6 +90,7 @@ from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvide
 from butterfly_guy.reports.live_performance import trade_pnl_dollars
 from butterfly_guy.risk.risk_engine import RiskEngine
 from butterfly_guy.services.account_monitor import AccountMonitor
+from butterfly_guy.services.exit_notifications import ExitNotifications, trade_notifier
 from butterfly_guy.services.notifier import (
     AlertmanagerNotifier,
     DiscordNotifier,
@@ -1223,7 +1224,7 @@ async def main() -> None:
         # Build query objects
         chain_q = ChainQueries(db)
         spot_q = SpotQueries(db)
-        trade_q = TradeQueries(db)
+        trade_q = TradeQueries(db, instance_role=instance_role)
         risk_q = RiskQueries(db)
         decision_q = DecisionQueries(db)
         intent_q = OrderIntentQueries(db)
@@ -1247,10 +1248,16 @@ async def main() -> None:
             if alertmanager_url
             else None
         )
-        notifier = (
-            DiscordNotifier(webhook)
-            if webhook and config.strategy.underlying == "SPX"
-            else None
+        live_webhook = os.environ.get("DISCORD_WEBHOOK_URL_SPX_LIVE") or dotenv_values(
+            ".env"
+        ).get("DISCORD_WEBHOOK_URL_SPX_LIVE", "")
+        notifier = trade_notifier(
+            config.strategy.underlying, instance_role, webhook, live_webhook,
+            paper_trading=config.execution.paper_trading,
+        )
+        exit_notifications = ExitNotifications(
+            db, config.strategy.underlying, instance_role, notifier,
+            enabled=config.strategy.underlying == "SPX",
         )
         # Account warnings use Discord for every asset, independently of trade alerts.
         account_monitor = AccountMonitor(
@@ -1442,6 +1449,9 @@ async def main() -> None:
         supervised: list[asyncio.Task[Any]] = []
         try:
             async with asyncio.TaskGroup() as tg:
+                supervised.append(
+                    tg.create_task(exit_notifications.run(), name="exit_notifications")
+                )
                 if account_monitor is not None:
                     supervised.append(
                         tg.create_task(account_monitor.run(), name="account_monitor")

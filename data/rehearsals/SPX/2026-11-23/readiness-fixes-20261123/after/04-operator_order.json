@@ -1,0 +1,39 @@
+{
+  "mode": "isolated broker/account fixtures; no network and no real orders",
+  "trigger": "operator_order",
+  "persisted_operator_exit": {
+    "reason": "Schwab order or leg change",
+    "handed_at": "2026-11-23T13:04:07.266970-05:00"
+  },
+  "phases": [
+    {
+      "phase": "takeover",
+      "events": [
+        "exit_handed_to_operator",
+        "manual_exit_signal_suppressed",
+        "profit_state_transition"
+      ],
+      "simulated_exit_attempts": 0,
+      "simulated_close_trade_calls": 0
+    },
+    {
+      "phase": "restart_after_cancel",
+      "events": [
+        "manual_exit_signal_suppressed",
+        "profit_state_transition"
+      ],
+      "simulated_exit_attempts": 0,
+      "simulated_close_trade_calls": 0
+    },
+    {
+      "phase": "manual_fill_adopted",
+      "events": [
+        "manual_exit_signal_suppressed",
+        "profit_state_transition",
+        "trade_exited"
+      ],
+      "simulated_exit_attempts": 0,
+      "simulated_close_trade_calls": 1
+    }
+  ]
+}

@@ -478,7 +478,7 @@ async def test_operator_working_order_hands_off_exit_then_fill_is_adopted():
 
 
 @pytest.mark.asyncio
-async def test_manual_close_discord_messages_say_it_was_manual():
+async def test_manual_close_persists_context_for_the_notification_worker():
     service = live_service(
         [HELD, FLAT], [[manual_close_order("WORKING")], [manual_close_order()]]
     )
@@ -487,11 +487,16 @@ async def test_manual_close_discord_messages_say_it_was_manual():
 
     texts = [c.args[0] for c in service.notifier.notify_text.await_args_list]
     assert any("manual action in Schwab" in text for text in texts)
-    exit_call = service.notifier.notify_exit.await_args.kwargs
-    assert exit_call["exit_reason"] == "manual_close"
-    assert exit_call["exit_price"] == pytest.approx(0.50)
-    assert "Closed by you in Schwab (filled 11:00:00 ET)" in exit_call["manual_detail"]
-    assert "`trailing_drawdown`" in exit_call["manual_detail"]
+    # Delivery belongs to the independent CLOSED-trade worker. The row retains
+    # everything it needs to describe the operator's fill after a restart.
+    service.notifier.notify_exit.assert_not_awaited()
+    args = service.trade_queries.close_trade.await_args.args
+    assert args[3] == "manual_close"
+    assert args[1] == pytest.approx(0.50)
+    assert args[2].astimezone(dt.timezone.utc).hour == 15
+    metadata = service.trade_queries.close_trade.await_args.kwargs["metadata"]
+    assert metadata["suppressed_exit_signal"]["reason"] == "trailing_drawdown"
+
 
 
 @pytest.mark.asyncio

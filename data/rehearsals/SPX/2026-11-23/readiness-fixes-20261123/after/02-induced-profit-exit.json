@@ -1,0 +1,50 @@
+{
+  "synthetic": true,
+  "purpose": "Force trailing-profit exit branch with fabricated marks; not observed price movement",
+  "trace": [
+    {
+      "synthetic_mark": 3.75,
+      "synthetic_peak": 3.75,
+      "signal": null
+    },
+    {
+      "synthetic_mark": 7.5,
+      "synthetic_peak": 7.5,
+      "signal": null
+    },
+    {
+      "synthetic_mark": 12.0,
+      "synthetic_peak": 12.0,
+      "signal": null
+    },
+    {
+      "synthetic_mark": 4.5,
+      "synthetic_peak": 12.0,
+      "signal": "drawdown_morning"
+    }
+  ],
+  "fill": {
+    "order_id": "PAPER",
+    "fill_price": 4.45,
+    "fill_time": "2026-11-23 18:04:07.176299+00:00",
+    "paper_fill_model": "mark_v1",
+    "execution_diagnostics": {
+      "observed_bid": null,
+      "observed_mark": 4.5,
+      "observed_ask": null,
+      "marketable_exit_estimate": 4.4,
+      "estimated_execution_drag": 0.05,
+      "configured_slippage": 0.05,
+      "configured_fill_buffer": 0.0,
+      "live_exit_rule": "bid_ladder",
+      "live_rule_first_limit": null,
+      "live_rule_exit_estimate": null
+    },
+    "spread_bid": null,
+    "spread_mark": 4.5,
+    "spread_ask": null,
+    "forced": false,
+    "ladder_steps": []
+  },
+  "real_broker_submits": 0
+}

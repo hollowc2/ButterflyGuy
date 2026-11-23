@@ -224,7 +224,9 @@ class DiscordNotifier:
         entry_time: "dt.datetime | None" = None,
         quantity: int = 1,
         manual_detail: str | None = None,
-    ) -> None:
+        exit_time: "dt.datetime | None" = None,
+        instance_role: str | None = None,
+    ) -> bool:
         """Post an exit; *manual_detail* marks a close the operator made in Schwab."""
         emoji = "✅" if pnl > 0 else "❌"
         pnl_dollars = pnl * 100.0 * quantity
@@ -233,19 +235,20 @@ class DiscordNotifier:
         )
         pnl_pct = (pnl / entry_price * 100) if entry_price > 0 else 0
         pnl_pct_str = f"+{pnl_pct:.0f}%" if pnl_pct >= 0 else f"{pnl_pct:.0f}%"
-        now_et = dt.datetime.now()
+        now_et = (exit_time or now_eastern()).astimezone(EASTERN)
         duration_str = ""
         if entry_time is not None:
             try:
-                held = now_et - entry_time.replace(tzinfo=None)
+                held = now_et - entry_time.astimezone(EASTERN)
                 mins = int(held.total_seconds() // 60)
                 duration_str = f" | Held: {mins}m"
             except Exception:
                 pass
         title = "BUTTERFLY CLOSED MANUALLY" if manual_detail else "BUTTERFLY EXITED"
+        role_prefix = f"[{instance_role.upper()}] " if instance_role else ""
         manual_line = f"> 🖐️ {manual_detail}\n" if manual_detail else ""
         msg = (
-            f"{emoji} **{underlying} {title}** #{trade_id}\n"
+            f"{emoji} **{role_prefix}{underlying} {title}** #{trade_id}\n"
             f"> **{direction}** | Reason: `{exit_reason}`\n"
             f"{manual_line}"
             f"> Entry: ${entry_price:.2f} → Exit: ${exit_price:.2f}\n"
@@ -253,7 +256,7 @@ class DiscordNotifier:
             f"> Time: {now_et.strftime('%H:%M:%S ET')}{duration_str}\n"
             f"> EOD chart follows after market close."
         )
-        await self._post(msg)
+        return await self._post(msg, redact_errors=True)
 
     async def notify_eod_chart(
         self,

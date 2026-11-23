@@ -1,0 +1,66 @@
+import asyncio,datetime as dt,hashlib,json,os,subprocess,tempfile,uuid
+from pathlib import Path
+from unittest.mock import patch
+import asyncpg
+from butterfly_guy.db.connection import DatabasePool
+from butterfly_guy.db.migrations import run_migrations as migrations
+from butterfly_guy.scripts.spx_live_db import migration_head
+
+DSN='postgresql://postgres:unused@127.0.0.1:55440/'
+PACKET=Path('data/rehearsals/SPX/2026-11-23/readiness-fixes-20261123')
+async def structure(conn):
+ return {'columns':[dict(r) for r in await conn.fetch("SELECT table_name,column_name,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position")], 'indexes':[dict(r) for r in await conn.fetch("SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public' ORDER BY tablename,indexname")]}
+async def main():
+ name='readiness_schema_'+uuid.uuid4().hex[:10]
+ restored=name+'_restored'
+ admin=await asyncpg.connect(DSN+'readiness_scratch')
+ db=DatabasePool(DSN+name,min_size=1,max_size=2)
+ try:
+  await admin.execute(f'CREATE DATABASE "{name}"')
+  await db.initialize()
+  with tempfile.TemporaryDirectory(prefix='spx-migrations-') as tmp:
+   for p in migrations.MIGRATIONS_DIR.glob('*.sql'):
+    if p.name<'013':Path(tmp,p.name).write_bytes(p.read_bytes())
+   with patch.object(migrations,'MIGRATIONS_DIR',Path(tmp)):
+    await migrations.run_migrations(db)
+  async with db.pool.acquire() as c: before=await structure(c)
+  await migrations.run_migrations(db)
+  async with db.pool.acquire() as c:
+   after=await structure(c)
+   ledger={r['version']:r['checksum'] for r in await c.fetch('SELECT version,checksum FROM schema_migrations')}
+   assert ledger==migration_head()
+   await c.execute("INSERT INTO account_monitor_state (account_key,state) VALUES ('brokerage_account','{\"probe\":true}')")
+  # Capture a complete Timescale-aware logical dump, restore only into another fresh scratch DB.
+  dump=Path('/tmp',name+'.dump')
+  with dump.open('wb') as f:
+   subprocess.run(['docker','exec','butterfly-readiness-ts225-disposable-20261123','pg_dump','-U','postgres','-d',name,'-Fc'],stdout=f,check=True)
+  await admin.execute(f'CREATE DATABASE "{restored}"')
+  restore_conn=await asyncpg.connect(DSN+restored)
+  try:
+   await restore_conn.execute("CREATE EXTENSION IF NOT EXISTS timescaledb VERSION '2.25.2'")
+   await restore_conn.execute('SELECT timescaledb_pre_restore()')
+   with dump.open('rb') as f:
+    subprocess.run(['docker','exec','-i','butterfly-readiness-ts225-disposable-20261123','pg_restore','-U','postgres','-d',restored,'--no-owner','--exit-on-error'],stdin=f,check=True)
+   await restore_conn.execute('SELECT timescaledb_post_restore()')
+   restored_state=await restore_conn.fetchval("SELECT state FROM account_monitor_state WHERE account_key='brokerage_account'")
+   assert json.loads(restored_state)=={'probe':True}
+   restored_ledger={r['version']:r['checksum'] for r in await restore_conn.fetch('SELECT version,checksum FROM schema_migrations')}
+   assert restored_ledger==ledger
+  finally: await restore_conn.close()
+  runtime=json.loads((PACKET/'runtime-audit-extended.json').read_text())
+  diffs={}
+  for target,actual in runtime['databases'].items():
+   expected=before if target=='butterfly_guy_spx_live' else after
+   diffs[target]={}
+   for section in ('columns','indexes'):
+    exp={json.dumps(r,sort_keys=True) for r in expected[section]}
+    got={json.dumps(r,sort_keys=True) for r in actual[section]}
+    diffs[target][section]={'missing':[json.loads(r) for r in sorted(exp-got)],'extra':[json.loads(r) for r in sorted(got-exp)]}
+  result={'created_utc':dt.datetime.now(dt.timezone.utc).isoformat(),'postgres_version':await admin.fetchval('SHOW server_version'),'timescale_version':'2.25.2','ledger_matches_release':ledger==migration_head(),'migration_013_added_columns':[r for r in after['columns'] if r not in before['columns']],'runtime_schema_differences':diffs,'scratch_logical_dump_restore_passed':True,'dump_sha256':hashlib.sha256(dump.read_bytes()).hexdigest(),'production_modified':False}
+  (PACKET/'schema-validation.json').write_text(json.dumps(result,indent=2)+'\n')
+  print(json.dumps(result,indent=2))
+ finally:
+  await db.close()
+  for n in (name,restored):await admin.execute(f'DROP DATABASE IF EXISTS "{n}" WITH (FORCE)')
+  await admin.close()
+asyncio.run(main())

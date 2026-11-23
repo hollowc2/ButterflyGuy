@@ -1,0 +1,26 @@
+[
+  {
+    "id": "EXIT_ALERT_NOT_RETRIED",
+    "status": "confirmed_unfixed",
+    "severity": "missed_notification",
+    "reproduction": "01-alert-delivery.xml",
+    "observation": "Discord rejected the post; the monitor closed the trade once, marked exit_secondary_work_pending false, and made one notification attempt.",
+    "source": [
+      "src/butterfly_guy/services/notifier.py:255",
+      "src/butterfly_guy/services/position_service.py:951"
+    ],
+    "scope": "Standard exit alert; actual paper exit on this session succeeded."
+  },
+  {
+    "id": "PAPER_MULTI_LOT_FEE_SCALING",
+    "status": "confirmed_unfixed",
+    "severity": "simulated_accounting_error",
+    "reproduction": "05-settlement-accounting.xml",
+    "observation": "Same signal mark 3.43: quantity one per-spread exit fill 3.38; quantity two per-spread exit fill 3.34. Fee scales with quantity inside per-spread price, then PnL is multiplied by quantity.",
+    "source": [
+      "src/butterfly_guy/execution/order_manager.py:475",
+      "src/butterfly_guy/execution/order_manager.py:488"
+    ],
+    "scope": "Isolated quantity-two simulation. Running session remained quantity one and its accounting reconciled."
+  }
+]

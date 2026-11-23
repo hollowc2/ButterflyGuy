@@ -1,0 +1,17 @@
+{
+  "mode": "isolated paper executions; running bot quantity unchanged",
+  "signal_mark": 3.43,
+  "fills": [
+    {
+      "quantity": 1,
+      "per_spread_fill": 3.38,
+      "total_dollars": 338.0
+    },
+    {
+      "quantity": 2,
+      "per_spread_fill": 3.38,
+      "total_dollars": 676.0
+    }
+  ],
+  "real_broker_submits": 0
+}

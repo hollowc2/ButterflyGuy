@@ -1,0 +1,1005 @@
+diff --git a/src/butterfly_guy/db/queries.py b/src/butterfly_guy/db/queries.py
+index f69890c..335c353 100644
+--- a/src/butterfly_guy/db/queries.py
++++ b/src/butterfly_guy/db/queries.py
+@@ -294,8 +294,9 @@ def entry_lock_key(underlying: str, trade_date: dt.date) -> str:
+ class TradeQueries:
+     """Queries for trades table."""
+ 
+-    def __init__(self, db: DatabasePool) -> None:
++    def __init__(self, db: DatabasePool, instance_role: str | None = None) -> None:
+         self.db = db
++        self.instance_role = instance_role
+ 
+     async def insert_trade(self, trade: dict[str, Any]) -> int:
+         return await self.db.pool.fetchval(
+@@ -331,7 +332,12 @@ class TradeQueries:
+             WHERE id = $1 AND status = 'OPEN'
+             """,
+             trade_id, exit_price, exit_time, exit_reason, pnl, peak_value,
+-            json.dumps(metadata or {}),
++            json.dumps({
++                **(metadata or {}),
++                # Enqueue with the guarded close, before any best-effort work.
++                "exit_notification_status": "pending",
++                "exit_notification_role": self.instance_role,
++            }),
+         )
+         return result == "UPDATE 1"
+ 
+diff --git a/src/butterfly_guy/execution/order_manager.py b/src/butterfly_guy/execution/order_manager.py
+index 8ebdc38..49571bd 100644
+--- a/src/butterfly_guy/execution/order_manager.py
++++ b/src/butterfly_guy/execution/order_manager.py
+@@ -472,20 +472,19 @@ class OrderManager:
+                 raise
+             log.error("execution_observation_write_failed", phase=phase)
+ 
+-    def _commission(self, quantity: int) -> float:
+-        """Paper trading commission: 4 legs × quantity × rate."""
++    def _commission(self) -> float:
++        """One side's fee in option points per spread (not aggregate dollars)."""
+         legs = 4
+-        return legs * quantity * self.settings.paper_commission_per_contract / 100
++        return legs * self.settings.paper_commission_per_contract / 100
+ 
+     def _mark_paper_fill(
+         self,
+         side: str,
+         mark: float,
+-        quantity: int,
+         spread: LiveSpread | None,
+     ) -> dict[str, object]:
+         """Return canonical strategy P&L at mark, with execution drag as metadata."""
+-        commission = self._commission(quantity)
++        commission = self._commission()
+         if side == "entry":
+             fill_price = round(mark + commission, 2)
+             marketable = round(
+@@ -730,7 +729,7 @@ class OrderManager:
+             if spread is None:
+                 log.warning("paper_entry_no_spread", center=candidate.center_strike)
+                 return None
+-            result = self._mark_paper_fill("entry", spread.mark, quantity, spread)
++            result = self._mark_paper_fill("entry", spread.mark, spread)
+             if not entry_fill_within_limit(
+                 float(result["fill_price"]),
+                 limit_price,
+@@ -874,7 +873,7 @@ class OrderManager:
+ 
+         if self.settings.paper_trading:
+             spread = await self._fetch_live_spread(candidate)
+-            result = self._mark_paper_fill("exit", current_value, quantity, spread)
++            result = self._mark_paper_fill("exit", current_value, spread)
+             log.info(
+                 "paper_exit_filled_at_mark",
+                 fill_price=result["fill_price"],
+diff --git a/src/butterfly_guy/scripts/run_live.py b/src/butterfly_guy/scripts/run_live.py
+index 665d321..0e03dc1 100644
+--- a/src/butterfly_guy/scripts/run_live.py
++++ b/src/butterfly_guy/scripts/run_live.py
+@@ -90,6 +90,7 @@ from butterfly_guy.gateway_client.shadow import ShadowComparingMarketDataProvide
+ from butterfly_guy.reports.live_performance import trade_pnl_dollars
+ from butterfly_guy.risk.risk_engine import RiskEngine
+ from butterfly_guy.services.account_monitor import AccountMonitor
++from butterfly_guy.services.exit_notifications import ExitNotifications, trade_notifier
+ from butterfly_guy.services.notifier import (
+     AlertmanagerNotifier,
+     DiscordNotifier,
+@@ -1223,7 +1224,7 @@ async def main() -> None:
+         # Build query objects
+         chain_q = ChainQueries(db)
+         spot_q = SpotQueries(db)
+-        trade_q = TradeQueries(db)
++        trade_q = TradeQueries(db, instance_role=instance_role)
+         risk_q = RiskQueries(db)
+         decision_q = DecisionQueries(db)
+         intent_q = OrderIntentQueries(db)
+@@ -1247,10 +1248,16 @@ async def main() -> None:
+             if alertmanager_url
+             else None
+         )
+-        notifier = (
+-            DiscordNotifier(webhook)
+-            if webhook and config.strategy.underlying == "SPX"
+-            else None
++        live_webhook = os.environ.get("DISCORD_WEBHOOK_URL_SPX_LIVE") or dotenv_values(
++            ".env"
++        ).get("DISCORD_WEBHOOK_URL_SPX_LIVE", "")
++        notifier = trade_notifier(
++            config.strategy.underlying, instance_role, webhook, live_webhook,
++            paper_trading=config.execution.paper_trading,
++        )
++        exit_notifications = ExitNotifications(
++            db, config.strategy.underlying, instance_role, notifier,
++            enabled=config.strategy.underlying == "SPX",
+         )
+         # Account warnings use Discord for every asset, independently of trade alerts.
+         account_monitor = AccountMonitor(
+@@ -1442,6 +1449,9 @@ async def main() -> None:
+         supervised: list[asyncio.Task[Any]] = []
+         try:
+             async with asyncio.TaskGroup() as tg:
++                supervised.append(
++                    tg.create_task(exit_notifications.run(), name="exit_notifications")
++                )
+                 if account_monitor is not None:
+                     supervised.append(
+                         tg.create_task(account_monitor.run(), name="account_monitor")
+diff --git a/src/butterfly_guy/services/notifier.py b/src/butterfly_guy/services/notifier.py
+index 9b71e26..6d25c5b 100644
+--- a/src/butterfly_guy/services/notifier.py
++++ b/src/butterfly_guy/services/notifier.py
+@@ -224,7 +224,9 @@ class DiscordNotifier:
+         entry_time: "dt.datetime | None" = None,
+         quantity: int = 1,
+         manual_detail: str | None = None,
+-    ) -> None:
++        exit_time: "dt.datetime | None" = None,
++        instance_role: str | None = None,
++    ) -> bool:
+         """Post an exit; *manual_detail* marks a close the operator made in Schwab."""
+         emoji = "✅" if pnl > 0 else "❌"
+         pnl_dollars = pnl * 100.0 * quantity
+@@ -233,19 +235,20 @@ class DiscordNotifier:
+         )
+         pnl_pct = (pnl / entry_price * 100) if entry_price > 0 else 0
+         pnl_pct_str = f"+{pnl_pct:.0f}%" if pnl_pct >= 0 else f"{pnl_pct:.0f}%"
+-        now_et = dt.datetime.now()
++        now_et = (exit_time or now_eastern()).astimezone(EASTERN)
+         duration_str = ""
+         if entry_time is not None:
+             try:
+-                held = now_et - entry_time.replace(tzinfo=None)
++                held = now_et - entry_time.astimezone(EASTERN)
+                 mins = int(held.total_seconds() // 60)
+                 duration_str = f" | Held: {mins}m"
+             except Exception:
+                 pass
+         title = "BUTTERFLY CLOSED MANUALLY" if manual_detail else "BUTTERFLY EXITED"
++        role_prefix = f"[{instance_role.upper()}] " if instance_role else ""
+         manual_line = f"> 🖐️ {manual_detail}\n" if manual_detail else ""
+         msg = (
+-            f"{emoji} **{underlying} {title}** #{trade_id}\n"
++            f"{emoji} **{role_prefix}{underlying} {title}** #{trade_id}\n"
+             f"> **{direction}** | Reason: `{exit_reason}`\n"
+             f"{manual_line}"
+             f"> Entry: ${entry_price:.2f} → Exit: ${exit_price:.2f}\n"
+@@ -253,7 +256,7 @@ class DiscordNotifier:
+             f"> Time: {now_et.strftime('%H:%M:%S ET')}{duration_str}\n"
+             f"> EOD chart follows after market close."
+         )
+-        await self._post(msg)
++        return await self._post(msg, redact_errors=True)
+ 
+     async def notify_eod_chart(
+         self,
+diff --git a/src/butterfly_guy/services/position_service.py b/src/butterfly_guy/services/position_service.py
+index 2bcd7e4..1c46961 100644
+--- a/src/butterfly_guy/services/position_service.py
++++ b/src/butterfly_guy/services/position_service.py
+@@ -929,24 +929,8 @@ class PositionService:
+                             "exit_mark_parity": exit_mark_parity,
+                         }, underlying=self.config.strategy.underlying)
+ 
+-                        if self.notifier:
+-                            try:
+-                                await self.notifier.notify_exit(
+-                                    trade_id=trade.trade_id,
+-                                    underlying=self.config.strategy.underlying,
+-                                    direction=trade.direction,
+-                                    exit_reason=signal.reason,
+-                                    entry_price=trade.entry_price,
+-                                    exit_price=exit_price,
+-                                    pnl=pnl,
+-                                    peak_value=pos_state.peak_value,
+-                                    entry_time=trade.entry_time,
+-                                    quantity=trade.quantity,
+-                                )
+-                            except Exception as e:
+-                                log.warning("notify_exit_failed", error=str(e))
+-                                raise
+-
++                        # Discord delivery is queued atomically by close_trade and
++                        # consumed independently, including after process restart.
+                         await self.trade_queries.merge_metadata(
+                             trade.trade_id, {"exit_secondary_work_pending": False}
+                         )
+@@ -1181,23 +1165,6 @@ class PositionService:
+             return
+         await self._record_exit_metrics(pnl, trade)
+ 
+-        if self.notifier:
+-            try:
+-                await self.notifier.notify_exit(
+-                    trade_id=trade.trade_id,
+-                    underlying=self.config.strategy.underlying,
+-                    direction=trade.direction,
+-                    exit_reason="cash_settled",
+-                    entry_price=trade.entry_price,
+-                    exit_price=settlement_value,
+-                    pnl=pnl,
+-                    peak_value=peak,
+-                    entry_time=trade.entry_time,
+-                    quantity=trade.quantity,
+-                )
+-            except Exception as e:
+-                log.warning("notify_exit_failed", error=str(e))
+-
+         log.info(
+             "cash_settle_complete",
+             trade_id=trade.trade_id,
+@@ -1520,30 +1487,6 @@ class PositionService:
+                 "suppressed_exit_signal": suppressed_signal,
+             }, underlying=self.config.strategy.underlying),
+         )
+-        if self.notifier:
+-            fill_time = fill.execution_time.astimezone(EASTERN).strftime("%H:%M:%S ET")
+-            detail = f"Closed by you in Schwab (filled {fill_time}); no bot exit order."
+-            if suppressed_signal is not None:
+-                detail += (
+-                    f" Bot signal was `{suppressed_signal['reason']}` at mark "
+-                    f"${float(suppressed_signal['mark_at_signal']):.2f}."
+-                )
+-            await self._best_effort(
+-                "manual_close_notify",
+-                self.notifier.notify_exit(
+-                    trade_id=trade.trade_id,
+-                    underlying=self.config.strategy.underlying,
+-                    direction=trade.direction,
+-                    exit_reason="manual_close",
+-                    entry_price=trade.entry_price,
+-                    exit_price=fill.net_fill_price,
+-                    pnl=pnl,
+-                    peak_value=peak,
+-                    entry_time=trade.entry_time,
+-                    quantity=trade.quantity,
+-                    manual_detail=detail,
+-                ),
+-            )
+         log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason="manual_close")
+ 
+     async def _persist_operator_exit(self, trade: TradeRecord, reason: str) -> bool:
+diff --git a/tests/test_spx_live_test.py b/tests/test_spx_live_test.py
+index 16f6146..9bedeee 100644
+--- a/tests/test_spx_live_test.py
++++ b/tests/test_spx_live_test.py
+@@ -478,7 +478,7 @@ async def test_operator_working_order_hands_off_exit_then_fill_is_adopted():
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_manual_close_discord_messages_say_it_was_manual():
++async def test_manual_close_persists_context_for_the_notification_worker():
+     service = live_service(
+         [HELD, FLAT], [[manual_close_order("WORKING")], [manual_close_order()]]
+     )
+@@ -487,11 +487,16 @@ async def test_manual_close_discord_messages_say_it_was_manual():
+ 
+     texts = [c.args[0] for c in service.notifier.notify_text.await_args_list]
+     assert any("manual action in Schwab" in text for text in texts)
+-    exit_call = service.notifier.notify_exit.await_args.kwargs
+-    assert exit_call["exit_reason"] == "manual_close"
+-    assert exit_call["exit_price"] == pytest.approx(0.50)
+-    assert "Closed by you in Schwab (filled 11:00:00 ET)" in exit_call["manual_detail"]
+-    assert "`trailing_drawdown`" in exit_call["manual_detail"]
++    # Delivery belongs to the independent CLOSED-trade worker. The row retains
++    # everything it needs to describe the operator's fill after a restart.
++    service.notifier.notify_exit.assert_not_awaited()
++    args = service.trade_queries.close_trade.await_args.args
++    assert args[3] == "manual_close"
++    assert args[1] == pytest.approx(0.50)
++    assert args[2].astimezone(dt.timezone.utc).hour == 15
++    metadata = service.trade_queries.close_trade.await_args.kwargs["metadata"]
++    assert metadata["suppressed_exit_signal"]["reason"] == "trailing_drawdown"
++
+ 
+ 
+ @pytest.mark.asyncio
+diff --git a/src/butterfly_guy/services/exit_notifications.py b/src/butterfly_guy/services/exit_notifications.py
+new file mode 100644
+index 0000000..dbbfe1c
+--- /dev/null
++++ b/src/butterfly_guy/services/exit_notifications.py
+@@ -0,0 +1,137 @@
++"""Retry closed-trade Discord receipts independently of position management.
++
++Delivery is at least once: acceptance followed by a lost acknowledgment or failed
++receipt commit can produce a duplicate. The worker never calls a broker or books P&L.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import datetime as dt
++import json
++
++from butterfly_guy.core.logging import get_logger
++from butterfly_guy.core.time_utils import EASTERN
++from butterfly_guy.db.connection import DatabasePool
++from butterfly_guy.services.notifier import DiscordNotifier
++
++log = get_logger(__name__)
++RETRY_SECONDS = 60
++DELIVERY_TIMEOUT_SECONDS = 15
++
++
++def trade_notifier(
++    underlying: str, role: str | None, paper_webhook: str, live_webhook: str,
++    *, paper_trading: bool = True,
++) -> DiscordNotifier | None:
++    """Live/rehearsal must never fall back to the paper channel."""
++    use_live_channel = not paper_trading or role in {"live", "live_rehearsal"}
++    webhook = live_webhook if use_live_channel else paper_webhook
++    return DiscordNotifier(webhook) if underlying == "SPX" and webhook else None
++
++
++class ExitNotifications:
++    def __init__(
++        self, db: DatabasePool, underlying: str, role: str | None,
++        notifier: DiscordNotifier | None, *, enabled: bool,
++    ) -> None:
++        self.db = db
++        self.underlying = underlying
++        self.role = role
++        self.notifier = notifier
++        self.enabled = enabled
++
++    async def run(self) -> None:
++        """Poll even outside market hours; a restart resumes CLOSED pending rows."""
++        while True:
++            try:
++                await self.tick()
++            except Exception as error:
++                # Transport and database exception strings may contain credentials.
++                log.error("exit_notification_tick_failed", error_type=type(error).__name__)
++            await asyncio.sleep(RETRY_SECONDS)
++
++    async def tick(self, now: dt.datetime | None = None) -> None:
++        now = now or dt.datetime.now(dt.timezone.utc)
++        async with self.db.pool.acquire() as conn, conn.transaction():
++            row = await conn.fetchrow(
++                """
++                SELECT * FROM butterfly_trades
++                WHERE status = 'CLOSED' AND underlying = $1
++                  AND COALESCE(metadata->>'exit_notification_role', $2, '')
++                      = COALESCE($2, '')
++                  AND (
++                    metadata->>'exit_notification_status' = 'pending'
++                    OR (NOT metadata ? 'exit_notification_status'
++                        AND metadata->>'exit_secondary_work_pending' = 'true')
++                  )
++                  AND (metadata->>'exit_notification_retry_at' IS NULL
++                       OR (metadata->>'exit_notification_retry_at')::timestamptz <= $3)
++                ORDER BY exit_time, id
++                LIMIT 1 FOR UPDATE SKIP LOCKED
++                """,
++                self.underlying, self.role, now,
++            )
++            if row is None:
++                return
++            # Hold just this closed row through the bounded request and receipt
++            # commit. Competing workers skip it; cancellation/crash releases it.
++            metadata = row["metadata"]
++            if isinstance(metadata, str):
++                metadata = json.loads(metadata)
++            state = {
++                "exit_notification_status": "pending",
++                "exit_notification_retry_at": (
++                    now + dt.timedelta(seconds=RETRY_SECONDS)
++                ).isoformat(),
++                "exit_notification_attempts": metadata.get("exit_notification_attempts", 0) + 1,
++            }
++            if not self.enabled:
++                state.update(
++                    exit_notification_status="disabled",
++                    exit_notification_error="intentionally_disabled",
++                )
++            elif self.notifier is None:
++                state["exit_notification_error"] = "unconfigured"
++                log.warning("exit_notification_unconfigured", trade_id=row["id"], role=self.role)
++            else:
++                detail = None
++                if row["exit_reason"] == "manual_close":
++                    filled = row["exit_time"].astimezone(EASTERN).strftime("%H:%M:%S ET")
++                    detail = f"Closed by you in Schwab (filled {filled}); no bot exit order."
++                    signal = metadata.get("suppressed_exit_signal")
++                    if signal:
++                        detail += (
++                            f" Bot signal was `{signal['reason']}` at mark "
++                            f"${float(signal['mark_at_signal']):.2f}."
++                        )
++                try:
++                    async with asyncio.timeout(DELIVERY_TIMEOUT_SECONDS):
++                        accepted = await self.notifier.notify_exit(
++                            trade_id=row["id"], underlying=row["underlying"],
++                            direction=row["direction"], exit_reason=row["exit_reason"],
++                            entry_price=float(row["entry_price"]),
++                            exit_price=float(row["exit_price"]), pnl=float(row["pnl"]),
++                            peak_value=float(row["peak_value"] or 0),
++                            entry_time=row["entry_time"], exit_time=row["exit_time"],
++                            quantity=row["quantity"], manual_detail=detail,
++                            instance_role=self.role,
++                        )
++                    if accepted is True:
++                        state.update(
++                            exit_notification_status="sent",
++                            exit_notification_accepted_at=now.isoformat(),
++                            exit_notification_error=None,
++                        )
++                    else:
++                        state["exit_notification_error"] = "not_accepted"
++                except Exception as error:
++                    state["exit_notification_error"] = type(error).__name__
++                log.info(
++                    "exit_notification_delivery", trade_id=row["id"],
++                    status=state["exit_notification_status"], role=self.role,
++                )
++            await conn.execute(
++                "UPDATE butterfly_trades SET metadata = metadata || $2::jsonb WHERE id = $1",
++                row["id"], json.dumps(state),
++            )
+diff --git a/tests/test_exit_notifications.py b/tests/test_exit_notifications.py
+new file mode 100644
+index 0000000..65c1d69
+--- /dev/null
++++ b/tests/test_exit_notifications.py
+@@ -0,0 +1,70 @@
++"""Exit transport contracts and channel selection; no network or broker calls."""
++
++import datetime as dt
++from unittest.mock import AsyncMock, MagicMock
++
++import pytest
++
++from butterfly_guy.services.exit_notifications import trade_notifier
++from butterfly_guy.services.notifier import DiscordNotifier
++
++
++@pytest.mark.parametrize("status,accepted", [(200, True), (204, True), (400, False),
++                                            (429, False), (500, False)])
++async def test_exit_reports_transport_acceptance(monkeypatch, status, accepted):
++    response = MagicMock(status=status)
++    response.__aenter__ = AsyncMock(return_value=response)
++    response.__aexit__ = AsyncMock(return_value=False)
++    session = MagicMock()
++    session.__aenter__ = AsyncMock(return_value=session)
++    session.__aexit__ = AsyncMock(return_value=False)
++    session.post.return_value = response
++    monkeypatch.setattr("butterfly_guy.services.notifier.aiohttp.ClientSession",
++                        MagicMock(return_value=session))
++    notifier = DiscordNotifier("https://invalid.example/isolated")
++    assert await notifier.notify_exit(1, "SPX", "CALL", "end_of_day", 3.75, 3.38,
++                                      -0.37, 3.83) is accepted
++    assert session.post.call_args.kwargs["timeout"].total == 10
++
++
++async def test_exit_timeout_redacts_exception_details(monkeypatch):
++    logger = MagicMock()
++    monkeypatch.setattr("butterfly_guy.services.notifier.log", logger)
++    monkeypatch.setattr("butterfly_guy.services.notifier.aiohttp.ClientSession",
++                        MagicMock(side_effect=TimeoutError("secret-webhook-and-credentials")))
++    assert not await DiscordNotifier("private").notify_exit(
++        1, "SPX", "CALL", "end_of_day", 3.75, 3.38, -0.37, 3.83,
++    )
++    logger.error.assert_called_once_with("discord_error", error_type="TimeoutError")
++
++
++@pytest.mark.parametrize("role,expected", [(None, "paper"), ("paper", "paper"),
++                                          ("live", "live"), ("live_rehearsal", "live")])
++def test_trade_channel_role_routing(role, expected):
++    notifier = trade_notifier("SPX", role, "paper", "live")
++    assert notifier.webhook_url == expected
++    assert trade_notifier("NDX", role, "paper", "live") is None
++    assert trade_notifier("XSP", role, "paper", "live") is None
++    if role in {"live", "live_rehearsal"}:
++        assert trade_notifier("SPX", role, "paper", "") is None
++
++
++def test_standalone_live_without_declared_role_uses_live_channel():
++    assert trade_notifier("SPX", None, "paper", "live", paper_trading=False).webhook_url == "live"
++    assert trade_notifier("SPX", None, "paper", "", paper_trading=False) is None
++
++
++async def test_reconstructed_exit_uses_persisted_time_quantity_and_role():
++    notifier = DiscordNotifier("unused")
++    notifier._post = AsyncMock(return_value=True)
++    assert await notifier.notify_exit(
++        100001, "SPX", "CALL", "end_of_day", 3.75, 3.38, -0.37, 3.83,
++        entry_time=dt.datetime(2026, 11, 23, 16, 0, tzinfo=dt.timezone.utc),
++        exit_time=dt.datetime(2026, 11, 23, 16, 7, tzinfo=dt.timezone.utc),
++        quantity=3, instance_role="live_rehearsal",
++    )
++    message = notifier._post.await_args.args[0]
++    assert "-$111.00" in message
++    assert "11:07:00 ET | Held: 7m" in message
++    assert "[LIVE_REHEARSAL] SPX" in message
++
+diff --git a/tests/test_paper_fee_units.py b/tests/test_paper_fee_units.py
+new file mode 100644
+index 0000000..9d4744a
+--- /dev/null
++++ b/tests/test_paper_fee_units.py
+@@ -0,0 +1,36 @@
++"""Hand-calculated mark_v1 accounting; quantity changes aggregate dollars only."""
++
++from unittest.mock import AsyncMock, patch
++
++import pytest
++
++from butterfly_guy.execution.order_manager import LiveSpread
++from butterfly_guy.reports.live_performance import trade_pnl_dollars
++from tests.test_order_manager import make_candidate, make_order_manager, make_settings
++
++
++@pytest.mark.parametrize("quantity,side_fee,net_pnl", [(1, 4.60, -37), (2, 9.20, -74),
++                                                   (3, 13.80, -111)])
++async def test_mark_fills_and_aggregate_dollars(quantity, side_fee, net_pnl):
++    # Four contracts per fly at $1.15 each = $4.60 per fly per side = .046 pts.
++    # Entry mark 3.70 + .046 -> 3.75. Exit mark 3.43 - .046 -> 3.38.
++    # After rounding: -.37 points = -$37/fly. Raw modeled round-trip fee $9.20/fly;
++    # rounding makes the embedded drag $10/fly. Do not subtract either again.
++    manager, broker = make_order_manager(make_settings(
++        paper_trading=True, paper_commission_per_contract=1.15,
++        paper_slippage_per_spread=2.0,
++    ), underlying="SPX")
++    candidate = make_candidate(7320, 7360, 7400, 3.70)
++    spread = LiveSpread(bid=3.0, mark=3.70, ask=4.0)
++    with patch.object(manager, "_fetch_live_spread", new=AsyncMock(return_value=spread)):
++        entry = await manager.execute_single_attempt(candidate, limit_price=4, quantity=quantity)
++        exit_fill = await manager.execute_exit(candidate, current_value=3.43, quantity=quantity)
++    assert entry["fill_price"] == 3.75
++    assert exit_fill["fill_price"] == 3.38
++    assert manager._commission() * 100 * quantity == pytest.approx(side_fee)
++    assert trade_pnl_dollars(
++        exit_fill["fill_price"] - entry["fill_price"], quantity,
++    ) == pytest.approx(net_pnl)
++    assert (3.75 - 3.70 + 3.43 - 3.38) * 100 * quantity == pytest.approx(10 * quantity)
++    broker.place_order.assert_not_awaited()
++
+diff --git a/tests/test_spx_rehearsal_regressions.py b/tests/test_spx_rehearsal_regressions.py
+new file mode 100644
+index 0000000..71be544
+--- /dev/null
++++ b/tests/test_spx_rehearsal_regressions.py
+@@ -0,0 +1,121 @@
++"""Promoted November 23 probes; recorded quote input and isolated broker fixtures."""
++
++import asyncio
++import datetime as dt
++import json
++from pathlib import Path
++from unittest.mock import AsyncMock, patch
++
++import pytest
++
++from butterfly_guy.core.config import ProfitManagementSettings
++from butterfly_guy.core.metrics import readiness_snapshot, set_readiness
++from butterfly_guy.data.schemas import ButterflyCandidate, OptionQuote, TradeRecord
++from butterfly_guy.execution.order_manager import OperatorExitTakeoverError
++from butterfly_guy.position.position_manager import PositionManager, fly_settlement_value
++from tests.test_position_monitoring import _service
++from tests.test_spx_live_test import (
++    FLAT,
++    HELD,
++    _persisted_metadata,
++    _restarted_trade,
++    assert_manual_close_recorded,
++    live_service,
++    manual_close_order,
++    run_live_monitor,
++)
++
++DAY = dt.date(2026, 11, 23)
++ROWS = json.loads((Path(__file__).parent / "fixtures/spx_rehearsal_20261123_quotes.json")
++                  .read_text())["rows"]
++COMPLETE = {
++    float(row["strike"]): OptionQuote(
++        symbol=row["symbol"], underlying="SPX", expiration=DAY,
++        strike=float(row["strike"]), option_type="CALL", bid=float(row["bid"]),
++        ask=float(row["ask"]), mark=float(row["mark"]),
++    ) for row in ROWS
++}
++CANDIDATE = ButterflyCandidate(
++    direction="CALL", wing_width=40, center_strike=7360, lower_strike=7320, upper_strike=7400,
++    cost=3.75, max_profit=36.25, reward_risk=36.25 / 3.75, lower_be=7323.75,
++    upper_be=7396.25, distance_from_spot=98.63, spot_price=7261.37,
++)
++
++
++@pytest.mark.parametrize("missing_strike", [7320.0, 7360.0, 7400.0])
++async def test_each_observed_spx_leg_missing_then_recovers(missing_strike):
++    set_readiness(None)
++    incomplete = {strike: quote for strike, quote in COMPLETE.items() if strike != missing_strike}
++    service = _service([COMPLETE, incomplete, incomplete, incomplete, incomplete, COMPLETE])
++    service.config.strategy.underlying = "SPX"
++    service.config.execution.paper_trading = True
++    service.position_manager = PositionManager("SPX", ProfitManagementSettings())
++    service.state_machine.evaluate.side_effect = None
++    service.state_machine.evaluate.return_value = None
++    calls = 0
++    observed_readiness = []
++
++    async def chain(*args, **kwargs):
++        nonlocal calls
++        calls += 1
++        observed_readiness.append(readiness_snapshot())
++        if calls == 7:
++            raise asyncio.CancelledError
++        return {"underlyingPrice": float(ROWS[0]["spot_price"])}
++
++    service.market_data.get_option_chain.side_effect = chain
++    trade = TradeRecord(
++        trade_id=100001, trade_date=DAY, direction="CALL", entry_price=3.75,
++        lower_symbol=COMPLETE[7320.0].symbol, center_symbol=COMPLETE[7360.0].symbol,
++        upper_symbol=COMPLETE[7400.0].symbol,
++    )
++    try:
++        with (
++            patch("butterfly_guy.services.position_service.is_market_open", return_value=True),
++            patch("butterfly_guy.services.position_service.session_date", return_value=DAY),
++            patch("butterfly_guy.services.position_service.get_0dte_expiration", return_value=DAY),
++            patch("butterfly_guy.services.position_service.asyncio.sleep", new=AsyncMock()),
++            patch("butterfly_guy.services.position_service.notify_telegram", new=AsyncMock()),
++            pytest.raises(asyncio.CancelledError),
++        ):
++            await service.monitor_loop(trade, CANDIDATE)
++        events = [call.args[0] for call in service.decision_queries.log_event.await_args_list]
++        assert events.count("position_market_data_unavailable") == 1
++        assert events.count("position_market_data_recovered") == 1
++        assert any(not ready for ready, _ in observed_readiness)
++        assert service.state_machine.evaluate.call_count == 2
++        service.order_manager.execute_exit.assert_not_awaited()
++        assert readiness_snapshot() == (True, None)
++    finally:
++        set_readiness(None)
++
++
++@pytest.mark.parametrize("trigger", ["operator_order", "ladder_takeover"])
++async def test_operator_ownership_across_two_restarts_and_cancellation(trigger):
++    if trigger == "operator_order":
++        first = live_service([HELD] * 10, [[manual_close_order("WORKING")]] * 10)
++    else:
++        first = live_service([HELD] * 10, [[]] * 10, execute_exit=OperatorExitTakeoverError(
++            "isolated fixture: operator canceled bot order",
++        ))
++    await run_live_monitor(first, polls=2)
++    trade = _restarted_trade(_persisted_metadata(first))
++    assert trade.operator_exit
++    second = live_service([HELD] * 10, [[manual_close_order("CANCELED")]] * 10)
++    await run_live_monitor(second, polls=6, trade=trade)
++    second.order_manager.execute_exit.assert_not_awaited()
++    third = live_service([HELD, FLAT], [[], [manual_close_order()]])
++    await run_live_monitor(third, trade=trade)
++    third.order_manager.execute_exit.assert_not_awaited()
++    assert_manual_close_recorded(third)
++
++
++@pytest.mark.parametrize("spot,intrinsic", [(7200, 0), (7320, 0), (7340, 20), (7360, 40),
++                                          (7380, 20), (7400, 0), (7500, 0)])
++@pytest.mark.parametrize("quantity", [1, 2, 3])
++def test_hypothetical_settlement_at_actual_strikes(spot, intrinsic, quantity):
++    # Hypothetical spots, not the official close. Entry already embeds its fee;
++    # expiration settlement has no modeled exit commission in this convention.
++    assert fly_settlement_value(CANDIDATE, spot) == intrinsic
++    assert (intrinsic - 3.75) * 100 * quantity == (100 * intrinsic - 375) * quantity
++
+diff --git a/tests/integration/test_exit_notifications_db.py b/tests/integration/test_exit_notifications_db.py
+new file mode 100644
+index 0000000..45e675a
+--- /dev/null
++++ b/tests/integration/test_exit_notifications_db.py
+@@ -0,0 +1,254 @@
++"""Real PostgreSQL outbox ownership, retry and crash boundaries on disposable DBs."""
++
++import asyncio
++import datetime as dt
++import json
++import os
++import uuid
++from contextlib import asynccontextmanager
++from types import SimpleNamespace
++from unittest.mock import AsyncMock, MagicMock
++
++import asyncpg
++import pytest
++import pytest_asyncio
++
++from butterfly_guy.core.config import RiskSettings
++from butterfly_guy.data.schemas import TradeRecord
++from butterfly_guy.db.connection import DatabasePool
++from butterfly_guy.db.migrations.run_migrations import run_migrations
++from butterfly_guy.db.queries import RiskQueries, TradeQueries
++from butterfly_guy.risk.risk_engine import RiskEngine
++from butterfly_guy.scripts.spx_live_db import dsn_for
++from butterfly_guy.services.exit_notifications import ExitNotifications
++from tests.integration.test_spx_live_db import _settings
++from tests.test_position_service_settlement import _monitor_patches, _pos_state, _telemetry_service
++
++NOW = dt.datetime(2026, 11, 23, 16, 7, tzinfo=dt.timezone.utc)
++DAY = NOW.date()
++
++
++@pytest_asyncio.fixture
++async def notification_db():
++    dsn = os.getenv("CI_DATABASE_URL")
++    if not dsn:
++        pytest.skip("requires CI_DATABASE_URL pointing to disposable test infrastructure")
++    name = f"exit_notifications_{uuid.uuid4().hex}"
++    admin = await asyncpg.connect(dsn)
++    db = DatabasePool(dsn_for(_settings(dsn), name), min_size=1, max_size=4)
++    try:
++        await admin.execute(f'CREATE DATABASE "{name}"')
++        await db.initialize()
++        await run_migrations(db)
++        yield db
++    finally:
++        await db.close()
++        await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
++        await admin.close()
++
++
++async def insert_trade(db, *, role="paper", close=True, reason="end_of_day", quantity=1):
++    queries = TradeQueries(db, instance_role=role)
++    trade_id = await queries.insert_trade({
++        "underlying": "SPX", "trade_date": DAY, "direction": "CALL", "wing_width": 40,
++        "center_strike": 7360, "lower_strike": 7320, "upper_strike": 7400,
++        "entry_price": 3.75, "entry_time": NOW - dt.timedelta(minutes=7),
++        "quantity": quantity,
++    })
++    if close:
++        assert await queries.close_trade(
++            trade_id, 3.38, NOW, reason, -0.37, 3.83,
++            metadata={"suppressed_exit_signal": {"reason": "trailing_drawdown",
++                                                "mark_at_signal": 3.43}},
++        )
++    return queries, trade_id
++
++
++async def state(db, trade_id):
++    return json.loads(await db.pool.fetchval(
++        "SELECT metadata FROM butterfly_trades WHERE id=$1", trade_id,
++    ))
++
++
++def worker(db, notifier, **kwargs):
++    return ExitNotifications(db, "SPX", kwargs.pop("role", "paper"), notifier,
++                             enabled=kwargs.pop("enabled", True), **kwargs)
++
++
++@pytest.mark.parametrize("failure", [False, TimeoutError("lost acknowledgment")])
++async def test_failure_restart_then_acceptance_is_not_retried(notification_db, failure):
++    db = notification_db
++    _, trade_id = await insert_trade(db)
++    notifier = SimpleNamespace(notify_exit=AsyncMock(side_effect=[failure, True]))
++    await worker(db, notifier).tick(NOW)
++    assert (await state(db, trade_id))["exit_notification_status"] == "pending"
++    # A new service, before the persisted retry deadline, must not spin.
++    restarted = worker(db, notifier)
++    await restarted.tick(NOW + dt.timedelta(seconds=59))
++    assert notifier.notify_exit.await_count == 1
++    await restarted.tick(NOW + dt.timedelta(seconds=60))
++    assert (await state(db, trade_id))["exit_notification_status"] == "sent"
++    for days in (1, 2, 10):
++        await worker(db, notifier).tick(NOW + dt.timedelta(days=days))
++    assert notifier.notify_exit.await_count == 2
++    row = await db.pool.fetchrow("SELECT status,pnl FROM butterfly_trades WHERE id=$1", trade_id)
++    assert row["status"] == "CLOSED" and float(row["pnl"]) == -0.37
++
++
++async def test_concurrent_workers_skip_owned_closed_row(notification_db):
++    db = notification_db
++    _, trade_id = await insert_trade(db)
++    entered, release = asyncio.Event(), asyncio.Event()
++
++    async def deliver(**kwargs):
++        entered.set()
++        await release.wait()
++        return True
++
++    first = SimpleNamespace(notify_exit=AsyncMock(side_effect=deliver))
++    other = SimpleNamespace(notify_exit=AsyncMock(return_value=True))
++    task = asyncio.create_task(worker(db, first).tick(NOW))
++    try:
++        await asyncio.wait_for(entered.wait(), 2)
++        await asyncio.wait_for(worker(db, other).tick(NOW), 2)
++        other.notify_exit.assert_not_awaited()
++    finally:
++        release.set()
++        await task
++    await worker(db, other).tick(NOW + dt.timedelta(minutes=1))
++    other.notify_exit.assert_not_awaited()
++    assert (await state(db, trade_id))["exit_notification_status"] == "sent"
++
++
++@pytest.mark.parametrize("enabled,notifier,status,error", [
++    (True, None, "pending", "unconfigured"),
++    (False, None, "disabled", "intentionally_disabled"),
++])
++async def test_missing_config_and_intentional_disable_are_distinct(
++    notification_db, enabled, notifier, status, error,
++):
++    db = notification_db
++    _, trade_id = await insert_trade(db)
++    await worker(db, notifier, enabled=enabled).tick(NOW)
++    metadata = await state(db, trade_id)
++    assert metadata["exit_notification_status"] == status
++    assert metadata["exit_notification_error"] == error
++    assert "exit_notification_accepted_at" not in metadata
++    restored = SimpleNamespace(notify_exit=AsyncMock(return_value=True))
++    await worker(db, restored).tick(NOW + dt.timedelta(minutes=1))
++    assert restored.notify_exit.await_count == int(enabled)
++
++
++async def test_request_deadline_and_cancel_release_ownership(notification_db, monkeypatch):
++    db = notification_db
++    _, trade_id = await insert_trade(db)
++    cancelled = asyncio.Event()
++
++    async def hang(**kwargs):
++        try:
++            await asyncio.Event().wait()
++        finally:
++            cancelled.set()
++
++    monkeypatch.setattr("butterfly_guy.services.exit_notifications.DELIVERY_TIMEOUT_SECONDS", 0.01)
++    await worker(db, SimpleNamespace(notify_exit=hang)).tick(NOW)
++    assert cancelled.is_set()
++    assert (await state(db, trade_id))["exit_notification_error"] == "TimeoutError"
++    accepted = SimpleNamespace(notify_exit=AsyncMock(return_value=True))
++    await worker(db, accepted).tick(NOW + dt.timedelta(minutes=1))
++    accepted.notify_exit.assert_awaited_once()
++
++
++@pytest.mark.parametrize("reason", ["manual_close", "cash_settled", "end_of_day"])
++async def test_restart_reconstructs_persisted_message_and_respects_role(notification_db, reason):
++    db = notification_db
++    _, trade_id = await insert_trade(db, role="live_rehearsal", reason=reason, quantity=3)
++    notifier = SimpleNamespace(notify_exit=AsyncMock(return_value=True))
++    await worker(db, notifier, role="paper").tick(NOW)
++    notifier.notify_exit.assert_not_awaited()
++    await worker(db, notifier, role="live_rehearsal").tick(NOW)
++    call = notifier.notify_exit.await_args.kwargs
++    assert call["trade_id"] == trade_id and call["quantity"] == 3
++    assert call["pnl"] == -0.37 and call["exit_price"] == 3.38
++    assert call["exit_time"] == NOW and call["instance_role"] == "live_rehearsal"
++    if reason == "manual_close":
++        assert "Closed by you in Schwab (filled 11:07:00 ET)" in call["manual_detail"]
++        assert "`trailing_drawdown`" in call["manual_detail"]
++    else:
++        assert call["manual_detail"] is None
++
++
++async def test_legacy_pending_closed_trade_is_consumed_but_open_trade_is_not(notification_db):
++    db = notification_db
++    _, trade_id = await insert_trade(db)
++    await db.pool.execute("UPDATE butterfly_trades SET metadata = "
++                          "'{\"exit_secondary_work_pending\":true}' WHERE id=$1", trade_id)
++    notifier = SimpleNamespace(notify_exit=AsyncMock(return_value=True))
++    await worker(db, notifier).tick(NOW)
++    assert (await state(db, trade_id))["exit_notification_status"] == "sent"
++    await db.pool.execute("UPDATE butterfly_trades SET status='OPEN', metadata = "
++                          "'{\"exit_notification_status\":\"pending\"}' WHERE id=$1", trade_id)
++    await worker(db, notifier).tick(NOW)
++    notifier.notify_exit.assert_awaited_once()
++
++
++async def test_acceptance_before_failed_receipt_commit_can_duplicate(notification_db):
++    db = notification_db
++    _, trade_id = await insert_trade(db)
++    accepted = SimpleNamespace(notify_exit=AsyncMock(return_value=True))
++
++    @asynccontextmanager
++    async def failing_receipt_connection():
++        async with db.pool.acquire() as conn:
++            yield SimpleNamespace(
++                transaction=conn.transaction, fetchrow=conn.fetchrow,
++                execute=AsyncMock(side_effect=ConnectionError("lost receipt commit")),
++            )
++
++    fault_db = SimpleNamespace(pool=SimpleNamespace(acquire=failing_receipt_connection))
++    with pytest.raises(ConnectionError):
++        await worker(fault_db, accepted).tick(NOW)
++    assert (await state(db, trade_id))["exit_notification_status"] == "pending"
++    # Same persisted trade, another process: acceptance may occur twice. No order or
++    # accounting method exists on this worker; only the delivery receipt is updated.
++    await worker(db, accepted).tick(NOW + dt.timedelta(minutes=1))
++    assert accepted.notify_exit.await_count == 2
++
++
++@pytest.mark.parametrize("quantity,pnl_dollars", [(1, -37), (2, -74), (3, -111)])
++async def test_monitor_one_exit_one_accounting_update_despite_delivery_failure(
++    notification_db, quantity, pnl_dollars,
++):
++    db = notification_db
++    queries, trade_id = await insert_trade(db, close=False, quantity=quantity)
++    service = _telemetry_service(None)
++    service.config.execution.paper_trading = True
++    service.position_manager.update_position_value.return_value = _pos_state(3.43, 3.83, entry=3.75)
++    service.state_machine = MagicMock()
++    service.state_machine.state.name = "LOSS"
++    service.state_machine.evaluate.return_value = MagicMock(
++        reason="end_of_day", urgency="immediate",
++    )
++    service.trade_queries = queries
++    risk_queries = RiskQueries(db)
++    await risk_queries.get_or_create(DAY, "SPX")
++    service.risk_engine = RiskEngine(RiskSettings(), risk_queries)
++    service.risk_engine.record_pnl = AsyncMock(wraps=service.risk_engine.record_pnl)
++    service._exit_mark_parity_report = AsyncMock(return_value={})
++    service._start_post_exit_recording = MagicMock()
++    service.order_manager.execute_exit.return_value = {"fill_price": 3.38, "fill_time": NOW}
++    trade = TradeRecord(trade_id=trade_id, trade_date=DAY, direction="CALL",
++                        entry_price=3.75, quantity=quantity)
++    patches = _monitor_patches(trade, AsyncMock())
++    with patches[0], patches[1], patches[2], patches[3], patches[4]:
++        await service.monitor_loop(trade, MagicMock())
++    notifier = SimpleNamespace(notify_exit=AsyncMock(side_effect=[False, True]))
++    await worker(db, notifier).tick(NOW)
++    await worker(db, notifier).tick(NOW + dt.timedelta(minutes=1))
++    await worker(db, notifier).tick(NOW + dt.timedelta(minutes=2))
++    service.order_manager.execute_exit.assert_awaited_once()
++    service.risk_engine.record_pnl.assert_awaited_once()
++    risk = await risk_queries.get_or_create(DAY, "SPX")
++    assert float(risk["realized_pnl"]) == pnl_dollars
++    assert (await state(db, trade_id))["exit_notification_status"] == "sent"
++
+diff --git a/tests/fixtures/spx_rehearsal_20261123_quotes.json b/tests/fixtures/spx_rehearsal_20261123_quotes.json
+new file mode 100644
+index 0000000..39171af
+--- /dev/null
++++ b/tests/fixtures/spx_rehearsal_20261123_quotes.json
+@@ -0,0 +1,54 @@
++{
++  "source": "data/rehearsals/SPX/2026-11-23/capture-20261123T163928Z/monitoring_leg_quotes.jsonl",
++  "observed": true,
++  "rows": [
++    {
++      "ask": "9.0000",
++      "bid": "8.8000",
++      "drawdown_pct": "0.0000",
++      "expiration": "2026-11-23",
++      "fly_mark": "3.7700",
++      "mark": "8.9000",
++      "option_type": "CALL",
++      "peak_value": "3.7700",
++      "spot_price": "7261.27",
++      "strike": "7320.00",
++      "symbol": "SPXW  261123C07320000",
++      "trade_id": 100001,
++      "ts": "2026-11-23 16:00:31.536915+00:00",
++      "underlying": "SPX"
++    },
++    {
++      "ask": "3.2000",
++      "bid": "3.1000",
++      "drawdown_pct": "0.0000",
++      "expiration": "2026-11-23",
++      "fly_mark": "3.7700",
++      "mark": "3.1500",
++      "option_type": "CALL",
++      "peak_value": "3.7700",
++      "spot_price": "7261.27",
++      "strike": "7360.00",
++      "symbol": "SPXW  261123C07360000",
++      "trade_id": 100001,
++      "ts": "2026-11-23 16:00:31.536915+00:00",
++      "underlying": "SPX"
++    },
++    {
++      "ask": "1.2000",
++      "bid": "1.1500",
++      "drawdown_pct": "0.0000",
++      "expiration": "2026-11-23",
++      "fly_mark": "3.7700",
++      "mark": "1.1700",
++      "option_type": "CALL",
++      "peak_value": "3.7700",
++      "spot_price": "7261.27",
++      "strike": "7400.00",
++      "symbol": "SPXW  261123C07400000",
++      "trade_id": 100001,
++      "ts": "2026-11-23 16:00:31.536915+00:00",
++      "underlying": "SPX"
++    }
++  ]
++}

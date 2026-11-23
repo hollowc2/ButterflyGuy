@@ -1,0 +1,55 @@
+{
+  "capture": "data/rehearsals/SPX/2026-11-23/capture-20261123T175437Z",
+  "manifest_hashes_valid": {
+    "trade.jsonl": true,
+    "decisions.jsonl": true,
+    "monitoring_leg_quotes.jsonl": true,
+    "post_exit_leg_quotes.jsonl": true,
+    "chains.jsonl": true,
+    "spot_prices.jsonl": true,
+    "risk_state.jsonl": true,
+    "broker_intent_counts.jsonl": true,
+    "config-on-disk.yaml": true,
+    "container-sanitized.log": true,
+    "ready.json": true,
+    "health.json": true,
+    "session-status.json": true
+  },
+  "trade_id": 100001,
+  "closed": true,
+  "pnl_dollars": -37.0,
+  "risk_realized_dollars": "-37.0000",
+  "coverage": {
+    "monitoring_leg_quotes": {
+      "rows": 432,
+      "observations": 144,
+      "first": "2026-11-23 16:00:31.536915+00:00",
+      "last": "2026-11-23 16:07:28.449015+00:00",
+      "incomplete_observations": 0,
+      "max_gap_seconds": 10.767226,
+      "gaps_over_5_seconds": 2,
+      "gaps_over_10_seconds": 2
+    },
+    "post_exit_leg_quotes": {
+      "rows": 7035,
+      "observations": 2345,
+      "first": "2026-11-23 16:07:30.240518+00:00",
+      "last": "2026-11-23 17:54:36.684933+00:00",
+      "incomplete_observations": 0,
+      "max_gap_seconds": 6.224491,
+      "gaps_over_5_seconds": 2,
+      "gaps_over_10_seconds": 0
+    }
+  },
+  "session_status": {
+    "running": true,
+    "status": "running",
+    "finished_at": "0001-01-01T00:00:00Z",
+    "session_STOPPED_marker": false,
+    "trade_closed": true,
+    "phase": "intraday",
+    "deliberate_closeout_verified": false
+  },
+  "market_still_open": true,
+  "official_close_observed": false
+}

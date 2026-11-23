@@ -1,0 +1,9 @@
+{
+  "running": false,
+  "status": "exited",
+  "finished_at": "2026-11-23T21:15:29.164642527Z",
+  "session_STOPPED_marker": true,
+  "trade_closed": true,
+  "phase": "post_close",
+  "deliberate_closeout_verified": true
+}

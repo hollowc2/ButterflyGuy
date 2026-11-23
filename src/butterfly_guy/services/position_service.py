@@ -929,24 +929,8 @@ class PositionService:
                             "exit_mark_parity": exit_mark_parity,
                         }, underlying=self.config.strategy.underlying)
 
-                        if self.notifier:
-                            try:
-                                await self.notifier.notify_exit(
-                                    trade_id=trade.trade_id,
-                                    underlying=self.config.strategy.underlying,
-                                    direction=trade.direction,
-                                    exit_reason=signal.reason,
-                                    entry_price=trade.entry_price,
-                                    exit_price=exit_price,
-                                    pnl=pnl,
-                                    peak_value=pos_state.peak_value,
-                                    entry_time=trade.entry_time,
-                                    quantity=trade.quantity,
-                                )
-                            except Exception as e:
-                                log.warning("notify_exit_failed", error=str(e))
-                                raise
-
+                        # Discord delivery is queued atomically by close_trade and
+                        # consumed independently, including after process restart.
                         await self.trade_queries.merge_metadata(
                             trade.trade_id, {"exit_secondary_work_pending": False}
                         )
@@ -1180,23 +1164,6 @@ class PositionService:
             log.warning("cash_settlement_already_completed", trade_id=trade.trade_id)
             return
         await self._record_exit_metrics(pnl, trade)
-
-        if self.notifier:
-            try:
-                await self.notifier.notify_exit(
-                    trade_id=trade.trade_id,
-                    underlying=self.config.strategy.underlying,
-                    direction=trade.direction,
-                    exit_reason="cash_settled",
-                    entry_price=trade.entry_price,
-                    exit_price=settlement_value,
-                    pnl=pnl,
-                    peak_value=peak,
-                    entry_time=trade.entry_time,
-                    quantity=trade.quantity,
-                )
-            except Exception as e:
-                log.warning("notify_exit_failed", error=str(e))
 
         log.info(
             "cash_settle_complete",
@@ -1520,30 +1487,6 @@ class PositionService:
                 "suppressed_exit_signal": suppressed_signal,
             }, underlying=self.config.strategy.underlying),
         )
-        if self.notifier:
-            fill_time = fill.execution_time.astimezone(EASTERN).strftime("%H:%M:%S ET")
-            detail = f"Closed by you in Schwab (filled {fill_time}); no bot exit order."
-            if suppressed_signal is not None:
-                detail += (
-                    f" Bot signal was `{suppressed_signal['reason']}` at mark "
-                    f"${float(suppressed_signal['mark_at_signal']):.2f}."
-                )
-            await self._best_effort(
-                "manual_close_notify",
-                self.notifier.notify_exit(
-                    trade_id=trade.trade_id,
-                    underlying=self.config.strategy.underlying,
-                    direction=trade.direction,
-                    exit_reason="manual_close",
-                    entry_price=trade.entry_price,
-                    exit_price=fill.net_fill_price,
-                    pnl=pnl,
-                    peak_value=peak,
-                    entry_time=trade.entry_time,
-                    quantity=trade.quantity,
-                    manual_detail=detail,
-                ),
-            )
         log.info("trade_exited", trade_id=trade.trade_id, pnl=pnl, reason="manual_close")
 
     async def _persist_operator_exit(self, trade: TradeRecord, reason: str) -> bool:

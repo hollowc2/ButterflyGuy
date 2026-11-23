@@ -1,0 +1,11 @@
+{
+  "trade_id": 100001,
+  "quantity": 1,
+  "entry_mark": "3.700000000000001",
+  "exit_signal_mark": "3.43",
+  "modeled_commission_option_points_per_side": "0.046",
+  "expected_rounded_entry": "3.75",
+  "expected_rounded_exit": "3.38",
+  "risk_pnl_dollars": "-37.00",
+  "explanation": "Paper mark_v1 embeds modeled commissions in fill prices; do not subtract them again. Slippage is diagnostic-only. Two-decimal price rounding affects the final dollar amount."
+}

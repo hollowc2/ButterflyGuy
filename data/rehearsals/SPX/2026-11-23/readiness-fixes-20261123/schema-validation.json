@@ -1,0 +1,687 @@
+{
+  "created_utc": "2026-11-23T18:03:39.688243+00:00",
+  "postgres_version": "16.11",
+  "timescale_version": "2.25.2",
+  "ledger_matches_release": true,
+  "migration_013_added_columns": [
+    {
+      "table_name": "account_monitor_state",
+      "column_name": "account_key",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "account_monitor_state",
+      "column_name": "state",
+      "data_type": "jsonb",
+      "is_nullable": "NO",
+      "column_default": "'{}'::jsonb"
+    },
+    {
+      "table_name": "account_monitor_state",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    }
+  ],
+  "runtime_schema_differences": {
+    "butterfly_guy": {
+      "columns": {
+        "missing": [],
+        "extra": [
+          {
+            "column_default": "now()",
+            "column_name": "inserted_at",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": "now()",
+            "column_name": "inserted_at",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": "true",
+            "column_name": "is_active",
+            "data_type": "boolean",
+            "is_nullable": "NO",
+            "table_name": "strategies"
+          },
+          {
+            "column_default": null,
+            "column_name": "amount",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "amount",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "asset",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "asset",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "asset",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "bankroll_before",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "best_ask",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "best_bid",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "close",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "bars_1m"
+          },
+          {
+            "column_default": null,
+            "column_name": "close",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "coin",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "bars_1m"
+          },
+          {
+            "column_default": null,
+            "column_name": "coin",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "l2_book"
+          },
+          {
+            "column_default": null,
+            "column_name": "coin",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "confidence",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "confidence",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "consecutive_losses",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "consecutive_wins",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "day_of_week",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "direction",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "direction",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "entry_price",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "entry_price",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "fill_pct",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "fill_price",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "gate_boosted",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "gate_name",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "high",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "bars_1m"
+          },
+          {
+            "column_default": null,
+            "column_name": "high",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "hour_utc",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "id",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "id",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "level",
+            "data_type": "smallint",
+            "is_nullable": "NO",
+            "table_name": "l2_book"
+          },
+          {
+            "column_default": null,
+            "column_name": "low",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "bars_1m"
+          },
+          {
+            "column_default": null,
+            "column_name": "low",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "market",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "market_slug",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "name",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "strategies"
+          },
+          {
+            "column_default": null,
+            "column_name": "open",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "bars_1m"
+          },
+          {
+            "column_default": null,
+            "column_name": "open",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "outcome",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "outcome",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "paper",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "paper",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "pnl",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "pnl",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "price",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "l2_book"
+          },
+          {
+            "column_default": null,
+            "column_name": "price",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "price_movement_pct",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "raw_json",
+            "data_type": "jsonb",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "session_trade_n",
+            "data_type": "integer",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "settlement_status",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "side",
+            "data_type": "character",
+            "is_nullable": "NO",
+            "table_name": "l2_book"
+          },
+          {
+            "column_default": null,
+            "column_name": "side",
+            "data_type": "character",
+            "is_nullable": "NO",
+            "table_name": "trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "size",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "l2_book"
+          },
+          {
+            "column_default": null,
+            "column_name": "size",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "slippage_pct",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "source_file",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "source_file",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "spread",
+            "data_type": "double precision",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "strategy",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "strategy",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "timeframe",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "timeframe",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "timeframe",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "trade_id",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "table_name": "trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "ts",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "table_name": "bars_1m"
+          },
+          {
+            "column_default": null,
+            "column_name": "ts",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "table_name": "l2_book"
+          },
+          {
+            "column_default": null,
+            "column_name": "ts",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "ts",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "ts",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "table_name": "polymarket_trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "ts",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "table_name": "trades"
+          },
+          {
+            "column_default": null,
+            "column_name": "volume",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "bars_1m"
+          },
+          {
+            "column_default": null,
+            "column_name": "volume",
+            "data_type": "double precision",
+            "is_nullable": "NO",
+            "table_name": "polymarket_ohlcv"
+          },
+          {
+            "column_default": null,
+            "column_name": "won",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trade_archive"
+          },
+          {
+            "column_default": null,
+            "column_name": "won",
+            "data_type": "boolean",
+            "is_nullable": "YES",
+            "table_name": "polymarket_trades"
+          }
+        ]
+      },
+      "indexes": {
+        "missing": [],
+        "extra": [
+          {
+            "indexdef": "CREATE INDEX bars_1m_ts_idx ON public.bars_1m USING btree (ts DESC)",
+            "indexname": "bars_1m_ts_idx",
+            "tablename": "bars_1m"
+          },
+          {
+            "indexdef": "CREATE INDEX idx_bars_coin ON public.bars_1m USING btree (coin, ts DESC)",
+            "indexname": "idx_bars_coin",
+            "tablename": "bars_1m"
+          },
+          {
+            "indexdef": "CREATE INDEX idx_l2_coin ON public.l2_book USING btree (coin, ts DESC)",
+            "indexname": "idx_l2_coin",
+            "tablename": "l2_book"
+          },
+          {
+            "indexdef": "CREATE INDEX idx_trades_coin ON public.trades USING btree (coin, ts DESC)",
+            "indexname": "idx_trades_coin",
+            "tablename": "trades"
+          },
+          {
+            "indexdef": "CREATE INDEX l2_book_ts_idx ON public.l2_book USING btree (ts DESC)",
+            "indexname": "l2_book_ts_idx",
+            "tablename": "l2_book"
+          },
+          {
+            "indexdef": "CREATE INDEX polymarket_ohlcv_lookup_idx ON public.polymarket_ohlcv USING btree (asset, timeframe, market, ts)",
+            "indexname": "polymarket_ohlcv_lookup_idx",
+            "tablename": "polymarket_ohlcv"
+          },
+          {
+            "indexdef": "CREATE INDEX polymarket_trade_archive_strategy_ts_idx ON public.polymarket_trade_archive USING btree (strategy, ts DESC)",
+            "indexname": "polymarket_trade_archive_strategy_ts_idx",
+            "tablename": "polymarket_trade_archive"
+          },
+          {
+            "indexdef": "CREATE INDEX polymarket_trade_archive_time_idx ON public.polymarket_trade_archive USING btree (ts DESC)",
+            "indexname": "polymarket_trade_archive_time_idx",
+            "tablename": "polymarket_trade_archive"
+          },
+          {
+            "indexdef": "CREATE INDEX polymarket_trades_ts_idx ON public.polymarket_trades USING btree (ts DESC)",
+            "indexname": "polymarket_trades_ts_idx",
+            "tablename": "polymarket_trades"
+          },
+          {
+            "indexdef": "CREATE INDEX spot_prices_underlying_ts_idx ON public.spot_prices USING btree (underlying, ts DESC)",
+            "indexname": "spot_prices_underlying_ts_idx",
+            "tablename": "spot_prices"
+          },
+          {
+            "indexdef": "CREATE INDEX trades_ts_idx ON public.trades USING btree (ts DESC)",
+            "indexname": "trades_ts_idx",
+            "tablename": "trades"
+          },
+          {
+            "indexdef": "CREATE UNIQUE INDEX polymarket_ohlcv_pkey ON public.polymarket_ohlcv USING btree (asset, timeframe, market, ts)",
+            "indexname": "polymarket_ohlcv_pkey",
+            "tablename": "polymarket_ohlcv"
+          },
+          {
+            "indexdef": "CREATE UNIQUE INDEX polymarket_trade_archive_pkey ON public.polymarket_trade_archive USING btree (id, ts)",
+            "indexname": "polymarket_trade_archive_pkey",
+            "tablename": "polymarket_trade_archive"
+          },
+          {
+            "indexdef": "CREATE UNIQUE INDEX polymarket_trades_pkey ON public.polymarket_trades USING btree (id, ts)",
+            "indexname": "polymarket_trades_pkey",
+            "tablename": "polymarket_trades"
+          },
+          {
+            "indexdef": "CREATE UNIQUE INDEX strategies_pkey ON public.strategies USING btree (name)",
+            "indexname": "strategies_pkey",
+            "tablename": "strategies"
+          }
+        ]
+      }
+    },
+    "butterfly_guy_spx_live": {
+      "columns": {
+        "missing": [],
+        "extra": []
+      },
+      "indexes": {
+        "missing": [],
+        "extra": []
+      }
+    },
+    "butterfly_guy_spx_live_rehearsal": {
+      "columns": {
+        "missing": [],
+        "extra": []
+      },
+      "indexes": {
+        "missing": [],
+        "extra": []
+      }
+    }
+  },
+  "scratch_logical_dump_restore_passed": true,
+  "dump_sha256": "d20db0fb49d142526ecee17b7285b32c726e1a697a94a806df179ba6ed9aff73",
+  "production_modified": false
+}

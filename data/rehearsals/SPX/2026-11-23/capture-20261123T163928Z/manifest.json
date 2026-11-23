@@ -1,0 +1,94 @@
+{
+  "retrieved_utc": "2026-11-23T16:39:28.095507+00:00",
+  "provider": "Schwab direct market data; ButterflyGuy mark_v1 simulated executions",
+  "database": "butterfly_guy_spx_live_rehearsal",
+  "host": "helios",
+  "session": "2026-11-23",
+  "trade_id": 100001,
+  "timezone": "timestamps include their source UTC/offset; display America/Los_Angeles",
+  "files": {
+    "trade.jsonl": {
+      "rows": 1,
+      "first_timestamp": "2026-11-23 16:00:29.888841+00:00",
+      "last_timestamp": "2026-11-23 16:00:29.888841+00:00",
+      "sha256": "221d1c19bcdcd4017813bf301ebd0d804870a54b6e501906742cd420c9265106"
+    },
+    "decisions.jsonl": {
+      "rows": 187,
+      "first_timestamp": "2026-11-23 15:53:09.062354+00:00",
+      "last_timestamp": "2026-11-23 16:29:58.021632+00:00",
+      "sha256": "2e94aa06f7b401703d769975de20e8c47d80e2443ce01d32065eeef7b10c9e59"
+    },
+    "monitoring_leg_quotes.jsonl": {
+      "rows": 432,
+      "first_timestamp": "2026-11-23 16:00:31.536915+00:00",
+      "last_timestamp": "2026-11-23 16:07:28.449015+00:00",
+      "sha256": "00c54c36ae2590cae481a7b3a65b760418dad4cb4343bb724ca15b2a83bfae32"
+    },
+    "post_exit_leg_quotes.jsonl": {
+      "rows": 2103,
+      "first_timestamp": "2026-11-23 16:07:30.240518+00:00",
+      "last_timestamp": "2026-11-23 16:39:26.230313+00:00",
+      "sha256": "1e14a99cfed4738880666026e68bd6929fe6ffb8dd85b07980ded613e5a0206c"
+    },
+    "chains.jsonl": {
+      "rows": 34398,
+      "first_timestamp": "2026-11-23 15:49:00.007550+00:00",
+      "last_timestamp": "2026-11-23 16:39:00.003113+00:00",
+      "sha256": "af952cd4836bb57c26a342083cb246f4d2eaab5309039def0964d1f951c23418"
+    },
+    "spot_prices.jsonl": {
+      "rows": 98,
+      "first_timestamp": "2026-11-23 15:49:00.007550+00:00",
+      "last_timestamp": "2026-11-23 16:39:00.003113+00:00",
+      "sha256": "e20e5a2849ccc306644eb4a925ea2a64614d678b268dc1bf8b042d6682795020"
+    },
+    "risk_state.jsonl": {
+      "rows": 1,
+      "first_timestamp": null,
+      "last_timestamp": null,
+      "sha256": "88e0de8c7b0c9c65bb936c4a509b31b958270332770ed1ef365a270271bc236b"
+    },
+    "broker_intent_counts.jsonl": {
+      "rows": 0,
+      "first_timestamp": null,
+      "last_timestamp": null,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "config-on-disk.yaml": {
+      "sha256": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25"
+    },
+    "container-sanitized.log": {
+      "sha256": "c1c2461f896d130a2dbac481fbdf2e10d601d6139b37dfeb95d4ebf33db3a7d6"
+    },
+    "ready.json": {
+      "sha256": "c705024cd6d531e7e6caf3729c0f9707d050533d7b55c17880053fc892bd646d"
+    },
+    "health.json": {
+      "sha256": "22c1af363d18ba433aa005dfc7fd1f0991ce9df4ba49bdd00148b859fd89ff0c"
+    }
+  },
+  "discord_receipts": [
+    {
+      "event": "rehearsal_discord_receipt",
+      "timestamp": "2026-11-23T16:07:29.524402+00:00",
+      "kind": "exit",
+      "accepted": true,
+      "paper_only": true
+    }
+  ],
+  "induced_events": [
+    "entry window 07:45 -> 08:30 PT",
+    "center tolerance 15 -> 100 points",
+    "exit_before_close_minutes 0 -> 300"
+  ],
+  "limitations": [
+    "No live broker order was submitted",
+    "Exit intentionally induced using end_of_day signal early",
+    "Discord acceptance does not establish human receipt",
+    "Failure-path tests use isolated test harnesses, not a production fault",
+    "Capture is point-in-time; post-exit quote recording continues until close",
+    "After the induced exit, the on-disk rehearsal config was restored to normal settings; the existing process retains its loaded test settings until stopped"
+  ],
+  "source_image": "sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739"
+}

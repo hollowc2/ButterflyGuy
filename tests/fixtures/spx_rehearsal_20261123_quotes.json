@@ -1,0 +1,54 @@
+{
+  "source": "data/rehearsals/SPX/2026-11-23/capture-20261123T163928Z/monitoring_leg_quotes.jsonl",
+  "observed": true,
+  "rows": [
+    {
+      "ask": "9.0000",
+      "bid": "8.8000",
+      "drawdown_pct": "0.0000",
+      "expiration": "2026-11-23",
+      "fly_mark": "3.7700",
+      "mark": "8.9000",
+      "option_type": "CALL",
+      "peak_value": "3.7700",
+      "spot_price": "7261.27",
+      "strike": "7320.00",
+      "symbol": "SPXW  261123C07320000",
+      "trade_id": 100001,
+      "ts": "2026-11-23 16:00:31.536915+00:00",
+      "underlying": "SPX"
+    },
+    {
+      "ask": "3.2000",
+      "bid": "3.1000",
+      "drawdown_pct": "0.0000",
+      "expiration": "2026-11-23",
+      "fly_mark": "3.7700",
+      "mark": "3.1500",
+      "option_type": "CALL",
+      "peak_value": "3.7700",
+      "spot_price": "7261.27",
+      "strike": "7360.00",
+      "symbol": "SPXW  261123C07360000",
+      "trade_id": 100001,
+      "ts": "2026-11-23 16:00:31.536915+00:00",
+      "underlying": "SPX"
+    },
+    {
+      "ask": "1.2000",
+      "bid": "1.1500",
+      "drawdown_pct": "0.0000",
+      "expiration": "2026-11-23",
+      "fly_mark": "3.7700",
+      "mark": "1.1700",
+      "option_type": "CALL",
+      "peak_value": "3.7700",
+      "spot_price": "7261.27",
+      "strike": "7400.00",
+      "symbol": "SPXW  261123C07400000",
+      "trade_id": 100001,
+      "ts": "2026-11-23 16:00:31.536915+00:00",
+      "underlying": "SPX"
+    }
+  ]
+}

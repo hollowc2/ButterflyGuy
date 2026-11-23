@@ -1,0 +1,18 @@
+{
+  "observed_utc": "2026-11-23T18:16:04.538055+00:00",
+  "copied_trade_id": 415,
+  "economic_fields_match": true,
+  "live_trade": {
+    "id": 415,
+    "trade_date": "2026-11-16",
+    "status": "CLOSED",
+    "entry_price": "2.0000",
+    "exit_price": "1.3000",
+    "pnl": "-0.7000",
+    "quantity": 1,
+    "entry_time": "2026-11-16 15:00:16+00:00",
+    "exit_time": "2026-11-16 20:23:27+00:00"
+  },
+  "bootstrap_function": "copy_live_trade copies trade/intents/quotes/decisions, not daily_risk_state",
+  "records_modified": false
+}
