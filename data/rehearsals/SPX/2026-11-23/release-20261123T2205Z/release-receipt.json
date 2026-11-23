@@ -1,0 +1,112 @@
+{
+  "recorded_utc": "2026-11-23T22:58:33.380997+00:00",
+  "release_source_sha": "b7ee64a1e2c743c68aa36a5a3563b3bcfc596d39",
+  "pr": "https://github.com/hollowc2/ButterflyGuy/pull/104",
+  "image": "sha256:568eb8a15a58b6587f6e5e8312ea7aed68421887db0794adbc501825683448b1",
+  "ci": [
+    {
+      "workflow": "CI",
+      "conclusion": "success",
+      "url": "https://github.com/hollowc2/ButterflyGuy/actions/runs/45282310852"
+    },
+    {
+      "workflow": "Database Smoke",
+      "conclusion": "success",
+      "url": "https://github.com/hollowc2/ButterflyGuy/actions/runs/45282310795"
+    }
+  ],
+  "deployment": "regular paper SPX only; project infra, service app_spx, container butterfly_spx_app",
+  "live_release": "same source/image staged on Helios; butterfly_spx_live_app remains stopped",
+  "live_schema": "013_account_monitor.sql applied after full backup and actual isolated restore validation",
+  "runtime_gate": {
+    "health_http": 200,
+    "ready_http": 200,
+    "packaged_source_files_match": 165,
+    "paper_trading": true,
+    "both_live_allow_flags_false": true,
+    "one_contract_one_trade": true,
+    "NDX_XSP_live_rehearsal_unchanged": true
+  },
+  "test_counts": {
+    "local_passed": 2270,
+    "local_skipped": 36,
+    "all_integration_cases": 45,
+    "real_Postgres_cases": 36,
+    "isolated_nonDB_integration_cases": 9,
+    "new_exit_Postgres_cases": 14,
+    "guarded_shared_checks": 335
+  },
+  "test_count_correction": "Earlier intraday records labeled all 45 integration cases real-DB. Four collector fixtures and five order-preview cases are isolated; 36 use actual PostgreSQL. Original recorded evidence is preserved.",
+  "remaining_live_canary_gates": [
+    "Fresh dated broker/DB/working-order reconciliation",
+    "Supervised paper confirmation of actual exit receipt acceptance on the fixed runtime",
+    "Normal settings, intended single instance and monitoring/guarded stop/rollback verification for that session",
+    "Explicit owner approval for the dated one-contract real-money session"
+  ],
+  "live_canary_assessment": "NO_GO until the remaining dated/session gates and owner approval; release deployment is not live-trading approval",
+  "safety": {
+    "broker_order_writes": 0,
+    "manual_positions_adopted_or_managed": false,
+    "live_session_scheduled": false,
+    "live_rehearsal_started": false,
+    "NDX_XSP_restarted": false,
+    "strategy_risk_limits_changed": false
+  },
+  "private_artifacts": {
+    "host": "helios",
+    "release": "/opt/butterflyguy-releases/spx-readiness-20261123",
+    "backup": "/opt/butterflyguy-releases/spx-readiness-backup-20261123T2205Z",
+    "restore_copy": "butterfly_guy_spx_live_restore_20261123T2205Z",
+    "restore_jobs": "all six disabled; source jobs untouched"
+  },
+  "artifacts": {
+    "startup-sanitized.txt": {
+      "sha256": "f397a2edbabe3da005e0da65992bbce9937ec34f9f4e98611de33d1f7389f35a",
+      "bytes": 1485
+    },
+    "end-of-day-reconciliation.json": {
+      "sha256": "eb8f908eece4c91a8bd7caee1679b359f4490820589d9649dbde18a67e6661f2",
+      "bytes": 2273
+    },
+    "migration-receipt.json": {
+      "sha256": "f5727530e2d397bd73967356669e6e0e0b5b53c4a7cf78c78021d2f53499d561",
+      "bytes": 1783
+    },
+    "backup-restore-receipt.json": {
+      "sha256": "87ecb25925fe2f26595e744f6ca7bd254cf55d17bb5d8d2f1b77fd596e825f72",
+      "bytes": 1403
+    },
+    "closeout-service-receipts.txt": {
+      "sha256": "f3b30839197ddeb1cc1756abe8cc1d6ecbf3da851004547d27f1104d3653f10b",
+      "bytes": 2698
+    },
+    "stability-check.json": {
+      "sha256": "da0487c852ae816b124105633e8a3d2b362825186400938e13fc59e401ce974b",
+      "bytes": 536
+    },
+    "postdeploy-reconciliation.json": {
+      "sha256": "5372b698883ae8c5e27b8fdf729c197f0ed0ad1de380cffb8f2d2565456d8cc2",
+      "bytes": 8869
+    },
+    "predeploy-reconciliation.json": {
+      "sha256": "43c1c299c81cc11dd48e966924b6121a559d9c15d59e31cb5fe5dc2ecc7d849b",
+      "bytes": 8869
+    },
+    "prepared-deployment.json": {
+      "sha256": "e02ae77a2e1a746bf4b7e2003fdc504c6644f99df63761dd6fdb7de1f16685c7",
+      "bytes": 3675
+    },
+    "runtime-preflight.json": {
+      "sha256": "5febde6004c47a32aa578282af5e1d8338b24f218ee7a34a46d95632375ac670",
+      "bytes": 155378
+    },
+    "services-preflight.json": {
+      "sha256": "6121c0c4abe29d368594e64589ca2f94f9bcc1d5c02244ac6d54ece873174eb0",
+      "bytes": 3326
+    },
+    "deployment-verification.json": {
+      "sha256": "cb511ea09937642cbf453e212297df53d434222bbba0dfb743dcffcd366a59c7",
+      "bytes": 19526
+    }
+  }
+}

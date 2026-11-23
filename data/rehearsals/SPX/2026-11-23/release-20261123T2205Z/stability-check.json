@@ -1,0 +1,25 @@
+{
+  "observed_utc": "2026-11-23T22:58:58.695230+00:00",
+  "health": {
+    "http": 200,
+    "body": {
+      "status": "ok",
+      "service": "SPX",
+      "timestamp": "2026-11-23T22:58:58",
+      "uptime_seconds": 384.3
+    }
+  },
+  "ready": {
+    "http": 200,
+    "body": {
+      "status": "ready",
+      "reason": null
+    }
+  },
+  "running": true,
+  "account_monitor_metrics": [
+    "butterfly_account_monitor_enabled 1.0",
+    "butterfly_account_monitor_last_tick_timestamp_seconds 1.795474716482347e+09"
+  ],
+  "restart_count": 0
+}

@@ -356,8 +356,9 @@ requested as part of this investigation.
 
 On the final unchanged source, the full suite passed **2,270 tests**, with **36
 skipped**, no failures and three existing dependency/process-fork deprecation
-warnings. All **45 real-DB integration cases** passed using a fresh local PG16 /
-TimescaleDB 2.25.2 scratch database. The skips require private NDX snapshots or the
+warnings. All **45 integration cases** passed; **36 use actual PostgreSQL** and
+nine are isolated collector/order-preview checks. The database cases used fresh
+local PG16 / TimescaleDB 2.25.2 scratch databases. The skips require private NDX snapshots or the
 separate `NDX_POSTGRES_BIN` infrastructure; they are not asserted as tested.
 The network-blocked shared/scenario run passed **335 checks**, with zero network
 attempts. The final routing/fee subset passed 15 checks and the PostgreSQL exit
@@ -435,3 +436,59 @@ hundreds of thousands of raw rows as source changes. The pre-existing graph
 backup remains private/local; unrelated research and current graph edits are not
 part of this release commit. The Database Smoke workflow now explicitly runs the
 new durable-exit Postgres regression suite on every relevant PR/main build.
+
+
+## Completed merge, migration and paper deployment
+
+[PR #104](https://github.com/hollowc2/ButterflyGuy/pull/104) merged as
+`b7ee64a1e2c743c68aa36a5a3563b3bcfc596d39`. Both
+[CI](https://github.com/hollowc2/ButterflyGuy/actions/runs/45282310852) and
+[Database Smoke](https://github.com/hollowc2/ButterflyGuy/actions/runs/45282310795)
+passed on that merge commit. Database Smoke now includes all 14 new durable-exit
+Postgres regressions.
+
+The live database's complete 8,319,624-byte backup was restored into an isolated
+copy on PG16.11 / TimescaleDB 2.25.2. All table counts and the 001–012 ledger match;
+all six restored background jobs are disabled. Source jobs were untouched. The
+approved **013_account_monitor.sql** migration then applied to
+`butterfly_guy_spx_live`; its schema/flatness gate passes with no open trades,
+unresolved intents, unlinked fills or paper rows. The backup and restore copy are
+retained privately on Helios; no dump or credentials were published.
+
+Regular paper SPX (`infra/app_spx`, `butterfly_spx_app`) was recreated with image
+`sha256:568eb8a15a58b6587f6e5e8312ea7aed68421887db0794adbc501825683448b1`.
+At **22:53:23 UTC**, `/health` and `/ready` both returned **200**. All **165**
+packaged Python/SQL files match the merged source snapshot. Role is `paper`, data
+is direct, paper trading is true, both live-allow flags are false, and the
+one-contract/one-trade limits remain unchanged. The account monitor is enabled
+and ticking. Mounts, ports, restart policy and effective runtime environment were
+preserved; a new unused equity-webhook env-file key was explicitly left absent,
+as it was in the original container, without changing its secret or the env file.
+
+The exact before/after fingerprints prove **NDX, XSP and the stopped live/rehearsal
+container are unchanged**. No real-money runtime was started. The same release
+source/image is staged for a future explicitly approved session; the old November
+23 session artifacts/nudges were not reused or rewritten. The host checkout was
+fast-forwarded and synchronized; runtime configs validate. Rollback argv pinning
+the prior image is saved in the release's `deployment/prepared-deployment.json`.
+No rollback was needed.
+
+A **22:58:58 UTC** stability check still showed health/ready 200, a fresh account
+monitor heartbeat and zero restarts after more than six minutes.
+
+The **22:53:52 UTC** read-only reconciliation again found zero account positions,
+zero active/unknown orders, and zero open rows in all three databases. Trade 100001
+and its -$37 risk reconciliation remain intact. Nothing was edited to force a gate.
+
+[Release receipt](../../data/rehearsals/SPX/2026-11-23/release-20261123T2205Z/release-receipt.json)
+binds CI, image/source, migration, actual close-out, backup/restore and deployment
+receipts. Earlier intraday manifests remain historical: their pending close-out
+and missing-schema classifications are superseded by this section. Their test
+count label is also corrected here: 45 integration cases comprise 36 real-DB and
+nine isolated cases, not 45 real-DB cases.
+
+A supervised one-contract live canary is **still NO-GO without a dated owner
+approval**, fresh broker/intent reconciliation, normal session settings, fixed
+runtime paper exit-receipt confirmation and session-specific monitoring/stop/
+rollback checks. No live broker order was placed, replaced or canceled; no manual
+position was adopted or managed; no real-money session was scheduled.

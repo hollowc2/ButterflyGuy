@@ -1,0 +1,260 @@
+{
+  "observed_utc": "2026-11-23T22:53:52.142849+00:00",
+  "read_only": true,
+  "broker_reconciliation": {
+    "active_bot_owned": 0,
+    "active_external_unattributed": 0,
+    "all_account_active_order_nodes": 0,
+    "all_account_position_count": 0,
+    "all_account_unknown_status_nodes": 0,
+    "manual_position_adopted_or_modified": false,
+    "order_history_start": "2026-09-25",
+    "order_status_counts": {
+      "CANCELED": 3,
+      "FILLED": 11,
+      "REPLACED": 9
+    },
+    "position_legs": [],
+    "spx_broker_flat": true,
+    "unknown_or_missing_status_nodes": 0
+  },
+  "databases": {
+    "butterfly_guy": {
+      "ledger": [
+        {
+          "checksum": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+          "version": "001_initial.sql"
+        },
+        {
+          "checksum": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+          "version": "002_fix_greeks_precision.sql"
+        },
+        {
+          "checksum": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+          "version": "003_add_underlying.sql"
+        },
+        {
+          "checksum": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+          "version": "004_add_chain_fields.sql"
+        },
+        {
+          "checksum": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+          "version": "005_add_daily_bars.sql"
+        },
+        {
+          "checksum": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+          "version": "006_tent_boundaries.sql"
+        },
+        {
+          "checksum": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+          "version": "007_monitoring_leg_quotes.sql"
+        },
+        {
+          "checksum": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+          "version": "008_one_open_trade_per_underlying_day.sql"
+        },
+        {
+          "checksum": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+          "version": "009_broker_order_intents.sql"
+        },
+        {
+          "checksum": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+          "version": "010_add_decision_log_underlying.sql"
+        },
+        {
+          "checksum": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+          "version": "011_snapshot_timing.sql"
+        },
+        {
+          "checksum": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+          "version": "012_post_exit_leg_quotes.sql"
+        },
+        {
+          "checksum": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+          "version": "013_account_monitor.sql"
+        }
+      ],
+      "open_trades": 0,
+      "open_spx_trades": 0,
+      "intent_status_counts": {
+        "FILLED": 4
+      },
+      "daily_risk": [
+        {
+          "halted": true,
+          "realized_pnl": "-768.0000",
+          "trade_count": 1,
+          "trade_date": "2026-11-23",
+          "underlying": "NDX"
+        },
+        {
+          "halted": false,
+          "realized_pnl": "0.0000",
+          "trade_count": 0,
+          "trade_date": "2026-11-23",
+          "underlying": "SPX"
+        },
+        {
+          "halted": false,
+          "realized_pnl": "0.0000",
+          "trade_count": 0,
+          "trade_date": "2026-11-23",
+          "underlying": "XSP"
+        }
+      ],
+      "day_trade_totals": [
+        {
+          "count": 1,
+          "pnl_dollars": "-768.0000",
+          "status": "CLOSED",
+          "underlying": "NDX"
+        }
+      ],
+      "timescale_version": "2.25.2"
+    },
+    "butterfly_guy_spx_live": {
+      "ledger": [
+        {
+          "checksum": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+          "version": "001_initial.sql"
+        },
+        {
+          "checksum": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+          "version": "002_fix_greeks_precision.sql"
+        },
+        {
+          "checksum": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+          "version": "003_add_underlying.sql"
+        },
+        {
+          "checksum": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+          "version": "004_add_chain_fields.sql"
+        },
+        {
+          "checksum": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+          "version": "005_add_daily_bars.sql"
+        },
+        {
+          "checksum": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+          "version": "006_tent_boundaries.sql"
+        },
+        {
+          "checksum": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+          "version": "007_monitoring_leg_quotes.sql"
+        },
+        {
+          "checksum": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+          "version": "008_one_open_trade_per_underlying_day.sql"
+        },
+        {
+          "checksum": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+          "version": "009_broker_order_intents.sql"
+        },
+        {
+          "checksum": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+          "version": "010_add_decision_log_underlying.sql"
+        },
+        {
+          "checksum": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+          "version": "011_snapshot_timing.sql"
+        },
+        {
+          "checksum": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+          "version": "012_post_exit_leg_quotes.sql"
+        },
+        {
+          "checksum": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+          "version": "013_account_monitor.sql"
+        }
+      ],
+      "open_trades": 0,
+      "open_spx_trades": 0,
+      "intent_status_counts": {
+        "CANCELED": 1,
+        "FILLED": 3
+      },
+      "daily_risk": [],
+      "day_trade_totals": [],
+      "timescale_version": "2.25.2"
+    },
+    "butterfly_guy_spx_live_rehearsal": {
+      "ledger": [
+        {
+          "checksum": "de95a8a21e4e5c07b55d97707a3cdbbdee84d3ade9f4b0cbfdc1427dbb76f699",
+          "version": "001_initial.sql"
+        },
+        {
+          "checksum": "10ee0ab8cfb34e554e44847eaf23616898770e6c5f0df0276b34b8acce2a6303",
+          "version": "002_fix_greeks_precision.sql"
+        },
+        {
+          "checksum": "b750f3a265812ef4048b14be29da82861aa129ae8c30d7a4c9f37289f7a8e329",
+          "version": "003_add_underlying.sql"
+        },
+        {
+          "checksum": "f74f81c8427ad51e45b23387e5037b61873f356f03dfde3325860e25b0db36af",
+          "version": "004_add_chain_fields.sql"
+        },
+        {
+          "checksum": "ba6d544b84d6f179c1a543f84cc3e296e669353cd80d8e083939f3b17e51892b",
+          "version": "005_add_daily_bars.sql"
+        },
+        {
+          "checksum": "46d20ca01bebf8a9f761e16f1f98de828ddad2c539da94820587ad72c8c57d6e",
+          "version": "006_tent_boundaries.sql"
+        },
+        {
+          "checksum": "9235f9c8a9d6bd2e2275f6511dd5bef3c6fe614a11ae74baa36d7173a268b34d",
+          "version": "007_monitoring_leg_quotes.sql"
+        },
+        {
+          "checksum": "27d684fcd7753064d809af1c2f50895be62a52fbbd901fd9b9896d19668b77ae",
+          "version": "008_one_open_trade_per_underlying_day.sql"
+        },
+        {
+          "checksum": "8e8d9cbb2eb12abebbe058c4d08fcf11e5fc37f25e2c463064f6049d9a9b2e99",
+          "version": "009_broker_order_intents.sql"
+        },
+        {
+          "checksum": "c4659f9df57ecacdf92d8bf5fbcd72169caedc16ec3945cc757ec6fa744ec010",
+          "version": "010_add_decision_log_underlying.sql"
+        },
+        {
+          "checksum": "07a08343c9029da9921c7c1ab8c69577b4973238e23775a2e48db77567f54f44",
+          "version": "011_snapshot_timing.sql"
+        },
+        {
+          "checksum": "66303fd9bdae6f1df8b03594d2f83fa40f2b0029a82344fdf32b577d455d614f",
+          "version": "012_post_exit_leg_quotes.sql"
+        },
+        {
+          "checksum": "5ee965d218225380ca9a92254318e4e5712e7e8e9802a1b82a2201c6d8176277",
+          "version": "013_account_monitor.sql"
+        }
+      ],
+      "open_trades": 0,
+      "open_spx_trades": 0,
+      "intent_status_counts": {},
+      "daily_risk": [
+        {
+          "halted": false,
+          "realized_pnl": "-37.0000",
+          "trade_count": 1,
+          "trade_date": "2026-11-23",
+          "underlying": "SPX"
+        }
+      ],
+      "day_trade_totals": [
+        {
+          "count": 1,
+          "pnl_dollars": "-37.0000",
+          "status": "CLOSED",
+          "underlying": "SPX"
+        }
+      ],
+      "timescale_version": "2.25.2"
+    }
+  },
+  "full_catalog_audit_sha256": "78ba787312cb363f383603e4f3a59b6906152e923802e432a5dcc5c009e5c087",
+  "full_catalog_audit_retained_privately": true
+}

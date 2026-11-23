@@ -1,0 +1,105 @@
+{
+  "prepared_utc": "2026-11-23T22:51:58.773128+00:00",
+  "source_sha": "b7ee64a1e2c743c68aa36a5a3563b3bcfc596d39",
+  "source_release": "/opt/butterflyguy-releases/spx-readiness-20261123/source",
+  "target_service": "app_spx",
+  "target_container": "butterfly_spx_app",
+  "project": "infra",
+  "image": "sha256:568eb8a15a58b6587f6e5e8312ea7aed68421887db0794adbc501825683448b1",
+  "rollback_image": "sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739",
+  "compose_files": [
+    "/opt/butterflyguy/infra/docker-compose.yml",
+    "/opt/butterflyguy/.rollbacks/account-equity-33062cb/release-image.yml",
+    "/opt/butterflyguy-releases/4a3c351-monday-20261123/deployment/release-spx.yml",
+    "/opt/butterflyguy-releases/spx-readiness-20261123/deployment/release-spx.yml"
+  ],
+  "deploy_argv": [
+    "docker",
+    "compose",
+    "--project-name",
+    "infra",
+    "--project-directory",
+    "/opt/butterflyguy/infra",
+    "-f",
+    "/opt/butterflyguy/infra/docker-compose.yml",
+    "-f",
+    "/opt/butterflyguy/.rollbacks/account-equity-33062cb/release-image.yml",
+    "-f",
+    "/opt/butterflyguy-releases/4a3c351-monday-20261123/deployment/release-spx.yml",
+    "-f",
+    "/opt/butterflyguy-releases/spx-readiness-20261123/deployment/release-spx.yml",
+    "up",
+    "-d",
+    "--no-deps",
+    "--no-build",
+    "--pull",
+    "never",
+    "app_spx"
+  ],
+  "rollback_argv": [
+    "docker",
+    "compose",
+    "--project-name",
+    "infra",
+    "--project-directory",
+    "/opt/butterflyguy/infra",
+    "-f",
+    "/opt/butterflyguy/infra/docker-compose.yml",
+    "-f",
+    "/opt/butterflyguy/.rollbacks/account-equity-33062cb/release-image.yml",
+    "-f",
+    "/opt/butterflyguy-releases/4a3c351-monday-20261123/deployment/release-spx.yml",
+    "-f",
+    "/opt/butterflyguy-releases/spx-readiness-20261123/deployment/release-spx.yml",
+    "-f",
+    "/opt/butterflyguy-releases/spx-readiness-20261123/deployment/rollback-spx.yml",
+    "up",
+    "-d",
+    "--no-deps",
+    "--no-build",
+    "--pull",
+    "never",
+    "app_spx"
+  ],
+  "environment_changed_keys": [],
+  "excluded_new_unused_environment_keys": [
+    "EQUITY_DISCORD_WEBHOOK_URL"
+  ],
+  "binds_and_ports_unchanged": true,
+  "paper_trading": true,
+  "both_allow_live_flags_false": true,
+  "live_rehearsal_remains_stopped": true,
+  "config_sha256": {
+    "configs/config.yaml": "05e188ca6aac95b3cdaa9b40bf982d241b428b197147425d5b9035c8fe673c25"
+  },
+  "before": {
+    "butterfly_spx_app": {
+      "id": "b57d3f6553556c0159eded36a90f0bb2732c04a2405b600a8b59091152f12f07",
+      "image": "sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739",
+      "started_at": "2026-11-22T01:15:35.728449794Z",
+      "running": true,
+      "restart_count": 0
+    },
+    "butterfly_ndx_app": {
+      "id": "357299987f4a2efb41b606a3d87518aed3dd67b85589bb135eb6c395963f3d7f",
+      "image": "sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739",
+      "started_at": "2026-11-22T01:17:40.733580883Z",
+      "running": true,
+      "restart_count": 0
+    },
+    "butterfly_xsp_app": {
+      "id": "27bb2640b65ef8ebd28adb7cb7987ec7406b3bd94e195cfed8fa76941fad8d3c",
+      "image": "sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739",
+      "started_at": "2026-11-22T01:18:42.341356139Z",
+      "running": true,
+      "restart_count": 0
+    },
+    "butterfly_spx_live_app": {
+      "id": "1651c7891cacacd0220d164d0cc2d5e80339aa092a2ad3a6b25b24807d242749",
+      "image": "sha256:6da41417101b27cd429dffb55b1768da0fbf2259c656d2cc2acf0594721c6739",
+      "started_at": "2026-11-23T16:07:20.009148725Z",
+      "running": false,
+      "restart_count": 0
+    }
+  }
+}
