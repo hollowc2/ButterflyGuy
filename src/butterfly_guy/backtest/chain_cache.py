@@ -116,13 +116,27 @@ def _existing_files(path: Path) -> list[Path]:
 
 def _open_text(path: Path) -> IO[str]:
     if path.suffix == ".zst":
-        reader = zstandard.ZstdDecompressor().stream_reader(path.open("rb"))
-        return io.TextIOWrapper(reader, encoding="utf-8")
+        # decompressobj, unlike stream_reader, reports whether the frame (and its
+        # checksum) was complete, so a truncated file raises instead of losing snapshots.
+        decompressor = zstandard.ZstdDecompressor().decompressobj()
+        data = decompressor.decompress(path.read_bytes())
+        if not decompressor.eof:
+            raise zstandard.ZstdError(f"{path}: truncated zstd frame")
+        return io.StringIO(data.decode("utf-8"))
     return path.open(encoding="utf-8")
 
 
 def _read_snapshots(json_path: Path) -> dict[str, dict] | None:
     """Read legacy JSON and JSONL snapshots for one day; None if neither is readable."""
+    try:
+        return _read_snapshot_files(json_path)
+    except FileNotFoundError:
+        # tools/compress_chains.py replaced a plain file with its .zst mid-read; the
+        # .zst is in place before the plain file is deleted, so one retry sees it.
+        return _read_snapshot_files(json_path)
+
+
+def _read_snapshot_files(json_path: Path) -> dict[str, dict] | None:
     snapshots: dict[str, dict] | None = None
     for path in _existing_files(json_path):
         try:

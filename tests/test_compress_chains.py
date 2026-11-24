@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import datetime as dt
+import fcntl
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -101,3 +103,74 @@ def test_main_dry_run_changes_nothing(tmp_path, capsys):
 
     assert path.exists()
     assert "would compress" in capsys.readouterr().out
+
+
+def test_compress_file_rejects_truncated_existing_zst(tmp_path):
+    path = _save_day(tmp_path, dt.date(2026, 11, 2))
+    zst = path.with_name(path.name + ".zst")
+    full = zstandard.ZstdCompressor(write_checksum=True).compress(path.read_bytes())
+    zst.write_bytes(full[:-1])
+
+    with pytest.raises(RuntimeError, match="truncated"):
+        compress_chains.compress_file(path)
+
+    assert path.exists()
+
+
+def test_compress_file_keeps_both_when_source_changes_before_delete(tmp_path, monkeypatch):
+    date = dt.date(2026, 11, 2)
+    path = _save_day(tmp_path, date)
+    late = dt.datetime.combine(date, dt.time(15, 0), tzinfo=dt.timezone.utc)
+    real_fsync_dir = compress_chains._fsync_dir
+
+    def append_then_fsync(directory):
+        save_snapshot(date, late, 7351.0, _ROWS, cache_dir=tmp_path)  # late writer
+        real_fsync_dir(directory)
+
+    monkeypatch.setattr(compress_chains, "_fsync_dir", append_then_fsync)
+
+    with pytest.raises(RuntimeError, match="changed while compressing"):
+        compress_chains.compress_file(path)
+
+    assert path.exists()
+    chains = load_chain_day(date, cache_dir=tmp_path, underlying="SPX")
+    assert late in chains
+
+
+def test_compress_file_recovery_keeps_plain_when_it_changes_after_hashing(
+    tmp_path, monkeypatch
+):
+    date = dt.date(2026, 11, 2)
+    path = _save_day(tmp_path, date)
+    zst = path.with_name(path.name + ".zst")
+    zst.write_bytes(zstandard.ZstdCompressor().compress(path.read_bytes()))
+    late = dt.datetime.combine(date, dt.time(15, 0), tzinfo=dt.timezone.utc)
+    real_plain_sha256 = compress_chains._plain_sha256
+
+    def hash_then_append(p):
+        digest = real_plain_sha256(p)
+        save_snapshot(date, late, 7351.0, _ROWS, cache_dir=tmp_path)  # late writer
+        return digest
+
+    monkeypatch.setattr(compress_chains, "_plain_sha256", hash_then_append)
+
+    with pytest.raises(RuntimeError, match="changed while compressing"):
+        compress_chains.compress_file(path)
+
+    assert path.exists()
+    assert late in load_chain_day(date, cache_dir=tmp_path, underlying="SPX")
+
+
+def test_main_skips_while_another_run_holds_the_lock(tmp_path, capsys):
+    path = _save_day(tmp_path, dt.date(2020, 1, 2))
+    held = os.open(tmp_path, os.O_RDONLY)
+    fcntl.flock(held, fcntl.LOCK_EX)
+    try:
+        assert compress_chains.main(["--root", str(tmp_path)]) == 0
+    finally:
+        os.close(held)
+
+    assert path.exists()
+    assert "skipping" in capsys.readouterr().out
+    assert compress_chains.main(["--root", str(tmp_path)]) == 0
+    assert not path.exists()

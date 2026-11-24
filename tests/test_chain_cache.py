@@ -1,8 +1,10 @@
 import datetime as dt
 import json
 
+import pytest
 import zstandard
 
+from butterfly_guy.backtest import chain_cache
 from butterfly_guy.backtest.chain_cache import chain_cache_path, load_chain_day, save_snapshot
 
 
@@ -226,3 +228,38 @@ def test_load_chain_day_merges_compressed_and_plain_journal(tmp_path):
 
     assert chains is not None
     assert sorted(chains.keys()) == [first, second]
+
+
+def test_load_chain_day_rejects_truncated_compressed_journal(tmp_path):
+    date = dt.date(2026, 5, 6)
+    first = dt.datetime(2026, 5, 6, 14, 30, tzinfo=dt.timezone.utc)
+    for i in range(200):
+        save_snapshot(date, first + dt.timedelta(minutes=i), 7350.0, _SPX_ROWS, cache_dir=tmp_path)
+    path = tmp_path / "SPX" / "2026-05-06.jsonl"
+    zst = path.with_name(path.name + ".zst")
+    data = path.read_bytes()
+    zst.write_bytes(zstandard.ZstdCompressor(write_checksum=True).compress(data)[:-1])
+    path.unlink()
+
+    with pytest.raises(zstandard.ZstdError, match="truncated"):
+        load_chain_day(date, cache_dir=tmp_path, underlying="SPX")
+
+
+def test_load_chain_day_retries_when_plain_file_is_compressed_mid_read(tmp_path, monkeypatch):
+    date = dt.date(2026, 5, 6)
+    first = dt.datetime(2026, 5, 6, 14, 30, tzinfo=dt.timezone.utc)
+    save_snapshot(date, first, 7350.0, _SPX_ROWS, cache_dir=tmp_path)
+    path = tmp_path / "SPX" / "2026-05-06.jsonl"
+    real_open = chain_cache._open_text
+
+    def compress_then_open(p):
+        if p == path and p.exists():
+            _compress(p)  # nightly job replaces the file after it was discovered
+        return real_open(p)
+
+    monkeypatch.setattr(chain_cache, "_open_text", compress_then_open)
+
+    chains = load_chain_day(date, cache_dir=tmp_path, underlying="SPX")
+
+    assert chains is not None
+    assert list(chains.keys()) == [first]
