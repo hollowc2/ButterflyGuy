@@ -13,6 +13,9 @@ Legacy days use data/chains/[<UNDERLYING>/]YYYY-MM-DD.json:
   {"date": "2026-03-10", "snapshots": {"<ts>": {"spot": ..., "quotes": [...]}}}
 The loader reads both and merges them.
 
+Finished days are compressed to YYYY-MM-DD.json[l].zst by tools/compress_chains.py;
+the loader reads a day's plain and compressed files alike.
+
 Simulation uses real quotes when available, falls back to synthetic otherwise.
 """
 
@@ -20,8 +23,12 @@ from __future__ import annotations
 
 import bisect
 import datetime as dt
+import io
 import json
 from pathlib import Path
+from typing import IO, Callable
+
+import zstandard
 
 from butterfly_guy.data.schemas import OptionQuote
 
@@ -102,25 +109,67 @@ def save_snapshot(
         f.write(line.encode("utf-8") + b"\n")
 
 
+def _existing_files(path: Path) -> list[Path]:
+    """path's zstd-compressed copy and path itself, whichever exist.
+
+    path is checked first: compress_chains publishes the .zst before deleting path,
+    so a day compressed between the two checks still shows up.
+    """
+    plain_exists = path.exists()
+    zst = path.with_name(path.name + ".zst")
+    return [p for p, exists in ((zst, zst.exists()), (path, plain_exists)) if exists]
+
+
+def _open_text(path: Path) -> IO[str]:
+    if path.suffix == ".zst":
+        # decompressobj, unlike stream_reader, reports whether the frame (and its
+        # checksum) was complete, so a truncated file raises instead of losing snapshots.
+        decompressor = zstandard.ZstdDecompressor().decompressobj()
+        data = decompressor.decompress(path.read_bytes())
+        if not decompressor.eof:
+            raise zstandard.ZstdError(f"{path}: truncated zstd frame")
+        return io.StringIO(data.decode("utf-8"))
+    return path.open(encoding="utf-8")
+
+
+def _read_legacy(path: Path) -> dict[str, dict] | None:
+    try:
+        with _open_text(path) as f:
+            return dict(json.load(f)["snapshots"])
+    except json.JSONDecodeError:
+        return None
+
+
+def _read_journal(path: Path) -> dict[str, dict]:
+    snapshots: dict[str, dict] = {}
+    with _open_text(path) as f:
+        for raw in f:
+            try:
+                snap = json.loads(raw)
+            except json.JSONDecodeError:
+                continue  # truncated line from an interrupted append
+            snapshots[snap["ts"]] = snap
+    return snapshots
+
+
+def _read_each(path: Path, read: Callable[[Path], dict[str, dict] | None]) -> list:
+    """read() each of path and its .zst copy that exist."""
+    try:
+        return [read(p) for p in _existing_files(path)]
+    except FileNotFoundError:
+        # tools/compress_chains.py replaced path with its .zst mid-read; the .zst is
+        # in place before path is deleted and is never moved, so rediscovery sees it.
+        return [read(p) for p in _existing_files(path)]
+
+
 def _read_snapshots(json_path: Path) -> dict[str, dict] | None:
     """Read legacy JSON and JSONL snapshots for one day; None if neither is readable."""
     snapshots: dict[str, dict] | None = None
-    if json_path.exists():
-        try:
-            snapshots = dict(json.loads(json_path.read_text(encoding="utf-8"))["snapshots"])
-        except json.JSONDecodeError:
-            pass
-
-    journal = json_path.with_suffix(".jsonl")
-    if journal.exists():
-        snapshots = snapshots or {}
-        with journal.open(encoding="utf-8") as f:
-            for raw in f:
-                try:
-                    snap = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue  # truncated line from an interrupted append
-                snapshots[snap["ts"]] = snap
+    for day in _read_each(json_path, _read_legacy) + _read_each(
+        json_path.with_suffix(".jsonl"), _read_journal
+    ):
+        if day is not None:
+            snapshots = (snapshots or {}) | day
     return snapshots
 
 

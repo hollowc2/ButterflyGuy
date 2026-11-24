@@ -67,6 +67,10 @@ data/chains/*.json
 data/chains/*/*.json
 data/chains/*.jsonl
 data/chains/*/*.jsonl
+data/chains/*.zst
+data/chains/*/*.zst
+data/chains/*.zst.tmp
+data/chains/*/*.zst.tmp
 
 # Logs
 *.log
