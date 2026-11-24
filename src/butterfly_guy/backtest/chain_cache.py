@@ -13,6 +13,9 @@ Legacy days use data/chains/[<UNDERLYING>/]YYYY-MM-DD.json:
   {"date": "2026-03-10", "snapshots": {"<ts>": {"spot": ..., "quotes": [...]}}}
 The loader reads both and merges them.
 
+Finished days are compressed to YYYY-MM-DD.json[l].zst by tools/compress_chains.py;
+the loader reads a day's plain and compressed files alike.
+
 Simulation uses real quotes when available, falls back to synthetic otherwise.
 """
 
@@ -20,8 +23,12 @@ from __future__ import annotations
 
 import bisect
 import datetime as dt
+import io
 import json
 from pathlib import Path
+from typing import IO
+
+import zstandard
 
 from butterfly_guy.data.schemas import OptionQuote
 
@@ -102,19 +109,31 @@ def save_snapshot(
         f.write(line.encode("utf-8") + b"\n")
 
 
+def _existing_files(path: Path) -> list[Path]:
+    """path's zstd-compressed copy and path itself, whichever exist."""
+    return [p for p in (path.with_name(path.name + ".zst"), path) if p.exists()]
+
+
+def _open_text(path: Path) -> IO[str]:
+    if path.suffix == ".zst":
+        reader = zstandard.ZstdDecompressor().stream_reader(path.open("rb"))
+        return io.TextIOWrapper(reader, encoding="utf-8")
+    return path.open(encoding="utf-8")
+
+
 def _read_snapshots(json_path: Path) -> dict[str, dict] | None:
     """Read legacy JSON and JSONL snapshots for one day; None if neither is readable."""
     snapshots: dict[str, dict] | None = None
-    if json_path.exists():
+    for path in _existing_files(json_path):
         try:
-            snapshots = dict(json.loads(json_path.read_text(encoding="utf-8"))["snapshots"])
+            with _open_text(path) as f:
+                snapshots = (snapshots or {}) | dict(json.load(f)["snapshots"])
         except json.JSONDecodeError:
             pass
 
-    journal = json_path.with_suffix(".jsonl")
-    if journal.exists():
+    for journal in _existing_files(json_path.with_suffix(".jsonl")):
         snapshots = snapshots or {}
-        with journal.open(encoding="utf-8") as f:
+        with _open_text(journal) as f:
             for raw in f:
                 try:
                     snap = json.loads(raw)
