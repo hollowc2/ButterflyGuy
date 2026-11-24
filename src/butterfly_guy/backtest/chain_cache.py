@@ -26,7 +26,7 @@ import datetime as dt
 import io
 import json
 from pathlib import Path
-from typing import IO
+from typing import IO, Callable
 
 import zstandard
 
@@ -126,34 +126,44 @@ def _open_text(path: Path) -> IO[str]:
     return path.open(encoding="utf-8")
 
 
+def _read_legacy(path: Path) -> dict[str, dict] | None:
+    try:
+        with _open_text(path) as f:
+            return dict(json.load(f)["snapshots"])
+    except json.JSONDecodeError:
+        return None
+
+
+def _read_journal(path: Path) -> dict[str, dict]:
+    snapshots: dict[str, dict] = {}
+    with _open_text(path) as f:
+        for raw in f:
+            try:
+                snap = json.loads(raw)
+            except json.JSONDecodeError:
+                continue  # truncated line from an interrupted append
+            snapshots[snap["ts"]] = snap
+    return snapshots
+
+
+def _read_each(path: Path, read: Callable[[Path], dict[str, dict] | None]) -> list:
+    """read() each of path and its .zst copy that exist."""
+    try:
+        return [read(p) for p in _existing_files(path)]
+    except FileNotFoundError:
+        # tools/compress_chains.py replaced path with its .zst mid-read; the .zst is
+        # in place before path is deleted and is never moved, so rediscovery sees it.
+        return [read(p) for p in _existing_files(path)]
+
+
 def _read_snapshots(json_path: Path) -> dict[str, dict] | None:
     """Read legacy JSON and JSONL snapshots for one day; None if neither is readable."""
-    try:
-        return _read_snapshot_files(json_path)
-    except FileNotFoundError:
-        # tools/compress_chains.py replaced a plain file with its .zst mid-read; the
-        # .zst is in place before the plain file is deleted, so one retry sees it.
-        return _read_snapshot_files(json_path)
-
-
-def _read_snapshot_files(json_path: Path) -> dict[str, dict] | None:
     snapshots: dict[str, dict] | None = None
-    for path in _existing_files(json_path):
-        try:
-            with _open_text(path) as f:
-                snapshots = (snapshots or {}) | dict(json.load(f)["snapshots"])
-        except json.JSONDecodeError:
-            pass
-
-    for journal in _existing_files(json_path.with_suffix(".jsonl")):
-        snapshots = snapshots or {}
-        with _open_text(journal) as f:
-            for raw in f:
-                try:
-                    snap = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue  # truncated line from an interrupted append
-                snapshots[snap["ts"]] = snap
+    for day in _read_each(json_path, _read_legacy) + _read_each(
+        json_path.with_suffix(".jsonl"), _read_journal
+    ):
+        if day is not None:
+            snapshots = (snapshots or {}) | day
     return snapshots
 
 

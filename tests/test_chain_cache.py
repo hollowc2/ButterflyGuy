@@ -263,3 +263,36 @@ def test_load_chain_day_retries_when_plain_file_is_compressed_mid_read(tmp_path,
 
     assert chains is not None
     assert list(chains.keys()) == [first]
+
+
+def test_load_chain_day_rediscovers_each_format_compressed_mid_read(tmp_path, monkeypatch):
+    date = dt.date(2026, 5, 6)
+    legacy_ts = dt.datetime(2026, 5, 6, 14, 30, tzinfo=dt.timezone.utc)
+    new_ts = legacy_ts + dt.timedelta(minutes=1)
+    legacy_path = chain_cache_path(date, tmp_path, "SPX")
+    legacy_path.parent.mkdir(parents=True)
+    legacy_quote = {"strike": 7350.0, "type": "CALL", "bid": 1.0, "ask": 1.2, "mark": 1.1}
+    legacy_path.write_text(
+        json.dumps(
+            {"snapshots": {legacy_ts.isoformat(): {"spot": 7350.0, "quotes": [legacy_quote]}}}
+        ),
+        encoding="utf-8",
+    )
+    save_snapshot(date, new_ts, 7351.0, _SPX_ROWS, cache_dir=tmp_path)
+    journal = legacy_path.with_suffix(".jsonl")
+    real_open = chain_cache._open_text
+    pending = {legacy_path, journal}
+
+    def compress_then_open(p):
+        if p in pending:  # each format is compressed just as it is about to be read
+            pending.discard(p)
+            _compress(p)
+        return real_open(p)
+
+    monkeypatch.setattr(chain_cache, "_open_text", compress_then_open)
+
+    chains = load_chain_day(date, cache_dir=tmp_path, underlying="SPX")
+
+    assert not pending
+    assert chains is not None
+    assert sorted(chains.keys()) == [legacy_ts, new_ts]

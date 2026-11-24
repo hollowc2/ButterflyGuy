@@ -161,16 +161,25 @@ def test_compress_file_recovery_keeps_plain_when_it_changes_after_hashing(
     assert late in load_chain_day(date, cache_dir=tmp_path, underlying="SPX")
 
 
-def test_main_skips_while_another_run_holds_the_lock(tmp_path, capsys):
+@pytest.mark.parametrize("subdir", ["", "SPX"])
+def test_main_skips_file_locked_by_another_run_under_any_root(tmp_path, capsys, subdir):
     path = _save_day(tmp_path, dt.date(2020, 1, 2))
-    held = os.open(tmp_path, os.O_RDONLY)
+    held = os.open(path, os.O_RDONLY)
     fcntl.flock(held, fcntl.LOCK_EX)
     try:
-        assert compress_chains.main(["--root", str(tmp_path)]) == 0
+        assert compress_chains.main(["--root", str(tmp_path / subdir)]) == 0
     finally:
         os.close(held)
 
     assert path.exists()
-    assert "skipping" in capsys.readouterr().out
-    assert compress_chains.main(["--root", str(tmp_path)]) == 0
+    assert not path.with_name(path.name + ".zst.tmp").exists()
+    assert "skipped" in capsys.readouterr().out
+    assert compress_chains.main(["--root", str(tmp_path / subdir)]) == 0
     assert not path.exists()
+
+
+def test_compress_file_skips_file_another_run_already_compressed(tmp_path):
+    path = _save_day(tmp_path, dt.date(2020, 1, 2))
+    compress_chains.compress_file(path)
+
+    assert compress_chains.compress_file(path) is None

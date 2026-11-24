@@ -9,7 +9,8 @@ checksum included) to exactly the same bytes, and the plain file's size, mtime
 and inode are unchanged since it was first read. If a .zst already exists (a run
 interrupted before the delete), the plain file is deleted only when the two
 match. Otherwise both are kept, chain_cache merges them, and the run fails.
-Runs hold an exclusive lock on the root directory, so overlapping runs skip.
+Each file is compressed under an exclusive flock on the file itself, so
+overlapping runs (even with different --root values) skip files already taken.
 
 Usage (from the repo root):
   .venv/bin/python tools/compress_chains.py [--dry-run] [--root data/chains]
@@ -81,10 +82,31 @@ def _unlink_unchanged(path: Path, before: tuple[int, int, int]) -> None:
     path.unlink()
 
 
-def compress_file(path: Path) -> int:
-    """Replace path with a verified path.zst; return the bytes saved."""
+def compress_file(path: Path) -> int | None:
+    """Replace path with a verified path.zst; return the bytes saved, or None when
+    another run holds the file or has already compressed it."""
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except FileNotFoundError:
+        return None
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return None
+        try:
+            before = _identity(path)
+        except FileNotFoundError:
+            return None
+        if before[2] != os.fstat(fd).st_ino:
+            return None  # path was replaced after we opened it
+        return _compress_locked(path, before)
+    finally:
+        os.close(fd)
+
+
+def _compress_locked(path: Path, before: tuple[int, int, int]) -> int:
     target = path.with_name(path.name + ".zst")
-    before = _identity(path)
     if target.exists():
         if _zst_sha256(target) != _plain_sha256(path):
             raise RuntimeError(f"{path} differs from existing {target.name}; kept both")
@@ -129,36 +151,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="list files without compressing")
     args = parser.parse_args(argv)
 
-    lock = os.open(args.root, os.O_RDONLY)
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        os.close(lock)
-        print(f"another compress_chains run holds {args.root}; skipping")
-        return 0
-    try:
-        return _run(args.root, args.dry_run)
-    finally:
-        os.close(lock)
-
-
-def _run(root: Path, dry_run: bool) -> int:
-    files = due_files(root, dt.date.today())
-    if dry_run:
+    files = due_files(args.root, dt.date.today())
+    if args.dry_run:
         for path in files:
             print(f"would compress {path}")
         return 0
 
-    saved = failures = 0
+    saved = skipped = failures = 0
     for path in files:
         try:
-            saved += compress_file(path)
+            result = compress_file(path)
         except Exception as e:
             failures += 1
             print(f"FAILED {path}: {e}", file=sys.stderr)
-    print(f"{len(files) - failures}/{len(files)} files compressed, {saved / 2**30:.2f} GiB saved")
+            continue
+        if result is None:
+            skipped += 1
+            print(f"skipped {path}: another run has it")
+        else:
+            saved += result
+    done = len(files) - skipped - failures
+    print(f"{done}/{len(files)} files compressed, {skipped} skipped, {saved / 2**30:.2f} GiB saved")
     return 1 if failures else 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
