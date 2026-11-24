@@ -110,8 +110,14 @@ def save_snapshot(
 
 
 def _existing_files(path: Path) -> list[Path]:
-    """path's zstd-compressed copy and path itself, whichever exist."""
-    return [p for p in (path.with_name(path.name + ".zst"), path) if p.exists()]
+    """path's zstd-compressed copy and path itself, whichever exist.
+
+    path is checked first: compress_chains publishes the .zst before deleting path,
+    so a day compressed between the two checks still shows up.
+    """
+    plain_exists = path.exists()
+    zst = path.with_name(path.name + ".zst")
+    return [p for p, exists in ((zst, zst.exists()), (path, plain_exists)) if exists]
 
 
 def _open_text(path: Path) -> IO[str]:

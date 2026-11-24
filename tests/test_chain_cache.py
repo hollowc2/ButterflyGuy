@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+from pathlib import Path
 
 import pytest
 import zstandard
@@ -296,3 +297,28 @@ def test_load_chain_day_rediscovers_each_format_compressed_mid_read(tmp_path, mo
     assert not pending
     assert chains is not None
     assert sorted(chains.keys()) == [legacy_ts, new_ts]
+
+
+def test_load_chain_day_finds_day_compressed_between_existence_checks(tmp_path, monkeypatch):
+    date = dt.date(2026, 5, 6)
+    first = dt.datetime(2026, 5, 6, 14, 30, tzinfo=dt.timezone.utc)
+    save_snapshot(date, first, 7350.0, _SPX_ROWS, cache_dir=tmp_path)
+    journal = tmp_path / "SPX" / "2026-05-06.jsonl"
+    day_files = {journal, journal.with_name(journal.name + ".zst")}
+    real_exists = Path.exists
+    pending = [True]
+
+    def exists_then_compress(self, *args, **kwargs):
+        result = real_exists(self, *args, **kwargs)
+        if self in day_files and pending:  # compression finishes after the first check
+            pending.clear()
+            _compress(journal)
+        return result
+
+    monkeypatch.setattr(Path, "exists", exists_then_compress)
+
+    chains = load_chain_day(date, cache_dir=tmp_path, underlying="SPX")
+
+    assert not pending
+    assert chains is not None
+    assert list(chains.keys()) == [first]
