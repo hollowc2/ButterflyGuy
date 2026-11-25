@@ -473,7 +473,7 @@
   "cash_settled_trades": 7,
   "cohort_id": "spx-prospective-v2-2026-10-02",
   "deferred_session_dates": [
-    "2026-11-23"
+    "2026-11-24"
   ],
   "eligible_trades": 36,
   "endpoint": {
@@ -514,7 +514,7 @@
     "integrity_checkpoint_due": true,
     "passed": false
   },
-  "generated_at": "2026-11-24T02:36:02.581230+00:00",
+  "generated_at": "2026-11-25T02:33:04.341544+00:00",
   "label": "prospective",
   "models": {
     "corrected_midpoint": {
@@ -599,9 +599,9 @@
   "primary_model": "stressed_marketable",
   "prospective_start_date": "2026-10-02",
   "schema_version": 2,
-  "session_completion_coverage": 0.973,
-  "sessions_observed": 37,
-  "sessions_recorded": 36,
+  "session_completion_coverage": 0.9737,
+  "sessions_observed": 38,
+  "sessions_recorded": 37,
   "sessions_with_incomplete_data": 1,
-  "sessions_without_signal": 0
+  "sessions_without_signal": 1
 }

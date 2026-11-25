@@ -3,16 +3,16 @@
 - Asset: SPX
 - Cohort label: prospective
 - Prospective start: 2026-10-02
-- Generated: 2026-11-24T02:36:02.581230+00:00
+- Generated: 2026-11-25T02:33:04.341544+00:00
 - Primary result: **stressed_marketable** (corrected midpoint is a comparison baseline only)
 
 ## Sessions
 
-- Sessions recorded: 36
-- No signal: 0
+- Sessions recorded: 37
+- No signal: 1
 - Incomplete data: 1
-- Session completion coverage: 97.3%
-- Deferred sessions: 2026-11-23
+- Session completion coverage: 97.4%
+- Deferred sessions: 2026-11-24
 - Eligible trades: 36
 - Cash-settled trades: 7
 
